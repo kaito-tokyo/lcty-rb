@@ -1,0 +1,39 @@
+<!--
+SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lcty</title>
+<link rel="stylesheet" href="/c/lcty.v1.css">
+<script src="/c/lcty.v1.js"></script>
+<script src="/c/lcty.v1.lang-ja.js"></script>
+<script>defineLctyV1CustomElements();</script>
+<script type="module" src="/index.js"></script>
+</head>
+<body class="page new">
+<lcty-sidebar></lcty-sidebar>
+<main class="new-card">
+  <h2 data-lcty-t="newChatHeading">New chat</h2>
+  <p id="fork-note" class="hint" hidden></p>
+  <div class="field">
+    <span data-lcty-t="setupTags">Tags (choosing them fills in a system prompt draft from their prompts and memory)</span>
+    <div id="setup-tags" class="tag-picker"></div>
+  </div>
+  <label class="field">
+    <span data-lcty-t="systemPrompt">System prompt</span>
+    <textarea id="setup-instructions" rows="4" placeholder="(none)" data-lcty-t-placeholder="none"></textarea>
+  </label>
+  <div><button id="setup-recompose" type="button" hidden data-lcty-t="recompose">Rebuild from the tags</button></div>
+  <label class="check"><input id="setup-thinking" type="checkbox"> <span data-lcty-t="enableThinking">Enable thinking</span></label>
+  <p class="hint" data-lcty-t="setupHint">The system prompt and thinking are fixed when the first message is sent (changing them later would defeat the cache). Tags can be added and removed after starting, but they only work as labels for search.</p>
+  <lcty-composer></lcty-composer>
+</main>
+<div id="toast" role="status" hidden></div>
+</body>
+</html>

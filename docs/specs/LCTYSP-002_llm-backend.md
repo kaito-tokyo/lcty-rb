@@ -20,19 +20,19 @@ the embedding model on a single port.
 - Requests use `POST /v1/responses` with `stream: true`.
 - llama-server does not support `previous_response_id`, so **every request sends `instructions` and the whole history
   as `input`**.
-- The reply (`response.output_text.delta`) and the reasoning (`response.reasoning_text.delta`) arrive as separate event
+- The reply (`response.output_text.delta`) and the thinking (`response.reasoning_text.delta`) arrive as separate event
   types. `<think>` never leaks into the reply text.
 - `model` must name a model defined in the router (`default` returns 400).
 
 ### Client interface (`public/js/llm/client.js`)
 
 ```js
-stream({ backend, instructions, input, thinking, extraBody, signal })
-  // → AsyncIterator<Event>
-  //   { type: "reasoning", delta }
-  //   { type: "text",      delta }
-  //   { type: "done",      usage, timings, incomplete? }   // timings are llama-server specific
-  //   { type: "error",     message }
+stream({ backend, instructions, input, thinking, extraBody, signal });
+// → AsyncIterator<Event>
+//   { type: "thinking", delta }
+//   { type: "text",      delta }
+//   { type: "done",      usage, timings, incomplete? }   // timings are llama-server specific
+//   { type: "error",     message }
 ```
 
 - `extraBody` adds parameters to one request only (for example `response_format` for memory proposals,
@@ -43,14 +43,14 @@ stream({ backend, instructions, input, thinking, extraBody, signal })
 
 `buildRequest()` is a pure function that lays out the saved strings mechanically.
 
-| Saved data | Sent as |
-|---|---|
-| user message | `{"role":"user","content": text}` |
-| assistant message | `{"type":"message","role":"assistant","content": text}` (400 without `type`) |
-| assistant reasoning | not sent |
-| assistant message with an empty body (aborted by an error) | not sent |
-| messages copied by a fork (`inherited`) | sent like any other message |
-| system prompt | top-level `instructions` |
+| Saved data                                                 | Sent as                                                                      |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| user message                                               | `{"role":"user","content": text}`                                            |
+| assistant message                                          | `{"type":"message","role":"assistant","content": text}` (400 without `type`) |
+| assistant thinking                                        | not sent                                                                     |
+| assistant message with an empty body (aborted by an error) | not sent                                                                     |
+| messages copied by a fork (`inherited`)                    | sent like any other message                                                  |
+| system prompt                                              | top-level `instructions`                                                     |
 
 ## Keeping the cache effective
 
@@ -61,7 +61,7 @@ These rules keep the prefix identical from one request to the next:
    ([LCTYSP-003](LCTYSP-003_conversation-file.md) guarantees a byte-exact round trip).
 2. **`instructions` is fixed when the conversation starts.** It never contains values that change per request, such as
    the date. Changing it mid-conversation means starting a new conversation.
-3. **Past reasoning is never sent.** It is saved, but only reply text goes into the history. Doing this consistently
+3. **Past thinking is never sent.** It is saved, but only reply text goes into the history. Doing this consistently
    keeps the prefix aligned (measured: about 60 tokens recomputed).
 4. **Thinking on/off is fixed per conversation.** The chat template embeds it near the start, so switching mid-way
    recomputes everything (measured). `chat_template_kwargs.enable_thinking` is always sent explicitly.
@@ -94,10 +94,10 @@ controls such as `id_slot`, and llama-server keeps its default `--slot-prompt-si
 - Each model runs as a child process and requests are routed by `model`. CORS, the API key and cache behavior are the
   same as when running a single model (measured).
 
-| Name | File | Main settings | Memory |
-|---|---|---|---|
-| `gemma-4-26b` | gemma-4-26B-A4B-it-qat-q4_0 (Q4_0) | KV q8_0, mlock, parallel 1 | about 16.5 GB |
-| `embeddinggemma-2` | ggml-org/embeddinggemma-2-GGUF (Q8_0) | `embedding`, ctx 8192, batch-size / ubatch-size 8192 | about 0.5 GB |
+| Name               | File                                  | Main settings                                        | Memory        |
+| ------------------ | ------------------------------------- | ---------------------------------------------------- | ------------- |
+| `gemma-4-26b`      | gemma-4-26B-A4B-it-qat-q4_0 (Q4_0)    | KV q8_0, mlock, parallel 1                           | about 16.5 GB |
+| `embeddinggemma-2` | ggml-org/embeddinggemma-2-GGUF (Q8_0) | `embedding`, ctx 8192, batch-size / ubatch-size 8192 | about 0.5 GB  |
 
 - **INI sections use short names and models are given as `hf-repo = repository:tag`.** Missing models are downloaded on
   first start, so the start script does not pass `--offline`.
@@ -110,16 +110,23 @@ controls such as `id_slot`, and llama-server keeps its default `--slot-prompt-si
 
 ## Backend settings
 
-The browser receives one backend from `GET /api/settings` ([LCTYSP-010](LCTYSP-010_data-and-settings.md)):
+The browser builds one backend from its settings ([LCTYSP-010](LCTYSP-010_data-and-settings.md)):
 
 ```json
-{ "id": "local", "label": "llama-server", "base_url": "http://localhost:12345",
-  "api": "responses", "api_key": "…", "model": "gemma-4-26b",
-  "embedding_model": "embeddinggemma-2", "embedding_dim": 768,
-  "thinking_kwarg": true, "extra": {} }
+{
+	"id": "local",
+	"label": "llama-server",
+	"base_url": "http://127.0.0.1:9931",
+	"api": "responses",
+	"api_key": "…",
+	"model": "gemma-4-26b-a4b-it",
+	"embedding_model": "embeddinggemma-2",
+	"thinking_kwarg": true,
+	"extra": {}
+}
 ```
 
-- `embedding_dim` is fixed by the vector format ([LCTYSP-008](LCTYSP-008_vector-binary.md)) and cannot be configured.
+- The embedding dimension is fixed by the vector format ([LCTYSP-008](LCTYSP-008_vector-binary.md)) and is not a setting.
 - `thinking_kwarg` controls whether thinking is sent as `chat_template_kwargs.enable_thinking`.
 
 ## Verified assumptions
@@ -128,7 +135,7 @@ Checked on 2026-11-04 with llama.cpp build 11669:
 
 - `/v1/responses` works, including the streaming event names.
 - CORS preflight passes and `Authorization` is allowed.
-- Reasoning arrives separately as `reasoning_text.delta` (Gemma needs `enable_thinking`).
+- Thinking arrives separately as `reasoning_text.delta` (Gemma needs `enable_thinking`).
 - With a single slot, the cache survives switching conversations.
 - Router mode behaves the same for CORS, caching and streaming.
 - EmbeddingGemma 2 runs on llama.cpp and is accurate enough for natural-language search in Japanese (5–6 of 6

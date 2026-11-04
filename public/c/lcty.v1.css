@@ -1,0 +1,314 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* lcty.v1.css: the stylesheet of every page and conversation file. Its rules (parts in BEM, no global reset,
+   box-sizing, the order of the sections): LCTYSP-005, Styling. */
+
+/* ---- tokens ---- */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --bg-side: #f5f5f4;
+  --bg-user: #f0f0ef;
+  --bg-code: #f6f6f5;
+  --fg: #1c1c1a;
+  --fg-dim: #6b6b66;
+  --border: #e3e3e0;
+  --accent: #2f6fde;
+  --danger: #c4372f;
+  --radius: 10px; /* message bubbles */
+  --radius-control: 7px; /* buttons and fields */
+  --radius-card: 12px; /* dialogs, the composer, the creation card */
+  --radius-pill: 999px; /* chips and floating buttons */
+  --shadow-float: 0 2px 8px rgba(0, 0, 0, .15);
+  --sidebar-width: 280px;
+  --content-width: 860px;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1b1a;
+    --bg-side: #222220;
+    --bg-user: #2a2a28;
+    --bg-code: #252523;
+    --fg: #e8e8e4;
+    --fg-dim: #9a9a94;
+    --border: #363633;
+    --accent: #6ea0ff;
+    --danger: #ff7a70;
+  }
+}
+
+/* ---- base ---- */
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); }
+[hidden] { display: none !important; }
+code, pre, textarea[spellcheck=false] { font-family: var(--font-mono); font-size: .9em; }
+
+/* Buttons: plain <button> / a.button in the pages, the mix lcty-button in the Shadow DOMs. Variants: primary, danger */
+button, a.button,
+lcty-c::part(lcty-button), lcty-sidebar::part(lcty-button), lcty-composer::part(lcty-button),
+lcty-message::part(lcty-button), lcty-cmd::part(lcty-button) {
+  font: inherit; color: inherit; background: transparent; border: 1px solid var(--border); border-radius: var(--radius-control);
+  padding: 3px 10px; cursor: pointer; white-space: nowrap;
+}
+button:hover, a.button:hover,
+lcty-c::part(lcty-button):hover, lcty-sidebar::part(lcty-button):hover, lcty-composer::part(lcty-button):hover,
+lcty-message::part(lcty-button):hover, lcty-cmd::part(lcty-button):hover { border-color: var(--fg-dim); }
+button:disabled,
+lcty-c::part(lcty-button):disabled, lcty-composer::part(lcty-button):disabled { opacity: .45; cursor: default; }
+button.primary, button.primary:hover, a.button.primary, a.button.primary:hover,
+lcty-c::part(lcty-button--primary), lcty-c::part(lcty-button--primary):hover,
+lcty-sidebar::part(lcty-button--primary), lcty-sidebar::part(lcty-button--primary):hover,
+lcty-composer::part(lcty-button--primary), lcty-composer::part(lcty-button--primary):hover {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+button.danger, lcty-c::part(lcty-button--danger) { color: var(--danger); }
+a.button { display: inline-block; text-decoration: none; color: inherit; font-size: 14px; }
+
+/* Fields */
+input[type=text], input[type=url], input[type=password], textarea, lcty-c::part(lcty-memory__text) {
+  box-sizing: border-box; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 6px 9px; width: 100%;
+}
+
+/* Tag chips: the new-conversation picker (.tag-chip) and the conversation's tags (lcty-c__tag) */
+.tag-chip, lcty-c::part(lcty-c__tag) {
+  display: inline-flex; align-items: center; gap: 2px; font-size: 12px; line-height: 1.6; border: 1px solid var(--border);
+  border-radius: var(--radius-pill); padding: 0 8px; background: var(--bg); color: var(--fg); cursor: pointer; user-select: none;
+}
+.tag-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tag-chip.unknown, lcty-c::part(lcty-c__tag--unknown) { border-style: dashed; color: var(--fg-dim); }
+.tag-chip .tag-x { border: 0; padding: 0 0 0 2px; font-size: 12px; line-height: 1; color: var(--fg-dim); } /* in <lcty-c>: lcty-c__tag-remove */
+.tag-picker { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+
+/* ---- pages ---- */
+/* moving between pages: a cross-document view transition; the sidebar has its own name (LCTYSP-005) */
+@view-transition { navigation: auto; }
+body.page { display: flex; flex-direction: column; height: 100vh; padding-left: var(--sidebar-width); } /* room for the fixed sidebar */
+.topbar, lcty-c::part(lcty-c__header) {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--border);
+}
+main.narrow { box-sizing: border-box; max-width: var(--content-width); width: 100%; margin: 0 auto; padding: 16px; overflow-y: auto; flex: 1; }
+/* the new conversation page (/): the creation card in the middle, the composer at its bottom */
+body.page.new { justify-content: center; }
+main.new-card {
+  box-sizing: border-box; display: grid; gap: 8px; padding: 16px; width: min(760px, calc(100% - 32px)); margin: 24px auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: 0 10px 30px rgba(0, 0, 0, .10);
+}
+.new-card h2 { margin: 0; font-size: 17px; }
+.new-card > lcty-composer { max-width: none; padding: 4px 0 0; }
+#toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 8px; font-size: 13px; z-index: 10;
+}
+
+/* ---- <lcty-sidebar>: the same on every page; inside <lcty-c> it is the part lcty-c__sidebar ---- */
+lcty-sidebar, lcty-c::part(lcty-c__sidebar) {
+  box-sizing: border-box; position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-width); z-index: 2;
+  display: flex; flex-direction: column; min-height: 0; background: var(--bg-side); border-right: 1px solid var(--border);
+  view-transition-name: lcty-sidebar;
+}
+lcty-sidebar::part(lcty-sidebar__nav), lcty-c::part(lcty-sidebar__nav) { display: flex; gap: 6px; padding: 10px; flex-wrap: wrap; }
+/* the links new / tags / settings are lcty-button (new: --primary) */
+lcty-sidebar::part(lcty-sidebar__link), lcty-c::part(lcty-sidebar__link) { display: inline-block; text-decoration: none; font-size: 14px; }
+lcty-sidebar::part(lcty-sidebar__search-box), lcty-c::part(lcty-sidebar__search-box) { padding: 0 10px 8px; display: grid; gap: 2px; }
+lcty-sidebar::part(lcty-sidebar__search), lcty-c::part(lcty-sidebar__search) {
+  box-sizing: border-box; width: 100%; font: inherit; color: inherit; font-size: 14px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius-control); padding: 5px 9px;
+}
+lcty-sidebar::part(lcty-sidebar__search-status), lcty-c::part(lcty-sidebar__search-status) { font-size: 12px; color: var(--fg-dim); }
+lcty-sidebar::part(lcty-sidebar__list), lcty-c::part(lcty-sidebar__list) { display: block; overflow-y: auto; flex: 1; padding: 0 6px 10px; }
+/* <lcty-conv-list> (in the sidebar's Shadow DOM, its parts exported to both hosts) */
+lcty-sidebar::part(lcty-conv-list__empty), lcty-c::part(lcty-conv-list__empty) { font-size: 13px; color: var(--fg-dim); padding: 6px 10px; margin: 0; }
+lcty-sidebar::part(lcty-conv-list__items), lcty-c::part(lcty-conv-list__items) { list-style: none; margin: 0; padding: 0; }
+lcty-sidebar::part(lcty-conv-list__item), lcty-c::part(lcty-conv-list__item) {
+  box-sizing: border-box; font: inherit; color: inherit; display: flex; flex-direction: column; align-items: flex-start; width: 100%;
+  background: transparent; border: 0; border-radius: var(--radius-control); padding: 6px 10px; text-align: left; cursor: pointer;
+}
+lcty-sidebar::part(lcty-conv-list__item):hover, lcty-c::part(lcty-conv-list__item):hover { background: var(--bg-user); }
+lcty-sidebar::part(lcty-conv-list__item--current), lcty-c::part(lcty-conv-list__item--current) { background: var(--bg-user); font-weight: 600; }
+lcty-sidebar::part(lcty-conv-list__title), lcty-c::part(lcty-conv-list__title) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+lcty-sidebar::part(lcty-conv-list__snippet), lcty-c::part(lcty-conv-list__snippet) {
+  font-size: 12px; color: var(--fg-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; width: 100%;
+}
+lcty-sidebar::part(lcty-conv-list__tags), lcty-c::part(lcty-conv-list__tags) { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+lcty-sidebar::part(lcty-conv-list__tag), lcty-c::part(lcty-conv-list__tag) {
+  display: inline-flex; align-items: center; font-size: 10px; line-height: 1.6; border: 1px solid var(--border);
+  border-radius: var(--radius-pill); padding: 0 6px; background: var(--bg); color: var(--fg); cursor: pointer; user-select: none;
+}
+lcty-sidebar::part(lcty-conv-list__meta), lcty-c::part(lcty-conv-list__meta) { font-size: 11px; color: var(--fg-dim); font-weight: normal; }
+
+/* ---- <lcty-c>: the conversation screen (layout: LCTYSP-005) ---- */
+lcty-c { display: flex; flex-direction: column; min-height: 100vh; margin-left: var(--sidebar-width); }
+lcty-c > lcty-message { width: 100%; } /* inside flex the width shrinks to the content */
+lcty-c > lcty-message:first-of-type { margin-top: 8px; }
+/* before the first message only the title and the buttons show: the system prompt, the thinking badge and the tags
+   come with the conversation; proposing memory needs tags */
+lcty-c:not(:has(> lcty-message)) > lcty-setup,
+lcty-c:not(:has(> lcty-message))::part(lcty-c__thinking),
+lcty-c:not(:has(> lcty-message))::part(lcty-c__tags),
+lcty-c:not(:has(> lcty-message))::part(lcty-c__propose-memory),
+lcty-c:not([data-setup-tags])::part(lcty-c__propose-memory) { display: none; }
+/* header: title, tags, badges, buttons */
+lcty-c::part(lcty-c__header) { position: sticky; top: 0; z-index: 1; background: var(--bg); }
+lcty-c::part(lcty-c__title) {
+  box-sizing: border-box; font: inherit; color: inherit; font-weight: 600; flex: 1; min-width: 160px; width: 100%;
+  background: var(--bg); border: 1px solid transparent; border-radius: var(--radius-control); padding: 6px 9px;
+}
+lcty-c::part(lcty-c__title):hover, lcty-c::part(lcty-c__title):focus { border-color: var(--border); }
+lcty-c::part(lcty-c__tags) { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+lcty-c::part(lcty-c__tag-list) { display: contents; }
+lcty-c::part(lcty-c__tag-remove) { font: inherit; font-size: 12px; line-height: 1; color: var(--fg-dim); } /* the bare button: lcty.v1.js */
+/* the picker's width is fixed, so the header does not move when the options (the tag definitions) arrive */
+lcty-c::part(lcty-c__tag-picker) {
+  box-sizing: border-box; font: inherit; font-size: 12px; width: 7em; border: 1px dashed var(--border); border-radius: var(--radius-pill); padding: 0 6px;
+  background: transparent; color: var(--fg-dim);
+}
+lcty-c::part(lcty-c__badges) { display: flex; gap: 4px; }
+lcty-c::part(lcty-c__thinking) {
+  font-size: 11px; border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 0 8px; color: var(--fg-dim); white-space: nowrap;
+}
+lcty-c::part(lcty-c__propose-memory) { font-size: 12px; }
+/* <lcty-setup>: the system prompt, the first of the file's elements (none shown when it is empty) */
+lcty-setup { box-sizing: border-box; display: block; max-width: var(--content-width); width: 100%; margin: 12px auto 8px; padding: 0 16px; }
+lcty-setup:not([data-instructions-base64]):is(:not([data-instructions]), [data-instructions=""]) { display: none; }
+lcty-setup::part(lcty-setup__summary) { color: var(--fg-dim); font-size: 13px; cursor: pointer; }
+lcty-setup::part(lcty-setup__text) {
+  white-space: pre-wrap; background: var(--bg-user); padding: 8px 12px; border-radius: 8px; margin: 6px 0 0;
+  font-family: var(--font-mono); font-size: .9em;
+}
+/* below the messages: the composer stays at the bottom, even with few messages */
+lcty-c::part(lcty-c__spacer) { flex: 1; }
+lcty-c::part(lcty-c__end) { height: 0; } /* the end of the page, watched for "to the bottom" */
+lcty-c::part(lcty-c__dock) { position: sticky; bottom: 0; }
+lcty-c::part(lcty-c__composer) { background: var(--bg); }
+/* floating above the composer: "to the bottom" and the running command (<lcty-cmd slot="float">) */
+lcty-c::part(lcty-c__float) {
+  position: absolute; bottom: calc(100% + 8px); left: 0; right: 0; display: flex; gap: 8px; justify-content: center;
+  align-items: center; /* clicks pass between its buttons: lcty.v1.js */
+}
+lcty-c::part(lcty-c__to-end) { border-radius: var(--radius-pill); padding: 4px 14px; background: var(--bg); box-shadow: var(--shadow-float); }
+lcty-c::part(lcty-c__to-end)::before { content: "↓ "; }
+
+/* ---- <lcty-composer>: on / and as the part lcty-c__composer (its parts exported under their own names) ---- */
+lcty-composer, lcty-c::part(lcty-c__composer) { box-sizing: border-box; display: block; max-width: var(--content-width); width: 100%; margin: 0 auto; padding: 8px 16px 16px; }
+lcty-composer::part(lcty-composer__form), lcty-c::part(lcty-composer__form) {
+  display: flex; gap: 8px; align-items: flex-end; border: 1px solid var(--border); border-radius: var(--radius-card);
+  padding: 8px; background: var(--bg);
+}
+lcty-composer::part(lcty-composer__input), lcty-c::part(lcty-composer__input) { box-sizing: border-box; flex: 1; width: 100%; font: inherit; color: inherit; } /* the field itself: lcty.v1.js */
+lcty-composer::part(lcty-composer__buttons), lcty-c::part(lcty-composer__buttons) { display: flex; gap: 6px; }
+/* send (lcty-button--primary) while idle, stop while generating */
+lcty-composer::part(lcty-composer__stop), lcty-c::part(lcty-composer__stop) { display: none; }
+lcty-composer[busy]::part(lcty-composer__send), lcty-c[busy]::part(lcty-composer__send) { display: none; }
+lcty-composer[busy]::part(lcty-composer__stop), lcty-c[busy]::part(lcty-composer__stop) { display: inline-block; }
+
+/* ---- <lcty-message>: head and foot in Shadow DOM, the content (Light DOM) through its slot ---- */
+lcty-message { box-sizing: border-box; display: block; max-width: var(--content-width); margin: 0 auto; padding: 10px 16px; }
+lcty-message::part(lcty-message__head) { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-dim); min-height: 24px; }
+lcty-message::part(lcty-message__actions) { margin-left: auto; display: flex; gap: 4px; visibility: hidden; }
+lcty-message:hover::part(lcty-message__actions) { visibility: visible; }
+lcty-message::part(lcty-message__action) { padding: 0 8px; } /* lcty-button */
+/* buttons exist per role (user: undo, fork; assistant: regenerate). Undo only on the last user message, regenerate only
+   on the last reply; none while generating */
+lcty-message::part(lcty-message__action--undo), lcty-message::part(lcty-message__action--regenerate) { display: none; }
+lcty-message[data-last-user]::part(lcty-message__action--undo), lcty-message:last-of-type::part(lcty-message__action--regenerate) { display: inline-block; }
+lcty-c[busy] lcty-message::part(lcty-message__actions) { display: none; }
+lcty-message::part(lcty-message__foot) { font-size: 11px; color: var(--fg-dim); margin-top: 4px; min-height: 1lh; } /* a line even before a module fills it in */
+lcty-message[data-status=incomplete]::part(lcty-message__foot) { color: var(--danger); }
+lcty-message[data-role=user] .user-text {
+  background: var(--bg-user); border-radius: var(--radius); padding: 8px 14px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+lcty-message[data-status=streaming] > article:empty::after,
+lcty-message[data-status=streaming] .md-tail:empty::after { content: "▍"; color: var(--fg-dim); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+lcty-message.flash .user-text, lcty-message.flash > article { animation: flash 1.6s ease-out; } /* a search hit opened */
+@keyframes flash { 0% { background: color-mix(in srgb, var(--accent) 25%, transparent); } 100% { background: transparent; } }
+/* thinking */
+lcty-thinking { display: block; margin: 2px 0 6px; }
+lcty-thinking summary { font-size: 12px; color: var(--fg-dim); cursor: pointer; }
+.thinking-body {
+  box-sizing: border-box; white-space: pre-wrap; font-size: 13px; color: var(--fg-dim); border-left: 3px solid var(--border);
+  padding: 2px 0 2px 12px; margin: 4px 0; max-height: 50vh; overflow-y: auto;
+}
+/* markdown (the reply's <article>) */
+lcty-message > article { display: block; overflow-wrap: anywhere; }
+.md-tail { display: contents; }
+lcty-message > article > :first-child, .md-tail > :first-child { margin-top: 0; }
+lcty-message > article :is(p, ul, ol, blockquote, .codeblock, .table-wrap) { margin: .55em 0; }
+lcty-message > article :is(h1, h2, h3, h4, h5, h6) { line-height: 1.35; margin: 1em 0 .4em; }
+lcty-message > article h1 { font-size: 1.45em; }
+lcty-message > article h2 { font-size: 1.28em; }
+lcty-message > article h3 { font-size: 1.12em; }
+lcty-message > article :is(h4, h5, h6) { font-size: 1em; }
+lcty-message > article :is(ul, ol) { padding-left: 1.6em; }
+lcty-message > article li > :is(ul, ol) { margin: .15em 0; }
+lcty-message > article blockquote { border-left: 3px solid var(--border); margin-left: 0; padding-left: 12px; color: var(--fg-dim); }
+lcty-message > article hr { border: 0; border-top: 1px solid var(--border); margin: 1.2em 0; }
+lcty-message > article a { color: var(--accent); }
+lcty-message > article :not(pre) > code { background: var(--bg-code); border: 1px solid var(--border); border-radius: 5px; padding: 0 4px; }
+.codeblock { border: 1px solid var(--border); border-radius: 8px; background: var(--bg-code); overflow: hidden; }
+.codebar { display: flex; align-items: center; padding: 2px 6px 2px 12px; font-size: 11px; color: var(--fg-dim); border-bottom: 1px solid var(--border); }
+.codebar .copy { margin-left: auto; font-size: 11px; padding: 0 8px; border-color: transparent; }
+.codeblock pre { margin: 0; padding: 10px 12px; overflow-x: auto; line-height: 1.5; }
+.table-wrap { overflow-x: auto; }
+lcty-message > article table { border-collapse: collapse; font-size: .95em; }
+lcty-message > article :is(th, td) { border: 1px solid var(--border); padding: 4px 10px; }
+lcty-message > article th { background: var(--bg-side); }
+
+/* ---- <lcty-cmd> (js/ui/lcty-cmd.js): shown only while running, a spinner and a stop button; floats above the
+   composer (slot="float") ---- */
+lcty-cmd { display: none; }
+lcty-cmd[state="running"] { box-sizing: border-box; display: block; max-width: var(--content-width); width: 100%; margin: 4px auto; padding: 0 16px; }
+lcty-cmd[slot="float"] {
+  width: auto; margin: 0; padding: 4px 6px 4px 14px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-pill); box-shadow: var(--shadow-float);
+}
+lcty-cmd::part(lcty-cmd__box) { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--fg-dim); }
+lcty-cmd::part(lcty-cmd__stop) { font-size: 12px; padding: 1px 8px; } /* lcty-button */
+lcty-cmd::part(lcty-cmd__spinner) {
+  width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+  animation: lcty-spin .8s linear infinite;
+}
+@keyframes lcty-spin { to { transform: rotate(360deg); } }
+
+/* ---- dialogs and forms: the pages' <dialog>s and forms, and the memory proposal dialog (lcty-c__memory, the block
+   lcty-memory, filled by js/tags.js) ---- */
+dialog, lcty-c::part(lcty-c__memory) {
+  box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); color: var(--fg);
+  width: min(560px, 92vw); padding: 18px 20px;
+}
+lcty-c::part(lcty-c__memory) { width: min(760px, 94vw); max-height: 88vh; }
+dialog::backdrop, lcty-c::part(lcty-c__memory)::backdrop { background: rgba(0, 0, 0, .35); }
+dialog h2, lcty-c::part(lcty-memory__title) { margin: 0 0 10px; font-size: 17px; }
+#settings-form, .tags-form, lcty-c::part(lcty-memory__form) { display: grid; gap: 10px; }
+#settings-form hr { border: 0; border-top: 1px solid var(--border); width: 100%; margin: 4px 0; }
+.field { display: grid; gap: 3px; }
+.field > span { font-size: 13px; color: var(--fg-dim); }
+.check, lcty-c::part(lcty-memory__adopt) { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.hint, lcty-c::part(lcty-memory__hint) { font-size: 12px; color: var(--fg-dim); margin: 0; }
+.dialog-buttons, lcty-c::part(lcty-memory__buttons) { display: flex; gap: 6px; align-items: center; }
+.dialog-buttons .spacer, lcty-c::part(lcty-memory__spacer) { flex: 1; }
+lcty-c::part(lcty-memory__tag) { font: inherit; color: inherit; }
+lcty-c::part(lcty-memory__proposals) { display: grid; gap: 8px; }
+lcty-c::part(lcty-memory__proposal) { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: start; }
+/* the tag editor (/tags) */
+.tag-edit { border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+.tag-edit-head { display: flex; gap: 6px; }
+.tag-edit-head input { flex: 1; font-weight: 600; }
+.mem-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.mem-list li { display: flex; gap: 6px; align-items: flex-start; }
+
+/* ---- narrow screens: the conversation page hides the sidebar; the other pages put it above their content ---- */
+@media (max-width: 720px) {
+  lcty-c { margin-left: 0; }
+  lcty-c::part(lcty-c__sidebar) { display: none; }
+  body.page { padding-left: 0; height: auto; min-height: 100vh; }
+  body.page > lcty-sidebar { position: static; width: auto; max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--border); }
+}
