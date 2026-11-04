@@ -1,0 +1,30 @@
+# This workflow is managed by gh actions-lock.
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Docs CI
+
+on:
+  pull_request:
+
+jobs:
+  docs-build:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6.0.0
+
+      - name: Build
+        working-directory: docs
+        run: rdoc --output dist
