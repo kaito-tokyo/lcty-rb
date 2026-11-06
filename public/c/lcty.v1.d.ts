@@ -298,11 +298,15 @@ declare class LctySidebarElement extends HTMLElement {
 }
 
 /**
- * <lcty-message>: one message. Its Shadow DOM holds the head (who, and the action buttons for the role), a <slot> (the
- * presentation HTML in Light DOM) and the foot. Rebuilt when data-role changes. The foot is shown when the message has
- * data-timings or data-client or is incomplete (data-status), before a module fills in its text (it keeps a line).
+ * <lcty-message>: one message. Its Shadow DOM holds the head (who, and the action buttons for the role), a reply's
+ * thinking, a <slot> (the presentation HTML in Light DOM) and the foot. Rebuilt when data-role changes. The thinking is
+ * a collapsed <details> showing data-thinking (or data-thinking-base64, UTF-8): summary "Thinking (n characters)" and
+ * the text; hidden when there is none. While a reply streams in a module writes the summary and the body, then sets
+ * data-thinking. The foot is shown when the message has data-timings or data-client or is incomplete (data-status),
+ * before a module fills in its text (it keeps a line).
  *
- * Parts: lcty-message__head / __who / __actions / __action (--undo, --fork, --regenerate; with lcty-button) / __foot
+ * Parts: lcty-message__head / __who / __actions / __action (--undo, --fork, --regenerate; with lcty-button) /
+ * __thinking / __thinking-summary / __thinking-body / __foot
  */
 declare class LctyMessageElement extends HTMLElement {
 	static readonly observedAttributes: readonly [
@@ -310,6 +314,8 @@ declare class LctyMessageElement extends HTMLElement {
 		"data-status",
 		"data-timings",
 		"data-client",
+		"data-thinking",
+		"data-thinking-base64",
 	];
 	/** Undo button (user messages only, else null) */
 	undoButton: HTMLButtonElement | null;
@@ -317,6 +323,12 @@ declare class LctyMessageElement extends HTMLElement {
 	forkButton: HTMLButtonElement | null;
 	/** Regenerate button (assistant messages only, else null) */
 	regenerateButton: HTMLButtonElement | null;
+	/** A reply's thinking (part lcty-message__thinking; assistant messages only, else null) */
+	thinking: HTMLDetailsElement | null;
+	/** Its summary (part lcty-message__thinking-summary) */
+	thinkingSummary: HTMLElement | null;
+	/** Its text (part lcty-message__thinking-body) */
+	thinkingBody: HTMLDivElement | null;
 	/** Who wrote it (part lcty-message__who) */
 	who: HTMLSpanElement;
 	/** Foot (part lcty-message__foot): timings, and the error or the stop of an incomplete reply; its text is set by a module */

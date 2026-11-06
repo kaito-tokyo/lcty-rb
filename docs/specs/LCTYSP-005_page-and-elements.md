@@ -217,7 +217,8 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   - `lcty-sidebar`: `__nav`, `__link` (new and settings), `__new`, `__settings` (the button opening the settings dialog), `__search-box`, `__search`, `__search-status`, `__list`.
   - `lcty-conv-list`: `__empty`, `__items`, `__entry`, `__item` (`--current`), `__title`, `__snippet`, `__tags`,
     `__tag`, `__tag-name`, `__meta`.
-  - `lcty-message`: `__head`, `__who`, `__actions`, `__action` (`--undo`, `--fork`, `--regenerate`), `__foot`.
+  - `lcty-message`: `__head`, `__who`, `__actions`, `__action` (`--undo`, `--fork`, `--regenerate`), `__thinking`,
+    `__thinking-summary`, `__thinking-body`, `__foot`.
   - `lcty-composer`: `__form`, `__input`, `__buttons`, `__send`, `__stop`.
   - `lcty-cmd`: `__box`, `__spinner`, `__label`, `__stop`.
 - **Nested Shadow DOMs export their parts under their own names.** `<lcty-c>` exports the sidebar's (and its list's)
@@ -246,15 +247,19 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
 | `<lcty-sidebar>`  | Head (new conversation, settings), search box, conversation list                                                                                                                                | `search`, `searchStatus`, `list`                                                                                                                  |
 | `<lcty-c>`        | The frame of a conversation file (used only under `/c/`): `<lcty-sidebar>`, header, `<slot>`, spacer, composer, memory dialog                                                                   | `sidebar`, `titleInput`, `tags`, `tagList`, `tagPicker`, `proposeMemoryButton`, `deleteButton`, `composer`, `toEndButton`, `dock`, `memoryDialog` |
 | `<lcty-setup>`    | The system prompt (a file element, line 5): `<details>` with its text, from `data-instructions` (or `data-instructions-base64`)                                                                 | `text`                                                                                                                                            |
-| `<lcty-message>`  | Head (who, action buttons for the role), `<slot>`, foot                                                                                                                                         | `who`, `undoButton`, `forkButton`, `regenerateButton` (`null` when the role has none), `foot`                                                     |
+| `<lcty-message>`  | Head (who, action buttons for the role), a reply's thinking (collapsed, from `data-thinking`), `<slot>`, foot                                                                                   | `who`, `undoButton`, `forkButton`, `regenerateButton`, `thinking`, `thinkingSummary`, `thinkingBody` (`null` when the role has none), `foot`      |
 | `<lcty-composer>` | Form (input, send, stop)                                                                                                                                                                        | `form`, `input`, `sendButton`, `stopButton`                                                                                                       |
 | `<lcty-cmd>`      | Spinner, label, stop button (shown only while running, floating above the composer through `slot="float"`). **Defined in a module** (`js/ui/lcty-cmd.js`), because a command is behavior itself | `label`, `stopButton`, `run()`, `abort()`                                                                                                         |
 
 - `<lcty-message>` builds buttons per role: user gets undo and fork, assistant gets regenerate. Parser-created elements
   have no `data-role` in the constructor, so `attributeChangedCallback` rebuilds the template with the role, replacing the
   fields. CSS shows undo only on the last user message (marked `data-last-user`) and regenerate only on the last reply.
-- `<lcty-thinking>` and `<article>` (the reply body) are plain containers, not defined elements. `<lcty-thinking>` is built
-  by the page only, from the message's `data-thinking`, and is never in a conversation file.
+- `<article>` (the reply body) is a plain container, not a defined element. A reply's thinking is part of
+  `<lcty-message>` itself: its Shadow DOM shows `data-thinking` (or `data-thinking-base64`) as a collapsed `<details>`
+  between the head and the content, so it is there at the first paint (and opened directly, without the module), and
+  nothing is added to the file. While a reply is generated the module writes the summary ("Thinking… (n characters)")
+  and, while it is open, the body; at the end it sets `data-thinking` and the element shows it. Files written before
+  had a `<lcty-thinking>` child of the message; `lcty.v1.css` hides it and the module removes it.
 - `<lcty-conv-list>` (the sidebar's conversation list) is defined in `lcty.v1.js` like the other elements: it builds
   the items (title, tag chips, date and, when known, the message count) as parts of `<lcty-sidebar>`'s Shadow DOM
   and fires `select` and `tag`. Pages give it items (`show(items, empty)`) and the current conversation (`current`).
@@ -307,7 +312,9 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   appears when the copy is next invalidated ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
 - **Moving between pages keeps the sidebar in place.** `lcty.v1.css` turns on cross-document view transitions
   (`@view-transition { navigation: auto; }`) and names the sidebar (`view-transition-name: lcty-sidebar`), so on a
-  same-origin navigation the browser keeps the sidebar where it is while the rest of the page changes. It is CSS only:
+  same-origin navigation the browser keeps the sidebar where it is while the rest of the page changes. Only the sidebar
+  takes part: the root is not captured (`:root { view-transition-name: none; }`), so the rest of the page changes at
+  once, without a cross-fade. It is CSS only:
   it scrolls nothing and changes no tree, and a browser without it navigates as usual.
 
 ### Layout of the conversation page
@@ -336,14 +343,14 @@ Rendering must stay cheaper than generation:
 - Drawing is batched with `requestAnimationFrame`, once per frame.
 - Markdown rendering fixes finished blocks in the DOM and redraws only the last, unfinished block (redrawing everything
   would be O(n²)). An unfinished code block is appended to a text node instead of being redrawn.
-- Thinking is collapsed and not rendered while closed.
+- Thinking is collapsed. While a reply streams in, its text is added to the body only while it is open.
 - Markdown to HTML always escapes text and only allows `http:`, `https:` and `mailto:` link URLs. LLM output is never put
   into the DOM as raw HTML.
 - Messages do not use `content-visibility: auto`. Off-screen messages would get estimated heights, so the page's
   height changes after the first paint and the browser restores the scroll position against an estimated layout
   (Safari landed at a different place on every reload).
 - **The rendering is settled by `lcty.v1.js`; the module is not needed for it.** The module runs after parsing and may
-  run after the first paint; it prepares the messages (feet, thinking views) and the header synchronously, and
+  run after the first paint; it prepares the messages (feet) and the header synchronously, and
   only then waits for the settings and the tags.
 - **Scrolling is the user's.** The page never moves to the end by itself: where it opens is the browser's (the top, the
   `#c-msg-…` element, or on reload the previous position); the page does not touch `history.scrollRestoration`. Moving to the end

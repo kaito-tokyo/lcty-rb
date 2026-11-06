@@ -559,6 +559,8 @@ export class LctyMessageElement extends HTMLElement {
 		"data-status",
 		"data-timings",
 		"data-client",
+		"data-thinking",
+		"data-thinking-base64",
 	];
 
 	constructor() {
@@ -572,7 +574,33 @@ export class LctyMessageElement extends HTMLElement {
 	attributeChangedCallback(name, old, value) {
 		if (name === "data-role" && old !== value)
 			this.shadowRoot.replaceChildren(...this.#build(value));
+		if (name === "data-role" || name.startsWith("data-thinking"))
+			this.#showThinking();
 		this.#showFoot();
+	}
+
+	// The thinking of a reply, collapsed, from data-thinking (or data-thinking-base64, UTF-8, when the text has
+	// characters an attribute cannot hold). Hidden when there is none. While a reply is generated a module writes the
+	// summary and the body itself, then sets the attribute.
+	#showThinking() {
+		if (!this.thinking) return;
+		const base64 = this.getAttribute("data-thinking-base64");
+		let text = this.getAttribute("data-thinking") || "";
+		if (base64 != null) {
+			try {
+				text = new TextDecoder("utf-8", { fatal: true }).decode(
+					Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
+				);
+			} catch {
+				text = "";
+			}
+		}
+		this.thinkingSummary.textContent = LctyT._(
+			"thinkingDone",
+			"Thinking ({n} characters)",
+		).replace("{n}", text.length.toLocaleString());
+		this.thinkingBody.textContent = text;
+		this.thinking.hidden = !text;
 	}
 
 	#showFoot() {
@@ -626,6 +654,28 @@ export class LctyMessageElement extends HTMLElement {
 			part: "lcty-message__foot",
 			hidden: "",
 		});
+		// a reply's thinking, between the head and the content (filled by #showThinking)
+		this.thinkingSummary =
+			role === "assistant"
+				? $(document.createElement("summary"), {
+						part: "lcty-message__thinking-summary",
+					})
+				: null;
+		this.thinkingBody =
+			role === "assistant"
+				? $(document.createElement("div"), {
+						part: "lcty-message__thinking-body",
+					})
+				: null;
+		this.thinking =
+			role === "assistant"
+				? $(
+						document.createElement("details"),
+						{ part: "lcty-message__thinking", hidden: "" },
+						this.thinkingSummary,
+						this.thinkingBody,
+					)
+				: null;
 
 		return [
 			$(
@@ -640,6 +690,7 @@ export class LctyMessageElement extends HTMLElement {
 					),
 				),
 			),
+			...(this.thinking ? [this.thinking] : []),
 			document.createElement("slot"),
 			this.foot,
 		];

@@ -175,9 +175,13 @@ lcty-c::part(lcty-c__tag--unknown) {
 }
 
 /* ---- pages ---- */
-/* moving between pages: a cross-document view transition; the sidebar has its own name (LCTYSP-005) */
+/* moving between pages: a cross-document view transition of the sidebar only (it has its own name); the rest of the
+   page is not captured, so it changes at once (LCTYSP-005) */
 @view-transition {
 	navigation: auto;
+}
+:root {
+	view-transition-name: none;
 }
 body.page {
 	display: flex;
@@ -609,16 +613,15 @@ lcty-message.flash > article {
 		background: transparent;
 	}
 }
-/* thinking */
-lcty-thinking {
-	display: block;
+/* thinking: a reply's own view (lcty-message__thinking, from data-thinking), between the head and the content */
+lcty-message::part(lcty-message__thinking) {
 	margin: 2px 0 6px;
 }
-lcty-thinking summary {
+lcty-message::part(lcty-message__thinking-summary) {
 	color: var(--fg-dim);
 	cursor: pointer;
 }
-.thinking-body {
+lcty-message::part(lcty-message__thinking-body) {
 	box-sizing: border-box;
 	white-space: pre-wrap;
 	color: var(--fg-dim);
@@ -627,6 +630,10 @@ lcty-thinking summary {
 	margin: 4px 0;
 	max-height: 50vh;
 	overflow-y: auto;
+}
+/* a <lcty-thinking> child that files written before the view moved into lcty-message may still have */
+lcty-message > lcty-thinking {
+	display: none;
 }
 /* markdown (the reply's <article>) */
 lcty-message > article {
