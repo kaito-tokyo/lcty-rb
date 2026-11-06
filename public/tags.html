@@ -1,0 +1,30 @@
+<!--
+SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-lcty-t="tagsPageTitle">Tags - local-chatty</title>
+<link rel="stylesheet" href="/c/lcty.v1.css">
+<script src="/c/lcty.v1.js"></script>
+<script src="/c/lcty.v1.lang-ja.js"></script>
+<script>defineLctyV1CustomElements();</script>
+<script type="module" src="/tags.js"></script>
+</head>
+<body class="page">
+<lcty-sidebar></lcty-sidebar>
+<header class="topbar">
+  <strong data-lcty-t="tags">Tags</strong>
+</header>
+<main class="narrow">
+  <p class="hint" data-lcty-t="tagsHint">The order is the order in which the system prompt draft joins them. Changing prompts or memory does not affect conversations already started.</p>
+  <div id="tags-editor"></div>
+</main>
+<div id="toast" role="status" hidden></div>
+</body>
+</html>

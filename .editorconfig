@@ -14,3 +14,17 @@ trim_trailing_whitespace = true
 indent_style = tab
 indent_size = tab
 tab_width = 8
+
+[*.json]
+indent_style = tab
+indent_size = tab
+tab_width = 2
+
+[*.js]
+indent_style = tab
+indent_size = tab
+tab_width = 2
+
+[*.wat]
+indent_style = space
+tab_width = 2

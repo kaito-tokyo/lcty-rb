@@ -64,7 +64,7 @@ CREATE TABLE conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (c
 
 - The query is embedded with the prefix `task: search result | query: `; documents are embedded with
   `title: none | text: ` (EmbeddingGemma 2's recommended prompts). Titles are not embedded because they can change.
-- Scoring runs in the browser over the distribution vector binary (256 dims, brute force with WASM SIMD) and takes the
+- Scoring runs in the browser over the distribution files (256 dims, brute force with WASM SIMD) and takes the
   best score per id ([LCTYSP-008](LCTYSP-008_vector-binary.md)).
 - When the embedding model is not configured or not running, only keyword search is used and a notice is shown.
 
@@ -72,13 +72,15 @@ CREATE TABLE conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (c
 
 ```
 browser: embed the query                       ┐ in parallel
-browser → POST /api/search {q, tags}           ┘
+browser → POST /v1/search {q, tags}           ┘
 browser: vector search over the downloaded binary
 browser: merge with RRF (score = Σ 1 / (60 + rank)), keep the best round per conversation (up to 30)
-browser → POST /api/snippets {ids, q}          only for rounds without a snippet (semantic-only hits)
+browser → POST /v1/snippets {ids, q}          only for rounds without a snippet (semantic-only hits)
 ```
 
-- Rounds are mapped to conversations with `message_ids` from `GET /api/conversations`, which the page loads anyway.
+- Rounds are mapped to conversations with `message_ids` from `GET /v1/conversations`. The sidebar's list comes from
+  the browser's copy of the meta ([LCTYSP-010](LCTYSP-010_data-and-settings.md)), so this is fetched only when a
+  semantic search runs, and kept until the list changes. `tag:` filters use the copy's `tags_hint`.
 
 ## Filtering by tag
 
@@ -87,6 +89,10 @@ browser → POST /api/snippets {ids, q}          only for rounds without a snipp
 - The server filters keyword search with `conv_tags`, updated on every sync with the conversation's current tags. The
   browser filters semantic hits with the tags from the conversation list.
 - Conversation lists and results show current tags; clicking a tag searches for `tag:name`.
+- `conv_tags` also gives `GET /v1/meta-all.json` its `tags_hint` (in the order the tags were given), and `conv_stats`
+  (the number of messages of each conversation, inherited ones included, recorded on every sync) its `messages_hint`,
+  so the browser's copy of the meta has current tags and counts without the server reading the bodies of the files. It is a hint: written through
+  the server it follows every change, but a file edited by hand is reflected only at the next start.
 
 ## Budget
 

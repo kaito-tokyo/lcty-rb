@@ -27,7 +27,7 @@ The top priority is performance, above all the time from sending a message to th
                  │  - storage client, search         │
                  └───────┬────────────────┬─────────┘
    same origin           │                │  cross origin (CORS)
-   static files, /api/*  │                │  POST /v1/responses (SSE), /v1/embeddings
+   static files, /v1/*   │                │  POST /v1/responses (SSE), /v1/embeddings
                  ┌───────▼──────┐  ┌──────▼──────────────────┐
                  │ chatty.rb    │  │ llama-server             │
                  │ (WEBrick)    │  │ (router mode, :12345)    │
@@ -50,8 +50,8 @@ Two principles drive the design:
 - Removes the latency of a relay and the fragile part of relaying SSE through WEBrick. Stopping uses `AbortController`.
 - Verified: llama-server answers preflight requests, echoes the `Origin` in `Access-Control-Allow-Origin`, and allows
   every header (`*`), including `Authorization`.
-- The API key is handed to the browser by `GET /api/settings` ([LCTYSP-010](LCTYSP-010_data-and-settings.md)). This is
-  acceptable because everything is bound to localhost.
+- The API key is a browser setting whose default comes from `GET /v1/defaults.json` ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+  This is acceptable because everything is bound to localhost; the key only guards against connecting to the wrong server.
 
 ### Ruby has three jobs: serving static files, the storage API, and the search index
 
@@ -59,7 +59,7 @@ Two principles drive the design:
 - Ruby barely interprets conversations. The exceptions are the rule that limits undo to one turn
   ([LCTYSP-004](LCTYSP-004_editing.md)), validation of what it writes ([LCTYSP-003](LCTYSP-003_conversation-file.md)),
   and deriving the search index ([LCTYSP-007](LCTYSP-007_search.md)).
-- Pages are static files. Ruby never assembles HTML from templates; it only serves files and answers `/api/*`
+- Pages are static files. Ruby never assembles HTML from templates; it only serves files (publishing `lcty.v1.*` into `data/c/` and bundling the module entries at startup) and answers `/v1/*`
   ([LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-006](LCTYSP-006_http-api.md)).
 
 ### The source of truth is files on the server
@@ -100,12 +100,12 @@ Two principles drive the design:
 
 Measured with gemma-4-26B-A4B on an Apple silicon Mac:
 
-| Situation | Time to the first delta |
-|---|---|
-| Sending about 5,900 tokens for the first time | 12.1 s |
-| Same content plus one more round at the end | 0.25 s |
-| One character changed near the start | 13.1 s |
-| Switching to another conversation and back | 0.09 s (the in-RAM cache still applies) |
+| Situation                                     | Time to the first delta                 |
+| --------------------------------------------- | --------------------------------------- |
+| Sending about 5,900 tokens for the first time | 12.1 s                                  |
+| Same content plus one more round at the end   | 0.25 s                                  |
+| One character changed near the start          | 13.1 s                                  |
+| Switching to another conversation and back    | 0.09 s (the in-RAM cache still applies) |
 
 - Prompt processing runs at about 450 tok/s and generation at about 40–55 tok/s, so perceived speed depends almost
   entirely on whether the prefix can be reused.

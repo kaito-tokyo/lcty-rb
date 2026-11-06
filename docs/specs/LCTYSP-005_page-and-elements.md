@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 # LCTYSP-005: Pages and custom elements
 
 - Status: Accepted
-- Related: [LCTYSP-001](LCTYSP-001_architecture.md), [LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-007](LCTYSP-007_search.md)
-- Implementation: `public/c/lcty.v1.js` (documented in `public/c/lcty.v1.d.ts`), `public/c/lcty.v1.esm.js`,
+- Related: [LCTYSP-001](LCTYSP-001_architecture.md), [LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-007](LCTYSP-007_search.md), [LCTYSP-011](LCTYSP-011_module-bundler.md)
+- Implementation: `lib/c/servlet.rb`, `public/c/lcty.v1.js` (documented in `public/c/lcty.v1.d.ts`), `public/c/lcty.v1.*`,
   `public/js/ui/lcty-elements.js`, `public/js/pages/*.js`
 
 ## Summary
@@ -19,48 +19,111 @@ a module loaded after parsing attaches every feature.
 
 ## Pages
 
-| URL | Page | Content |
-|---|---|---|
-| `/` | Search (home) | Search box, results and list, links to new conversation, tags, settings |
-| `/c/` | New conversation | Tag picker, system prompt draft, thinking on/off, first message. `?fork=<id>&at=<n>` forks ([LCTYSP-004](LCTYSP-004_editing.md)) |
-| `/c/<id>.html` | Conversation | Messages, composer, undo / regenerate / fork, tags (labels), memory proposals. `#<message UUIDv7>` scrolls to that round |
-| `/tags` | Tags | Editing tag definitions and memory ([LCTYSP-009](LCTYSP-009_tags-and-memory.md)) |
-| `/settings` | Settings | Current values from `.env` and a connection test ([LCTYSP-010](LCTYSP-010_data-and-settings.md)) |
+| URL            | Page                            | Content                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`            | New conversation (the top page) | Separate components, not `<lcty-c>`: `<lcty-sidebar>` and a creation card in plain HTML (tag picker, system prompt draft, thinking on/off) holding a `<lcty-composer>` for the first message. Sending creates the file and moves to `/c/<id>.html` ([LCTYSP-004](LCTYSP-004_editing.md)). `?fork=<id>&at=<n>` forks ([LCTYSP-004](LCTYSP-004_editing.md)); `?q=…` puts a query into the sidebar's search box. `/c/` redirects here (with its query) |
+| `/c/<id>.html` | Conversation                    | Messages, composer, undo / regenerate / fork, tags (labels), memory proposals. `#c-msg-<message UUIDv7>` (the message element's `id`) scrolls to that round; a bare `#<message UUIDv7>` from older links still works                                                                                                                                                                                                                                |
+| `/tags`        | Tags                            | Editing tag definitions and memory ([LCTYSP-009](LCTYSP-009_tags-and-memory.md))                                                                                                                                                                                                                                                                                                                                                                    |
+| `/settings`    | Settings                        | Editing the browser settings and a connection test ([LCTYSP-010](LCTYSP-010_data-and-settings.md))                                                                                                                                                                                                                                                                                                                                                  |
 
-- The conversation page has a sidebar with the search box and the conversation list. Search is shared with the home page
-  (`js/search/search-panel.js`). Choosing a conversation navigates to it; a match inside the current conversation
-  scrolls to that round instead.
+- **Every page has the same sidebar** (`<lcty-sidebar>`): new conversation, tags and settings, the search box and the
+  conversation list. The conversation page has it inside `lcty-c`'s Shadow DOM; the other pages put it at the top
+  of `<body>`. Its behavior is `js/ui/sidebar.js` (search is `js/search/search-panel.js`). Choosing a conversation
+  navigates to it; a match inside the current conversation scrolls to that round instead.
+- Narrow screens (720px or less): the conversation page hides the sidebar; the other pages show it above their content.
 - The history sent back to the model is read from the DOM: each `<lcty-message>` reads its text from attributes, which
   are exactly the saved strings ([LCTYSP-003](LCTYSP-003_conversation-file.md)). No JSON has to be fetched to open a
   conversation.
 
 ### Routing
 
-- **Under `/c/`, requests are routed by extension.** `.html` returns `data/c/<id>.html` untouched; anything else is a
-  static file from `public/c/` (`lcty.v1.js`, `lcty.v1.css`, `lcty.v1.esm.js`, and `index.html` for `/c/`). Because the
-  header line uses relative paths, nothing needs special handling.
-- `/c/` is `public/c/index.html`, a document with only the header line, which opens as an empty conversation.
-- `/tags` and `/settings` return HTML from `public/`; everything else under `/` is served from `public/`.
-- Ruby answers dynamically only under `/api/*` ([LCTYSP-006](LCTYSP-006_http-api.md)).
+- **Under `/c/`, everything comes from `data/c/`.** `<id>.html` returns the conversation file untouched, `lcty.v1.*` are
+  static files next to it, and `/c/` itself redirects to `/` (a new conversation is the top page). Nothing else is served.
+  The header line uses relative paths.
+- **`/c/` URLs are permanent** (conversation permalinks and the files the header line loads), so they are never moved
+  under a versioned path such as `/v1/`. The assets carry their version in the file name (`lcty.v1.*`).
+- `/tags` and `/settings` return HTML from `public/`; everything else under `/` is served from `public/` (`/` is
+  `public/index.html`, the new conversation page).
+- Ruby answers dynamically under `/v1/*` ([LCTYSP-006](LCTYSP-006_http-api.md), including `/v1/defaults.json` of
+  [LCTYSP-010](LCTYSP-010_data-and-settings.md)). Everything under `/c/` is static.
+- **Serving code lives per URL prefix:** `/c/` in `lib/c/servlet.rb` (`Chatty::C::Servlet`), `/v1/` in
+  `lib/v1/servlet.rb` (`Chatty::V1::Servlet`). Everything about vectors (the vector binary and the vector DB) is under
+  `lib/v1/` too.
+- **`chatty.rb` only wires the servlets together:** it opens the data (`Chatty.open_data`), builds the WEBrick server with
+  the request guard and mounts `/v1`, `/c`, `/tags`, `/settings` and `/`. At startup it publishes the `lcty.v1.*` files (`C.publish_assets`). It also applies transparent gzip to every servlet
+  (`GzipServer`): 200 responses to GET of text-like types of 1 KiB or more, when `Accept-Encoding` allows gzip. The
+  ETag is kept and `Vary: Accept-Encoding` is added, so conditional GETs still return 304. Shared parts live in `lib/`: settings
+  (`lib/config.rb`), storage (`lib/store.rb`), the `Host` / `Origin` check (`lib/guard.rb`) and the fixed pages
+  (`lib/page_servlet.rb`).
 
 ## The `lcty.v1` files
 
-| File | Role |
-|---|---|
-| `lcty.v1.css` | The stylesheet for every page. Loaded by `<link>` in the header, so pages are styled even without scripts. |
-| `lcty.v1.js` | Classic script loaded synchronously in `<head>`. Defines the custom elements: DOM structure only. |
-| `lcty.v1.d.ts` | Types and documentation of `lcty.v1.js`. |
-| `lcty.v1.esm.js` | Module entry (`<script type="module">`, runs after parsing). Loads `js/pages/conversation.js`. |
+Every page loads the same files. They are published at startup into `data/c/`, next to the conversation files: they
+belong to the user together with the conversations they render, so a backup of `data/` keeps both
+([LCTYSP-010](LCTYSP-010_data-and-settings.md)). Each is rewritten only when its content changed.
 
-- **`v1` is the rendering version.** When the format changes, the version goes up (`lcty.v2.*`) and old files keep
+**Rule (path design): `c/lcty.v1.*` holds exactly what a conversation file needs where it is.** A conversation file
+opened directly, offline, must still find everything it needs next to it, so those files are `/c/lcty.v1.*` (in
+`public/c/`, published into `data/c/`). A file a conversation file does not need on its own (one that only serves the
+other pages, or a copy of server data such as the sidebar's meta database) is not a `/c/` file: it lives directly
+under `public/` and is served from the server's root, like the operation pages (`/meta_db.worker.js`,
+[LCTYSP-010](LCTYSP-010_data-and-settings.md); `/fuzzy_search.worker.js` and `/bdot264.wasm`,
+[LCTYSP-008](LCTYSP-008_vector-binary.md)). The `lcty.v1.` prefix is for `/c/` files only.
+
+The `/c/` files refer to each other by **relative paths only**, so they work wherever the folder is: over HTTP at
+`/c/` and opened directly from `data/c/` (`file://`). The stylesheet is linked once, by line 1, and no Shadow DOM
+loads one (it would need a path of its own). Links to the other pages (`/`,
+`/tags`, `/settings`) stay absolute: they are the server's pages, not part of reading a conversation.
+
+| File (`data/c/`)     | Source                                   | Role                                                                                                                                                                                                                                         |
+| -------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lcty.v1.css`        | `public/c/lcty.v1.css` (copied)          | The stylesheet for every page, loaded by `<link>` so pages are styled even without scripts.                                                                                                                                                  |
+| `lcty.v1.js`         | `public/c/lcty.v1.js` (ES module, built) | Classic script loaded synchronously in `<head>`. Defines `LctyT` and the custom elements: DOM structure only.                                                                                                                                |
+| `lcty.v1.lang-ja.js` | `public/c/lcty.v1.lang-ja.json` (built)  | The Japanese texts. The JSON table is checked and wrapped as `LctyT.addLang("ja", …);`, a classic script loaded right after `lcty.v1.js`.                                                                                                    |
+| `lcty.v1.module.js`  | `public/c/lcty.v1.module.js` (bundled)   | The module entry of the conversation page (`<script type="module">`, runs after parsing): it attaches the event listeners and features `/c/<id>.html` needs (the page code is written in it directly). Bundled with every module it imports. |
+
+Types and documentation of `lcty.v1.js` are in `public/c/lcty.v1.d.ts`. `public/js/` (the modules) is not copied into
+`data/c/`; it only exists as the source of the bundles. The `.d.ts` and `.license` files stay in the repository.
+
+The other pages have their own module entries, which are not part of `data/c/`: `public/index.js` (`/`,
+`js/pages/new.js`), `public/tags.js` and `public/settings.js`. They are bundled at startup the same way and served
+from memory at `/index.js`, `/tags.js` and `/settings.js` (`lib/module_servlet.rb`). Each entry only imports its
+page's init function (`initNewPage`, `initTagsPage`, `initSettingsPage` in `js/pages/*.js`) and calls it.
+The workers are not `/c/` files either: `public/meta_db.worker.js` (`/meta_db.worker.js`, the sidebar's meta
+database, a copy of server data) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
+with its kernel `public/bdot264.wasm`, built from `public/bdot264.wat`) work on server data, which a conversation file
+opened on its own does not need.
+
+- **The module entries are bundled at startup** into one module file each, by the module bundler
+  ([LCTYSP-011](LCTYSP-011_module-bundler.md)): every module becomes a block and its code is never rewritten. This
+  relies on conventions the modules follow (imports and exports on single lines, immutable exports, and every module
+  except the entry only declaring at its top level); the server does not start when one is broken. So module state is a
+  `const state = { … }` literal, classes are returned by functions (`cmdElementClass`, `convListClass`), and only the
+  entry runs code at the top level: `lcty.v1.module.js` holds the conversation page's code, and the other entries call
+  an init function.
+- **`v1` is the rendering version.** When the format changes, the version goes up (`lcty-c.v2.*`) and old files keep
   opening with the old version.
-- **`lcty.v1.js` contains no comments except the SPDX lines,** because every conversation page loads it synchronously
-  first and size matters. Its documentation lives in `lcty.v1.d.ts` and in this spec. The ERB conditions described
-  below look like comments but are a mechanism, not documentation.
-- Other pages (`/`, `/tags`, `/settings`) do not load `lcty.v1.js`. Markdown rendering there is the ordinary module
-  `js/ui/markdown.js`.
+- **The source is an ES module; the served file is a classic script.** `public/c/lcty.v1.js` has no imports and marks
+  its exported declarations with `export`. Building is one step: each leading `export` becomes `/*export*/`. The source
+  can be imported as a module (tests, tools); the published file runs as a classic script.
+- **`lcty.v1.js` contains no comments except the SPDX lines and `/*export*/`,** because every conversation page loads
+  it synchronously first and size matters. Its documentation lives in `lcty.v1.d.ts` and in this spec.
+- **Defining the elements is a separate step.** `lcty.v1.js` only declares the classes; the page calls
+  `defineLctyV1CustomElements()` in an inline script after the languages, before its body. Importing the source as a
+  module therefore defines nothing, and `defineLctyV1CustomElements(registry)` can target another registry (it defaults
+  to `globalThis.customElements`).
+- **Every script is explicitly allowed by a CSP.** The inline script is always exactly `defineLctyV1CustomElements();`,
+  so a Content Security Policy can allow it by its hash, `script-src 'self' 'sha256-X2wbvtAYt2XwlVqD5csibGuGUbyTIG+8dURKk+zfmys='`,
+  without `'unsafe-inline'`. (chatty.rb does not send a CSP header yet.)
+- Other pages (`/`, `/tags`, `/settings`) load the same files from `/c/` and make the same call.
+- Markdown rendering is the ordinary module `js/ui/markdown.js` on every page.
 
 ## Custom elements
+
+**Only interactive parts are custom elements.** Structure without behavior of its own (frames, cards, headings, hints)
+is plain HTML styled by `lcty.v1.css`; a custom element is used where a part has its own interaction or state (the
+sidebar, the composer, messages, commands), or where a conversation file has to be assembled by one element
+(`<lcty-c>`).
 
 ### Defined synchronously; the DOM is settled in one pass
 
@@ -79,50 +142,180 @@ a module loaded after parsing attaches every feature.
   fields. Values that decide the structure are passed as arguments.
 - **The conversation file's elements stay in Light DOM and are shown through `<slot>`.** Their display order follows the
   Shadow DOM, whenever they arrive.
-- **Styling comes from outside through `::part()`** (multiple names are allowed, such as `part="action undo"`, and they
-  combine with host conditions such as `lcty-message[data-last-user]::part(undo)`). CSS variables and inherited
-  properties (`font`, `color`) reach inside. The old piercing selectors (`/deep/`, `>>>`) no longer exist. Only
-  `lcty-container`'s frame, which has many parts, loads `lcty.v1.css` inside its shadow root.
+
+### Styling
+
+- **Styling comes from outside through `::part()`** (multiple names are allowed, such as
+  `part="lcty-message__action lcty-message__action--undo"`, and they combine with host conditions such as
+  `lcty-message[data-last-user]::part(lcty-message__action--undo)`). CSS variables and inherited
+  properties (`font`, `color`) reach inside. The old piercing selectors (`/deep/`, `>>>`) no longer exist.
+- **Rule: styling belongs to the root CSS (`lcty.v1.css`).** Look and layout are written there, through `::part()`
+  for what is inside a Shadow DOM. The exception is fine-grained tuning of a UI control that only serves its
+  behavior (a textarea's `resize` and `outline`, a button's inner padding): that may be kept inside the Shadow DOM as an adopted stylesheet
+  (`adoptedStyleSheets`): a `CSSStyleSheet` built with `replaceSync` in the element's constructor, right where its
+  Shadow DOM is made, so the tuning sits next to the elements it tunes. It must stay
+  small, since it is part of `lcty.v1.js`, and it never sets what the page would want to change (colors, sizes of
+  text, spacing between elements, layout). Today: in `<lcty-c>` (the tag chip's × as a bare button, and the floating area letting clicks through
+  between its buttons); in `<lcty-composer>` (the textarea as a bare field: no border, background,
+  outline or resize handle, its inner padding and maximum height). Page rules through `::part()` still win over
+  them (the outer tree's normal declarations come first in the cascade).
+- **No Shadow DOM loads a stylesheet.** The page links `lcty.v1.css` once (line 1 of a conversation file, the
+  `<head>` of the other pages), and every element inside a Shadow DOM that needs styling has a part. Nothing inside
+  gets the page's element rules (`button`, `input`), and each part carries what it needs.
+- **Rule: no global reset.** A rule such as `* { box-sizing: border-box }` or `button { font: inherit }` reaches only
+  the Light DOM, so it would have to be repeated in every Shadow DOM (an adopted sheet each) to mean the same
+  everywhere. Instead each rule says what its element needs: `box-sizing: border-box` where a width or height
+  includes padding or border, `font: inherit` (and `color: inherit`) on controls. The button look is one rule for
+  `button` / `a.button` and every `::part(lcty-button)`, so it carries those for all of them. A shorthand `font: inherit`
+  in a `::part()` rule wins over an adopted sheet, so a `line-height` it must keep is written after it, in the same
+  rule.
+  - **Where `box-sizing: border-box` is written:** on a box whose width or height is set (a length, `100%`, `min()`,
+    `max-width` / `max-height`) and that has padding or a border: the fields and the inputs at `width: 100%` (the
+    search box, the title, the composer's textarea, the memory items), the sidebar's conversation items, the fixed
+    widths (the sidebar, the tag picker), the boxes at most `--content-width` wide with padding (`lcty-message`, the
+    composer, the system prompt, `main.narrow`, a running `lcty-cmd`), the creation card and the dialogs, and the
+    thinking text (its `max-height`).
+  - **Everything else keeps the browser's default** (`content-box`; buttons and checkboxes are `border-box` there):
+    a box whose size comes from its content or its container is the same either way. `lcty-cmd`'s spinner is
+    `content-box` on purpose: 14 px plus its 2 px border.
+  - A new rule that sets a size on a box with padding or a border needs the declaration too; without it the box
+    grows by its padding and border.
+- **Rule: part names are BEM, with the custom element's tag name as the block.** What `::part()` can select is in
+  effect one namespace: exported parts merge into the outer host's, and a short name (`tag`, `list`) soon means two
+  things. The tag name is unique by construction (the custom element registry), so `<block>__<element>` never
+  collides:
+  - **element:** `lcty-c__header`, `lcty-sidebar__search`, `lcty-conv-list__title`, `lcty-message__foot`,
+    `lcty-composer__input`, `lcty-cmd__spinner`. A block that is not a custom element is named the same way:
+    `lcty-memory` (the memory dialog's contents, built by `js/tags.js`).
+  - **modifier** (a state or a variant), added next to the element's own name, since `::part()` cannot be followed
+    by attribute selectors: `part="lcty-conv-list__item lcty-conv-list__item--current"`,
+    `lcty-c__tag lcty-c__tag--unknown`, `lcty-message__action lcty-message__action--undo`. Host states stay host
+    conditions (`lcty-c[busy]::part(lcty-composer__send)`).
+  - **mix** (a look shared across blocks): its own block added as another name, `part="lcty-c__delete lcty-button lcty-button--danger"`.
+    Every button of the Shadow DOMs (and the sidebar's links) is `lcty-button`, with `--primary` or `--danger`; it is
+    styled in one rule together with the pages' `button` / `a.button`, and the element part keeps only what differs.
+  - **a nested element's host** is an element of the outer block: `lcty-c__sidebar`, `lcty-c__composer`.
+- **Parts today.**
+  - `lcty-c`: `__sidebar`, `__header`, `__title`, `__tags`, `__tag-list`, `__tag` (`--unknown`), `__tag-name`,
+    `__tag-remove`, `__tag-picker`, `__badges`, `__thinking`, `__propose-memory`, `__delete`, `__spacer`, `__dock`,
+    `__float`, `__to-end`, `__end`, `__composer`,
+    `__memory`.
+  - `lcty-setup`: `__details`, `__summary`, `__text`.
+  - `lcty-memory`: `__form`, `__title`, `__hint`, `__proposals`, `__proposal`, `__adopt`, `__tag`, `__text`,
+    `__buttons`, `__spacer`.
+  - `lcty-button` (mix): `lcty-button`, `lcty-button--primary`, `lcty-button--danger`.
+  - `lcty-sidebar`: `__nav`, `__link` (each of new / tags / settings), `__new`, `__tags`, `__settings`, `__search-box`, `__search`, `__search-status`, `__list`.
+  - `lcty-conv-list`: `__empty`, `__items`, `__entry`, `__item` (`--current`), `__title`, `__snippet`, `__tags`,
+    `__tag`, `__tag-name`, `__meta`.
+  - `lcty-message`: `__head`, `__who`, `__actions`, `__action` (`--undo`, `--fork`, `--regenerate`), `__foot`.
+  - `lcty-composer`: `__form`, `__input`, `__buttons`, `__send`, `__stop`.
+  - `lcty-cmd`: `__box`, `__spinner`, `__label`, `__stop`.
+- **Nested Shadow DOMs export their parts under their own names.** `<lcty-c>` exports the sidebar's (and its list's)
+  and the composer's parts unchanged (`exportparts`, `lcty-button` included), so a rule for them is written once per host:
+  `lcty-sidebar::part(lcty-sidebar__nav), lcty-c::part(lcty-sidebar__nav)`. The two sidebar helpers in
+  `lcty.v1.js` add the block to the element names they are given (`"item item--current"` becomes
+  `lcty-conv-list__item lcty-conv-list__item--current`).
+- Parts toggled with `hidden` set no `display`, or the part rule would override `hidden`.
+- **`<lcty-cmd>`** is Light DOM (a file element); its Shadow DOM's parts are styled with `lcty-cmd::part(…)`.
+- **How `lcty.v1.css` is arranged.** In order: the tokens (custom properties: colors, with their dark values; radii
+  `--radius-control` / `--radius-card` / `--radius-pill`; `--shadow-float`; `--sidebar-width`; `--content-width`;
+  `--font-mono`), the base (`[hidden]`, the button look, fields, tag chips), the pages, then one section per block
+  (`<lcty-sidebar>` with `<lcty-conv-list>`, `<lcty-c>`, `<lcty-composer>`, `<lcty-message>` with its Markdown,
+  `<lcty-cmd>`), the dialogs and forms (with the block `lcty-memory`), and last the narrow screens. A page's class that
+  looks the same as a part shares its rule (`.hint, lcty-c::part(lcty-memory__hint)`), so one look is written once.
+- **Comments in the code say what a rule or element does; the reasons and the rules behind it are here.** The code
+  points to this section (LCTYSP-005) rather than repeating it.
 - Elements carry no stylesheet of their own, so many messages cost only their shadow roots. Measured with an 8 MB,
   6,000-message conversation: about 0.15 s from receiving it to `DOMContentLoaded` (about 20 ms without scripts; building
   each shadow root from `innerHTML` took 1–1.7 s).
 
 ### Elements
 
-| Element | Shadow DOM | Exposed fields |
-|---|---|---|
-| `<lcty-container>` | The frame: sidebar, header, setup area, `<slot>`, spacer, composer, memory dialog | `search`, `searchStatus`, `sideList`, `titleInput`, `tags`, `badges`, `proposeMemoryButton`, `deleteButton`, `setup`, `setupTags`, `setupInstructions`, `setupRecomposeButton`, `setupThinking`, `fixed`, `fixedInstructions`, `composer`, `memoryDialog` |
-| `<lcty-message>` | Head (who, action buttons for the role), `<slot>`, foot | `who`, `undoButton`, `forkButton`, `regenerateButton` (`null` when the role has none), `foot` |
-| `<lcty-composer>` | Form (input, send, stop) | `form`, `input`, `sendButton`, `stopButton` |
+| Element           | Shadow DOM                                                                                                                                                                                      | Exposed fields                                                                                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<lcty-sidebar>`  | Head (new conversation, tags, settings), search box, conversation list                                                                                                                          | `search`, `searchStatus`, `list`                                                                                                                                             |
+| `<lcty-c>`        | The frame of a conversation file (used only under `/c/`): `<lcty-sidebar>`, header, `<slot>`, spacer, composer, memory dialog                                                                   | `sidebar`, `titleInput`, `tags`, `tagList`, `tagPicker`, `badges`, `thinkingBadge`, `proposeMemoryButton`, `deleteButton`, `composer`, `toEndButton`, `dock`, `memoryDialog` |
+| `<lcty-setup>`    | The system prompt (a file element, line 4): `<details>` with its text, from `data-instructions` (or `data-instructions-base64`)                                                                 | `text`                                                                                                                                                                       |
+| `<lcty-message>`  | Head (who, action buttons for the role), `<slot>`, foot                                                                                                                                         | `who`, `undoButton`, `forkButton`, `regenerateButton` (`null` when the role has none), `foot`                                                                                |
+| `<lcty-composer>` | Form (input, send, stop)                                                                                                                                                                        | `form`, `input`, `sendButton`, `stopButton`                                                                                                                                  |
+| `<lcty-cmd>`      | Spinner, label, stop button (shown only while running, floating above the composer through `slot="float"`). **Defined in a module** (`js/ui/lcty-cmd.js`), because a command is behavior itself | `label`, `stopButton`, `run()`, `abort()`                                                                                                                                    |
 
 - `<lcty-message>` builds buttons per role: user gets undo and fork, assistant gets regenerate. Parser-created elements
   have no `data-role` in the constructor, so `attributeChangedCallback` rebuilds the template with the role, replacing the
   fields. CSS shows undo only on the last user message (marked `data-last-user`) and regenerate only on the last reply.
-- `<lcty-thinking>` and `<article>` (the reply body) are plain containers, not defined elements.
-- `<lcty-conv-list>` (the conversation list) is defined by a module; it is not part of conversation files.
+- `<lcty-thinking>` and `<article>` (the reply body) are plain containers, not defined elements. `<lcty-thinking>` is built
+  by the page only, from the message's `data-thinking`, and is never in a conversation file.
+- `<lcty-conv-list>` (the sidebar's conversation list) is defined in `lcty.v1.js` like the other elements: it builds
+  the items (title, tag chips, date and, when known, the message count) as parts of `<lcty-sidebar>`'s Shadow DOM
+  and fires `select` and `tag`. Pages give it items (`show(items, empty)`) and the current conversation (`current`).
 - Ids in the frame are styling hooks for CSS. Code reaches elements through the fields.
 
 ### Structure in `lcty.v1.js`, features in modules
 
-- **`lcty.v1.js` defines DOM structure only.** `connectedCallback` is not extended later, elements fire no custom events
+- **`lcty.v1.js` defines DOM structure only.** Each element builds its Shadow DOM in its constructor with a small
+  helper `$(el, attrs, ...children)` (`$(el, part, attrs, ...children)` in `<lcty-sidebar>`, where every element gets a part): attribute values are strings, as the DOM defines them (a boolean attribute is
+  written as `""`; one that is absent is not written). `connectedCallback` is not extended later, elements fire no custom events
   of their own, and behavior is not mixed into the classes (no jQuery-style extension).
-- **Every feature lives in modules** loaded from `lcty.v1.esm.js` (`js/pages/conversation.js`, `js/ui/lcty-elements.js`):
-  Markdown rendering, streaming, reasoning display, timings in the foot, sending with Enter (Shift+Enter inserts a
-  newline; Enter during IME composition is ignored), generation, saving, following the end while scrolling, copying code
+- **Every feature lives in modules** loaded from the page entries (`lcty.v1.module.js`, `index.js`, `tags.js`, `settings.js`; `js/pages/*.js`, `js/ui/lcty-elements.js`, `js/ui/sidebar.js`):
+  Markdown rendering, streaming, thinking display, timings in the foot, sending with Enter (Shift+Enter inserts a
+  newline; Enter during IME composition is ignored), generation, saving, copying code
   blocks and auto-resizing the composer. They attach handlers directly to exposed fields
   (`container.composer.form.onsubmit = …`, `message.undoButton.onclick = …`) and use plain functions that operate on the
   DOM (`appendMessage(container, m)`, `messageOf(el)`, …). Per-element state lives in `WeakMap`s.
-- Until the module has loaded, the content and frame are visible, buttons do nothing yet, and timings are not shown (the
-  foot grows by a line when they appear).
+- **The tree is decided in `lcty.v1.js`; modules never change it.** A module sets values, attributes and handlers on
+  the fields, and appends to Light DOM only what the conversation file gets (messages), and sets the document title and attributes
+  (`data-tag-defs`). So the page painted before the module has loaded has its final layout.
+- **Each piece of the frame follows one input, and nothing is redrawn as a whole.**
+  - **The title** is read once, in the constructor: the `<title>` is line 2 and `<lcty-c>` line 3, so it is already
+    there. Later changes are the module's.
+  - **The thinking badge's text** follows `data-thinking`; **the tag chips** follow `data-setup-tags` (for now the tags
+    at creation only: the current tags in `tags.sqlite` are not shown in the header yet); **the picker's choices**
+    and which chips are unknown follow `data-tag-defs`, the tag definitions, set only once they have arrived (until
+    then nothing is marked unknown or disabled; the picker's width is fixed). Each is rebuilt in
+    `attributeChangedCallback` for its attribute only.
+  - **The system prompt is `<lcty-setup>` itself**, the first of the file's elements: it shows its own text (collapsed)
+    through the `<slot>`, so nothing is copied into the frame.
+  - **What shows before the first message is CSS:** `lcty-c:not(:has(> lcty-message))` hides the system prompt, the
+    thinking badge, the tags and "propose memory" (which also needs `data-setup-tags`); an empty `lcty-setup` is
+    hidden too. No script watches the children.
+  - Buttons do nothing until the module has loaded.
+- **The sidebar's list is filled from the browser's copy of the meta, on every page.** `<lcty-sidebar>` fills its list
+  as soon as it is in the document, before any module has loaded ([LCTYSP-010](LCTYSP-010_data-and-settings.md)):
+  - from the `localStorage` snapshot `lcty.meta.v1` (the newest 20 conversations: id, title, `updated_at_hint`,
+    `tags_hint` and `messages_hint`),
+    synchronously, so the first view is there at the first paint;
+  - when there is no snapshot, from IndexedDB `lcty` (store `meta`), asynchronously. The database is only read: when
+    it does not exist yet it is not created (the meta worker owns the schema), and the list stays empty.
+
+  These items have titles, dates, `tags_hint` as their tags and `messages_hint` as their counts (`showCached`), so
+  they look the same as the module's items when the hints are up to date. `<lcty-c>`
+  marks its own conversation as current when it is connected. Once the module has loaded, it shows the list from the same copy
+  (IndexedDB, all conversations; `js/search/search-panel.js`) and reads it again whenever a sync has stored a new
+  list, in this tab or another; a cached result that arrives after that is ignored. The sidebar does not fetch
+  `/v1/conversations` to show the list. Before the first sync of a new browser the copy is empty, and the list stays
+  blank instead of saying there are no conversations. A conversation created or changed outside this browser
+  appears when the copy is next invalidated ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+- **Moving between pages keeps the sidebar in place.** `lcty.v1.css` turns on cross-document view transitions
+  (`@view-transition { navigation: auto; }`) and names the sidebar (`view-transition-name: lcty-sidebar`), so on a
+  same-origin navigation the browser keeps the sidebar where it is while the rest of the page changes. It is CSS only:
+  it scrolls nothing and changes no tree, and a browser without it navigates as usual.
 
 ### Layout of the conversation page
 
-- `<lcty-container>` ends line 1, so it is created before the content. Its constructor builds the frame; the parser then
-  appends the file's elements to Light DOM, shown through the `<slot>` between the setup area and the composer.
-  `<title>`, `lcty-meta` and `lcty-tags` are `display: none`.
+- `<lcty-c>` ends line 3, after the `<title>` (which stays in the head), so it is created before the content. What it
+  needs to know is on its own attributes (`id`, `data-setup-tags`, `data-thinking`, `data-created-at`; the
+  system prompt is its first child, `lcty-setup`); its
+  constructor builds the frame, and the parser then appends the file's elements to Light DOM, shown through the
+  `<slot>` between the header and the composer. `lcty-setup` is the first of them; `lcty-cmd`
+  shows itself only while it runs.
+- **`<lcty-c>` is used only under `/c/`.** A conversation file cannot be assembled from parts (it is one header line and
+  appended elements), so `<lcty-c>` does everything there. Other pages place components individually.
 - The header is `position: sticky` at the top, the composer is `sticky` at the bottom, and the sidebar is
   `position: fixed`. A growing spacer after the `<slot>` keeps the composer at the bottom even with few messages.
-- **The whole page (window) scrolls.** New messages are appended to the end of `lcty-container`'s Light DOM.
+- **The new conversation page (`/`)** puts the creation card (`main.new-card`, plain HTML) in the middle of the screen, framed like a dialog (border,
+  rounded corners, shadow; at most 760px wide) so it reads as creating something. The sidebar is the same as on every
+  page.
+- **The whole page (window) scrolls.** New messages are appended to the end of `lcty-c`'s Light DOM.
 - Content is never hidden while loading and does not move afterwards.
 
 ## Rendering streams
@@ -133,31 +326,49 @@ Rendering must stay cheaper than generation:
 - Drawing is batched with `requestAnimationFrame`, once per frame.
 - Markdown rendering fixes finished blocks in the DOM and redraws only the last, unfinished block (redrawing everything
   would be O(n²)). An unfinished code block is appended to a text node instead of being redrawn.
-- Reasoning is collapsed and not rendered while closed.
+- Thinking is collapsed and not rendered while closed.
 - Markdown to HTML always escapes text and only allows `http:`, `https:` and `mailto:` link URLs. LLM output is never put
   into the DOM as raw HTML.
-- Each message uses `content-visibility: auto` so off-screen messages skip layout and painting.
+- Messages do not use `content-visibility: auto`. Off-screen messages would get estimated heights, so the page's
+  height changes after the first paint and the browser restores the scroll position against an estimated layout
+  (Safari landed at a different place on every reload).
+- **The rendering is settled by `lcty.v1.js`; the module is not needed for it.** The module runs after parsing and may
+  run after the first paint; it prepares the messages (feet, thinking views) and the header synchronously, and
+  only then waits for the settings and the tags.
+- **Scrolling is the user's.** The page never moves to the end by itself: where it opens is the browser's (the top, the
+  `#c-msg-…` element, or on reload the previous position); the page does not touch `history.scrollRestoration`. Moving to the end
+  on open fought the browser's restoration and the estimated heights of off-screen messages, and sometimes ended at
+  the top.
+- **"To the bottom" floats above the composer** (`#to-end` in `<lcty-c>`), shown while the end is out of view (more
+  than 48px below): an `IntersectionObserver` watches an empty element at the end of the frame (`lcty-c__end`). It moves to the end once.
+- **A running command floats next to it.** While an `lcty-cmd` runs (every generation does: sending, regenerating, a
+  new conversation), it sets `slot="float"` on itself and floats next to "To the bottom" with its spinner and a stop
+  button; when it ends it removes the attribute and is hidden again. Nothing scrolls the page except the button: not
+  sending, not a reply streaming in.
 - Not adopted: streaming insertion APIs such as `streamAppendHTML` (behind a flag as of 2026-11, not in Safari). The hard
   part, incremental Markdown parsing, has to be written anyway, and rendering is not a bottleneck.
 
 ## UI texts
 
-`lcty.v1.js` supports every language and follows `<html lang>`. UI texts are tables in `LctyT`; elements look them up
-with `LctyT._('send')`.
+UI texts follow `<html lang>`, matched exactly against the registered language tags (pages write `lang` as it is
+registered, e.g. `ja`).
 
-- **Tables.** `x-default` (English) is part of `LctyT` itself (the initial value of `#dicts`). Other languages are added
-  with `LctyT.addLang('ja', {…})`; aliases with `LctyT.addAlias('ja-JP', 'ja')`. Tags are registered in canonical form
-  (`ja`, `en-GB`, `zh-Hant-TW`); registration does not canonicalize. Tables are frozen when registered.
-- **Closing registration.** `LctyT.freeze()` freezes `#dicts` once all languages are registered (later `addLang` /
-  `addAlias` throw TypeError). `_()` throws before that and remembers the table for `<html lang>` on its first call.
-- **Lookup (`LctyT.dict(lang)`).** Empty (`''` or `[]`) gives `x-default`. Otherwise: exact match of the first tag
-  canonicalized by `Intl.getCanonicalLocales`, then its language part (`ja` for `ja-JP` or `ja-JP-u-ca-japanese`), then
-  `x-default`. Invalid tags log `console.warn` and give `x-default`. `_()` falls back to `x-default` per item and returns
-  the key itself for keys found nowhere, so missing texts show on screen.
-- **Language blocks are wrapped in ERB conditions:** `/* <% if lang.nil? || lang == 'ja' %> */ … /* <% end %> */`. The
-  ERB tags sit inside JS comments, so without ERB the file is valid JS with every language (how it is served today).
-  Rendering it with ERB and `lang = 'ja'` keeps only that language and `x-default` (`lang = nil` keeps all). All of these
-  were checked to be valid JS.
-- **The query in `lcty.v1.js?lang=ja` is an optimization hint** for serving such a rendered file. The server ignores it
-  today and the script never reads it; only `<html lang>` decides the language.
-- Texts in the modules (toasts, timings, the tag picker, …) and the other pages are still Japanese only.
+- **x-default is written where the text is used.** Elements call `LctyT._("send", "Send")`: the key and the x-default
+  (English) text. There is no x-default table.
+- **Languages are separate scripts.** `lcty.v1.lang-ja.js` (built from the JSON table `public/c/lcty.v1.lang-ja.json`; the language comes from the file name) calls `LctyT.addLang("ja", {…})`; tables are frozen when
+  registered. A page loads the languages it needs after `lcty.v1.js` and before its body.
+- **`LctyT._(key, text, lang = <html lang>)`** returns the translation when that language has the key (an empty
+  translation counts as none), otherwise `text`. Callers always pass `text`; leaving it out shows `undefined`, so a
+  missing text is visible.
+- **Modules use `tr(key, text, vars)`** (`js/i18n.js`): `LctyT._` plus `{name}` placeholders filled from `vars`
+  (`tr("searchFailed", "Search failed: {error}", { error: e.message })`), so a language can order the parts its own
+  way. Toasts, statuses, confirmations, timings, the tag editor and the prompts sent for memory proposals all go
+  through it.
+- **Static HTML is English with keys,** localized by the page's init (`localize()`): `data-lcty-t="key"` replaces an
+  element's text, and `data-lcty-t-placeholder` / `-title` / `-aria-label` replace that attribute. The English written
+  in the HTML is the x-default, so a page without scripts or without the language shows English. Text around inline
+  markup is split into elements (`<span data-lcty-t="…Before">` `<code>…</code>` `<span data-lcty-t="…After">`).
+- **No Japanese outside the language tables.** Code writes English; Japanese lives only in
+  `lcty.v1.lang-ja.json`. Messages that never reach the screen (internal errors, the server's messages) are plain
+  English.
+- All keys are listed in `LctyTextKey` in `public/c/lcty.v1.d.ts`.

@@ -50,12 +50,21 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 - More memory makes the first send of a new conversation heavier (prompt processing is about 450 tok/s, so 2,000 tokens
   take about 4.5 s). The tag editor shows an estimate of the memory size.
 
-### In the conversation file
+### The tags of a conversation
 
-- `lcty-meta`'s `data-tags` holds the tags at start and `data-instructions` the system prompt actually sent. The two are
-  not guaranteed to correspond (tags are a hint).
-- Changing tags later appends `lcty-tags`. The current tags are the last `lcty-tags`, otherwise the meta tags
-  ([LCTYSP-003](LCTYSP-003_conversation-file.md)).
+- The tags at start are `<lcty-c>`'s `data-setup-tags`, written once when the conversation is created;
+  `lcty-setup`'s `data-instructions` holds the system prompt actually sent. The two are not guaranteed to correspond (tags are a hint).
+- **Changing tags later does not touch the conversation file.** The new tags are kept in `tags.sqlite` (table
+  `conversation_tags`: the conversation id, the tags as a JSON array in the order given, and when they were set). The
+  current tags are that row, or `data-setup-tags` when the tags were never changed
+  ([LCTYSP-003](LCTYSP-003_conversation-file.md)). Deleting a conversation deletes its row. Tag names need not be
+  defined (an undefined one shows as such), and renaming a tag definition does not rename it in conversations.
+- The page sends a change as a `tags` line (`POST /v1/conversations/:id/lines`), which the server stores in
+  `tags.sqlite` instead of appending it; the search index (`conv_tags`) follows it.
+- **For now the header shows the tags at creation** (`data-setup-tags`), also after a change; the current tags live in
+  `tags.sqlite`, and the sidebar and search use them ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
+- Not adopted: appending an `lcty-tags` line to the file on each change. Tags are a hint for search and memory, not
+  part of the record of the conversation, and keeping them out of the file keeps the file append-only for messages.
 - A fork inherits its source's instructions and current tags ([LCTYSP-004](LCTYSP-004_editing.md)).
 
 ## Memory
@@ -77,7 +86,7 @@ UI → llm:      the current conversation (instructions + whole history) plus on
                response_format (JSON Schema) fixes the reply to {proposals: [{tag, text}]}
 llm → UI:      the proposals
 UI:            shows each proposal with accept / edit and accept / discard
-UI → storage:  POST /api/tags/:name/memory for each accepted one
+UI → storage:  POST /v1/tags/:name/memory for each accepted one
 ```
 
 - **The temporary message is never saved** and does not enter the history.
@@ -107,7 +116,7 @@ CREATE TABLE memory (
   files and the derived file can be deleted on its own. SQLite is a stable format and is fine for source-of-truth data.
 - **Format changes migrate instead of rebuilding.** `PRAGMA user_version` decides which migrations to run; a newer
   version than the code knows is an error at startup (deleting would lose data).
-- Saving the tag editor (`PUT /api/tags`) is one transaction: create tags under new names first, move memory to them,
+- Saving the tag editor (`PUT /v1/tags`) is one transaction: create tags under new names first, move memory to them,
   then delete tags that disappeared (which also handles renames).
 - `source` (`source_conv`, `source_msg`) records the conversation and its last message when the item was proposed, so
   an item can link back to where it came from.
@@ -115,12 +124,20 @@ CREATE TABLE memory (
 API shape:
 
 ```json
-{ "tags": [
-  { "name": "ruby",
-    "prompt": "Answer with Ruby 2.6's standard library only. Remember design decisions and discovered constraints.",
-    "memory": [
-      { "id": "mem-3f9a…", "text": "WEBrick paths and query values are ASCII-8BIT; convert to UTF-8 before SQLite", "at": "…",
-        "source": { "conv_id": "…", "msg_id": "…" } }
-    ] }
-] }
+{
+	"tags": [
+		{
+			"name": "ruby",
+			"prompt": "Answer with Ruby 2.6's standard library only. Remember design decisions and discovered constraints.",
+			"memory": [
+				{
+					"id": "mem-3f9a…",
+					"text": "WEBrick paths and query values are ASCII-8BIT; convert to UTF-8 before SQLite",
+					"at": "…",
+					"source": { "conv_id": "…", "msg_id": "…" }
+				}
+			]
+		}
+	]
+}
 ```

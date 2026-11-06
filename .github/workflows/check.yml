@@ -15,6 +15,22 @@ on:
     tags: ["*"]
 
 jobs:
+  check-biome:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check with biome
+        run: npx @biomejs/biome check
+
   check-reuse:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
