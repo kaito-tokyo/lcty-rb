@@ -58,10 +58,7 @@ async function kernel() {
 			state.kernel = { bdot264: instance.exports.bdot264, memory };
 		}
 	} catch (e) {
-		console.warn(
-			"bdot264.wasm cannot be used; scoring in JavaScript",
-			e,
-		);
+		console.warn("bdot264.wasm cannot be used; scoring in JavaScript", e);
 	}
 	return state.kernel;
 }
@@ -220,7 +217,8 @@ function top(values, k) {
 self.onmessage = async ({ data }) => {
 	const { id, op } = data;
 	try {
-		if (op === "load") self.postMessage({ id, rows: await load(data.dat, data.idx) });
+		if (op === "load")
+			self.postMessage({ id, rows: await load(data.dat, data.idx) });
 		else if (op === "search")
 			self.postMessage({
 				id,

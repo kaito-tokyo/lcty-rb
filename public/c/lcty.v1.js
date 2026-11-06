@@ -50,7 +50,11 @@ export class LctySetupElement extends HTMLElement {
 export class LctyCElement extends HTMLElement {
 	// What each attribute decides (LCTYSP-005): data-thinking the badge's text; data-setup-tags the chips (the tags at
 	// creation; the current ones are not shown yet) and data-tag-defs which of them are unknown and the picker's choices
-	static observedAttributes = ["data-setup-tags", "data-thinking", "data-tag-defs"];
+	static observedAttributes = [
+		"data-setup-tags",
+		"data-thinking",
+		"data-tag-defs",
+	];
 
 	// The frame of a conversation file. Styling, what shows before the first message, and scrolling: LCTYSP-005.
 
@@ -125,17 +129,27 @@ export class LctyCElement extends HTMLElement {
 		);
 		this.deleteButton = $(
 			document.createElement("button"),
-			{ id: "delete-chat", part: "lcty-c__delete lcty-button lcty-button--danger", type: "button" },
+			{
+				id: "delete-chat",
+				part: "lcty-c__delete lcty-button lcty-button--danger",
+				type: "button",
+			},
 			_("delete", "Delete"),
 		);
 		this.composer = $(document.createElement("lcty-composer"), {
 			id: "composer",
 			part: "lcty-c__composer",
-			exportparts: "lcty-button, lcty-button--primary, lcty-composer__form, lcty-composer__input, lcty-composer__buttons, lcty-composer__send, lcty-composer__stop",
+			exportparts:
+				"lcty-button, lcty-button--primary, lcty-composer__form, lcty-composer__input, lcty-composer__buttons, lcty-composer__send, lcty-composer__stop",
 		});
 		this.toEndButton = $(
 			document.createElement("button"),
-			{ id: "to-end", part: "lcty-c__to-end lcty-button", type: "button", hidden: "" },
+			{
+				id: "to-end",
+				part: "lcty-c__to-end lcty-button",
+				type: "button",
+				hidden: "",
+			},
 			_("toEnd", "Scroll to bottom"),
 		);
 		this.toEndButton.addEventListener("click", () =>
@@ -177,7 +191,10 @@ export class LctyCElement extends HTMLElement {
 				this.deleteButton,
 			),
 			document.createElement("slot"),
-			$(document.createElement("div"), { id: "log-spacer", part: "lcty-c__spacer" }),
+			$(document.createElement("div"), {
+				id: "log-spacer",
+				part: "lcty-c__spacer",
+			}),
 			this.dock,
 			this.memoryDialog,
 			this.end,
@@ -187,9 +204,12 @@ export class LctyCElement extends HTMLElement {
 		this.titleInput.value = document.querySelector("title")?.textContent || "";
 
 		// "To the bottom" is shown while the end of the page is more than 48 px below the view
-		new IntersectionObserver(([e]) => (this.toEndButton.hidden = e.isIntersecting), {
-			rootMargin: "0px 0px 48px 0px",
-		}).observe(this.end);
+		new IntersectionObserver(
+			([e]) => (this.toEndButton.hidden = e.isIntersecting),
+			{
+				rootMargin: "0px 0px 48px 0px",
+			},
+		).observe(this.end);
 	}
 
 	attributeChangedCallback(name) {
@@ -210,9 +230,12 @@ export class LctyCElement extends HTMLElement {
 	// marked unknown and the picker has no choices)
 	#tagsChanged() {
 		const _ = LctyT._;
-		const words = (name) => (this.getAttribute(name) || "").split(/\s+/).filter(Boolean);
+		const words = (name) =>
+			(this.getAttribute(name) || "").split(/\s+/).filter(Boolean);
 		const tags = words("data-setup-tags");
-		const defs = this.hasAttribute("data-tag-defs") ? words("data-tag-defs") : null;
+		const defs = this.hasAttribute("data-tag-defs")
+			? words("data-tag-defs")
+			: null;
 		const el = (tag, attrs, ...children) => {
 			const e = document.createElement(tag);
 			for (const kv of Object.entries(attrs)) e.setAttribute(...kv);
@@ -239,7 +262,10 @@ export class LctyCElement extends HTMLElement {
 							type: "button",
 							class: "tag-x",
 							part: "lcty-c__tag-remove",
-							"aria-label": _("removeTag", "Remove {name}").replace("{name}", name),
+							"aria-label": _("removeTag", "Remove {name}").replace(
+								"{name}",
+								name,
+							),
 						},
 						"×",
 					),
@@ -546,7 +572,9 @@ export class LctyMessageElement extends HTMLElement {
 
 	constructor() {
 		super();
-		this.attachShadow({ mode: "open" }).append(...this.#build(this.getAttribute("data-role")));
+		this.attachShadow({ mode: "open" }).append(
+			...this.#build(this.getAttribute("data-role")),
+		);
 		this.#showFoot();
 	}
 
@@ -603,7 +631,10 @@ export class LctyMessageElement extends HTMLElement {
 					? _("assistant", "Assistant")
 					: "",
 		);
-		this.foot = $(document.createElement("div"), { part: "lcty-message__foot", hidden: "" });
+		this.foot = $(document.createElement("div"), {
+			part: "lcty-message__foot",
+			hidden: "",
+		});
 
 		return [
 			$(
@@ -648,7 +679,10 @@ export class LctyComposerElement extends HTMLElement {
 		});
 		this.sendButton = $(
 			document.createElement("button"),
-			{ type: "submit", part: "lcty-composer__send lcty-button lcty-button--primary" },
+			{
+				type: "submit",
+				part: "lcty-composer__send lcty-button lcty-button--primary",
+			},
 			_("send", "Send"),
 		);
 		this.stopButton = $(

@@ -28,14 +28,14 @@ source of truth at startup or by the browser. Everything else is source-of-truth
   - Backups only need files that do not start with `_` (for example `rsync -a --exclude='_*' data/ backup/`).
   - When the index misbehaves or its format changes, delete the `_` files and restart.
 
-| File                                         | Kind                                                                                                   | Rebuilt by                                                                                  |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| `c/*.html`                                   | Source (conversations; same layout as the URL `/c/<id>.html`)                                          | —                                                                                           |
-| `c/lcty.v1.*`                                | Source (what a conversation file needs where it is: published at startup, rewritten only when changed; LCTYSP-005) | —                                                                                           |
-| `tags.sqlite`                                | Source (tag definitions, memory and the tags of conversations changed after creation)                 | —                                                                                           |
-| `_index.sqlite` (+ `-wal`, `-shm`)           | Derived (rounds and FTS)                                                                               | Rebuilt from the conversation files at startup ([LCTYSP-007](LCTYSP-007_search.md))         |
-| `_vectors.<model>.sqlite` (+ `-wal`, `-shm`) | Derived (vector DB)                                                                                    | Re-embedded by the browser while a page is open ([LCTYSP-008](LCTYSP-008_vector-binary.md)) |
-| `_vectors.eg2_264.dat`, `_vectors.eg2_264.idx` | Derived (distribution files of the default embedding model: the rows and their ids, served as `/v1/vectors.eg2_264.*`) | Rebuilt from the vector DB on the next request |
+| File                                           | Kind                                                                                                                   | Rebuilt by                                                                                  |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `c/*.html`                                     | Source (conversations; same layout as the URL `/c/<id>.html`)                                                          | —                                                                                           |
+| `c/lcty.v1.*`                                  | Source (what a conversation file needs where it is: published at startup, rewritten only when changed; LCTYSP-005)     | —                                                                                           |
+| `tags.sqlite`                                  | Source (tag definitions, memory and the tags of conversations changed after creation)                                  | —                                                                                           |
+| `_index.sqlite` (+ `-wal`, `-shm`)             | Derived (rounds and FTS)                                                                                               | Rebuilt from the conversation files at startup ([LCTYSP-007](LCTYSP-007_search.md))         |
+| `_vectors.<model>.sqlite` (+ `-wal`, `-shm`)   | Derived (vector DB)                                                                                                    | Re-embedded by the browser while a page is open ([LCTYSP-008](LCTYSP-008_vector-binary.md)) |
+| `_vectors.eg2_264.dat`, `_vectors.eg2_264.idx` | Derived (distribution files of the default embedding model: the rows and their ids, served as `/v1/vectors.eg2_264.*`) | Rebuilt from the vector DB on the next request                                              |
 
 - SQLite files use WAL mode. To back up `tags.sqlite`, copy `tags.sqlite-wal` with it or run `PRAGMA wal_checkpoint`
   first.

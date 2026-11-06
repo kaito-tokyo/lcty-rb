@@ -10,12 +10,16 @@
 // /v1/conversations only when a semantic search runs, and kept until the list changes.
 
 import {
+	onMetaDbChange,
+	readMetaDb,
+	syncMetaDbIfStale,
+} from "../api/meta-db.js";
+import {
 	fetchSnippets,
 	getDefaults,
 	listConversations,
 	searchConversations,
 } from "../api/storage.js";
-import { onMetaDbChange, readMetaDb, syncMetaDbIfStale } from "../api/meta-db.js";
 import { backendOf, showToast } from "../common.js";
 import { tr } from "../i18n.js";
 import { embeddingConfig, embedQuery } from "./embed.js";
@@ -33,7 +37,13 @@ const RRF_K = 60;
 export function createSearchPanel({ list, box, status, getSettings }) {
 	const vectors = createVectorStore(); // One per page: each page creates one search panel
 	// all: the list (from the copy); stale: the copy is out of date; rounds: {convOf, idsOf} from /v1/conversations, on demand
-	const state = { all: [], stale: false, query: "", current: null, rounds: null };
+	const state = {
+		all: [],
+		stale: false,
+		query: "",
+		current: null,
+		rounds: null,
+	};
 	let seq = 0;
 	let timer = 0;
 
@@ -65,7 +75,9 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		});
 		const { embedding_model } = await defaults;
 		if (cfg.model !== embedding_model)
-			throw new Error(`the vectors are for ${embedding_model}, not ${cfg.model}`);
+			throw new Error(
+				`the vectors are for ${embedding_model}, not ${cfg.model}`,
+			);
 	}
 
 	// [[msgId, score], …] and the map from a round to its conversation
@@ -79,7 +91,9 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		// With tag: filters the worker selects among the rounds of the matching conversations; otherwise it only drops
 		// rounds whose conversation is not in the list
 		const allow = filtered
-			? state.all.filter((c) => hasTags(c.id)).flatMap((c) => idsOf.get(c.id) || [])
+			? state.all
+					.filter((c) => hasTags(c.id))
+					.flatMap((c) => idsOf.get(c.id) || [])
 			: null;
 		const hits = await vectors.search(vec, 50, {
 			allow,
@@ -93,7 +107,10 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		if (!q) {
 			status.textContent = "";
 			// Before the first sync the copy is empty: wait for it instead of saying there are no conversations
-			const empty = state.stale && !state.all.length ? "" : tr("noConversations", "No conversations yet");
+			const empty =
+				state.stale && !state.all.length
+					? ""
+					: tr("noConversations", "No conversations yet");
 			return show(state.all, empty);
 		}
 		const mySeq = ++seq;

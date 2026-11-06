@@ -442,7 +442,10 @@ export function openMemoryDialog({
 						),
 						el(
 							"select",
-							{ part: "lcty-memory__tag", onchange: (e) => (it.tag = e.target.value) },
+							{
+								part: "lcty-memory__tag",
+								onchange: (e) => (it.tag = e.target.value),
+							},
 							tags.map((t) =>
 								el("option", { value: t, selected: t === it.tag }, t),
 							),
@@ -490,7 +493,11 @@ export function openMemoryDialog({
 				part: "lcty-memory__form",
 				onsubmit: (e) => e.preventDefault(),
 			},
-			el("h2", { part: "lcty-memory__title" }, tr("memoryProposals", "Memory proposals")),
+			el(
+				"h2",
+				{ part: "lcty-memory__title" },
+				tr("memoryProposals", "Memory proposals"),
+			),
 			el(
 				"p",
 				{ part: "lcty-memory__hint" },
@@ -507,7 +514,11 @@ export function openMemoryDialog({
 				el("span", { part: "lcty-memory__spacer" }),
 				el(
 					"button",
-					{ type: "button", part: "lcty-button", onclick: () => dialog.close() },
+					{
+						type: "button",
+						part: "lcty-button",
+						onclick: () => dialog.close(),
+					},
 					tr("close", "Close"),
 				),
 				items.length

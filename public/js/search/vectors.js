@@ -103,7 +103,11 @@ export function createVectorStore() {
 		/** Refetch if the files changed (concurrent calls share one fetch) */
 		async refresh() {
 			const at = (name) => `/v1/${name}`;
-			state.loading ||= call({ op: "load", dat: at("vectors.eg2_264.dat"), idx: at("vectors.eg2_264.idx") })
+			state.loading ||= call({
+				op: "load",
+				dat: at("vectors.eg2_264.dat"),
+				idx: at("vectors.eg2_264.idx"),
+			})
 				.then((r) => {
 					state.rows = r.rows;
 				})

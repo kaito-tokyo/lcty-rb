@@ -203,7 +203,10 @@ declare const LctyT: {
  * first message (lcty.v1.css).
  */
 declare class LctySetupElement extends HTMLElement {
-	static readonly observedAttributes: readonly ["data-instructions", "data-instructions-base64"];
+	static readonly observedAttributes: readonly [
+		"data-instructions",
+		"data-instructions-base64",
+	];
 	/** The text of the system prompt */
 	text: HTMLPreElement;
 }

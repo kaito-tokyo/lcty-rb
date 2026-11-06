@@ -47,7 +47,7 @@ stream({ backend, instructions, input, thinking, extraBody, signal });
 | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | user message                                               | `{"role":"user","content": text}`                                            |
 | assistant message                                          | `{"type":"message","role":"assistant","content": text}` (400 without `type`) |
-| assistant thinking                                        | not sent                                                                     |
+| assistant thinking                                         | not sent                                                                     |
 | assistant message with an empty body (aborted by an error) | not sent                                                                     |
 | messages copied by a fork (`inherited`)                    | sent like any other message                                                  |
 | system prompt                                              | top-level `instructions`                                                     |
