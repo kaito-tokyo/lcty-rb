@@ -114,8 +114,8 @@ module Chatty
     # needs only these), and the elements start on line 5:
     #   1. <!DOCTYPE html><html lang="ja" />
     #   2. <head> with the files it loads: lcty.v1.js and lcty.v1.lang-ja.js (classic scripts, so a file opened directly
-    #      still builds its frame), the module preload of lcty.v1.module.js (imported on load by <lcty-c>) and
-    #      lcty.v1.css. </head> ends the line.
+    #      still builds its frame) and lcty.v1.css. </head> ends the line. lcty.v1.module.js is not here: <lcty-c>
+    #      imports it once the page has loaded (from the HTTP cache when it has not changed).
     #   3. The title slot: <title id="__512">[512 bytes]<!---->. The id carries the slot length right next to it. The
     #      slot starts as a ruler of digits; a title is written over its head as "<title text></title><!--", so the rest
     #      of the ruler and the fixed "<!---->" become a comment. Digits never form "--", so whatever the title, the
@@ -129,7 +129,7 @@ module Chatty
     HEADER = %(<!DOCTYPE html><html lang="ja" />\n) +
              %(<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />) +
              %(<script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script>) +
-             %(<link rel="modulepreload" href="lcty.v1.module.js" /><link rel="stylesheet" href="lcty.v1.css" /></head>\n)
+             %(<link rel="stylesheet" href="lcty.v1.css" /></head>\n)
     TITLE_OPEN_RE = /\A<title id="__(\d+)">/.freeze
     SLOT_END = '<!---->' # after the slot, never overwritten
 

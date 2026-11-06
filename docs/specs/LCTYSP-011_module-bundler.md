@@ -8,23 +8,21 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-010](LCTYSP-010_data-and-settings.md)
-- Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/c/servlet.rb` (`data/c/lcty.v1.module.js`) and
-  `lib/module_servlet.rb` (`/index.js`)
+- Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/module_servlet.rb` (`/index.js`)
 
 ## Summary
 
-At startup the server turns each page's module entry and every module it imports into one module file. The bundler is
+At startup the server turns the new conversation page's module entry (`/index.js`) and every module it imports into one
+module file. The conversation page's entry, `lcty.v1.module.js`, is not bundled: it is served as it is and the browser
+imports the modules itself ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). The bundler is
 a few regular expressions on whole lines: each module becomes a block, its import lines become `const` aliases, and a
 `var` at the end of the block publishes its exports. The code of a module is never rewritten. This is correct only
 because the modules follow strict conventions, and the bundler refuses to start the server when one does not.
 
 ## Why a bundler, and why this one
 
-- **One file per page.** A conversation file loads `lcty.v1.module.js` from next to it (over HTTP the server serves
-  the bundle from memory; a copy is published into `data/c/` at startup): the scripts belong
-  to the user together with the conversations they render ([LCTYSP-010](LCTYSP-010_data-and-settings.md)), so a
-  backup of `data/` keeps both. A single file is simple to keep there, and the modules themselves (`public/js/`) stay
-  in the repository.
+- **One file per page.** The new conversation page loads one module file, `/index.js`, and the modules themselves
+  (`public/js/`) stay in the repository.
 - **No external tools.** The server runs on macOS's `/usr/bin/ruby` with no Node.js or npm, so the bundler is part of
   the server and has to be small enough to read in one sitting.
 - **No runtime.** The output has no loader, no module registry and no wrapper functions: it is the modules' own code

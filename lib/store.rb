@@ -26,14 +26,14 @@ module Chatty
     CREATABLE = %w[message title cmd].freeze # the tags at creation are meta.tags
 
     # Write to a temporary file, then rename (atomic replace). Used whenever a conversation file is written whole.
-    # Files whose head is not in the current format (the one before 2026-11-07, or a head edited by hand) are rewritten
-    # in the current one at startup (LCTYSP-003). What they hold is kept as read; so is their modification time, which
+    # Files whose head is not the current one (the format before 2026-11-07, a head edited by hand, or a header, lines 1
+    # and 2, that has changed since) are rewritten with the current one at startup (LCTYSP-003). What they hold is kept as read; so is their modification time, which
     # is updated_at_hint (the order of the list). A file whose meta cannot be read at all is left as it is.
     def migrate_heads
       conversation_paths.each do |path|
         with_lock(path) do |f|
           text = f.read
-          next if ConvHtml.head_lines(text)
+          next if text.start_with?(ConvHtml::HEADER) && ConvHtml.head_lines(text)
           entries = parse_lines(text, File.basename(path)).map(&:first)
           next if ConvHtml.current_meta(entries).empty?
           mtime = f.mtime

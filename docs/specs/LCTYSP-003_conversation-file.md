@@ -26,7 +26,7 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 
 ```html
 <!DOCTYPE html><html lang="ja" />
-<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script><link rel="modulepreload" href="lcty.v1.module.js" /><link rel="stylesheet" href="lcty.v1.css" /></head>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script><link rel="stylesheet" href="lcty.v1.css" /></head>
 <title id="__512">Title</title><!--7890123456789…34567890<!---->
 <lcty-c id="c-20261104-…" data-setup-tags="ruby concise" data-created-at="…" />
 <lcty-setup data-instructions="system prompt"></lcty-setup>
@@ -39,17 +39,18 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
   well-formed XML fragment (`<!DOCTYPE html>` and `<head>` are not XML). Every head line is complete on one line.
 - **Lines 1 and 2 are a fixed header.** Line 1 is `<!DOCTYPE html><html lang="ja" />`; line 2 is the `<head>`, ending
   with `</head>`. It loads `lcty.v1.js` (the element definitions, which define the elements at its end) and
-  `lcty.v1.lang-ja.js` (the Japanese texts, registered with `LctyT`), in that order, as classic scripts; preloads
-  `lcty.v1.module.js`, the page's features, which `<lcty-c>` imports once the page has loaded so that it never blocks
-  rendering; and links the stylesheet ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). There is no inline script. The
+  `lcty.v1.lang-ja.js` (the Japanese texts, registered with `LctyT`), in that order, as classic scripts, and links the
+  stylesheet. The page's features, `lcty.v1.module.js`, are not in the header: `<lcty-c>` imports them once the page
+  has loaded, so they never block rendering ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). There is no inline script. The
   `/>` on `<html>` (and on `<lcty-c>`) is ignored by the HTML parser. Opened over HTTP, the file shows as the
   conversation.
-- **Opened directly (`file://`, offline), the file still shows as the conversation.** It needs nothing but the
-  `lcty.v1.*` files next to it, all loaded by relative paths from line 2 (no Shadow DOM loads anything of its own,
-  [LCTYSP-005](LCTYSP-005_page-and-elements.md)): the classic scripts build the frame. Only reading is supported there:
-  importing the module fails (browsers refuse module scripts from `file://`, whose origin is `null`) and the error is
-  left as it is, so nothing is sent, nothing reaches the LLM server, and the sidebar's list is empty unless that origin
-  has its own cached copy. None of this is needed to read it.
+- **Opened directly (`file://`, offline), the file still shows as the conversation.** It needs nothing but
+  `lcty.v1.js` and `lcty.v1.css` next to it in `data/c/`, loaded by relative paths from line 2 (no Shadow DOM loads
+  anything of its own, [LCTYSP-005](LCTYSP-005_page-and-elements.md)): the classic script builds the frame. Only
+  reading is supported there, and every error is left as it is: the language script is not next to it (the frame shows
+  the English x-default texts; the conversation itself is in the file), and importing the module fails (browsers refuse
+  module scripts from `file://`, whose origin is `null`), so nothing is sent, nothing reaches the LLM server, and the
+  sidebar's list is empty unless that origin has its own cached copy. None of this is needed to read it.
 - **The head lines (1 to 4) hold only what a list of conversations needs:** the title, the id, the tags at creation and
   the creation time. Collecting them is enough to build the sidebar's database (`GET /v1/meta-all.json` reads only
   these lines of each file, [LCTYSP-006](LCTYSP-006_http-api.md)). The system prompt, which may be long, is not among
@@ -81,7 +82,7 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 - **Older heads are rewritten at startup.** Before 2026-11-07 the head was three lines starting with `<!` (the header
   with `data-lcty-tlrange`, then `<!--lcty-meta-->` with the title slot and with a never-closed `<lcty-c>`, which could
   also carry `data-thinking`). The server still reads that format, and at startup it rewrites every file whose head is
-  not in the current format (also a head edited by hand), keeping what it holds and its modification time.
+  not the current one (also a head edited by hand, or a header, lines 1 and 2, that has changed since), keeping what it holds and its modification time.
 - **The title** is the current conversation title. Newlines become spaces. The escaped title is cut at a character
   boundary so it fits the slot (about 160 Japanese characters). Changing the title overwrites the slot in place (seek
   to its start, write exactly its length, fsync) under the file lock, so the rest of the file stays append-only. When

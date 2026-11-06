@@ -167,6 +167,12 @@ lcty-c::part(lcty-c__tag--unknown) {
 #setup-tags > label {
 	display: inline-block;
 }
+/* a chosen tag: its chip in the accent color */
+#setup-tags input:checked + .tag-chip {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: #fff;
+}
 
 /* ---- pages ---- */
 /* moving between pages: a cross-document view transition; the sidebar has its own name (LCTYSP-005) */
@@ -187,10 +193,8 @@ lcty-c::part(lcty-c__header) {
 	padding: 8px 16px;
 	border-bottom: 1px solid var(--border);
 }
-/* the new conversation page (/): the creation card in the middle, the composer at its bottom */
-body.page.new {
-	justify-content: center;
-}
+/* the new conversation page (/): the creation card at the top (so nothing above the draft moves when it grows), the
+   composer at its bottom */
 main.new-card {
 	box-sizing: border-box;
 	display: grid;

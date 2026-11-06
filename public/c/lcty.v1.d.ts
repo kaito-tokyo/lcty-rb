@@ -9,13 +9,13 @@
  * - The source is the ES module public/c/lcty.v1.mjs (no imports; exported declarations start with `export`). The
  *   classic script public/c/lcty.v1.js is generated from it by the command in its head comment (each leading `export`
  *   becomes `/*export*\/`, and the last line `//?defineLctyV1CustomElements();` loses its `//?`) and committed. At
- *   startup chatty.rb copies it to data/c/lcty.v1.js, next to the conversation files: they belong to the user together
- *   (LCTYSP-010).
+ *   startup chatty.rb copies it (with lcty.v1.css, nothing else) to data/c/, next to the conversation files: they
+ *   belong to the user together (LCTYSP-010).
  * - Every page loads it synchronously inside <head> (a conversation file on line 2, as lcty.v1.js; other pages as
  *   /c/lcty.v1.js), followed by lcty.v1.lang-ja.js (the Japanese texts, generated from public/c/lcty.v1.lang-ja.mjs).
  *   There is no inline script: lcty.v1.js defines the elements at its end. The conversation page's module
- *   lcty.v1.module.js is preloaded by line 2 and imported by <lcty-c> once the page has loaded; the rendering (the scroll
- *   position included) does not wait for it. The custom elements are defined before the body is parsed, so every
+ *   lcty.v1.module.js is imported by <lcty-c> once the page has loaded; the rendering (the scroll position included)
+ *   does not wait for it. The custom elements are defined before the body is parsed, so every
  *   element is created by the parser and the DOM structure is settled in a single pass.
  * - Each element builds its internal structure in Shadow DOM with DOM APIs in its constructor (a parser-created element may
  *   not get children or attributes there, but a shadow root is allowed). HTML strings (innerHTML) are not used. A small
@@ -281,7 +281,7 @@ declare class LctyConvListElement extends HTMLElement {
  */
 declare class LctySidebarElement extends HTMLElement {
 	static readonly _: typeof LctyT._;
-	/** "New conversation" link to / (part lcty-sidebar__new) */
+	/** "New conversation" link to /, opened in a new window (target="_blank" rel="noopener"; part lcty-sidebar__new) */
 	newLink: HTMLAnchorElement;
 	/** Opens the settings dialog attached by js/ui/sidebar.js (part lcty-sidebar__settings) */
 	settingsButton: HTMLButtonElement;

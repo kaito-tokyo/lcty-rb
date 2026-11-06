@@ -59,7 +59,7 @@ Two principles drive the design:
 - Ruby barely interprets conversations. The exceptions are the rule that limits undo to one turn
   ([LCTYSP-004](LCTYSP-004_editing.md)), validation of what it writes ([LCTYSP-003](LCTYSP-003_conversation-file.md)),
   and deriving the search index ([LCTYSP-007](LCTYSP-007_search.md)).
-- Pages are static files. Ruby never assembles HTML from templates; it only serves files (publishing `lcty.v1.*` into `data/c/` and bundling the module entries at startup) and answers `/v1/*`
+- Pages are static files. Ruby never assembles HTML from templates; it only serves files (publishing `lcty.v1.js` and `lcty.v1.css` into `data/c/` and bundling the module entries at startup) and answers `/v1/*`
   ([LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-006](LCTYSP-006_http-api.md)).
 
 ### The source of truth is files on the server

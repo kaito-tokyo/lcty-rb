@@ -442,10 +442,11 @@ export class LctySidebarElement extends HTMLElement {
 			return el;
 		};
 
+		// a new chat opens in a new window (tab), so the current conversation stays where it is
 		this.newLink = $(
 			document.createElement("a"),
 			"new",
-			{ href: "/" },
+			{ href: "/", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
 		// opens the settings dialog, attached by js/ui/sidebar.js (LCTYSP-010)

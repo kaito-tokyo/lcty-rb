@@ -38,10 +38,10 @@ import {
 	setComposerValue,
 } from "../js/ui/lcty-elements.js";
 // lcty.v1.module.js: the entry of the conversation page /c/<id>.html (LCTYSP-005). Line 2 of a conversation file loads
-// lcty.v1.js (the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese texts), preloads this module
-// and links lcty.v1.css. <lcty-c> imports this module once the page has loaded, so it never blocks rendering; it then
-// attaches the event listeners and features the page needs. Bundled into data/c/ at startup with every module it
-// imports.
+// lcty.v1.js (the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese texts) and links lcty.v1.css.
+// <lcty-c> imports this module once the page has loaded, so it never blocks rendering; it then attaches the event
+// listeners and features the page needs. Served as it is from public/c/, not bundled: the browser imports the modules
+// in public/js/ through the paths below (/js/…, from the server's root), so the features work over HTTP only.
 //
 // The conversation file itself (data/c/<id>.html); the conversation is rebuilt from the elements in <lcty-c>. New
 // conversations are made on / (js/pages/new.js). Saving is append-only; the one exception is popping the last turn
