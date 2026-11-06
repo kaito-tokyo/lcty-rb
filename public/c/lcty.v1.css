@@ -55,6 +55,7 @@ body {
 	color: var(--fg);
 }
 [hidden] {
+	/* biome-ignore lint/complexity/noImportantStyles: the hidden attribute must hide whatever display a rule sets */
 	display: none !important;
 }
 code,
@@ -211,13 +212,6 @@ main.new-card {
 	border-radius: var(--radius-card);
 	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
-.new-card h2 {
-	margin: 0;
-}
-.new-card > lcty-composer {
-	max-width: none;
-	padding: 4px 0 0;
-}
 #toast {
 	position: fixed;
 	bottom: 20px;
@@ -362,20 +356,6 @@ lcty-c {
 	min-height: 100vh;
 	margin-left: var(--sidebar-width);
 }
-lcty-c > lcty-message {
-	width: 100%;
-} /* inside flex the width shrinks to the content */
-lcty-c > lcty-message:first-of-type {
-	margin-top: 8px;
-}
-/* before the first message only the title and the buttons show: the system prompt and the tags
-   come with the conversation; proposing memory needs tags */
-lcty-c:not(:has(> lcty-message)) > lcty-setup,
-lcty-c:not(:has(> lcty-message))::part(lcty-c__tags),
-lcty-c:not(:has(> lcty-message))::part(lcty-c__propose-memory),
-lcty-c:not([data-setup-tags])::part(lcty-c__propose-memory) {
-	display: none;
-}
 /* header: title, tags, buttons */
 lcty-c::part(lcty-c__header) {
 	position: sticky;
@@ -434,6 +414,14 @@ lcty-setup {
 	width: 100%;
 	margin: 12px auto 8px;
 	padding: 0 16px;
+}
+/* before the first message only the title and the buttons show: the system prompt and the tags
+   come with the conversation; proposing memory needs tags */
+lcty-c:not(:has(> lcty-message)) > lcty-setup,
+lcty-c:not(:has(> lcty-message))::part(lcty-c__tags),
+lcty-c:not(:has(> lcty-message))::part(lcty-c__propose-memory),
+lcty-c:not([data-setup-tags])::part(lcty-c__propose-memory) {
+	display: none;
 }
 lcty-setup:not([data-instructions-base64]):is(
 	:not([data-instructions]),
@@ -543,6 +531,12 @@ lcty-message {
 	margin: 0 auto;
 	padding: 10px 16px;
 }
+lcty-c > lcty-message {
+	width: 100%;
+} /* inside flex the width shrinks to the content */
+lcty-c > lcty-message:first-of-type {
+	margin-top: 8px;
+}
 lcty-message::part(lcty-message__head) {
 	display: flex;
 	align-items: center;
@@ -578,8 +572,38 @@ lcty-c[busy] lcty-message::part(lcty-message__actions) {
 lcty-message::part(lcty-message__foot) {
 	color: var(--fg-dim);
 	margin-top: 4px;
-	min-height: 1lh;
-} /* a line even before a module fills it in */
+}
+/* the ⓘ of a reply's timings, a bare button that opens them in a popover, one item per line (lcty.v1.js) */
+lcty-message::part(lcty-message__info) {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: 0 2px;
+	cursor: pointer;
+}
+lcty-message::part(lcty-message__timings) {
+	white-space: pre-line;
+	color: var(--fg);
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-control);
+	padding: 6px 10px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+/* just above the ⓘ, its implicit anchor (popovertarget), below it when there is no room; without anchor positioning
+   it stays centered, as popovers are by default */
+@supports (position-area: top) {
+	lcty-message::part(lcty-message__timings) {
+		inset: auto;
+		margin: 0 0 4px;
+		position-area: top span-right;
+		position-try-fallbacks: flip-block;
+	}
+}
+lcty-message::part(lcty-message__status) {
+	margin-right: 6px;
+}
 lcty-message[data-status="incomplete"]::part(lcty-message__foot) {
 	color: var(--danger);
 }
@@ -601,10 +625,6 @@ lcty-message[data-status="streaming"] .md-tail:empty::after {
 		opacity: 0;
 	}
 }
-lcty-message.flash .user-text,
-lcty-message.flash > article {
-	animation: flash 1.6s ease-out;
-} /* a search hit opened */
 @keyframes flash {
 	0% {
 		background: color-mix(in srgb, var(--accent) 25%, transparent);
@@ -640,6 +660,10 @@ lcty-message > article {
 	display: block;
 	overflow-wrap: anywhere;
 }
+lcty-message.flash .user-text,
+lcty-message.flash > article {
+	animation: flash 1.6s ease-out;
+} /* a search hit opened */
 .md-tail {
 	display: contents;
 }
@@ -693,7 +717,7 @@ lcty-message > article :not(pre) > code {
 	color: var(--fg-dim);
 	border-bottom: 1px solid var(--border);
 }
-.codebar .copy {
+.codebar :is(.select, .copy) {
 	margin-left: auto;
 	padding: 0 8px;
 	border-color: transparent;
@@ -787,6 +811,14 @@ lcty-c::part(lcty-c__memory)::backdrop {
 dialog h2,
 lcty-c::part(lcty-memory__title) {
 	margin: 0 0 10px;
+}
+/* the creation card on /: after the generic dialog heading and composer rules it overrides */
+.new-card h2 {
+	margin: 0;
+}
+.new-card > lcty-composer {
+	max-width: none;
+	padding: 4px 0 0;
 }
 .settings-form,
 .tags-form,

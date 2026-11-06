@@ -218,7 +218,7 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   - `lcty-conv-list`: `__empty`, `__items`, `__entry`, `__item` (`--current`), `__title`, `__snippet`, `__tags`,
     `__tag`, `__tag-name`, `__meta`.
   - `lcty-message`: `__head`, `__who`, `__actions`, `__action` (`--undo`, `--fork`, `--regenerate`), `__thinking`,
-    `__thinking-summary`, `__thinking-body`, `__foot`.
+    `__thinking-summary`, `__thinking-body`, `__foot`, `__status`, `__info`, `__timings`.
   - `lcty-composer`: `__form`, `__input`, `__buttons`, `__send`, `__stop`.
   - `lcty-cmd`: `__box`, `__spinner`, `__label`, `__stop`.
 - **Nested Shadow DOMs export their parts under their own names.** `<lcty-c>` exports the sidebar's (and its list's)
@@ -242,14 +242,14 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
 
 ### Elements
 
-| Element           | Shadow DOM                                                                                                                                                                                      | Exposed fields                                                                                                                                    |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<lcty-sidebar>`  | Head (new conversation, settings), search box, conversation list                                                                                                                                | `search`, `searchStatus`, `list`                                                                                                                  |
-| `<lcty-c>`        | The frame of a conversation file (used only under `/c/`): `<lcty-sidebar>`, header, `<slot>`, spacer, composer, memory dialog                                                                   | `sidebar`, `titleInput`, `tags`, `tagList`, `tagPicker`, `proposeMemoryButton`, `deleteButton`, `composer`, `toEndButton`, `dock`, `memoryDialog` |
-| `<lcty-setup>`    | The system prompt (a file element, line 5): `<details>` with its text, from `data-instructions` (or `data-instructions-base64`)                                                                 | `text`                                                                                                                                            |
-| `<lcty-message>`  | Head (who, action buttons for the role), a reply's thinking (collapsed, from `data-thinking`), `<slot>`, foot                                                                                   | `who`, `undoButton`, `forkButton`, `regenerateButton`, `thinking`, `thinkingSummary`, `thinkingBody` (`null` when the role has none), `foot`      |
-| `<lcty-composer>` | Form (input, send, stop)                                                                                                                                                                        | `form`, `input`, `sendButton`, `stopButton`                                                                                                       |
-| `<lcty-cmd>`      | Spinner, label, stop button (shown only while running, floating above the composer through `slot="float"`). **Defined in a module** (`js/ui/lcty-cmd.js`), because a command is behavior itself | `label`, `stopButton`, `run()`, `abort()`                                                                                                         |
+| Element           | Shadow DOM                                                                                                                                                                                      | Exposed fields                                                                                                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<lcty-sidebar>`  | Head (new conversation, settings), search box, conversation list                                                                                                                                | `search`, `searchStatus`, `list`                                                                                                                                              |
+| `<lcty-c>`        | The frame of a conversation file (used only under `/c/`): `<lcty-sidebar>`, header, `<slot>`, spacer, composer, memory dialog                                                                   | `sidebar`, `titleInput`, `tags`, `tagList`, `tagPicker`, `proposeMemoryButton`, `deleteButton`, `composer`, `toEndButton`, `dock`, `memoryDialog`                             |
+| `<lcty-setup>`    | The system prompt (a file element, line 5): `<details>` with its text, from `data-instructions` (or `data-instructions-base64`)                                                                 | `text`                                                                                                                                                                        |
+| `<lcty-message>`  | Head (who, action buttons for the role), a reply's thinking (collapsed, from `data-thinking`), `<slot>`, foot                                                                                   | `who`, `undoButton`, `forkButton`, `regenerateButton`, `thinking`, `thinkingSummary`, `thinkingBody` (`null` when the role has none), `foot`, `statusText`, `info`, `timings` |
+| `<lcty-composer>` | Form (input, send, stop)                                                                                                                                                                        | `form`, `input`, `sendButton`, `stopButton`                                                                                                                                   |
+| `<lcty-cmd>`      | Spinner, label, stop button (shown only while running, floating above the composer through `slot="float"`). **Defined in a module** (`js/ui/lcty-cmd.js`), because a command is behavior itself | `label`, `stopButton`, `run()`, `abort()`                                                                                                                                     |
 
 - `<lcty-message>` builds buttons per role: user gets undo and fork, assistant gets regenerate. Parser-created elements
   have no `data-role` in the constructor, so `attributeChangedCallback` rebuilds the template with the role, replacing the
@@ -260,6 +260,13 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   nothing is added to the file. While a reply is generated the module writes the summary ("Thinking… (n characters)")
   and, while it is open, the body; at the end it sets `data-thinking` and the element shows it. Files written before
   had a `<lcty-thinking>` child of the message; `lcty.v1.css` hides it and the module removes it.
+- **A message's foot is the element's too,** settled at the first paint: it shows why an incomplete reply ended
+  (`data-status`, `data-error`: "Stopped" or "Error: …") as text, and an ⓘ when the message has `data-timings` or
+  `data-client`. The ⓘ is a button that opens a popover (`popovertarget`, no script; `popover="auto"`, so a click
+  outside closes it) with the timings (tokens, speed, time to the first output), one per line. The module fills the
+  popover in, so doing it after the first paint changes nothing on screen. Where anchor positioning is supported the popover opens just
+  above the ⓘ, its implicit anchor (below it when there is no room); elsewhere it is centered, as popovers are by
+  default.
 - `<lcty-conv-list>` (the sidebar's conversation list) is defined in `lcty.v1.js` like the other elements: it builds
   the items (title, tag chips, date and, when known, the message count) as parts of `<lcty-sidebar>`'s Shadow DOM
   and fires `select` and `tag`. Pages give it items (`show(items, empty)`) and the current conversation (`current`).
@@ -272,9 +279,10 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   written as `""`; one that is absent is not written). `connectedCallback` is not extended later, elements fire no custom events
   of their own, and behavior is not mixed into the classes (no jQuery-style extension).
 - **Every feature lives in modules** loaded from the page entries (`lcty.v1.module.js`, `index.js`; `js/pages/*.js`, `js/ui/lcty-elements.js`, `js/ui/sidebar.js`, `js/ui/settings-dialog.js`):
-  Markdown rendering, streaming, thinking display, timings in the foot, sending with Enter (Shift+Enter inserts a
-  newline; Enter during IME composition is ignored), generation, saving, copying code
-  blocks and auto-resizing the composer. They attach handlers directly to exposed fields
+  Markdown rendering, streaming, thinking display, the timings text (in the popover the foot's ⓘ opens), sending with Enter (Shift+Enter inserts a
+  newline; Enter during IME composition is ignored), generation, saving, selecting the code of
+  a code block ("Select all", so the browser's own copy takes it; no clipboard API, which needs a secure context) and
+  auto-resizing the composer. They attach handlers directly to exposed fields
   (`container.composer.form.onsubmit = …`, `message.undoButton.onclick = …`) and use plain functions that operate on the
   DOM (`appendMessage(container, m)`, `messageOf(el)`, …). Per-element state lives in `WeakMap`s.
 - **The tree is decided in `lcty.v1.js`; modules never change it.** A module sets values, attributes and handlers on

@@ -239,7 +239,7 @@ function describeTimings(m) {
 				time: fmtSec(m.client.ttft_ms),
 			}),
 		);
-	return parts.join(" · ");
+	return parts.join("\n"); // one item per line in the popover
 }
 
 function jsonAttr(el, name) {
@@ -290,21 +290,18 @@ export function messageOf(el) {
 	return m;
 }
 
+// The foot is the element's own (lcty.v1.js): it shows the end of an incomplete reply from data-status / data-error and
+// the ⓘ from data-timings / data-client. A message made on screen gets those attributes here; the timings text goes
+// into the popover the ⓘ opens, so filling it in after the first paint changes nothing on screen.
 function renderFoot(el) {
 	const m = messageOf(el);
-	const foot = el.foot; // head and foot are Shadow DOM (lcty.v1.js)
-	const parts = [];
-	if (m.status === "incomplete")
-		parts.push(
-			m.error
-				? tr("errorPrefix", "Error: {error}", { error: m.error })
-				: tr("stopped", "Stopped"),
-		);
+	const set = (name, v) =>
+		v == null ? el.removeAttribute(name) : el.setAttribute(name, v);
+	set("data-error", m.error ?? null);
+	set("data-timings", m.timings ? JSON.stringify(m.timings) : null);
+	set("data-client", m.client ? JSON.stringify(m.client) : null);
 	const t = describeTimings(m);
-	if (t) parts.push(t);
-	const text = parts.join(" — ");
-	if (foot.textContent !== text) foot.textContent = text;
-	if (foot.hidden !== (parts.length === 0)) foot.hidden = parts.length === 0;
+	if (el.timings.textContent !== t) el.timings.textContent = t;
 }
 
 // Attach click handlers to the message's buttons (only those its role has)
@@ -431,19 +428,20 @@ export function initConversationElements(container, h = {}) {
 			viewSetText(view, messageOf(el).content);
 	}
 	markLastUser(container);
-	// "Copy" on code blocks
+	// "Select all" on code blocks: selects the code, to copy it with the browser's own copy (no clipboard API, which
+	// needs a secure context). Replies saved before have a "Copy" button (button.copy) in their presentation HTML; it
+	// is relabelled and works the same way
+	for (const btn of container.querySelectorAll(
+		":scope > lcty-message > article .codebar button.copy",
+	))
+		btn.textContent = tr("selectAll", "Select all");
 	container.addEventListener("click", (e) => {
-		const btn = e.target.closest?.("lcty-message > article button.copy");
+		const btn = e.target.closest?.(
+			"lcty-message > article .codebar :is(button.select, button.copy)",
+		);
 		if (!btn) return;
 		const code = btn.closest(".codeblock")?.querySelector("code");
-		if (!code) return;
-		navigator.clipboard.writeText(code.textContent).then(
-			() => {
-				btn.textContent = tr("copied", "Copied");
-				setTimeout(() => (btn.textContent = tr("copy", "Copy")), 1200);
-			},
-			() => (btn.textContent = tr("copyFailed", "Copy failed")),
-		);
+		if (code) getSelection().selectAllChildren(code);
 	});
 	initComposer(container.composer, {
 		onSend: (text) => state.handlers.onSend?.(text),

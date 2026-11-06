@@ -557,6 +557,7 @@
 	static observedAttributes = [
 		"data-role",
 		"data-status",
+		"data-error",
 		"data-timings",
 		"data-client",
 		"data-thinking",
@@ -603,13 +604,25 @@
 		this.thinking.hidden = !text;
 	}
 
+	// The foot: why an incomplete reply ended (data-status, data-error), and the ⓘ when there are timings (data-timings,
+	// data-client), which opens a popover whose text a module fills in. Both come from attributes, so the foot is
+	// settled at the first paint.
 	#showFoot() {
-		const hidden = !(
-			this.getAttribute("data-status") === "incomplete" ||
-			this.hasAttribute("data-timings") ||
-			this.hasAttribute("data-client")
-		);
-		if (this.foot.hidden !== hidden) this.foot.hidden = hidden;
+		const _ = LctyT._;
+		const error = this.getAttribute("data-error");
+		const status =
+			this.getAttribute("data-status") !== "incomplete"
+				? ""
+				: error
+					? _("errorPrefix", "Error: {error}").replace("{error}", error)
+					: _("stopped", "Stopped");
+		if (this.statusText.textContent !== status)
+			this.statusText.textContent = status;
+		const info =
+			this.hasAttribute("data-timings") || this.hasAttribute("data-client");
+		if (this.info.hidden === info) this.info.hidden = !info;
+		if (this.foot.hidden !== !(status || info))
+			this.foot.hidden = !(status || info);
 	}
 
 	#build(role) {
@@ -650,10 +663,33 @@
 					? _("assistant", "Assistant")
 					: "",
 		);
-		this.foot = $(document.createElement("div"), {
-			part: "lcty-message__foot",
-			hidden: "",
+		this.statusText = $(document.createElement("span"), {
+			part: "lcty-message__status",
 		});
+		// the ⓘ opens the timings in a popover (popovertarget, no script; a module fills it in)
+		this.timings = $(document.createElement("div"), {
+			id: "timings",
+			part: "lcty-message__timings",
+			popover: "auto",
+		});
+		this.info = $(
+			document.createElement("button"),
+			{
+				type: "button",
+				part: "lcty-message__info",
+				popovertarget: "timings",
+				"aria-label": _("timings", "Timings"),
+				hidden: "",
+			},
+			"ⓘ",
+		);
+		this.foot = $(
+			document.createElement("div"),
+			{ part: "lcty-message__foot", hidden: "" },
+			this.statusText,
+			this.info,
+			this.timings,
+		);
 		// a reply's thinking, between the head and the content (filled by #showThinking)
 		this.thinkingSummary =
 			role === "assistant"

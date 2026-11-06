@@ -104,12 +104,11 @@ type LctyTextKey =
 	| "timingInput"
 	| "timingOutput"
 	| "timingFirst"
+	| "timings"
 	| "errorPrefix"
 	| "stopped"
-	| "copied"
-	| "copy"
+	| "selectAll"
 	| "toEnd"
-	| "copyFailed"
 	| "generating"
 	| "noConversations"
 	| "noMatches"
@@ -302,16 +301,19 @@ declare class LctySidebarElement extends HTMLElement {
  * thinking, a <slot> (the presentation HTML in Light DOM) and the foot. Rebuilt when data-role changes. The thinking is
  * a collapsed <details> showing data-thinking (or data-thinking-base64, UTF-8): summary "Thinking (n characters)" and
  * the text; hidden when there is none. While a reply streams in a module writes the summary and the body, then sets
- * data-thinking. The foot is shown when the message has data-timings or data-client or is incomplete (data-status),
- * before a module fills in its text (it keeps a line).
+ * data-thinking. The foot shows, from attributes, why an incomplete reply ended (data-status, data-error: "Stopped" or
+ * "Error: …") and an ⓘ when the message has data-timings or data-client. The ⓘ is a button that opens a popover
+ * (popovertarget, just above it where anchor positioning is supported) whose text a module fills in, so nothing on
+ * screen changes after the first paint. Hidden when it has neither.
  *
  * Parts: lcty-message__head / __who / __actions / __action (--undo, --fork, --regenerate; with lcty-button) /
- * __thinking / __thinking-summary / __thinking-body / __foot
+ * __thinking / __thinking-summary / __thinking-body / __foot / __status / __info / __timings
  */
 declare class LctyMessageElement extends HTMLElement {
 	static readonly observedAttributes: readonly [
 		"data-role",
 		"data-status",
+		"data-error",
 		"data-timings",
 		"data-client",
 		"data-thinking",
@@ -331,8 +333,14 @@ declare class LctyMessageElement extends HTMLElement {
 	thinkingBody: HTMLDivElement | null;
 	/** Who wrote it (part lcty-message__who) */
 	who: HTMLSpanElement;
-	/** Foot (part lcty-message__foot): timings, and the error or the stop of an incomplete reply; its text is set by a module */
+	/** Foot (part lcty-message__foot): statusText and info */
 	foot: HTMLDivElement;
+	/** Why an incomplete reply ended, from data-status / data-error (part lcty-message__status) */
+	statusText: HTMLSpanElement;
+	/** The ⓘ, shown with data-timings / data-client (part lcty-message__info); it opens timings */
+	info: HTMLButtonElement;
+	/** The popover with the timings, one item per line (part lcty-message__timings); its text is set by a module */
+	timings: HTMLDivElement;
 }
 
 /**

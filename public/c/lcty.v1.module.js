@@ -489,7 +489,7 @@ window.addEventListener("beforeunload", (e) => {
 	// element (a conversation just created on /, or a creation that was interrupted) runs. send generates a reply to the
 	// last user message.
 	defineCommands({
-		send: async (cmd, controller) => {
+		send: async (_cmd, controller) => {
 			const msgs = state.conv.messages;
 			if (state.busy || msgs[msgs.length - 1]?.role !== "user") return;
 			await generate(controller);
