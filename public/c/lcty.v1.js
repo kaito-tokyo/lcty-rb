@@ -188,7 +188,7 @@
 			this.end,
 		);
 
-		// The title is line 2 of the file and this element line 3, so it is already there; later changes are a module's
+		// The title is line 3 of the file and this element line 4, so it is already there; later changes are a module's
 		this.titleInput.value = document.querySelector("title")?.textContent || "";
 
 		// "To the bottom" is shown while the end of the page is more than 48 px below the view
@@ -207,6 +207,19 @@
 	// The parser has set the attributes by now: mark this conversation in the sidebar's list
 	connectedCallback() {
 		this.sidebar.list.current = this.id.replace(/^c-/, "");
+		LctyCElement.#importFeatures();
+	}
+
+	// The conversation page's features (lcty.v1.module.js, next to this file) are imported once the page has loaded, so
+	// they never block rendering. import() resolves against this script's URL. Opened directly (file://) the import fails
+	// and the page stays a static view (LCTYSP-005).
+	static #featuresRequested = false;
+	static #importFeatures() {
+		if (LctyCElement.#featuresRequested) return;
+		LctyCElement.#featuresRequested = true;
+		const run = () => import("./lcty.v1.module.js");
+		if (document.readyState === "complete") run();
+		else addEventListener("load", run, { once: true });
 	}
 
 	// The chips (data-setup-tags) and the picker's choices (data-tag-defs: the defined tags; until it is set nothing is

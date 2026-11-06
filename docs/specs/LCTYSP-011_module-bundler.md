@@ -20,7 +20,8 @@ because the modules follow strict conventions, and the bundler refuses to start 
 
 ## Why a bundler, and why this one
 
-- **One file per page.** A conversation file loads `lcty.v1.module.js` from `data/c/`, next to it: the scripts belong
+- **One file per page.** A conversation file loads `lcty.v1.module.js` from next to it (over HTTP the server serves
+  the bundle from memory; a copy is published into `data/c/` at startup): the scripts belong
   to the user together with the conversations they render ([LCTYSP-010](LCTYSP-010_data-and-settings.md)), so a
   backup of `data/` keeps both. A single file is simple to keep there, and the modules themselves (`public/js/`) stay
   in the repository.

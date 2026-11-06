@@ -44,7 +44,7 @@ source of truth at startup or by the browser. Everything else is source-of-truth
 ### In the browser
 
 - **IndexedDB `lcty`** (derived; it can be dropped at any time):
-  - store `meta` (key `id`): a copy of `GET /v1/meta-all.json`, the meta of every conversation read from its meta lines
+  - store `meta` (key `id`): a copy of `GET /v1/meta-all.json`, the meta of every conversation read from its head lines
     ([LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-006](LCTYSP-006_http-api.md)). It holds `setup_tags` (the
     tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
     messages, from the search index); the last three are only hints.
