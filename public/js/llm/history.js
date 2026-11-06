@@ -9,7 +9,7 @@
 //  - assistant items require type: "message" (400 without it)
 //  - messages copied from the fork source (inherited) are treated like any other message
 
-export function buildRequest({ instructions, thinking, messages }) {
+export function buildRequest({ instructions, messages }) {
 	const input = [];
 	for (const m of messages) {
 		if (m.role === "user") {
@@ -18,5 +18,5 @@ export function buildRequest({ instructions, thinking, messages }) {
 			input.push({ type: "message", role: "assistant", content: m.content });
 		}
 	}
-	return { instructions: instructions || "", input, thinking: !!thinking };
+	return { instructions: instructions || "", input };
 }

@@ -6,15 +6,17 @@
  * Types and documentation for lcty.v1.js (LCTYSP-005). The served script keeps no comments other than SPDX and
  * /*export*\/ to stay small, so its documentation lives here.
  *
- * - The source is the ES module public/c/lcty.v1.js (no imports; exported declarations start with `export`). At startup
- *   chatty.rb replaces each leading `export` with `/*export*\/` and writes the classic script to data/c/lcty.v1.js,
- *   next to the conversation files: they belong to the user together (LCTYSP-010).
- * - Every page loads it synchronously inside <head> (a conversation file on line 1, as lcty.v1.js; other pages as
- *   /c/lcty.v1.js), followed by lcty.v1.lang-ja.js (the Japanese texts, built from public/c/lcty.v1.lang-ja.json), an
- *   inline <script>defineLctyV1CustomElements();</script>; the module lcty.v1.module.js (deferred, as modules are) runs
- *   after the document has been parsed. The rendering (the scroll position included) does not wait for it. The custom elements are
- *   defined before the body is parsed, so every element is created by the parser and the DOM structure is settled in a
- *   single pass.
+ * - The source is the ES module public/c/lcty.v1.mjs (no imports; exported declarations start with `export`). The
+ *   classic script public/c/lcty.v1.js is generated from it by the command in its head comment (each leading `export`
+ *   becomes `/*export*\/`, and the last line `//?defineLctyV1CustomElements();` loses its `//?`) and committed. At
+ *   startup chatty.rb copies it (with lcty.v1.css, nothing else) to data/c/, next to the conversation files: they
+ *   belong to the user together (LCTYSP-010).
+ * - Every page loads it synchronously inside <head> (a conversation file on line 2, as lcty.v1.js; other pages as
+ *   /c/lcty.v1.js), followed by lcty.v1.lang-ja.js (the Japanese texts, generated from public/c/lcty.v1.lang-ja.mjs).
+ *   There is no inline script: lcty.v1.js defines the elements at its end. The conversation page's module
+ *   lcty.v1.module.js is imported by <lcty-c> once the page has loaded; the rendering (the scroll position included)
+ *   does not wait for it. The custom elements are defined before the body is parsed, so every
+ *   element is created by the parser and the DOM structure is settled in a single pass.
  * - Each element builds its internal structure in Shadow DOM with DOM APIs in its constructor (a parser-created element may
  *   not get children or attributes there, but a shadow root is allowed). HTML strings (innerHTML) are not used. A small
  *   helper `$(el, attrs, ...children)` sets attributes (values are strings, as the DOM defines them; a boolean attribute is
@@ -41,7 +43,6 @@ type LctyTextKey =
 	| "systemPrompt"
 	| "none"
 	| "recompose"
-	| "enableThinking"
 	| "setupHint"
 	| "undo"
 	| "fork"
@@ -54,8 +55,6 @@ type LctyTextKey =
 	| "indexFailed"
 	| "settingsLoadFailed"
 	| "saveFailed"
-	| "thinkingOn"
-	| "thinkingOff"
 	| "addTag"
 	| "addTagOption"
 	| "proposingMemory"
@@ -105,12 +104,11 @@ type LctyTextKey =
 	| "timingInput"
 	| "timingOutput"
 	| "timingFirst"
+	| "timings"
 	| "errorPrefix"
 	| "stopped"
-	| "copied"
-	| "copy"
+	| "selectAll"
 	| "toEnd"
-	| "copyFailed"
 	| "generating"
 	| "noConversations"
 	| "noMatches"
@@ -130,24 +128,20 @@ type LctyTextKey =
 	| "missingModels"
 	| "connectFailed"
 	| "defaultsLoadFailed"
-	| "noTagsBefore"
-	| "noTagsAfter"
+	| "noTagsYet"
+	| "editTags"
+	| "confirmCloseTags"
 	| "forkTitle"
 	| "forkFrom"
 	| "forkInherits"
 	| "createFailed"
 	| "forkLoadFailed"
 	| "newChatHeading"
-	| "tagsPageTitle"
-	| "settingsPageTitle"
 	| "settingsHint"
 	| "baseUrlLabel"
 	| "apiKeyLabel"
 	| "chatModelLabel"
 	| "embeddingModelLabel"
-	| "thinkingKwargBefore"
-	| "thinkingKwargAfter"
-	| "defaultThinkingLabel"
 	| "resetDefaults"
 	| "testConnection";
 
@@ -176,22 +170,24 @@ declare const LctyT: {
  * <lcty-c>: the whole conversation screen. It ends line 3 of a conversation file, so it is created before the body.
  *
  * Used only under /c/. What the frame needs to know is on its own attributes, written once when the conversation is
- * created: id ("c-" + the conversation id), data-setup-tags (the tags at creation), data-thinking and data-created-at.
+ * created: id ("c-" + the conversation id), data-setup-tags (the tags at creation) and data-created-at.
  * The system prompt is its first child, lcty-setup (data-instructions, or data-instructions-base64 when it has
  * unwritable characters).
  * The frame (<lcty-sidebar>, header, <slot>, composer, memory dialog) lives in Shadow DOM. Parts: lcty-c__header, __title, __tags, __tag (--unknown), __tag-name,
- * __tag-remove, __tag-picker, __badges, __thinking, __propose-memory, __delete,
+ * __tag-remove, __tag-picker, __propose-memory, __delete,
  * __spacer, __dock, __float, __to-end, __end, __composer, __memory; the dialog's lcty-memory__*; lcty-button for buttons; the
  * sidebar's and the composer's exported under their own names. The file's elements (lcty-setup, messages, lcty-cmd) are appended to Light DOM by the
  * parser and shown through the <slot> between the header and the composer; lcty-setup shows the system prompt itself.
  *
  * The frame's tree is decided here, and each piece follows one input (LCTYSP-005): the title (the document's <title>,
- * read once), the thinking badge's text (data-thinking), the tag chips (data-setup-tags: the tags at creation, for
+ * read once), the tag chips (data-setup-tags: the tags at creation, for
  * now), and which chips are unknown and the picker's choices (data-tag-defs, the tag definitions, space-separated).
  * What shows before the first message is lcty.v1.css's (:has). Modules only set values, attributes and handlers.
  *
  * When it is connected it marks its own conversation as current in the sidebar's list (which <lcty-sidebar> fills
- * itself).
+ * itself), and the first one imports the page's features, ./lcty.v1.module.js (resolved against lcty.v1.js), on the
+ * window's load event (at once when the page has already loaded), so they never block rendering. Opened directly
+ * (file://) the import fails and the page stays a static view.
  *
  * Above the composer floats "to the bottom" (#to-end, shown while the end is out of view) and a running <lcty-cmd>
  * (slot="float"). Scrolling: LCTYSP-005, Layout of the conversation page.
@@ -214,7 +210,6 @@ declare class LctySetupElement extends HTMLElement {
 declare class LctyCElement extends HTMLElement {
 	static readonly observedAttributes: readonly [
 		"data-setup-tags",
-		"data-thinking",
 		"data-tag-defs",
 	];
 	/** The sidebar (#sidebar), the same element every page has */
@@ -227,10 +222,6 @@ declare class LctyCElement extends HTMLElement {
 	tagList: HTMLSpanElement;
 	/** The tag picker: "+ Tag" and the defined tags not on the conversation (disabled when there is none) */
 	tagPicker: HTMLSelectElement;
-	/** Badges (#conv-badges) */
-	badges: HTMLSpanElement;
-	/** Thinking on / off (data-thinking); hidden before the first message (lcty.v1.css) */
-	thinkingBadge: HTMLSpanElement;
 	/** "Propose memory" button (#propose-memory); hidden before the first message or without tags (lcty.v1.css); a module disables it */
 	proposeMemoryButton: HTMLButtonElement;
 	/** Delete button (#delete-chat) */
@@ -289,12 +280,10 @@ declare class LctyConvListElement extends HTMLElement {
  */
 declare class LctySidebarElement extends HTMLElement {
 	static readonly _: typeof LctyT._;
-	/** "New conversation" link to / (part lcty-sidebar__new) */
+	/** "New conversation" link to /, opened in a new window (target="_blank" rel="noopener"; part lcty-sidebar__new) */
 	newLink: HTMLAnchorElement;
-	/** Link to /tags (part lcty-sidebar__tags) */
-	tagsLink: HTMLAnchorElement;
-	/** Link to /settings (part lcty-sidebar__settings) */
-	settingsLink: HTMLAnchorElement;
+	/** Opens the settings dialog attached by js/ui/sidebar.js (part lcty-sidebar__settings) */
+	settingsButton: HTMLButtonElement;
 	/** The three links (part lcty-sidebar__nav) */
 	nav: HTMLElement;
 	/** Search box (part lcty-sidebar__search) */
@@ -308,18 +297,27 @@ declare class LctySidebarElement extends HTMLElement {
 }
 
 /**
- * <lcty-message>: one message. Its Shadow DOM holds the head (who, and the action buttons for the role), a <slot> (the
- * presentation HTML in Light DOM) and the foot. Rebuilt when data-role changes. The foot is shown when the message has
- * data-timings or data-client or is incomplete (data-status), before a module fills in its text (it keeps a line).
+ * <lcty-message>: one message. Its Shadow DOM holds the head (who, and the action buttons for the role), a reply's
+ * thinking, a <slot> (the presentation HTML in Light DOM) and the foot. Rebuilt when data-role changes. The thinking is
+ * a collapsed <details> showing data-thinking (or data-thinking-base64, UTF-8): summary "Thinking (n characters)" and
+ * the text; hidden when there is none. While a reply streams in a module writes the summary and the body, then sets
+ * data-thinking. The foot shows, from attributes, why an incomplete reply ended (data-status, data-error: "Stopped" or
+ * "Error: …") and an ⓘ when the message has data-timings or data-client. The ⓘ is a button that opens a popover
+ * (popovertarget, just above it where anchor positioning is supported) whose text a module fills in, so nothing on
+ * screen changes after the first paint. Hidden when it has neither.
  *
- * Parts: lcty-message__head / __who / __actions / __action (--undo, --fork, --regenerate; with lcty-button) / __foot
+ * Parts: lcty-message__head / __who / __actions / __action (--undo, --fork, --regenerate; with lcty-button) /
+ * __thinking / __thinking-summary / __thinking-body / __foot / __status / __info / __timings
  */
 declare class LctyMessageElement extends HTMLElement {
 	static readonly observedAttributes: readonly [
 		"data-role",
 		"data-status",
+		"data-error",
 		"data-timings",
 		"data-client",
+		"data-thinking",
+		"data-thinking-base64",
 	];
 	/** Undo button (user messages only, else null) */
 	undoButton: HTMLButtonElement | null;
@@ -327,10 +325,22 @@ declare class LctyMessageElement extends HTMLElement {
 	forkButton: HTMLButtonElement | null;
 	/** Regenerate button (assistant messages only, else null) */
 	regenerateButton: HTMLButtonElement | null;
+	/** A reply's thinking (part lcty-message__thinking; assistant messages only, else null) */
+	thinking: HTMLDetailsElement | null;
+	/** Its summary (part lcty-message__thinking-summary) */
+	thinkingSummary: HTMLElement | null;
+	/** Its text (part lcty-message__thinking-body) */
+	thinkingBody: HTMLDivElement | null;
 	/** Who wrote it (part lcty-message__who) */
 	who: HTMLSpanElement;
-	/** Foot (part lcty-message__foot): timings, and the error or the stop of an incomplete reply; its text is set by a module */
+	/** Foot (part lcty-message__foot): statusText and info */
 	foot: HTMLDivElement;
+	/** Why an incomplete reply ended, from data-status / data-error (part lcty-message__status) */
+	statusText: HTMLSpanElement;
+	/** The ⓘ, shown with data-timings / data-client (part lcty-message__info); it opens timings */
+	info: HTMLButtonElement;
+	/** The popover with the timings, one item per line (part lcty-message__timings); its text is set by a module */
+	timings: HTMLDivElement;
 }
 
 /**
@@ -350,9 +360,9 @@ declare class LctyComposerElement extends HTMLElement {
 }
 
 /**
- * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message and lcty-composer in registry. lcty.v1.js itself defines nothing: the page
- * calls this in an inline script after the language scripts, so the texts are registered before any element is built.
- * The inline script is always the same, so a CSP allows it by its hash.
+ * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message and lcty-composer in registry. lcty.v1.js
+ * calls it at its end; importing lcty.v1.mjs defines nothing. The elements are created while the body is parsed, after
+ * the language scripts in <head> have registered their texts.
  */
 declare function defineLctyV1CustomElements(
 	registry?: CustomElementRegistry,

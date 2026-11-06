@@ -25,61 +25,68 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 ## File layout
 
 ```html
-<!doctype html><html data-lcty-tlrange="0x0187,0x0387" lang="ja"><meta charset="utf-8">…<script type="module" src="lcty.v1.module.js"></script><link rel="stylesheet" href="lcty.v1.css"><script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script><script>defineLctyV1CustomElements();</script>
-<!--lcty-meta--><title>Title</title><!--8901234567890…34567890-->
-<!--lcty-meta--><lcty-c id="c-20261104-…" data-setup-tags="ruby concise" data-thinking="false" data-created-at="…">
+<!DOCTYPE html><html lang="ja" />
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script><link rel="stylesheet" href="lcty.v1.css" /></head>
+<title id="__512">Title</title><!--7890123456789…34567890<!---->
+<lcty-c id="c-20261104-…" data-setup-tags="ruby concise" data-created-at="…" />
 <lcty-setup data-instructions="system prompt"></lcty-setup>
 <lcty-message id="c-msg-0190…" data-role="user" data-at="…" data-content="user text"><div class="user-text">user text</div></lcty-message>
 <lcty-message id="c-msg-0190…" data-role="assistant" data-status="completed" data-at="…" data-timings="{…}" data-client="{…}" data-content="# Heading&#10;…" data-thinking="thoughts"><article data-generator="lcty.v1"><h1>Heading</h1>…</article></lcty-message>
 ```
 
-- **Rule: lines starting with `<!` are skipped when reading.** Such lines must be complete on one line. Text always
-  escapes `<` as `&lt;`, so a text line never starts with a raw `<!`. Lines 1 to 3 all start with `<!`, so the element
-  parser sees lines 4 and later, a well-formed XML fragment (`<!doctype html>` and the never-closed `<lcty-c>` are not
-  valid XML). Ruby reads lines 2 and 3 on their own (the title slot and the attributes of `<lcty-c>`).
-- **Line 1 is a fixed header.** It loads the page module, the stylesheet, the element definitions and the Japanese
-  texts, in that order (`lcty.v1.js` before `lcty.v1.lang-ja.js`, which registers its table with `LctyT`), then defines
-  the elements ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). Opened over HTTP, the file shows as the conversation.
-- **Opened directly (`file://`, offline), the file still shows as the conversation.** It needs nothing but the
-  `lcty.v1.*` files next to it, all loaded by relative paths from line 1 (no Shadow DOM loads
-  anything of its own, [LCTYSP-005](LCTYSP-005_page-and-elements.md)). Only reading is supported there: the module does not load (browsers
-  refuse module scripts from `file://`, whose origin is `null`), so nothing is sent, nothing reaches the LLM server,
-  and the sidebar's list is empty unless that origin has its own cached copy. None of this is needed to read it.
-- **`<!--lcty-meta-->` starts lines 2 and 3.** The empty comment is there only so that those lines start with `<!` and
-  the element parser skips them.
-- **The `<!` lines (1 to 3) are the meta lines.** They hold only what a list of conversations needs: the title, the
-  id, the tags at creation, whether thinking is on and the creation time. Collecting them is enough to build the
-  sidebar's database (`GET /v1/meta-all.json` reads only these lines of each file,
-  [LCTYSP-006](LCTYSP-006_http-api.md)). The system prompt, which may be long, is not among them; it is on line 4.
-- **Line 2 is the title slot.** The browser puts the comment and the `<title>` in the head, so `<title>` is the
-  document's own title (the tab shows it even without JavaScript).
-- **Line 3 opens the frame, `<lcty-c>`, whose attributes are what the frame needs to know.** They are written once,
-  when the conversation is created, and never change (line 3 is never rewritten):
+- **Rule: lines 1 to 4 are the head; the elements start on line 5.** Ruby reads the head lines on their own (the title
+  slot on line 3 and the attributes of `<lcty-c>` on line 4), and the element parser sees lines 5 and later, a
+  well-formed XML fragment (`<!DOCTYPE html>` and `<head>` are not XML). Every head line is complete on one line.
+- **Lines 1 and 2 are a fixed header.** Line 1 is `<!DOCTYPE html><html lang="ja" />`; line 2 is the `<head>`, ending
+  with `</head>`. It loads `lcty.v1.js` (the element definitions, which define the elements at its end) and
+  `lcty.v1.lang-ja.js` (the Japanese texts, registered with `LctyT`), in that order, as classic scripts, and links the
+  stylesheet. The page's features, `lcty.v1.module.js`, are not in the header: `<lcty-c>` imports them once the page
+  has loaded, so they never block rendering ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). There is no inline script. The
+  `/>` on `<html>` (and on `<lcty-c>`) is ignored by the HTML parser. Opened over HTTP, the file shows as the
+  conversation.
+- **Opened directly (`file://`, offline), the file still shows as the conversation.** It needs nothing but
+  `lcty.v1.js` and `lcty.v1.css` next to it in `data/c/`, loaded by relative paths from line 2 (no Shadow DOM loads
+  anything of its own, [LCTYSP-005](LCTYSP-005_page-and-elements.md)): the classic script builds the frame. Only
+  reading is supported there, and every error is left as it is: the language script is not next to it (the frame shows
+  the English x-default texts; the conversation itself is in the file), and importing the module fails (browsers refuse
+  module scripts from `file://`, whose origin is `null`), so nothing is sent, nothing reaches the LLM server, and the
+  sidebar's list is empty unless that origin has its own cached copy. None of this is needed to read it.
+- **The head lines (1 to 4) hold only what a list of conversations needs:** the title, the id, the tags at creation and
+  the creation time. Collecting them is enough to build the sidebar's database (`GET /v1/meta-all.json` reads only
+  these lines of each file, [LCTYSP-006](LCTYSP-006_http-api.md)). The system prompt, which may be long, is not among
+  them; it is on line 5.
+- **Line 3 is the title slot:** `<title id="__512">[begin]…[end]<!---->`. The `<title>` comes after `</head>`; the
+  parser moves it into the head, so it is the document's own title (the tab shows it even without JavaScript). The id
+  carries the length of the slot right next to it: the slot is the 512 bytes from `[begin]` (just after the `>` of the
+  opening tag) to `[end]` (just before the fixed `<!---->`, which is never overwritten). Ruby reads the title from the
+  slot.
+- **The slot is built from a ruler.** A blank slot is 512 digits aligned so that the last one is always `0`
+  (`…7890`, just before `<!---->`, so a broken slot is easy to spot). Writing a title overwrites the head of the slot
+  with `escaped title</title><!--`: the rest of the ruler and the `<!---->` after it become a comment. Digits never form
+  `--`, so whatever the title, the comment always closes at the last `>` (when the ruler is used up it reads
+  `<!--<!---->`, a harmless nested-comment parse error) and the slot keeps its length. The longest escaped title is
+  therefore 500 bytes.
+- **Line 4 is the frame, `<lcty-c … />`, whose attributes are what the frame needs to know.** They are written once,
+  when the conversation is created, and never change (line 4 is never rewritten):
   - `id`: `c-` followed by the conversation id (see the id prefixes below);
   - `data-setup-tags`: the tags the conversation was created with (space separated, omitted when empty). **Tag
     changes are not written to the file:** they are kept in `tags.sqlite`, and the current tags are those, or these
     when the tags were never changed ([LCTYSP-009](LCTYSP-009_tags-and-memory.md));
-  - `data-thinking`: whether thinking is on (`true` / `false`);
   - `data-created-at`: when the conversation was created.
 
-  `<lcty-c>` is deliberately never closed: the HTML parser closes it at the end of the file, so every element from line
-  4 on becomes its child and appending is just writing at the end. Nothing else about a conversation is recorded: not
-  the backend (the browser always uses its default backend) and not the conversation it was forked from.
-- **Line 4 is `lcty-setup`**, the system prompt (see Elements).
-- **The title slot is declared on line 1.** `data-lcty-tlrange="0xSSSS,0xEEEE"` on `<html>` is the half-open byte range
-  from the `<` of `<title>` to the end of line 2 (just after `-->`, where the newline is):
-  `<!--lcty-meta-->[begin]<title>…</title><!--…0-->[end]`. Both numbers are 4-digit hex, so the header length never
-  depends on them. By default the slot is 512 bytes. Ruby reads the title from the slot.
-- **The slot is built from a ruler.** A blank slot is a run of digits ending with `0-->` (the digits count up to the
-  end, so the one just before `-->` is always `0`; a broken slot is easy to spot). Writing a title overwrites its head
-  with `<title>…</title><!--`, which turns the rest of the ruler into the body of a comment; digits never form `--`, so
-  the result is always a valid comment and the slot keeps its length. The longest escaped title is therefore 490 bytes
-  (`<!---->` when the ruler is used up).
+  In HTML the `/>` is ignored, so `<lcty-c>` stays open until the end of the file and every element from line 5 on
+  becomes its child: appending is just writing at the end. As XML the line is a complete element on its own. Nothing
+  else about a conversation is recorded: not the backend (the browser always uses its default backend) and not the
+  conversation it was forked from.
+- **Line 5 is `lcty-setup`**, the system prompt (see Elements).
+- **Older heads are rewritten at startup.** Before 2026-11-07 the head was three lines starting with `<!` (the header
+  with `data-lcty-tlrange`, then `<!--lcty-meta-->` with the title slot and with a never-closed `<lcty-c>`, which could
+  also carry `data-thinking`). The server still reads that format, and at startup it rewrites every file whose head is
+  not the current one (also a head edited by hand, or a header, lines 1 and 2, that has changed since), keeping what it holds and its modification time.
 - **The title** is the current conversation title. Newlines become spaces. The escaped title is cut at a character
-  boundary so the slot never exceeds 512 bytes (about 160 Japanese characters). Changing the title overwrites the slot
-  in place (seek to its start, write exactly its length, fsync) under the file lock, so the rest of the file stays
-  append-only. When the new title does not fit the slot, or the file has no valid slot, the whole file is rewritten
-  with a default-size slot.
+  boundary so it fits the slot (about 160 Japanese characters). Changing the title overwrites the slot in place (seek
+  to its start, write exactly its length, fsync) under the file lock, so the rest of the file stays append-only. When
+  the file has no valid slot, the whole file is rewritten instead.
 - **Titles come from replies.** The system prompt asks the chat model to start every reply with a level-1 heading
   (`# タイトル`). This is best effort: when the first line of a reply is such a heading, the page sets it as the title.
   The heading stays in the reply's content, so the history sent back is exactly what the model wrote (the cache
@@ -88,7 +95,7 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 - **Rendering reads the title only from `<title>`.** The heading rule is applied once, when a reply is received: the
   page writes the title (into the slot) and puts the same text into the page's `<title>`. Nothing derives a title from
   the messages when a file is opened or listed, and nothing is added to it (no site name).
-- **Lines 4 and later** are elements, one per line, separated by a single newline.
+- **Lines 5 and later** are elements, one per line, separated by a single newline.
 - **Element ids carry a prefix that may be added and removed freely.** The identity is the bare id (the conversation
   id, the message UUIDv7). As an element `id` it is written with a prefix, `c-` for `<lcty-c>` and `c-msg-` for
   `lcty-message`, only so that it can sit in a URL fragment and in CSS selectors and never collides with other ids in the
@@ -101,8 +108,8 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 
 | Element        | Content                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `<title>`      | The title, in the slot on line 2 (not an element of the body); changing it overwrites the slot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `lcty-setup`   | The system prompt actually sent: `data-instructions` (or `data-instructions-base64`). Written on line 4 when the conversation is created. **Written exactly once and never overridden:** only the first `lcty-setup` counts, and a later one is ignored.                                                                                                                                                                                                                                                                                                                                                                   |
+| `<title>`      | The title, in the slot on line 3 (not an element of the body); changing it overwrites the slot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `lcty-setup`   | The system prompt actually sent: `data-instructions` (or `data-instructions-base64`). Written on line 5 when the conversation is created. **Written exactly once and never overridden:** only the first `lcty-setup` counts, and a later one is ignored.                                                                                                                                                                                                                                                                                                                                                                   |
 | `lcty-cmd`     | A command tag: an operation to run, abstracted as `data-op` (lowercase letters, digits and `-`) with `data-at`. A command written to the file runs when the file is opened while it is still the last element (deferred execution); commands appended only in memory never reach the file (volatile execution). Unknown operations are ignored. Today only `send`, written as the last line when a conversation is created ([LCTYSP-004](LCTYSP-004_editing.md)). Shown only while running (spinner and stop).                                                                                                             |
 | `lcty-message` | One message. `id` is `c-msg-` followed by the message UUIDv7, so `#c-msg-…` links to the element. Attributes: `data-role`, `data-at`, `data-status`, `data-error`, `data-inherited`; JSON attributes `data-timings`, `data-client`, `data-usage`. Text is `data-content`, thinking is `data-thinking` (each `-base64` when needed, see below). Children are presentation: `div.user-text` for the user and `<article>` for the assistant. **Thinking has no presentation in the file**: it is `data-thinking` only, since it is not needed to read the conversation, and the page shows it (collapsed) from the attribute. |
 

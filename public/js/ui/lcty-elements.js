@@ -143,9 +143,12 @@ function viewFinish(view) {
 	viewFlush(view, s);
 }
 
-// ---- Thinking (<lcty-thinking>): not rendered while collapsed ----
+// ---- Thinking (while a reply is generated) ----
+// A reply's thinking view is part of <lcty-message> (its Shadow DOM, lcty.v1.js), built from data-thinking. While the
+// reply streams in, the text is kept here and written to the view's summary and body (the body only while it is open);
+// at the end it becomes data-thinking and the element shows it itself.
 
-/** <lcty-thinking> => { text, rendered, done, raf, node } */
+/** <lcty-message> => { text, rendered, raf, node } while it streams */
 function thoughts() {
 	state.thoughtMap ??= new WeakMap();
 	return state.thoughtMap;
@@ -154,51 +157,32 @@ function thoughts() {
 function thoughtState(el) {
 	let s = thoughts().get(el);
 	if (!s) {
-		s = {
-			text: "",
-			rendered: 0,
-			done: false,
-			raf: 0,
-			node: document.createTextNode(""),
-		};
+		s = { text: "", rendered: 0, raf: 0, node: document.createTextNode("") };
 		thoughts().set(el, s);
-		el.querySelector(".thinking-body").append(s.node);
-		el.querySelector("details").addEventListener("toggle", () =>
-			thoughtFlush(el, s),
-		);
+		el.thinkingBody.replaceChildren(s.node);
+		el.thinking.addEventListener("toggle", () => thoughtFlush(el, s));
 	}
 	return s;
 }
 
 function thoughtFlush(el, s) {
 	const n = s.text.length;
-	el.hidden = n === 0;
-	el.querySelector("summary").textContent = s.done
-		? tr("thinkingDone", "Thinking ({n} characters)", {
-				n: n.toLocaleString(),
-			})
-		: tr("thinkingNow", "Thinking… ({n} characters)", {
-				n: n.toLocaleString(),
-			});
-	if (el.querySelector("details").open && s.rendered < n) {
+	el.thinking.hidden = n === 0;
+	el.thinkingSummary.textContent = tr(
+		"thinkingNow",
+		"Thinking… ({n} characters)",
+		{ n: n.toLocaleString() },
+	);
+	if (el.thinking.open && s.rendered < n) {
 		s.node.appendData(s.text.slice(s.rendered));
 		s.rendered = n;
 		el.dispatchEvent(new Event("md-render", { bubbles: true }));
 	}
 }
 
-function thoughtSetText(el, text) {
-	const s = thoughtState(el);
-	s.text = text ?? "";
-	s.rendered = 0;
-	s.node.data = "";
-	s.done = true;
-	thoughtFlush(el, s);
-}
-
 function thoughtAppend(el, delta) {
+	if (!delta || !el.thinking) return;
 	const s = thoughtState(el);
-	if (!delta) return;
 	s.text += delta;
 	if (!s.raf) {
 		s.raf = requestAnimationFrame(() => {
@@ -208,24 +192,14 @@ function thoughtAppend(el, delta) {
 	}
 }
 
+// The end of streaming: the text becomes data-thinking, which the element shows (summary "Thinking (n characters)")
 function thoughtFinish(el) {
-	const s = thoughtState(el);
-	s.done = true;
+	const s = thoughts().get(el);
+	if (!s) return;
 	if (s.raf) cancelAnimationFrame(s.raf);
-	s.raf = 0;
-	thoughtFlush(el, s);
-}
-
-/** The thinking view of a reply, collapsed: <lcty-thinking><details><summary/><div.thinking-body/></details>. It is
- * built by the page only (the file keeps the thinking in data-thinking, LCTYSP-003). */
-function thinkingView() {
-	const thinking = document.createElement("lcty-thinking");
-	const details = document.createElement("details");
-	const body = document.createElement("div");
-	body.className = "thinking-body";
-	details.append(document.createElement("summary"), body);
-	thinking.append(details);
-	return thinking;
+	thoughts().delete(el);
+	if (s.text) el.setAttribute("data-thinking", s.text);
+	else el.removeAttribute("data-thinking");
 }
 
 // ---- Messages (<lcty-message>) ----
@@ -265,7 +239,7 @@ function describeTimings(m) {
 				time: fmtSec(m.client.ttft_ms),
 			}),
 		);
-	return parts.join(" · ");
+	return parts.join("\n"); // one item per line in the popover
 }
 
 function jsonAttr(el, name) {
@@ -316,21 +290,18 @@ export function messageOf(el) {
 	return m;
 }
 
+// The foot is the element's own (lcty.v1.js): it shows the end of an incomplete reply from data-status / data-error and
+// the ⓘ from data-timings / data-client. A message made on screen gets those attributes here; the timings text goes
+// into the popover the ⓘ opens, so filling it in after the first paint changes nothing on screen.
 function renderFoot(el) {
 	const m = messageOf(el);
-	const foot = el.foot; // head and foot are Shadow DOM (lcty.v1.js)
-	const parts = [];
-	if (m.status === "incomplete")
-		parts.push(
-			m.error
-				? tr("errorPrefix", "Error: {error}", { error: m.error })
-				: tr("stopped", "Stopped"),
-		);
+	const set = (name, v) =>
+		v == null ? el.removeAttribute(name) : el.setAttribute(name, v);
+	set("data-error", m.error ?? null);
+	set("data-timings", m.timings ? JSON.stringify(m.timings) : null);
+	set("data-client", m.client ? JSON.stringify(m.client) : null);
 	const t = describeTimings(m);
-	if (t) parts.push(t);
-	const text = parts.join(" — ");
-	if (foot.textContent !== text) foot.textContent = text;
-	if (foot.hidden !== (parts.length === 0)) foot.hidden = parts.length === 0;
+	if (el.timings.textContent !== t) el.timings.textContent = t;
 }
 
 // Attach click handlers to the message's buttons (only those its role has)
@@ -355,21 +326,14 @@ function addMessage(container, m) {
 		body.textContent = m.content;
 		el.append(body);
 	} else {
-		el.append(thinkingView(), document.createElement("article"));
+		// the thinking view is the element's own (data-thinking); only the content is a child
+		if (m.thinking && m.status !== "streaming")
+			el.setAttribute("data-thinking", m.thinking);
+		el.append(document.createElement("article"));
 	}
 	container.append(el);
-	if (m.role === "assistant" && m.status !== "streaming") {
-		thoughtSetText(
-			el.querySelector(":scope > lcty-thinking"),
-			m.thinking || "",
-		);
+	if (m.role === "assistant" && m.status !== "streaming")
 		viewSetText(el.querySelector(":scope > article"), m.content || "");
-	} else if (m.role === "assistant") {
-		thoughtFlush(
-			el.querySelector(":scope > lcty-thinking"),
-			thoughtState(el.querySelector(":scope > lcty-thinking")),
-		);
-	}
 	renderFoot(el);
 	return el;
 }
@@ -379,13 +343,13 @@ export function appendText(el, delta) {
 }
 
 export function appendThinking(el, delta) {
-	thoughtAppend(el.querySelector(":scope > lcty-thinking"), delta);
+	thoughtAppend(el, delta);
 }
 
 /** End of streaming. Reflect the message's status, timings, etc. */
 export function finishMessage(el) {
 	viewFinish(el.querySelector(":scope > article"));
-	thoughtFinish(el.querySelector(":scope > lcty-thinking"));
+	thoughtFinish(el);
 	el.dataset.status = messageOf(el).status || "completed";
 	renderFoot(el);
 }
@@ -455,36 +419,29 @@ export function initConversationElements(container, h = {}) {
 	for (const el of messageEls(container)) {
 		wireMessage(el);
 		renderFoot(el);
-		// The thinking view, from data-thinking (files written before it was dropped from them still have one; it is
-		// replaced so every reply is shown the same way)
-		const thinking = messageOf(el).thinking;
+		// The thinking view is the element's own, from data-thinking (lcty.v1.js). Files written before that may still
+		// have a <lcty-thinking> child of their own (hidden by lcty.v1.css); it is dropped
 		el.querySelector(":scope > lcty-thinking")?.remove();
-		if (thinking) {
-			const view = thinkingView();
-			const article = el.querySelector(":scope > article");
-			if (article) article.before(view);
-			else el.append(view);
-			thoughtSetText(view, thinking);
-		}
 		// Replies without saved presentation HTML (e.g. created through the API directly) are rendered from the attribute
 		const view = el.querySelector(":scope > article");
 		if (view && view.getAttribute("data-generator") !== GENERATOR)
 			viewSetText(view, messageOf(el).content);
 	}
 	markLastUser(container);
-	// "Copy" on code blocks
+	// "Select all" on code blocks: selects the code, to copy it with the browser's own copy (no clipboard API, which
+	// needs a secure context). Replies saved before have a "Copy" button (button.copy) in their presentation HTML; it
+	// is relabelled and works the same way
+	for (const btn of container.querySelectorAll(
+		":scope > lcty-message > article .codebar button.copy",
+	))
+		btn.textContent = tr("selectAll", "Select all");
 	container.addEventListener("click", (e) => {
-		const btn = e.target.closest?.("lcty-message > article button.copy");
+		const btn = e.target.closest?.(
+			"lcty-message > article .codebar :is(button.select, button.copy)",
+		);
 		if (!btn) return;
 		const code = btn.closest(".codeblock")?.querySelector("code");
-		if (!code) return;
-		navigator.clipboard.writeText(code.textContent).then(
-			() => {
-				btn.textContent = tr("copied", "Copied");
-				setTimeout(() => (btn.textContent = tr("copy", "Copy")), 1200);
-			},
-			() => (btn.textContent = tr("copyFailed", "Copy failed")),
-		);
+		if (code) getSelection().selectAllChildren(code);
 	});
 	initComposer(container.composer, {
 		onSend: (text) => state.handlers.onSend?.(text),

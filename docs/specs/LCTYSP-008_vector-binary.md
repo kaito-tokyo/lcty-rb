@@ -111,8 +111,9 @@ CREATE TABLE vectors (
   or rounds change (and when the server has just started).
   There are no incremental fetches (no `Range`): **full sync only.** Deletions and replacements show up in the rewritten
   files, so no list of invalidated ids is needed.
-- **Both files carry the same `ETag`**, the pair's version (`vectors.eg2_264.dat`'s modification time and both sizes), and
-  `Cache-Control: no-cache`, so the browser revalidates every time and gets 304 when nothing changed. The worker fetches
+- **Both files carry the same `ETag`**, the pair's version (`vectors.eg2_264.dat`'s modification time and both sizes),
+  and nothing that gives them a freshness lifetime (no `Cache-Control`, no `Last-Modified`), so the browser revalidates
+  every time and gets 304 when nothing changed. The worker fetches
   the two at once; when their `ETag`s differ (a rewrite between the two requests) it fetches the pair again. Storage on
   the browser side is left to the HTTP cache; when the `ETag` is unchanged the files are not read again.
 - **The browser uses only what the server serves.** It never appends vectors it PUT itself.

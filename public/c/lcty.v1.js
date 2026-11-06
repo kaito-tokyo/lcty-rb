@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-export const LctyT = {
+// `lcty.v1.js` MUST be committed on the repository after being generated from this file:
+//   ruby -E UTF-8 -e 'puts ARGF.read.gsub(/^export/, "/*export*/").gsub(%r[^//\?], "")' lcty.v1.mjs >lcty.v1.js
+
+/*export*/ const LctyT = {
 	dicts: Object.create(null),
 	addLang(lang, dict) {
 		LctyT.dicts[lang] = Object.freeze(dict);
@@ -14,7 +17,7 @@ export const LctyT = {
 };
 
 /** <lcty-setup>: the system prompt (line 4 of a conversation file), shown by itself, collapsed (LCTYSP-005) */
-export class LctySetupElement extends HTMLElement {
+/*export*/ class LctySetupElement extends HTMLElement {
 	static observedAttributes = ["data-instructions", "data-instructions-base64"];
 
 	constructor() {
@@ -47,14 +50,10 @@ export class LctySetupElement extends HTMLElement {
 	}
 }
 
-export class LctyCElement extends HTMLElement {
-	// What each attribute decides (LCTYSP-005): data-thinking the badge's text; data-setup-tags the chips (the tags at
+/*export*/ class LctyCElement extends HTMLElement {
+	// What each attribute decides (LCTYSP-005): data-setup-tags the chips (the tags at
 	// creation; the current ones are not shown yet) and data-tag-defs which of them are unknown and the picker's choices
-	static observedAttributes = [
-		"data-setup-tags",
-		"data-thinking",
-		"data-tag-defs",
-	];
+	static observedAttributes = ["data-setup-tags", "data-tag-defs"];
 
 	// The frame of a conversation file. Styling, what shows before the first message, and scrolling: LCTYSP-005.
 
@@ -76,7 +75,7 @@ export class LctyCElement extends HTMLElement {
 			part: "lcty-c__sidebar",
 			// its parts (and its list's) under their own names: lcty-c::part(lcty-sidebar__nav) and so on
 			exportparts:
-				"lcty-button, lcty-button--primary, lcty-sidebar__nav, lcty-sidebar__link, lcty-sidebar__new, lcty-sidebar__tags, lcty-sidebar__settings, lcty-sidebar__search-box, lcty-sidebar__search, lcty-sidebar__search-status, lcty-sidebar__list, lcty-conv-list__empty, lcty-conv-list__items, lcty-conv-list__entry, lcty-conv-list__item, lcty-conv-list__item--current, lcty-conv-list__title, lcty-conv-list__snippet, lcty-conv-list__tags, lcty-conv-list__tag, lcty-conv-list__tag-name, lcty-conv-list__meta",
+				"lcty-button, lcty-button--primary, lcty-sidebar__nav, lcty-sidebar__link, lcty-sidebar__new, lcty-sidebar__settings, lcty-sidebar__search-box, lcty-sidebar__search, lcty-sidebar__search-status, lcty-sidebar__list, lcty-conv-list__empty, lcty-conv-list__items, lcty-conv-list__entry, lcty-conv-list__item, lcty-conv-list__item--current, lcty-conv-list__title, lcty-conv-list__snippet, lcty-conv-list__tags, lcty-conv-list__tag, lcty-conv-list__tag-name, lcty-conv-list__meta",
 		});
 		this.titleInput = $(document.createElement("input"), {
 			id: "conv-title",
@@ -103,16 +102,6 @@ export class LctyCElement extends HTMLElement {
 			{ id: "conv-tags", part: "lcty-c__tags" },
 			this.tagList,
 			this.tagPicker,
-		);
-		this.thinkingBadge = $(
-			document.createElement("span"),
-			{ part: "lcty-c__thinking" },
-			_("thinkingOff", "Thinking off"),
-		);
-		this.badges = $(
-			document.createElement("span"),
-			{ id: "conv-badges", part: "lcty-c__badges" },
-			this.thinkingBadge,
 		);
 		this.proposeMemoryButton = $(
 			document.createElement("button"),
@@ -186,7 +175,6 @@ export class LctyCElement extends HTMLElement {
 				{ id: "conv-header", part: "lcty-c__header" },
 				this.titleInput,
 				this.tags,
-				this.badges,
 				this.proposeMemoryButton,
 				this.deleteButton,
 			),
@@ -200,7 +188,7 @@ export class LctyCElement extends HTMLElement {
 			this.end,
 		);
 
-		// The title is line 2 of the file and this element line 3, so it is already there; later changes are a module's
+		// The title is line 3 of the file and this element line 4, so it is already there; later changes are a module's
 		this.titleInput.value = document.querySelector("title")?.textContent || "";
 
 		// "To the bottom" is shown while the end of the page is more than 48 px below the view
@@ -212,18 +200,26 @@ export class LctyCElement extends HTMLElement {
 		).observe(this.end);
 	}
 
-	attributeChangedCallback(name) {
-		if (name === "data-thinking")
-			this.thinkingBadge.textContent =
-				this.getAttribute("data-thinking") === "true"
-					? LctyT._("thinkingOn", "Thinking on")
-					: LctyT._("thinkingOff", "Thinking off");
-		else this.#tagsChanged();
+	attributeChangedCallback() {
+		this.#tagsChanged();
 	}
 
 	// The parser has set the attributes by now: mark this conversation in the sidebar's list
 	connectedCallback() {
 		this.sidebar.list.current = this.id.replace(/^c-/, "");
+		LctyCElement.#importFeatures();
+	}
+
+	// The conversation page's features (lcty.v1.module.js, next to this file) are imported once the page has loaded, so
+	// they never block rendering. import() resolves against this script's URL. Opened directly (file://) the import fails
+	// and the page stays a static view (LCTYSP-005).
+	static #featuresRequested = false;
+	static #importFeatures() {
+		if (LctyCElement.#featuresRequested) return;
+		LctyCElement.#featuresRequested = true;
+		const run = () => import("./lcty.v1.module.js");
+		if (document.readyState === "complete") run();
+		else addEventListener("load", run, { once: true });
 	}
 
 	// The chips (data-setup-tags) and the picker's choices (data-tag-defs: the defined tags; until it is set nothing is
@@ -287,7 +283,7 @@ export class LctyCElement extends HTMLElement {
  * select {detail: {id, chunkId}} (search results carry chunkId, the user message id of the matching round) and
  * tag {detail: {name}} (a tag chip was clicked).
  */
-export class LctyConvListElement extends HTMLElement {
+/*export*/ class LctyConvListElement extends HTMLElement {
 	#items = [];
 
 	#current = null;
@@ -430,7 +426,7 @@ export class LctyConvListElement extends HTMLElement {
 	}
 }
 
-export class LctySidebarElement extends HTMLElement {
+/*export*/ class LctySidebarElement extends HTMLElement {
 	static _ = LctyT._;
 
 	constructor() {
@@ -446,29 +442,25 @@ export class LctySidebarElement extends HTMLElement {
 			return el;
 		};
 
+		// a new chat opens in a new window (tab), so the current conversation stays where it is
 		this.newLink = $(
 			document.createElement("a"),
 			"new",
-			{ href: "/" },
+			{ href: "/", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
-		this.tagsLink = $(
-			document.createElement("a"),
-			"tags",
-			{ href: "/tags" },
-			_("tags", "Tags"),
-		);
-		this.settingsLink = $(
-			document.createElement("a"),
+		// opens the settings dialog, attached by js/ui/sidebar.js (LCTYSP-010)
+		this.settingsButton = $(
+			document.createElement("button"),
 			"settings",
 			{
-				href: "/settings",
+				type: "button",
 				title: _("settings", "Settings"),
 				"aria-label": _("settings", "Settings"),
 			},
 			"⚙︎",
 		);
-		for (const a of [this.newLink, this.tagsLink, this.settingsLink])
+		for (const a of [this.newLink, this.settingsButton])
 			a.part.add("lcty-sidebar__link", "lcty-button");
 		this.newLink.part.add("lcty-button--primary");
 		this.nav = $(
@@ -476,8 +468,7 @@ export class LctySidebarElement extends HTMLElement {
 			"nav",
 			{},
 			this.newLink,
-			this.tagsLink,
-			this.settingsLink,
+			this.settingsButton,
 		);
 
 		this.search = $(document.createElement("input"), "search", {
@@ -562,12 +553,15 @@ export class LctySidebarElement extends HTMLElement {
 	}
 }
 
-export class LctyMessageElement extends HTMLElement {
+/*export*/ class LctyMessageElement extends HTMLElement {
 	static observedAttributes = [
 		"data-role",
 		"data-status",
+		"data-error",
 		"data-timings",
 		"data-client",
+		"data-thinking",
+		"data-thinking-base64",
 	];
 
 	constructor() {
@@ -581,16 +575,54 @@ export class LctyMessageElement extends HTMLElement {
 	attributeChangedCallback(name, old, value) {
 		if (name === "data-role" && old !== value)
 			this.shadowRoot.replaceChildren(...this.#build(value));
+		if (name === "data-role" || name.startsWith("data-thinking"))
+			this.#showThinking();
 		this.#showFoot();
 	}
 
+	// The thinking of a reply, collapsed, from data-thinking (or data-thinking-base64, UTF-8, when the text has
+	// characters an attribute cannot hold). Hidden when there is none. While a reply is generated a module writes the
+	// summary and the body itself, then sets the attribute.
+	#showThinking() {
+		if (!this.thinking) return;
+		const base64 = this.getAttribute("data-thinking-base64");
+		let text = this.getAttribute("data-thinking") || "";
+		if (base64 != null) {
+			try {
+				text = new TextDecoder("utf-8", { fatal: true }).decode(
+					Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
+				);
+			} catch {
+				text = "";
+			}
+		}
+		this.thinkingSummary.textContent = LctyT._(
+			"thinkingDone",
+			"Thinking ({n} characters)",
+		).replace("{n}", text.length.toLocaleString());
+		this.thinkingBody.textContent = text;
+		this.thinking.hidden = !text;
+	}
+
+	// The foot: why an incomplete reply ended (data-status, data-error), and the ⓘ when there are timings (data-timings,
+	// data-client), which opens a popover whose text a module fills in. Both come from attributes, so the foot is
+	// settled at the first paint.
 	#showFoot() {
-		const hidden = !(
-			this.getAttribute("data-status") === "incomplete" ||
-			this.hasAttribute("data-timings") ||
-			this.hasAttribute("data-client")
-		);
-		if (this.foot.hidden !== hidden) this.foot.hidden = hidden;
+		const _ = LctyT._;
+		const error = this.getAttribute("data-error");
+		const status =
+			this.getAttribute("data-status") !== "incomplete"
+				? ""
+				: error
+					? _("errorPrefix", "Error: {error}").replace("{error}", error)
+					: _("stopped", "Stopped");
+		if (this.statusText.textContent !== status)
+			this.statusText.textContent = status;
+		const info =
+			this.hasAttribute("data-timings") || this.hasAttribute("data-client");
+		if (this.info.hidden === info) this.info.hidden = !info;
+		if (this.foot.hidden !== !(status || info))
+			this.foot.hidden = !(status || info);
 	}
 
 	#build(role) {
@@ -631,10 +663,55 @@ export class LctyMessageElement extends HTMLElement {
 					? _("assistant", "Assistant")
 					: "",
 		);
-		this.foot = $(document.createElement("div"), {
-			part: "lcty-message__foot",
-			hidden: "",
+		this.statusText = $(document.createElement("span"), {
+			part: "lcty-message__status",
 		});
+		// the ⓘ opens the timings in a popover (popovertarget, no script; a module fills it in)
+		this.timings = $(document.createElement("div"), {
+			id: "timings",
+			part: "lcty-message__timings",
+			popover: "auto",
+		});
+		this.info = $(
+			document.createElement("button"),
+			{
+				type: "button",
+				part: "lcty-message__info",
+				popovertarget: "timings",
+				"aria-label": _("timings", "Timings"),
+				hidden: "",
+			},
+			"ⓘ",
+		);
+		this.foot = $(
+			document.createElement("div"),
+			{ part: "lcty-message__foot", hidden: "" },
+			this.statusText,
+			this.info,
+			this.timings,
+		);
+		// a reply's thinking, between the head and the content (filled by #showThinking)
+		this.thinkingSummary =
+			role === "assistant"
+				? $(document.createElement("summary"), {
+						part: "lcty-message__thinking-summary",
+					})
+				: null;
+		this.thinkingBody =
+			role === "assistant"
+				? $(document.createElement("div"), {
+						part: "lcty-message__thinking-body",
+					})
+				: null;
+		this.thinking =
+			role === "assistant"
+				? $(
+						document.createElement("details"),
+						{ part: "lcty-message__thinking", hidden: "" },
+						this.thinkingSummary,
+						this.thinkingBody,
+					)
+				: null;
 
 		return [
 			$(
@@ -649,13 +726,14 @@ export class LctyMessageElement extends HTMLElement {
 					),
 				),
 			),
+			...(this.thinking ? [this.thinking] : []),
 			document.createElement("slot"),
 			this.foot,
 		];
 	}
 }
 
-export class LctyComposerElement extends HTMLElement {
+/*export*/ class LctyComposerElement extends HTMLElement {
 	constructor() {
 		super();
 
@@ -712,7 +790,7 @@ export class LctyComposerElement extends HTMLElement {
 	}
 }
 
-export function defineLctyV1CustomElements(
+/*export*/ function defineLctyV1CustomElements(
 	registry = globalThis.customElements,
 ) {
 	registry.define("lcty-conv-list", LctyConvListElement);
@@ -722,3 +800,5 @@ export function defineLctyV1CustomElements(
 	registry.define("lcty-message", LctyMessageElement);
 	registry.define("lcty-composer", LctyComposerElement);
 }
+
+defineLctyV1CustomElements();

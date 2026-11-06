@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Interface shared by backends (LCTYSP-002).
-// stream({ backend, instructions, input, thinking, signal }) → AsyncIterator<Event>
+// stream({ backend, instructions, input, signal }) → AsyncIterator<Event>
 
 import { streamResponses } from "./responses.js";
 

@@ -4,7 +4,7 @@
 
 # -*- encoding: utf-8 -*-
 # A tiny ES module bundler (LCTYSP-005): an entry and the modules it imports become one module file, with regular
-# expressions on whole lines only. It builds data/c/lcty.v1.module.js and the operation pages' entries (LCTYSP-011).
+# expressions on whole lines only. It builds the new conversation page's entry, /index.js (LCTYSP-011).
 #
 # Each module becomes a block, in evaluation order (depth-first, dependencies first), and its code is never rewritten:
 #

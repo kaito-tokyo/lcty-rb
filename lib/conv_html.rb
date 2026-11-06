@@ -110,71 +110,78 @@ module Chatty
       end
     end
 
-    # The head of a conversation file (LCTYSP-003), three lines that all start with "<!" (so the element parser skips
-    # them; Ruby reads lines 2 and 3 on their own):
-    #   1. the header: the scripts and the stylesheet the file loads. Opened over HTTP, the file shows as the conversation.
-    #   2. <!--lcty-meta--> and the title slot <title>…</title><!--…-->. The <title> is the document's own title.
-    #   3. <!--lcty-meta--> and the frame's opening tag <lcty-c id="c-<id>" data-setup-tags data-thinking data-created-at>:
-    #      what the frame needs to know, written once at creation. <lcty-c> is never closed: the HTML parser closes it at
-    #      the end of the file, so every element from line 4 on becomes its child and appending is just adding to the end.
-    # Lines 4 and later are elements, a well-formed XML fragment; line 4 is lcty-setup (the system prompt).
-    # The "<!" lines hold only what a list of conversations needs (title, id, tags, thinking, created_at), so collecting
-    # them is enough to build the sidebar's database; the system prompt, which may be long, is on line 4.
-    # data-lcty-tlrange is the title slot: the half-open byte range from the "<" of <title> to the end of line 2 (just
-    # after "-->"), as two fixed-width hex numbers (so the header length never depends on them). The slot is overwritten
-    # in place when the title changes.
-    TITLE_SLOT = 512 # Default slot length (bytes)
-    HEADER_FORMAT = %(<!doctype html><html data-lcty-tlrange="0x%04x,0x%04x" lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><script type="module" src="lcty.v1.module.js"></script><link rel="stylesheet" href="lcty.v1.css"><script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script><script>defineLctyV1CustomElements();</script>\n).freeze
-    HEAD_MARK = '<!--lcty-meta-->' # starts lines 2 and 3, so they start with "<!" (the meta lines)
-    HEADER = begin
-      start = format(HEADER_FORMAT, 0, 0).bytesize + HEAD_MARK.bytesize
-      format(HEADER_FORMAT, start, start + TITLE_SLOT).freeze
-    end
-    SLOT_END = '-->'
+    # The head of a conversation file (LCTYSP-003): lines 1 to 4. Ruby reads them on their own (the conversation list
+    # needs only these), and the elements start on line 5:
+    #   1. <!DOCTYPE html><html lang="ja" />
+    #   2. <head> with the files it loads: lcty.v1.js and lcty.v1.lang-ja.js (classic scripts, so a file opened directly
+    #      still builds its frame) and lcty.v1.css. </head> ends the line. lcty.v1.module.js is not here: <lcty-c>
+    #      imports it once the page has loaded (from the HTTP cache when it has not changed).
+    #   3. The title slot: <title id="__512">[512 bytes]<!---->. The id carries the slot length right next to it. The
+    #      slot starts as a ruler of digits; a title is written over its head as "<title text></title><!--", so the rest
+    #      of the ruler and the fixed "<!---->" become a comment. Digits never form "--", so whatever the title, the
+    #      comment always closes at the last ">". The parser moves the <title> into <head>.
+    #   4. The frame <lcty-c id="c-<id>" data-setup-tags data-created-at />: what the frame needs to know, written once
+    #      at creation. In HTML the "/>" is ignored, so <lcty-c> stays open and every element after it becomes its child
+    #      (appending is just adding to the end); as XML the line is a complete element on its own.
+    # Lines 5 and later are elements, a well-formed XML fragment; line 5 is lcty-setup (the system prompt).
+    HEAD_LINES = 4
+    TITLE_SLOT = 512 # Slot length (bytes)
+    HEADER = %(<!DOCTYPE html><html lang="ja" />\n) +
+             %(<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />) +
+             %(<script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script>) +
+             %(<link rel="stylesheet" href="lcty.v1.css" /></head>\n)
+    TITLE_OPEN_RE = /\A<title id="__(\d+)">/.freeze
+    SLOT_END = '<!---->' # after the slot, never overwritten
 
-    # The blank slot of size bytes: a ruler of digits ending with "0-->" (aligned so the digit just before "-->" is
-    # always 0, which makes a broken slot easy to spot). Overwriting its head with "<title>…</title><!--" turns the rest
-    # of the ruler into the comment body: digits never form "--", so the result is always a valid comment, and the slot
-    # length never changes.
+    # The blank slot of size bytes: a ruler of digits aligned so the last one is always 0 ("…7890"), which makes the
+    # end of the slot easy to check by eye just before "<!---->".
     def blank_slot(size)
-      n = size - SLOT_END.bytesize
-      (1..n).map { |i| ((i - n) % 10).to_s }.join + SLOT_END
+      (1..size).map { |i| ((i - size) % 10).to_s }.join
     end
 
-    # The title slot, exactly size bytes. The escaped title is cut at a character boundary so the slot never exceeds
-    # TITLE_SLOT; nil when even that does not fit in size (the caller rewrites the file).
+    # The slot holding title, exactly size bytes: "<title text></title><!--" over the head of the ruler. The escaped
+    # title is cut at a character boundary so it fits; nil when even an empty title does not (the caller rewrites).
     # Newlines become spaces and unwritable characters become Control Pictures (display only).
-    def title_line(title, size = TITLE_SLOT)
+    def title_slot(title, size = TITLE_SLOT)
       chars = visible(title.to_s.gsub(/[\r\n]+/, ' ')).strip.chars
-      head = ->(cs) { "<title>#{cs.join.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}</title><!--" }
-      chars.pop while head.(chars).bytesize > TITLE_SLOT - SLOT_END.bytesize
+      head = ->(cs) { "#{cs.join.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')}</title><!--" }
+      chars.pop while !chars.empty? && head.(chars).bytesize > size
       h = head.(chars)
-      return nil if h.bytesize > size - SLOT_END.bytesize
+      return nil if h.bytesize > size
       slot = blank_slot(size)
       slot[0, h.bytesize] = h
       slot
     end
 
-    # The title slot [start, end) declared by a header line, or nil when the line has none.
-    def tlrange(header)
-      m = header.to_s.b[/data-lcty-tlrange="0x\h{4},0x\h{4}"/]
-      m && m.scan(/0x(\h{4})/).flatten.map { |h| h.to_i(16) }
+    # Line 3, the whole title line (without the newline)
+    def title_line(title)
+      %(<title id="__#{TITLE_SLOT}">) + title_slot(title) + SLOT_END
     end
 
-    # Whether the bytes of a slot look like one (so it can be overwritten in place)
-    def slot?(bytes)
-      bytes = bytes.to_s.b
-      bytes.start_with?('<title>') && bytes.end_with?(SLOT_END) && !bytes.include?("\n")
+    # Where the slot of a title line is: [offset of the slot within the line, its size], or nil when the line is not one
+    def slot_range(line)
+      bytes = line.to_s.b
+      m = TITLE_OPEN_RE.match(bytes) or return nil
+      start = m[0].bytesize
+      size = m[1].to_i
+      return nil unless bytes.byteslice(start + size, SLOT_END.bytesize) == SLOT_END
+      slot = bytes.byteslice(start, size).to_s
+      return nil unless slot.bytesize == size && !slot.include?("\n") && slot.include?('</title><!--')
+      [start, size]
     end
 
-    # The title written in the slot [start, end) of text, or nil when there is none
-    def slot_title(text)
-      range = tlrange(text.each_line.first)
-      return nil unless range && range[1] > range[0]
-      bytes = text.b[range[0]...range[1]].to_s
-      return nil unless slot?(bytes)
-      t = bytes[%r{\A<title>([^<]*)</title><!--}, 1] or return nil
+    # The title written in a title line, or nil when there is none
+    def slot_title(line)
+      range = slot_range(line) or return nil
+      start, size = range
+      t = line.to_s.b.byteslice(start, size)[%r{\A([^<]*)</title><!--}, 1] or return nil
       t.force_encoding(Encoding::UTF_8).gsub('&lt;', '<').gsub('&gt;', '>').gsub('&amp;', '&')
+    end
+
+    # The title of a line that holds a <title> but no valid slot (a head written by hand, or broken), or nil
+    def loose_title(line)
+      t = line.to_s[%r{<title[^>]*>([^<]*)</title>}, 1] or return nil
+      t.gsub('&lt;', '<').gsub('&gt;', '>').gsub('&amp;', '&')
     end
 
     # The current title (the last title line)
@@ -182,45 +189,82 @@ module Chatty
       lines.reverse.find { |l| l['type'] == 'title' }
     end
 
-    # The meta: line 3's <lcty-c> attributes (id, tags at creation, thinking, created_at) and the first lcty-setup's
+    # The meta: line 4's <lcty-c> attributes (id, tags at creation, created_at) and the first lcty-setup's
     # instructions. Written once when the conversation is created and never overridden (LCTYSP-003).
     def current_meta(lines)
       lines.find { |l| l['type'] == 'meta' } || {}
     end
 
-    # The whole conversation file: the header, the title slot, <lcty-c>, then lcty-setup and the other elements
-    # (LCTYSP-003)
+    # The whole conversation file: the header (lines 1 and 2), the title line, <lcty-c>, then lcty-setup and the other
+    # elements (LCTYSP-003)
     def document(lines)
       title = current_title(lines)
       meta = current_meta(lines)
       raise FormatError, 'a conversation needs a meta' if meta.empty?
       rest = lines.reject { |l| %w[title meta].include?(l['type']) }
-      HEADER + HEAD_MARK + title_line(title ? title['title'] : '') + "\n" + frame_line(meta) +
+      HEADER + title_line(title ? title['title'] : '') + "\n" + frame_line(meta) +
         encode([meta.merge('type' => 'setup')] + rest)
     end
 
-    # Line 3: <!--lcty-meta--><lcty-c …> (written once; never closed)
+    # Line 4: <lcty-c … /> (written once)
     def frame_line(meta)
       check_chars!(meta, 'meta')
       tags = Array(meta['tags'])
       e = node(Nokogiri::HTML5::Document.parse(''), 'lcty-c',
                'id' => "c-#{meta['id']}", 'data-setup-tags' => tags.empty? ? nil : tags.join(' '),
-               'data-thinking' => meta['thinking'] ? 'true' : 'false', 'data-created-at' => meta['created_at'])
-      HEAD_MARK + e.to_xhtml(save_with: SAVE).sub(%r{</lcty-c>\z}, '') + "\n"
+               'data-created-at' => meta['created_at'])
+      e.to_xhtml(save_with: SAVE).sub(%r{></lcty-c>\z}, ' />') + "\n"
     end
 
-    # The meta from line 3, or nil when the line is not one
+    # The meta from line 4, or nil when the line is not one
     def frame_meta(line)
-      return nil unless line.to_s.start_with?(HEAD_MARK + '<lcty-c ')
-      e = Nokogiri::XML::DocumentFragment.parse(line.chomp.delete_prefix(HEAD_MARK) + '</lcty-c>').at_xpath('lcty-c')
+      return nil unless line.to_s.start_with?('<lcty-c ')
+      e = Nokogiri::XML::DocumentFragment.parse(line.chomp).at_xpath('lcty-c')
       return nil unless e
       { 'type' => 'meta', 'id' => e['id'].to_s.sub(/\Ac-/, ''), 'created_at' => e['data-created-at'],
-        'thinking' => e['data-thinking'] == 'true', 'tags' => split_tags(e['data-setup-tags']), 'instructions' => '' }
+        'tags' => split_tags(e['data-setup-tags']), 'instructions' => '' }
     end
 
-    # Rule: lines starting with "<!" are skipped when reading: lines 1 to 3. Text escapes < as &lt;, so a text line never
-    # starts with a raw "<!".
-    def strip_directives(text)
+    # The head lines (1 to 4) of a file in the current format, or nil when it has none (an older head, or broken)
+    def head_lines(text)
+      head = text.each_line.take(HEAD_LINES)
+      return nil unless head.size == HEAD_LINES && head[0].start_with?('<!DOCTYPE html><html ') &&
+                        head[1].start_with?('<head>') && slot_range(head[2]) && frame_meta(head[3])
+      head
+    end
+
+    # The elements: everything after the head
+    def body_text(text)
+      return legacy_body(text) if legacy?(text)
+      text.each_line.drop(HEAD_LINES).join
+    end
+
+    # ---- The head before 2026-11-07 (read only; the server rewrites such files at startup, LCTYSP-003) ----
+    # Three lines starting with "<!": the header with data-lcty-tlrange="0x…,0x…" (the title slot's byte range), then
+    # <!--lcty-meta--><title>…</title><!--…--> and <!--lcty-meta--><lcty-c …> (never closed).
+    LEGACY_MARK = '<!--lcty-meta-->'
+
+    def legacy?(text)
+      text.to_s.b.start_with?('<!doctype html><html data-lcty-tlrange=')
+    end
+
+    def legacy_title(text)
+      m = text.each_line.first.to_s.b[/data-lcty-tlrange="0x(\h{4}),0x(\h{4})"/] && [$1.to_i(16), $2.to_i(16)]
+      return nil unless m && m[1] > m[0]
+      bytes = text.b[m[0]...m[1]].to_s
+      return nil unless bytes.start_with?('<title>') && bytes.end_with?('-->') && !bytes.include?("\n")
+      t = bytes[%r{\A<title>([^<]*)</title><!--}, 1] or return nil
+      t.force_encoding(Encoding::UTF_8).gsub('&lt;', '<').gsub('&gt;', '>').gsub('&amp;', '&')
+    end
+
+    def legacy_meta(text)
+      line = text.each_line.take(3)[2].to_s
+      return nil unless line.start_with?(LEGACY_MARK + '<lcty-c ')
+      frame_meta(line.chomp.delete_prefix(LEGACY_MARK).sub(/>\z/, ' />'))
+    end
+
+    # Rule of that format: lines starting with "<!" (lines 1 to 3) are not elements
+    def legacy_body(text)
       text.each_line.reject { |l| l.start_with?('<!') }.join
     end
 
@@ -287,11 +331,17 @@ module Chatty
 
     # ---- Reading ----
 
-    # [[line object, element], …], starting with the title read from the slot and the meta read from line 3 and the
+    # [[line object, element], …], starting with the title read from the slot and the meta read from line 4 and the
     # first lcty-setup (element nil). A last element broken by an interrupted write is dropped.
     def decode(text, label = '')
-      title = slot_title(text)
-      meta = frame_meta(text.each_line.take(3)[2])
+      if legacy?(text)
+        title = legacy_title(text)
+        meta = legacy_meta(text)
+      else
+        head = text.each_line.take(HEAD_LINES)
+        title = slot_title(head[2]) || loose_title(head[2])
+        meta = frame_meta(head[3])
+      end
       els = decode_elements(text, label)
       setup = els.find { |o, _| o['type'] == 'setup' }
       meta['instructions'] = setup[0]['instructions'] if meta && setup
@@ -301,7 +351,7 @@ module Chatty
     end
 
     def decode_elements(text, label)
-      frag = Nokogiri::XML::DocumentFragment.parse(strip_directives(text))
+      frag = Nokogiri::XML::DocumentFragment.parse(body_text(text))
       els = frag.element_children.to_a
       unless frag.errors.empty?
         warn "conversation file #{label} is not well-formed (#{frag.errors.first.message.strip}); dropping the last element"

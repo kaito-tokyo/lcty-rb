@@ -24,9 +24,7 @@ module Chatty
         'base_url' => 'http://127.0.0.1:9931',
         'api_key' => "#{Socket.gethostname}-#{ENV['USER']}",
         'model' => 'gemma-4-26b-a4b-it',
-        'embedding_model' => 'embeddinggemma-2',
-        'thinking_kwarg' => true,
-        'default_thinking' => true
+        'embedding_model' => 'embeddinggemma-2'
       }
     end
 

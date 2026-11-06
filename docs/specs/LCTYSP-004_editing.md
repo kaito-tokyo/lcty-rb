@@ -34,7 +34,7 @@ while keeping the original, the user forks. Editing assistant messages is not of
    then sent there. The original stays as it is.
    - Copied messages get `inherited: true`. The search index skips them so the same content is not found twice
      ([LCTYSP-007](LCTYSP-007_search.md)).
-   - `instructions` and `thinking` are taken over from the source, and so are its current tags. The new conversation
+   - `instructions` is taken over from the source, and so are its current tags. The new conversation
      does not record where it was forked from.
    - Each file stands on its own: deleting the source does not break the fork.
 4. **Editing assistant messages is not offered.**
@@ -70,7 +70,7 @@ page while generating would lose the partial reply, so a `beforeunload` confirma
 ### Starting a conversation
 
 ```
-User → UI:      on / (the top page): choose tags, edit the system prompt draft, thinking on/off, write the first message
+User → UI:      on / (the top page): choose tags, edit the system prompt draft, write the first message
 User → UI:      send
 UI:             decides the conversation id
 UI   → storage: POST /v1/conversations { meta, lines: [title, (inherited messages,) the first message, <lcty-cmd data-op="send">] }
@@ -104,11 +104,11 @@ composer with a spinner and a stop button, and can be aborted; [LCTYSP-005](LCTY
 User → UI:      "Fork from here" on user message #n
 UI:             navigates to /?fork=<id>&at=<n>
 UI   → storage: GET /v1/conversations/<id>
-UI:             fills in the source's system prompt, thinking and tags, notes "forked from …" and puts message #n into
+UI:             fills in the source's system prompt and tags, notes "forked from …" and puts message #n into
                 the composer (messages 0..n-1 are not shown; they are copied when sending)
 User → UI:      edit and send
 UI   → storage: POST /v1/conversations
-                  { meta: { instructions/thinking/tags of the source },
+                  { meta: { instructions/tags of the source },
                     lines: [title, messages 0..n-1 with inherited: true, message #n, <lcty-cmd data-op="send">] }
 UI:             moves to /c/<id>.html, which generates the reply
 ```

@@ -59,7 +59,7 @@ Two principles drive the design:
 - Ruby barely interprets conversations. The exceptions are the rule that limits undo to one turn
   ([LCTYSP-004](LCTYSP-004_editing.md)), validation of what it writes ([LCTYSP-003](LCTYSP-003_conversation-file.md)),
   and deriving the search index ([LCTYSP-007](LCTYSP-007_search.md)).
-- Pages are static files. Ruby never assembles HTML from templates; it only serves files (publishing `lcty.v1.*` into `data/c/` and bundling the module entries at startup) and answers `/v1/*`
+- Pages are static files. Ruby never assembles HTML from templates; it only serves files (publishing `lcty.v1.js` and `lcty.v1.css` into `data/c/` and bundling the module entries at startup) and answers `/v1/*`
   ([LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-006](LCTYSP-006_http-api.md)).
 
 ### The source of truth is files on the server
@@ -83,11 +83,13 @@ Two principles drive the design:
 
 ## Security
 
-- Listens on `127.0.0.1` only.
-- Every request is checked for `Host` (and `Origin` for anything other than GET/HEAD) to prevent DNS rebinding and
-  CSRF.
+- Listens on `127.0.0.1` by default; `LCTY_HOST` names another address ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+  There is no authentication, so an address other than loopback makes the conversations readable and writable by
+  anyone who can reach it.
+- Requests are not checked: there is no `Host` / `Origin` check and no headers are added to every response. The server
+  is meant for the user's own machine and mostly serves static files, whose caching is the browser's default (WEBrick
+  sends `ETag` and `Last-Modified`).
 - Conversation ids are limited to `[A-Za-z0-9_-]{1,80}`.
-- Responses carry `Cache-Control: no-cache`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
 
 ## Encoding
 

@@ -137,12 +137,10 @@ function toAppSettings(v) {
 				api_key: v.api_key,
 				model: v.model,
 				embedding_model: v.embedding_model,
-				thinking_kwarg: v.thinking_kwarg,
 				extra: {},
 			},
 		],
 		default_backend: "local",
-		default_thinking: v.default_thinking,
 	};
 }
 

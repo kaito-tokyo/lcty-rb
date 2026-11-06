@@ -4,3 +4,6 @@
 
 * text=auto eol=lf
 *.wasm binary
+
+public/c/lcty.v1.js linguist-generated
+public/c/lcty.v1.lang-*.js linguist-generated

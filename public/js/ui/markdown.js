@@ -192,7 +192,7 @@ export function fenceParts(block) {
 export function codeBlockHTML(lang, code) {
 	return (
 		`<div class="codeblock"><div class="codebar"><span class="lang">${esc(lang)}</span>` +
-		`<button type="button" class="copy">${esc(tr("copy", "Copy"))}</button></div>` +
+		`<button type="button" class="select">${esc(tr("selectAll", "Select all"))}</button></div>` +
 		`<pre><code${lang ? ` data-lang="${esc(lang)}"` : ""}>${esc(code)}</code></pre></div>`
 	);
 }

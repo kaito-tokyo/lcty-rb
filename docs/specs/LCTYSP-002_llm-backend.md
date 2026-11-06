@@ -27,7 +27,7 @@ the embedding model on a single port.
 ### Client interface (`public/js/llm/client.js`)
 
 ```js
-stream({ backend, instructions, input, thinking, extraBody, signal });
+stream({ backend, instructions, input, extraBody, signal });
 // → AsyncIterator<Event>
 //   { type: "thinking", delta }
 //   { type: "text",      delta }
@@ -63,8 +63,10 @@ These rules keep the prefix identical from one request to the next:
    the date. Changing it mid-conversation means starting a new conversation.
 3. **Past thinking is never sent.** It is saved, but only reply text goes into the history. Doing this consistently
    keeps the prefix aligned (measured: about 60 tokens recomputed).
-4. **Thinking on/off is fixed per conversation.** The chat template embeds it near the start, so switching mid-way
-   recomputes everything (measured). `chat_template_kwargs.enable_thinking` is always sent explicitly.
+4. **Thinking is not switched by the UI.** Requests carry no `chat_template_kwargs.enable_thinking`: whether the model
+   thinks is llama-server's (its defaults and chat template; with the bundled setup Gemma 4 thinks). The chat template
+   embeds it near the start, so switching it mid-way would recompute everything (measured); leaving it to the server
+   keeps it the same for every request.
 5. **Sampling settings (temperature etc.) are not handled by the UI.** They are left out of requests and use
    llama-server's defaults (the model's recommended values).
 6. **History is never truncated silently.** Dropping old messages changes the prefix. The context is 262k tokens; any
@@ -121,13 +123,11 @@ The browser builds one backend from its settings ([LCTYSP-010](LCTYSP-010_data-a
 	"api_key": "…",
 	"model": "gemma-4-26b-a4b-it",
 	"embedding_model": "embeddinggemma-2",
-	"thinking_kwarg": true,
 	"extra": {}
 }
 ```
 
 - The embedding dimension is fixed by the vector format ([LCTYSP-008](LCTYSP-008_vector-binary.md)) and is not a setting.
-- `thinking_kwarg` controls whether thinking is sent as `chat_template_kwargs.enable_thinking`.
 
 ## Verified assumptions
 
@@ -135,7 +135,8 @@ Checked on 2026-11-04 with llama.cpp build 11669:
 
 - `/v1/responses` works, including the streaming event names.
 - CORS preflight passes and `Authorization` is allowed.
-- Thinking arrives separately as `reasoning_text.delta` (Gemma needs `enable_thinking`).
+- Thinking arrives separately as `reasoning_text.delta`. Without `enable_thinking` in the request Gemma 4 still thinks
+  (checked on 2026-11-06).
 - With a single slot, the cache survives switching conversations.
 - Router mode behaves the same for CORS, caching and streaming.
 - EmbeddingGemma 2 runs on llama.cpp and is accurate enough for natural-language search in Japanese (5–6 of 6

@@ -7,7 +7,7 @@
 
 import { parseSSE } from "./sse.js";
 
-function buildBody({ backend, instructions, input, thinking, extraBody }) {
+function buildBody({ backend, instructions, input, extraBody }) {
 	const extra = backend.extra || {};
 	// extraBody: parameters added for this one request only (e.g. response_format for memory proposals)
 	const body = {
@@ -18,13 +18,7 @@ function buildBody({ backend, instructions, input, thinking, extraBody }) {
 		input,
 	};
 	if (instructions) body.instructions = instructions;
-	if (backend.thinking_kwarg !== false) {
-		// Thinking is fixed per conversation (LCTYSP-002). Always send it explicitly so the prefix stays identical.
-		body.chat_template_kwargs = {
-			...(extra.chat_template_kwargs || {}),
-			enable_thinking: !!thinking,
-		};
-	}
+	// Whether the model thinks is left to llama-server (its defaults / chat template): no enable_thinking is sent (LCTYSP-002)
 	return body;
 }
 

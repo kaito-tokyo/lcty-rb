@@ -26,6 +26,26 @@ module Chatty
     CREATABLE = %w[message title cmd].freeze # the tags at creation are meta.tags
 
     # Write to a temporary file, then rename (atomic replace). Used whenever a conversation file is written whole.
+    # Files whose head is not the current one (the format before 2026-11-07, a head edited by hand, or a header, lines 1
+    # and 2, that has changed since) are rewritten with the current one at startup (LCTYSP-003). What they hold is kept as read; so is their modification time, which
+    # is updated_at_hint (the order of the list). A file whose meta cannot be read at all is left as it is.
+    def migrate_heads
+      conversation_paths.each do |path|
+        with_lock(path) do |f|
+          text = f.read
+          next if text.start_with?(ConvHtml::HEADER) && ConvHtml.head_lines(text)
+          entries = parse_lines(text, File.basename(path)).map(&:first)
+          next if ConvHtml.current_meta(entries).empty?
+          mtime = f.mtime
+          write_atomic(path, document(entries))
+          File.utime(File.atime(path), mtime, path)
+          warn "rewrote #{File.basename(path)} with the current head"
+        end
+      rescue StandardError => e
+        warn "could not rewrite #{File.basename(path)}: #{e.class}: #{e.message}"
+      end
+    end
+
     def write_atomic(path, data)
       FileUtils.mkdir_p(File.dirname(path))
       tmp = "#{path}.tmp-#{Process.pid}-#{SecureRandom.hex(4)}"
@@ -50,7 +70,8 @@ module Chatty
       path
     end
 
-    # The whole conversation file (header on line 1, <title> on line 2, then the elements. LCTYSP-003)
+    # The whole conversation file (the header on lines 1 and 2, the title slot on line 3, <lcty-c> on line 4, then the
+    # elements. LCTYSP-003)
     def document(lines)
       ConvHtml.document(lines)
     rescue ConvHtml::InvalidCharError => e
@@ -134,7 +155,7 @@ module Chatty
       path = conv_path(meta['id'])
       raise HttpError.new(409, 'already exists') if File.exist?(path)
       ensure_ids!(lines)
-      meta = meta.slice('id', 'created_at', 'thinking', 'tags', 'instructions') # the tags at creation are data-setup-tags
+      meta = meta.slice('id', 'created_at', 'tags', 'instructions') # the tags at creation are data-setup-tags
       write_atomic(path, document([meta.merge('type' => 'meta')] + lines))
       meta['id']
     end
@@ -164,25 +185,21 @@ module Chatty
       end
     end
 
-    # The title is the <title> on line 2, in the slot that data-lcty-tlrange on line 1 declares (LCTYSP-003).
-    # When the new title fits in the slot, the slot is overwritten in place; otherwise (or when the file has no valid slot)
-    # the whole file is rewritten, with a slot of the default size.
+    # The title is the <title> on line 3, in the slot whose length its id carries (LCTYSP-003). The slot is overwritten
+    # in place; when the file has no valid slot (an older head, or a broken one) the whole file is rewritten instead.
     def set_title(id, title_line)
       path = existing_conv_path(id)
       with_lock(path) do |f|
         f.binmode
-        range = ConvHtml.tlrange(f.gets)
-        if range && range[1] > range[0]
-          f.seek(range[0])
-          size = range[1] - range[0]
-          line = ConvHtml.slot?(f.read(size)) && ConvHtml.title_line(title_line['title'], size)
-          if line
-            f.seek(range[0])
-            f.write(line.b)
-            f.flush
-            f.fsync
-            next
-          end
+        head = Array.new(ConvHtml::HEAD_LINES - 1) { f.gets }
+        range = head.all? && ConvHtml.slot_range(head[2])
+        slot = range && ConvHtml.title_slot(title_line['title'], range[1])
+        if slot && !ConvHtml.legacy?(head[0])
+          f.seek(head[0].bytesize + head[1].bytesize + range[0])
+          f.write(slot.b)
+          f.flush
+          f.fsync
+          next
         end
         f.rewind
         entries = parse_lines(f.read.force_encoding(Encoding::UTF_8), id).map(&:first)
@@ -226,8 +243,8 @@ module Chatty
       }
     end
 
-    # The meta of every conversation, newest first, from its "<!" lines only (the header, the title slot and <lcty-c>.
-    # LCTYSP-003): they hold what a list needs, so the rest of each file is not read (GET /v1/meta-all.json).
+    # The meta of every conversation, newest first, from its head lines only (lines 1 to 4: the header, the title slot and
+    # <lcty-c>. LCTYSP-003): they hold what a list needs, so the rest of each file is not read (GET /v1/meta-all.json).
     # setup_tags are the tags at creation; later changes are in tags.sqlite, which tags_hint reflects.
     # updated_at_hint is only a hint (the file's mtime, which copying, syncing or editing by hand changes too), and so is
     # tags_hint and messages_hint, the current tags and the number of messages as recorded in the search index (derived;
@@ -237,15 +254,16 @@ module Chatty
       counts = INDEX.messages_hint
       conversation_paths.map do |path|
         begin
-          head = File.open(path, 'r:UTF-8') { |f| Array.new(3) { f.gets }.compact }
-          meta = head.size == 3 && head.all? { |l| l.start_with?('<!') } && ConvHtml.frame_meta(head[2])
-          unless meta
-            warn "skip #{File.basename(path)}: no meta lines"
+          text = File.open(path, 'r:UTF-8') { |f| Array.new(ConvHtml::HEAD_LINES) { f.gets }.compact.join }
+          head = ConvHtml.head_lines(text)
+          unless head
+            warn "skip #{File.basename(path)}: no head lines"
             next nil
           end
+          meta = ConvHtml.frame_meta(head[3])
           {
-            'id' => meta['id'], 'title' => ConvHtml.slot_title(head.join).to_s, 'created_at' => meta['created_at'],
-            'updated_at_hint' => File.mtime(path).iso8601, 'thinking' => meta['thinking'], 'setup_tags' => meta['tags'],
+            'id' => meta['id'], 'title' => ConvHtml.slot_title(head[2]).to_s, 'created_at' => meta['created_at'],
+            'updated_at_hint' => File.mtime(path).iso8601, 'setup_tags' => meta['tags'],
             'tags_hint' => tags[meta['id']] || [], 'messages_hint' => counts[meta['id']]
           }
         rescue SystemCallError => e
@@ -343,6 +361,7 @@ module Chatty
     const_set(:TAGS, TagStore.new(TAGS_DB_PATH))
     const_set(:INDEX, SearchIndex.new(INDEX_PATH))
     const_set(:VECTORS, V1::VectorDB.new(INDEX, DATA_DIR))
+    Store.migrate_heads
     convs = Store.conversation_paths.map { |p| [File.basename(p, '.html'), Store.index_state(p)] }.to_h
     INDEX.full_sync(convs)
     VECTORS.gc_all
