@@ -8,7 +8,10 @@
 module Chatty
   ROOT = File.expand_path('..', __dir__)
   PUBLIC_DIR = File.join(ROOT, 'public')
-  DATA_DIR = File.expand_path(ENV['LCTY_DATA_DIR'].to_s.empty? ? 'data' : ENV['LCTY_DATA_DIR'], ROOT)
+  # Default: the macOS per-user application data folder, outside the repository. A relative LCTY_DATA_DIR is resolved
+  # against the repository root.
+  DEFAULT_DATA_DIR = File.join(Dir.home, 'Library', 'Application Support', 'tokyo.kaito.lcty-rb', 'Data')
+  DATA_DIR = File.expand_path(ENV['LCTY_DATA_DIR'].to_s.empty? ? DEFAULT_DATA_DIR : ENV['LCTY_DATA_DIR'], ROOT)
   CONV_DIR = File.join(DATA_DIR, 'c') # Same layout as the URL /c/<id>.html (LCTYSP-003)
   TAGS_DB_PATH = File.join(DATA_DIR, 'tags.sqlite') # Source of truth (tag definitions and memory)
   # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-010)
