@@ -31,7 +31,7 @@ llm-backend/run-llama-cpp.sh
 Start the server and open http://127.0.0.1:8765/:
 
 ```bash
-/usr/bin/ruby chatty.rb
+/usr/bin/ruby lcty.rb
 ```
 
 The browser talks to `llama-server` directly; the Ruby server serves the pages and keeps the conversations, the tags
@@ -39,13 +39,15 @@ and the search index.
 
 ## Settings
 
-- Server: only the environment variables `PORT` (default 8765) and `LCTY_DATA_DIR` (default `data/`).
+- Server: only the environment variables `PORT` (default 8765) and `LCTY_DATA_DIR` (default
+  `~/Library/Application Support/tokyo.kaito.lcty-rb/Data`).
 - Everything else (the `llama-server` URL, API key, model names, thinking) is set on `/settings` and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 
 ## Data
 
-Everything is in `data/`:
+Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.lcty-rb/Data/` by default
+(`LCTY_DATA_DIR`):
 
 - `c/<id>.html`: one file per conversation. Opened through the server (`/c/<id>.html`) it shows as the conversation.
 - `tags.sqlite`: tag definitions, memory and tag changes.
@@ -54,7 +56,7 @@ Everything is in `data/`:
 Back up everything that does not start with `_`:
 
 ```bash
-rsync -a --exclude='_*' data/ backup/
+rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/" backup/
 ```
 
 ## Documentation
