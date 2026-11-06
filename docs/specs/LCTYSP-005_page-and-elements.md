@@ -52,11 +52,11 @@ a module imported once the page has loaded attaches every feature without blocki
 - **Serving code lives per URL prefix:** `/c/` in `lib/c/servlet.rb` (`Chatty::C::Servlet`), `/v1/` in
   `lib/v1/servlet.rb` (`Chatty::V1::Servlet`). Everything about vectors (the vector binary and the vector DB) is under
   `lib/v1/` too.
-- **`chatty.rb` only wires the servlets together:** it opens the data (`Chatty.open_data`), builds the WEBrick server with
-  the request guard and mounts `/v1`, `/c` and `/`. At startup it publishes the `lcty.v1.*` files (`C.publish_assets`). It also applies transparent gzip to every servlet
+- **`chatty.rb` only wires the servlets together:** it opens the data (`Chatty.open_data`), builds the WEBrick server and
+  mounts `/v1`, `/c` and `/`. At startup it publishes the `lcty.v1.*` files (`C.publish_assets`). It also applies transparent gzip to every servlet
   (`GzipServer`): 200 responses to GET of text-like types of 1 KiB or more, when `Accept-Encoding` allows gzip. The
   ETag is kept and `Vary: Accept-Encoding` is added, so conditional GETs still return 304. Shared parts live in `lib/`: settings
-  (`lib/config.rb`), storage (`lib/store.rb`), and the `Host` / `Origin` check (`lib/guard.rb`).
+  (`lib/config.rb`) and storage (`lib/store.rb`).
 
 ## The `lcty.v1` files
 
@@ -120,8 +120,8 @@ opened on its own does not need.
   The elements are created while the body is parsed, after the language script in `<head>` has registered its texts.
 - **The page's features are imported, not loaded by the header.** `<lcty-c>`'s `connectedCallback` imports
   `./lcty.v1.module.js` (resolved against the script's own URL) on the window's `load` event, or at once when the page
-  has already loaded. It is not preloaded: after the first visit it comes from the HTTP cache (the server sends
-  `Cache-Control: no-cache` with an `ETag`, so an unchanged file is a `304`). Opened directly (`file://`), the import fails and the error is left as it is.
+  has already loaded. It is not preloaded: after the first visit it comes from the HTTP cache (WEBrick sends
+  `ETag` and `Last-Modified`; how long a copy is used without asking is the browser's default). Opened directly (`file://`), the import fails and the error is left as it is.
 - **There is no inline script,** so a Content Security Policy needs only `script-src 'self'`. (chatty.rb does not
   send a CSP header yet.)
 - The new conversation page (`/`) loads the same two classic scripts from `/c/`, then its own entry `/index.js` as a

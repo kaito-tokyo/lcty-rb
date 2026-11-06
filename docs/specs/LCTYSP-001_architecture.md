@@ -83,11 +83,13 @@ Two principles drive the design:
 
 ## Security
 
-- Listens on `127.0.0.1` only.
-- Every request is checked for `Host` (and `Origin` for anything other than GET/HEAD) to prevent DNS rebinding and
-  CSRF.
+- Listens on `127.0.0.1` by default; `LCTY_HOST` names another address ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+  There is no authentication, so an address other than loopback makes the conversations readable and writable by
+  anyone who can reach it.
+- Requests are not checked: there is no `Host` / `Origin` check and no headers are added to every response. The server
+  is meant for the user's own machine and mostly serves static files, whose caching is the browser's default (WEBrick
+  sends `ETag` and `Last-Modified`).
 - Conversation ids are limited to `[A-Za-z0-9_-]{1,80}`.
-- Responses carry `Cache-Control: no-cache`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
 
 ## Encoding
 

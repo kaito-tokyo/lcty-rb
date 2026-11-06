@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Server settings (LCTYSP-010): only the environment variables PORT and LCTY_DATA_DIR; everything else is a browser setting.
+# Server settings (LCTYSP-010): only the environment variables PORT, LCTY_HOST and LCTY_DATA_DIR; everything else is a
+# browser setting.
 
 module Chatty
   ROOT = File.expand_path('..', __dir__)
@@ -17,7 +18,8 @@ module Chatty
   # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-010)
   INDEX_PATH = File.join(DATA_DIR, '_index.sqlite')
   PORT = Integer(ENV['PORT'].to_s.empty? ? 45280 : ENV['PORT'])
-  BIND = '127.0.0.1'
+  BIND = ENV['LCTY_HOST'].to_s.empty? ? '127.0.0.1' : ENV['LCTY_HOST'] # The address to listen on
+  BIND_URL_HOST = BIND.include?(':') ? "[#{BIND}]" : BIND # As written in a URL (an IPv6 address in brackets)
   ID_RE = /\A[A-Za-z0-9_-]{1,80}\z/
   TAG_NAME_RE = /\A[^\s:]{1,40}\z/ # No whitespace or ':' (to tell it apart from tag:name in search)
 

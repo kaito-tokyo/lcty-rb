@@ -39,8 +39,8 @@ and the search index.
 
 ## Settings
 
-- Server: only the environment variables `PORT` (default 45280) and `LCTY_DATA_DIR` (default
-  `~/Library/Application Support/tokyo.kaito.lcty-rb/Data`).
+- Server: only the environment variables `PORT` (default 45280), `LCTY_HOST` (the address to listen on, default
+  `127.0.0.1`) and `LCTY_DATA_DIR` (default `~/Library/Application Support/tokyo.kaito.lcty-rb/Data`).
 - Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 

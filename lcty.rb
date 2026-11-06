@@ -9,7 +9,8 @@
 # lcty-rb: static file server + JSON document store.
 # Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the LLM (LCTYSP-001).
 #
-#   /usr/bin/ruby lcty.rb        # => http://127.0.0.1:45280
+#   /usr/bin/ruby lcty.rb                            # => http://127.0.0.1:45280
+#   LCTY_HOST=192.168.1.10 /usr/bin/ruby lcty.rb     # => http://192.168.1.10:45280 (that address only)
 #
 # This file only wires the servlets together (plus transparent gzip); the code lives in lib/ (LCTYSP-005).
 
@@ -20,7 +21,6 @@ require 'webrick'
 require 'zlib'
 require_relative 'lib/config'
 require_relative 'lib/store'
-require_relative 'lib/guard'
 require_relative 'lib/module_servlet'
 require_relative 'lib/c/servlet'
 require_relative 'lib/v1/servlet'
@@ -79,7 +79,6 @@ module Chatty
       BindAddress: BIND,
       Port: PORT,
       MimeTypes: MIME_TYPES,
-      RequestCallback: GUARD,
       Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN),
       AccessLog: [],
       DoNotReverseLookup: true
@@ -89,7 +88,7 @@ module Chatty
     ModuleServlet.mount_all(server)
     server.mount('/', WEBrick::HTTPServlet::FileHandler, PUBLIC_DIR, FancyIndexing: false)
     %w[INT TERM].each { |sig| trap(sig) { server.shutdown } }
-    $stderr.puts "lcty-rb: http://#{BIND}:#{PORT}/  (data: #{DATA_DIR})"
+    $stderr.puts "lcty-rb: http://#{BIND_URL_HOST}:#{PORT}/  (data: #{DATA_DIR})"
     server.start
   end
 end

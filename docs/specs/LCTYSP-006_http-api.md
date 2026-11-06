@@ -13,7 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 ## Summary
 
 chatty.rb answers `/v1/*` on the same origin as the pages. Bodies are JSON unless stated otherwise. Errors return
-`{"error": "…"}` with an HTTP status. Every request passes the `Host` / `Origin` check
+`{"error": "…"}` with an HTTP status. Requests are not checked for `Host` or `Origin`
 ([LCTYSP-001](LCTYSP-001_architecture.md)).
 
 ## Conversations
