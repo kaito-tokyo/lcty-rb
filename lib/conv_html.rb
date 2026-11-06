@@ -114,11 +114,11 @@ module Chatty
     # them; Ruby reads lines 2 and 3 on their own):
     #   1. the header: the scripts and the stylesheet the file loads. Opened over HTTP, the file shows as the conversation.
     #   2. <!--lcty-meta--> and the title slot <title>…</title><!--…-->. The <title> is the document's own title.
-    #   3. <!--lcty-meta--> and the frame's opening tag <lcty-c id="c-<id>" data-setup-tags data-thinking data-created-at>:
+    #   3. <!--lcty-meta--> and the frame's opening tag <lcty-c id="c-<id>" data-setup-tags data-created-at>:
     #      what the frame needs to know, written once at creation. <lcty-c> is never closed: the HTML parser closes it at
     #      the end of the file, so every element from line 4 on becomes its child and appending is just adding to the end.
     # Lines 4 and later are elements, a well-formed XML fragment; line 4 is lcty-setup (the system prompt).
-    # The "<!" lines hold only what a list of conversations needs (title, id, tags, thinking, created_at), so collecting
+    # The "<!" lines hold only what a list of conversations needs (title, id, tags, created_at), so collecting
     # them is enough to build the sidebar's database; the system prompt, which may be long, is on line 4.
     # data-lcty-tlrange is the title slot: the half-open byte range from the "<" of <title> to the end of line 2 (just
     # after "-->"), as two fixed-width hex numbers (so the header length never depends on them). The slot is overwritten
@@ -182,7 +182,7 @@ module Chatty
       lines.reverse.find { |l| l['type'] == 'title' }
     end
 
-    # The meta: line 3's <lcty-c> attributes (id, tags at creation, thinking, created_at) and the first lcty-setup's
+    # The meta: line 3's <lcty-c> attributes (id, tags at creation, created_at) and the first lcty-setup's
     # instructions. Written once when the conversation is created and never overridden (LCTYSP-003).
     def current_meta(lines)
       lines.find { |l| l['type'] == 'meta' } || {}
@@ -205,7 +205,7 @@ module Chatty
       tags = Array(meta['tags'])
       e = node(Nokogiri::HTML5::Document.parse(''), 'lcty-c',
                'id' => "c-#{meta['id']}", 'data-setup-tags' => tags.empty? ? nil : tags.join(' '),
-               'data-thinking' => meta['thinking'] ? 'true' : 'false', 'data-created-at' => meta['created_at'])
+               'data-created-at' => meta['created_at'])
       HEAD_MARK + e.to_xhtml(save_with: SAVE).sub(%r{</lcty-c>\z}, '') + "\n"
     end
 
@@ -215,7 +215,7 @@ module Chatty
       e = Nokogiri::XML::DocumentFragment.parse(line.chomp.delete_prefix(HEAD_MARK) + '</lcty-c>').at_xpath('lcty-c')
       return nil unless e
       { 'type' => 'meta', 'id' => e['id'].to_s.sub(/\Ac-/, ''), 'created_at' => e['data-created-at'],
-        'thinking' => e['data-thinking'] == 'true', 'tags' => split_tags(e['data-setup-tags']), 'instructions' => '' }
+        'tags' => split_tags(e['data-setup-tags']), 'instructions' => '' }
     end
 
     # Rule: lines starting with "<!" are skipped when reading: lines 1 to 3. Text escapes < as &lt;, so a text line never

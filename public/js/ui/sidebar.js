@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The sidebar shared by every page (LCTYSP-005, LCTYSP-007): <lcty-sidebar> and its <lcty-conv-list> (structure in
-// /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box and the list's items and handlers here.
+// /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box, the list's items and handlers, and the settings
+// dialog (LCTYSP-010) here.
 
 import { convUrl } from "../common.js";
 import { createSearchPanel } from "../search/search-panel.js";
+import { initSettingsDialog } from "./settings-dialog.js";
 
 /**
  * @param {LctySidebarElement} sidebar
@@ -27,5 +29,6 @@ export function initSidebar(sidebar, { getSettings, onSelect }) {
 		if (onSelect?.(e.detail)) return;
 		location.href = convUrl(e.detail.id, e.detail.chunkId);
 	});
+	initSettingsDialog(sidebar.settingsButton);
 	return panel;
 }

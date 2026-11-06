@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# The module entries of the operation pages (/index.js, /tags.js, /settings.js. LCTYSP-005):
+# The module entries of the operation pages (/index.js. LCTYSP-005):
 # public/<name>.js bundled at startup (Bundle) and served from memory.
 
 require 'webrick'
@@ -12,7 +12,7 @@ require_relative 'c/bundle'
 
 module Chatty
   class ModuleServlet < WEBrick::HTTPServlet::AbstractServlet
-    ENTRIES = %w[index.js tags.js settings.js].freeze
+    ENTRIES = %w[index.js].freeze
 
     def self.mount_all(server)
       ENTRIES.each { |entry| server.mount("/#{entry}", self, C::Bundle.bundle(PUBLIC_DIR, entry)) }

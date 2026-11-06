@@ -41,7 +41,6 @@ type LctyTextKey =
 	| "systemPrompt"
 	| "none"
 	| "recompose"
-	| "enableThinking"
 	| "setupHint"
 	| "undo"
 	| "fork"
@@ -54,8 +53,6 @@ type LctyTextKey =
 	| "indexFailed"
 	| "settingsLoadFailed"
 	| "saveFailed"
-	| "thinkingOn"
-	| "thinkingOff"
 	| "addTag"
 	| "addTagOption"
 	| "proposingMemory"
@@ -130,24 +127,20 @@ type LctyTextKey =
 	| "missingModels"
 	| "connectFailed"
 	| "defaultsLoadFailed"
-	| "noTagsBefore"
-	| "noTagsAfter"
+	| "noTagsYet"
+	| "editTags"
+	| "confirmCloseTags"
 	| "forkTitle"
 	| "forkFrom"
 	| "forkInherits"
 	| "createFailed"
 	| "forkLoadFailed"
 	| "newChatHeading"
-	| "tagsPageTitle"
-	| "settingsPageTitle"
 	| "settingsHint"
 	| "baseUrlLabel"
 	| "apiKeyLabel"
 	| "chatModelLabel"
 	| "embeddingModelLabel"
-	| "thinkingKwargBefore"
-	| "thinkingKwargAfter"
-	| "defaultThinkingLabel"
 	| "resetDefaults"
 	| "testConnection";
 
@@ -176,17 +169,17 @@ declare const LctyT: {
  * <lcty-c>: the whole conversation screen. It ends line 3 of a conversation file, so it is created before the body.
  *
  * Used only under /c/. What the frame needs to know is on its own attributes, written once when the conversation is
- * created: id ("c-" + the conversation id), data-setup-tags (the tags at creation), data-thinking and data-created-at.
+ * created: id ("c-" + the conversation id), data-setup-tags (the tags at creation) and data-created-at.
  * The system prompt is its first child, lcty-setup (data-instructions, or data-instructions-base64 when it has
  * unwritable characters).
  * The frame (<lcty-sidebar>, header, <slot>, composer, memory dialog) lives in Shadow DOM. Parts: lcty-c__header, __title, __tags, __tag (--unknown), __tag-name,
- * __tag-remove, __tag-picker, __badges, __thinking, __propose-memory, __delete,
+ * __tag-remove, __tag-picker, __propose-memory, __delete,
  * __spacer, __dock, __float, __to-end, __end, __composer, __memory; the dialog's lcty-memory__*; lcty-button for buttons; the
  * sidebar's and the composer's exported under their own names. The file's elements (lcty-setup, messages, lcty-cmd) are appended to Light DOM by the
  * parser and shown through the <slot> between the header and the composer; lcty-setup shows the system prompt itself.
  *
  * The frame's tree is decided here, and each piece follows one input (LCTYSP-005): the title (the document's <title>,
- * read once), the thinking badge's text (data-thinking), the tag chips (data-setup-tags: the tags at creation, for
+ * read once), the tag chips (data-setup-tags: the tags at creation, for
  * now), and which chips are unknown and the picker's choices (data-tag-defs, the tag definitions, space-separated).
  * What shows before the first message is lcty.v1.css's (:has). Modules only set values, attributes and handlers.
  *
@@ -214,7 +207,6 @@ declare class LctySetupElement extends HTMLElement {
 declare class LctyCElement extends HTMLElement {
 	static readonly observedAttributes: readonly [
 		"data-setup-tags",
-		"data-thinking",
 		"data-tag-defs",
 	];
 	/** The sidebar (#sidebar), the same element every page has */
@@ -227,10 +219,6 @@ declare class LctyCElement extends HTMLElement {
 	tagList: HTMLSpanElement;
 	/** The tag picker: "+ Tag" and the defined tags not on the conversation (disabled when there is none) */
 	tagPicker: HTMLSelectElement;
-	/** Badges (#conv-badges) */
-	badges: HTMLSpanElement;
-	/** Thinking on / off (data-thinking); hidden before the first message (lcty.v1.css) */
-	thinkingBadge: HTMLSpanElement;
 	/** "Propose memory" button (#propose-memory); hidden before the first message or without tags (lcty.v1.css); a module disables it */
 	proposeMemoryButton: HTMLButtonElement;
 	/** Delete button (#delete-chat) */
@@ -291,10 +279,8 @@ declare class LctySidebarElement extends HTMLElement {
 	static readonly _: typeof LctyT._;
 	/** "New conversation" link to / (part lcty-sidebar__new) */
 	newLink: HTMLAnchorElement;
-	/** Link to /tags (part lcty-sidebar__tags) */
-	tagsLink: HTMLAnchorElement;
-	/** Link to /settings (part lcty-sidebar__settings) */
-	settingsLink: HTMLAnchorElement;
+	/** Opens the settings dialog attached by js/ui/sidebar.js (part lcty-sidebar__settings) */
+	settingsButton: HTMLButtonElement;
 	/** The three links (part lcty-sidebar__nav) */
 	nav: HTMLElement;
 	/** Search box (part lcty-sidebar__search) */

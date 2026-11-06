@@ -95,7 +95,6 @@ function convFromDom() {
 	const meta = {
 		id: log.id.replace(/^c-/, ""), // id="c-<conversation id>" (LCTYSP-003)
 		created_at: d.createdAt,
-		thinking: d.thinking === "true",
 		instructions: (setup && textAttr(setup, "data-instructions")) ?? "",
 	};
 	// The tags at creation are data-setup-tags. The current tags are not in the file (tags.sqlite, LCTYSP-009): they

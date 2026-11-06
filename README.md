@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 A personal chat web UI for [llama.cpp](https://github.com/ggml-org/llama.cpp)'s `llama-server`, served by a small
 Ruby server on your own machine. Conversations are plain HTML files you can open, back up and keep.
 
-- Chat with a local model, with or without thinking; undo, regenerate and fork from any message.
+- Chat with a local model; undo, regenerate and fork from any message.
 - Search every conversation from the sidebar: keywords and semantic search (EmbeddingGemma 2), merged.
 - Tags carry a system prompt and a memory; the model can propose memory items from a conversation.
 
@@ -28,7 +28,7 @@ Start the models (router mode: the chat and embedding models in `llm-backend/lla
 llm-backend/run-llama-cpp.sh
 ```
 
-Start the server and open http://127.0.0.1:8765/:
+Start the server and open http://127.0.0.1:45280/:
 
 ```bash
 /usr/bin/ruby lcty.rb
@@ -39,9 +39,9 @@ and the search index.
 
 ## Settings
 
-- Server: only the environment variables `PORT` (default 8765) and `LCTY_DATA_DIR` (default
+- Server: only the environment variables `PORT` (default 45280) and `LCTY_DATA_DIR` (default
   `~/Library/Application Support/tokyo.kaito.lcty-rb/Data`).
-- Everything else (the `llama-server` URL, API key, model names, thinking) is set on `/settings` and stored in the
+- Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 
 ## Data

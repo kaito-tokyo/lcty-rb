@@ -134,7 +134,7 @@ module Chatty
       path = conv_path(meta['id'])
       raise HttpError.new(409, 'already exists') if File.exist?(path)
       ensure_ids!(lines)
-      meta = meta.slice('id', 'created_at', 'thinking', 'tags', 'instructions') # the tags at creation are data-setup-tags
+      meta = meta.slice('id', 'created_at', 'tags', 'instructions') # the tags at creation are data-setup-tags
       write_atomic(path, document([meta.merge('type' => 'meta')] + lines))
       meta['id']
     end
@@ -245,7 +245,7 @@ module Chatty
           end
           {
             'id' => meta['id'], 'title' => ConvHtml.slot_title(head.join).to_s, 'created_at' => meta['created_at'],
-            'updated_at_hint' => File.mtime(path).iso8601, 'thinking' => meta['thinking'], 'setup_tags' => meta['tags'],
+            'updated_at_hint' => File.mtime(path).iso8601, 'setup_tags' => meta['tags'],
             'tags_hint' => tags[meta['id']] || [], 'messages_hint' => counts[meta['id']]
           }
         rescue SystemCallError => e

@@ -8,6 +8,8 @@
 #
 # The files under public/c/ (lcty.v1.*; the modules in public/js/ are bundled into lcty.v1.module.js, not copied) belong to the user like the conversation files: they are published
 # next to them in data/c/ at startup, so a backup of data/ keeps conversations together with what renders them (LCTYSP-010).
+# Over HTTP, a file copied as it is (the stylesheet) is served from public/c/ itself, so an edit there shows at the next
+# load without a restart; the built files are served from data/c/.
 # Path rule: c/lcty.v1.* holds exactly what a conversation file needs where it is (opened directly, offline); a file it
 # does not need on its own (the sidebar's meta database worker, …) lives directly under public/ instead (LCTYSP-005).
 
@@ -34,22 +36,27 @@ module Chatty
     LANG_RE = /\A(lcty\.v\d+\.lang-([a-z-]+))\.json\z/.freeze
 
     @published = [].freeze # Names relative to data/c/ that /c/ serves besides conversation files
+    @live = [].freeze # Those of them copied as they are: served from public/c/ (the server's copy), not data/c/
     class << self
-      attr_reader :published
+      attr_reader :published, :live
     end
 
     # At startup: mirror public/c/ into data/c/ (atomic replace per file, only when the content changed). Files no longer
     # in public/c/ are left in data/c/ (they belong to the user) but are not served.
     def self.publish_assets
       names = []
+      live = []
       Dir.glob('**/*', base: SRC_DIR).sort.each do |rel|
         src = File.join(SRC_DIR, rel)
         next if File.directory?(src) || SKIP_RE.match?(rel)
-        name, body = build(rel, File.binread(src))
+        raw = File.binread(src)
+        name, body = build(rel, raw)
         write_if_changed(File.join(CONV_DIR, name), body)
         names << name
+        live << name if body.equal?(raw) # build returned the source itself: copied as it is
       end
       @published = names.freeze
+      @live = live.freeze
     end
 
     def self.build(rel, body)
@@ -74,12 +81,14 @@ module Chatty
       File.rename(tmp, path)
     end
 
-    # Under /c/: .html returns data/c/<id>.html (the conversation file) untouched, the published files (C.published) are static files in data/c/,
+    # Under /c/: .html returns data/c/<id>.html (the conversation file) untouched, the published files (C.published) are
+    # static files in data/c/ (those copied as they are, C.live, in public/c/),
     # and /c/ itself redirects to the top page (a new conversation; the query, e.g. ?fork=<id>&at=<n>, goes along).
     class Servlet < WEBrick::HTTPServlet::AbstractServlet
       def initialize(server, *options)
         super
         @files = WEBrick::HTTPServlet::FileHandler.new(server, CONV_DIR, FancyIndexing: false)
+        @live_files = WEBrick::HTTPServlet::FileHandler.new(server, SRC_DIR, FancyIndexing: false)
       end
 
       def do_GET(req, res)
@@ -87,6 +96,7 @@ module Chatty
         if name.empty?
           res.set_redirect(WEBrick::HTTPStatus::Found, req.query_string.to_s.empty? ? '/' : "/?#{req.query_string}")
         end
+        return @live_files.do_GET(req, res) if C.live.include?(name)
         return @files.do_GET(req, res) if C.published.include?(name)
         id = name[/\A(.+)\.html\z/, 1].to_s
         raise WEBrick::HTTPStatus::NotFound unless ID_RE.match?(id) && File.exist?(Store.conv_path(id))

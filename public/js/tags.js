@@ -4,7 +4,7 @@
 
 // Tags and memory (LCTYSP-009).
 //  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
-//  - renderTagsEditor: editor for tag definitions and memory (the /tags page)
+//  - renderTagsEditor: editor for tag definitions and memory (the new page's tags dialog)
 //  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
 
 import { addMemory, getTags, putTags } from "./api/storage.js";
@@ -52,53 +52,15 @@ export function composeDraft(defs, selected) {
 	return parts.join("\n\n");
 }
 
-/** A tag chip. Passing onRemove adds a ×. */
-export function tagChip(name, { known = true, onClick, onRemove } = {}) {
-	return el(
-		"span",
-		{
-			class: `tag-chip${known ? "" : " unknown"}`,
-			dataset: { tag: name },
-			title: known
-				? tr("searchTag", "Search tag:{name}", { name })
-				: tr("undefinedTag", "Undefined tag"),
-		},
-		el(
-			"span",
-			{
-				class: "tag-name",
-				onclick: onClick
-					? (e) => {
-							e.stopPropagation();
-							onClick(name);
-						}
-					: undefined,
-			},
-			name,
-		),
-		onRemove
-			? el(
-					"button",
-					{
-						type: "button",
-						class: "tag-x",
-						"aria-label": tr("removeTag", "Remove {name}", { name }),
-						onclick: (e) => {
-							e.stopPropagation();
-							onRemove(name);
-						},
-					},
-					"×",
-				)
-			: null,
-	);
-}
-
 // ---- Tag editor ----
 
-/** Draws the editor for tag definitions (name, prompt, memory) into container. Calls onSaved(new definitions) after saving. */
+/**
+ * Draws the editor for tag definitions (name, prompt, memory) into container. Calls onSaved(new definitions) after
+ * saving. Returns { isDirty }: whether there are unsaved edits.
+ */
 export function renderTagsEditor(container, { defs, onSaved, toast }) {
-	let work = structuredClone(defs);
+	let saved = structuredClone(defs);
+	let work = structuredClone(saved);
 	const list = el("div", { class: "tags-edit" });
 	const status = el("p", { class: "hint" });
 
@@ -249,8 +211,9 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 			t.memory = (t.memory || []).filter((m) => m.text.trim());
 		try {
 			await putTags({ tags: work });
-			work = (await getTags()).tags; // Take timestamps etc. from the saved values
-			onSaved(work);
+			saved = (await getTags()).tags; // Take timestamps etc. from the saved values
+			work = structuredClone(saved);
+			onSaved(structuredClone(saved));
 			status.textContent = "";
 			render();
 			toast(tr("tagsSaved", "Tags saved"));
@@ -295,13 +258,20 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 					"button",
 					{
 						type: "button",
-						onclick: () =>
-							confirm(
-								tr(
-									"confirmDiscard",
-									"Discard the changes and go back to the saved state?",
-								),
-							) && location.reload(),
+						onclick: () => {
+							if (
+								!confirm(
+									tr(
+										"confirmDiscard",
+										"Discard the changes and go back to the saved state?",
+									),
+								)
+							)
+								return;
+							work = structuredClone(saved);
+							status.textContent = "";
+							render();
+						},
 					},
 					tr("discardChanges", "Discard changes"),
 				),
@@ -313,6 +283,7 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 			),
 		),
 	);
+	return { isDirty: () => JSON.stringify(work) !== JSON.stringify(saved) };
 }
 
 // ---- Memory proposals (LCTYSP-009) ----

@@ -8,7 +8,7 @@
 // does not need it (LCTYSP-005).
 //
 //   database "lcty"
-//     store "meta" (key: id): {id, title, created_at, updated_at_hint, thinking, setup_tags, tags_hint, messages_hint},
+//     store "meta" (key: id): {id, title, created_at, updated_at_hint, setup_tags, tags_hint, messages_hint},
 //       from
 //       GET /v1/meta-all.json
 //       (built by the server from each conversation file's "<!" meta lines, LCTYSP-003)

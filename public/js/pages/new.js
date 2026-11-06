@@ -24,7 +24,7 @@ import {
 	showToast,
 } from "../common.js";
 import { localize, tr } from "../i18n.js";
-import { composeDraft, sortTags, tagChip } from "../tags.js";
+import { composeDraft, renderTagsEditor, sortTags } from "../tags.js";
 import {
 	focusComposer,
 	initComposer,
@@ -43,7 +43,6 @@ export function initNewPage() {
 		tags: $("#setup-tags"),
 		instructions: $("#setup-instructions"),
 		recomposeButton: $("#setup-recompose"),
-		thinking: $("#setup-thinking"),
 	};
 	const composer = $(".new-card > lcty-composer");
 	const sidebar = document.querySelector("lcty-sidebar");
@@ -62,26 +61,46 @@ export function initNewPage() {
 
 	// ---- Tags and the system prompt draft (LCTYSP-009) ----
 
+	// The ⚙︎ at the end of the tag list opens the tag editor (js/tags.js) in a dialog
+	const tagsButton = document.createElement("button");
+	tagsButton.type = "button";
+	tagsButton.title = tr("editTags", "Edit tags");
+	tagsButton.setAttribute("aria-label", tr("editTags", "Edit tags"));
+	tagsButton.textContent = "⚙︎";
+	tagsButton.addEventListener("click", openTagsDialog);
+	let tagsEditor = null; // { isDirty } of the editor in the dialog while it is open
+	const tagsDialog = createTagsDialog();
+	const tagsDialogBody = tagsDialog.querySelector(":scope > div:last-child");
+
 	function renderTags() {
 		const picker = form.tags;
-		if (!state.tagDefs.length) {
-			const link = document.createElement("a");
-			link.href = "/tags";
-			link.textContent = tr("tags", "Tags");
+		// One checkbox per tag definition, then ⚙︎, laid out as inline content separated by spaces (no CSS of its own).
+		// Rebuilt only when the definitions change, so focus stays on the box
+		const names = JSON.stringify(state.tagDefs.map((t) => t.name));
+		if (picker.dataset.names !== names) {
+			picker.dataset.names = names;
+			const items = state.tagDefs.length
+				? state.tagDefs.map((t) => {
+						const box = document.createElement("input");
+						box.type = "checkbox";
+						box.value = t.name;
+						box.addEventListener("change", () => toggleTag(t.name));
+						const label = document.createElement("label");
+						if (t.prompt) label.title = t.prompt;
+						// the name as a chip, the same look as the sidebar's tags
+						const chip = document.createElement("span");
+						chip.className = "tag-chip";
+						chip.textContent = t.name;
+						label.append(box, chip);
+						return label;
+					})
+				: [tr("noTagsYet", "(No tags yet)")];
 			picker.replaceChildren(
-				tr("noTagsBefore", "(No tags yet. Create them on the "),
-				link,
-				tr("noTagsAfter", " page.)"),
-			);
-		} else {
-			picker.replaceChildren(
-				...state.tagDefs.map((t) => {
-					const chip = tagChip(t.name, { onClick: () => toggleTag(t.name) });
-					chip.classList.toggle("on", state.tags.includes(t.name));
-					return chip;
-				}),
+				...[...items, tagsButton].flatMap((e, i) => (i ? [" ", e] : [e])),
 			);
 		}
+		for (const box of picker.querySelectorAll("input[type=checkbox]"))
+			box.checked = state.tags.includes(box.value);
 		const ta = form.instructions; // Fit the height so the whole draft is visible
 		ta.style.height = "auto";
 		ta.style.height = `${Math.min(ta.scrollHeight + 2, window.innerHeight * 0.5)}px`;
@@ -90,6 +109,84 @@ export function initNewPage() {
 			state.tags.length &&
 			ta.value !== composeDraft(state.tagDefs, state.tags)
 		);
+	}
+
+	function createTagsDialog() {
+		const dialog = document.createElement("dialog");
+		dialog.id = "tags-dialog";
+		dialog.setAttribute("aria-label", tr("editTags", "Edit tags"));
+		const heading = document.createElement("h2");
+		heading.textContent = tr("tags", "Tags");
+		const close = document.createElement("button");
+		close.type = "button";
+		close.textContent = tr("close", "Close");
+		const spacer = document.createElement("span");
+		spacer.className = "spacer";
+		const head = document.createElement("div");
+		head.className = "dialog-buttons";
+		head.append(heading, spacer, close);
+		const body = document.createElement("div");
+		dialog.append(head, body);
+		document.body.append(dialog);
+		// Closing with unsaved edits asks first (the close button, Esc and a click on the backdrop)
+		const tryClose = () => {
+			if (
+				tagsEditor?.isDirty() &&
+				!confirm(
+					tr(
+						"confirmCloseTags",
+						"Close without saving? The unsaved changes are discarded.",
+					),
+				)
+			)
+				return;
+			dialog.close();
+		};
+		close.addEventListener("click", tryClose);
+		dialog.addEventListener("cancel", (e) => {
+			e.preventDefault();
+			tryClose();
+		});
+		dialog.addEventListener("click", (e) => {
+			if (e.target === dialog) tryClose();
+		});
+		return dialog;
+	}
+
+	// Opens the editor on the saved definitions (fetched again, in case another tab changed them meanwhile)
+	async function openTagsDialog() {
+		let defs;
+		try {
+			defs = (await getTags()).tags;
+		} catch (e) {
+			showToast(
+				tr("tagsLoadFailed", "Failed to load the tags: {error}", {
+					error: e.message,
+				}),
+			);
+			return;
+		}
+		tagsEditor = renderTagsEditor(tagsDialogBody, {
+			defs,
+			toast: showToast,
+			onSaved: tagsSaved,
+		});
+		tagsDialog.showModal();
+	}
+
+	// After saving: the chosen tags that no longer exist are dropped (tags never defined, e.g. from a fork, stay), and an
+	// untouched draft is composed again from the new prompts and memory
+	function tagsSaved(defs) {
+		const before = new Set(state.tagDefs.map((t) => t.name));
+		const after = new Set(defs.map((t) => t.name));
+		state.tagDefs = defs;
+		state.tags = sortTags(
+			defs,
+			state.tags.filter((n) => !before.has(n) || after.has(n)),
+		);
+		if (!state.dirty)
+			form.instructions.value = composeDraft(state.tagDefs, state.tags);
+		renderTags();
 	}
 
 	function toggleTag(name) {
@@ -131,7 +228,6 @@ export function initNewPage() {
 		state.tags = [...(src.tags || [])];
 		state.dirty = true; // keep the source's system prompt as it is
 		form.instructions.value = src.meta.instructions || "";
-		form.thinking.checked = !!src.meta.thinking;
 		const a = document.createElement("a");
 		a.href = convUrl(src.meta.id);
 		a.textContent = src.title || tr("untitled", "(untitled)");
@@ -157,7 +253,6 @@ export function initNewPage() {
 			id,
 			created_at: at,
 			instructions: form.instructions.value,
-			thinking: form.thinking.checked,
 			tags: state.tags,
 		};
 		const title = state.fork
@@ -189,7 +284,6 @@ export function initNewPage() {
 
 	(async () => {
 		state.settings = await loadSettings();
-		form.thinking.checked = !!state.settings?.default_thinking;
 		try {
 			state.tagDefs = (await getTags()).tags;
 		} catch (e) {

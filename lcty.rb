@@ -9,7 +9,7 @@
 # lcty-rb: static file server + JSON document store.
 # Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the LLM (LCTYSP-001).
 #
-#   /usr/bin/ruby lcty.rb        # => http://127.0.0.1:8765
+#   /usr/bin/ruby lcty.rb        # => http://127.0.0.1:45280
 #
 # This file only wires the servlets together (plus transparent gzip); the code lives in lib/ (LCTYSP-005).
 
@@ -21,7 +21,6 @@ require 'zlib'
 require_relative 'lib/config'
 require_relative 'lib/store'
 require_relative 'lib/guard'
-require_relative 'lib/page_servlet'
 require_relative 'lib/module_servlet'
 require_relative 'lib/c/servlet'
 require_relative 'lib/v1/servlet'
@@ -87,8 +86,6 @@ module Chatty
     )
     server.mount('/v1', V1::Servlet)
     server.mount('/c', C::Servlet)
-    server.mount('/tags', PageServlet, 'tags.html')
-    server.mount('/settings', PageServlet, 'settings.html')
     ModuleServlet.mount_all(server)
     server.mount('/', WEBrick::HTTPServlet::FileHandler, PUBLIC_DIR, FancyIndexing: false)
     %w[INT TERM].each { |sig| trap(sig) { server.shutdown } }

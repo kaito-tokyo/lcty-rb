@@ -30,7 +30,7 @@ the model and added only when the user approves it.
   search. To change the system prompt, start a new conversation (a fork inherits its source's system prompt).
 - **Editing a tag's prompt later does not affect existing conversations.** They store the fixed system prompt itself, so
   edits apply from the next draft. The cache and reproducibility are preserved.
-- Tags carry only a prompt and memory. Thinking on/off and the model are not tied to tags.
+- Tags carry only a prompt and memory. The model is not tied to tags.
 - Deleting a tag definition keeps the name on conversations (shown as an undefined tag).
 
 ### Composing the draft
@@ -48,7 +48,7 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 - Changing tags before the start recomposes the draft and replaces the field. Once the user has edited the field by
   hand it is not replaced (so their text is not lost); a "Rebuild from tags" button appears instead.
 - More memory makes the first send of a new conversation heavier (prompt processing is about 450 tok/s, so 2,000 tokens
-  take about 4.5 s). The tag editor shows an estimate of the memory size.
+  take about 4.5 s). The tag editor (the ⚙︎ at the end of the new conversation page's tag list) shows an estimate of the memory size.
 
 ### The tags of a conversation
 

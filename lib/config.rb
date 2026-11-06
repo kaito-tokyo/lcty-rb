@@ -16,7 +16,7 @@ module Chatty
   TAGS_DB_PATH = File.join(DATA_DIR, 'tags.sqlite') # Source of truth (tag definitions and memory)
   # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-010)
   INDEX_PATH = File.join(DATA_DIR, '_index.sqlite')
-  PORT = Integer(ENV['PORT'].to_s.empty? ? 8765 : ENV['PORT'])
+  PORT = Integer(ENV['PORT'].to_s.empty? ? 45280 : ENV['PORT'])
   BIND = '127.0.0.1'
   ID_RE = /\A[A-Za-z0-9_-]{1,80}\z/
   TAG_NAME_RE = /\A[^\s:]{1,40}\z/ # No whitespace or ':' (to tell it apart from tag:name in search)

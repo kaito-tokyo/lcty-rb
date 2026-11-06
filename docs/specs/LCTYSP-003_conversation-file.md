@@ -27,7 +27,7 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 ```html
 <!doctype html><html data-lcty-tlrange="0x0187,0x0387" lang="ja"><meta charset="utf-8">…<script type="module" src="lcty.v1.module.js"></script><link rel="stylesheet" href="lcty.v1.css"><script src="lcty.v1.js"></script><script src="lcty.v1.lang-ja.js"></script><script>defineLctyV1CustomElements();</script>
 <!--lcty-meta--><title>Title</title><!--8901234567890…34567890-->
-<!--lcty-meta--><lcty-c id="c-20261104-…" data-setup-tags="ruby concise" data-thinking="false" data-created-at="…">
+<!--lcty-meta--><lcty-c id="c-20261104-…" data-setup-tags="ruby concise" data-created-at="…">
 <lcty-setup data-instructions="system prompt"></lcty-setup>
 <lcty-message id="c-msg-0190…" data-role="user" data-at="…" data-content="user text"><div class="user-text">user text</div></lcty-message>
 <lcty-message id="c-msg-0190…" data-role="assistant" data-status="completed" data-at="…" data-timings="{…}" data-client="{…}" data-content="# Heading&#10;…" data-thinking="thoughts"><article data-generator="lcty.v1"><h1>Heading</h1>…</article></lcty-message>
@@ -48,7 +48,7 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 - **`<!--lcty-meta-->` starts lines 2 and 3.** The empty comment is there only so that those lines start with `<!` and
   the element parser skips them.
 - **The `<!` lines (1 to 3) are the meta lines.** They hold only what a list of conversations needs: the title, the
-  id, the tags at creation, whether thinking is on and the creation time. Collecting them is enough to build the
+  id, the tags at creation and the creation time. Collecting them is enough to build the
   sidebar's database (`GET /v1/meta-all.json` reads only these lines of each file,
   [LCTYSP-006](LCTYSP-006_http-api.md)). The system prompt, which may be long, is not among them; it is on line 4.
 - **Line 2 is the title slot.** The browser puts the comment and the `<title>` in the head, so `<title>` is the
@@ -59,8 +59,9 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
   - `data-setup-tags`: the tags the conversation was created with (space separated, omitted when empty). **Tag
     changes are not written to the file:** they are kept in `tags.sqlite`, and the current tags are those, or these
     when the tags were never changed ([LCTYSP-009](LCTYSP-009_tags-and-memory.md));
-  - `data-thinking`: whether thinking is on (`true` / `false`);
   - `data-created-at`: when the conversation was created.
+
+  Files written before thinking on/off was removed also carry `data-thinking` (`true` / `false`) here; it is ignored.
 
   `<lcty-c>` is deliberately never closed: the HTML parser closes it at the end of the file, so every element from line
   4 on becomes its child and appending is just writing at the end. Nothing else about a conversation is recorded: not
