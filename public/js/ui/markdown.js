@@ -7,8 +7,8 @@
 // For streaming rendering it is split into scanBlocks(), which cuts text into blocks,
 // and renderBlock(), which turns one block into HTML (LCTYSP-005).
 // Supported: paragraphs / headings / rules / code blocks / quotes / lists (nested) / tables /
-//            bold, italic, strikethrough, inline code, links, bare-URL autolinks and suggestion autolinks
-//            (<x-suggestion-for-user-turn:text>, rendered as a button).
+//            bold, italic, strikethrough, inline code, links, bare-URL autolinks and suggested next messages
+//            (<suggestion-for-user-turn>text</suggestion-for-user-turn>, rendered as a button).
 //
 // Safety: text is always escaped and only http / https / mailto links are allowed.
 import { tr } from "../i18n.js";
@@ -385,12 +385,17 @@ function inlineText(raw) {
 	let s = esc(raw);
 	const slots = [];
 	const hold = (html) => `\u0000${slots.push(html) - 1}\u0000`;
-	// <x-suggestion-for-user-turn:text>: a suggested next user message, an autolink with its own scheme. Unlike
-	// CommonMark, the text may contain spaces; it runs to the first > on the line. It becomes a button, not a link
-	s = s.replace(/&lt;x-suggestion-for-user-turn:([^\n]*?)&gt;/g, (all, text) =>
-		text.trim()
-			? hold(`<button type="button" class="suggestion">${text.trim()}</button>`)
-			: all,
+	// <suggestion-for-user-turn>text</suggestion-for-user-turn>: a suggested next user message, shown where it is
+	// written as a button. The text runs to the closing tag or, when it is missing (still streaming, or forgotten),
+	// to the end of the line. An empty one shows nothing
+	s = s.replace(
+		/&lt;suggestion-for-user-turn&gt;([^\n]*?)(?:&lt;\/suggestion-for-user-turn&gt;|(?=\n)|$)/g,
+		(_, text) =>
+			hold(
+				text.trim()
+					? `<button type="button" class="suggestion">${text.trim()}</button>`
+					: "",
+			),
 	);
 	// [text](url)
 	s = s.replace(/\[([^\]\n]+)\]\(([^()\s]+)\)/g, (all, text, u) => {

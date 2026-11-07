@@ -435,7 +435,7 @@ export function initConversationElements(container, h = {}) {
 		":scope > lcty-message > article .codebar button.copy",
 	))
 		btn.textContent = tr("selectAll", "Select all");
-	// Suggested next messages (<x-suggestion-for-user-turn:…> in a reply): put the text into the composer to edit and send
+	// Suggested next messages (<suggestion-for-user-turn> in a reply): put the text into the composer to edit and send
 	container.addEventListener("click", (e) => {
 		const btn = e.target.closest?.("lcty-message > article button.suggestion");
 		if (!btn) return;
