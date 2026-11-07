@@ -1867,18 +1867,15 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 		page.evaluate(
 			() =>
 				new Promise((resolve, reject) => {
-					const req = indexedDB.open("lcty_t", 1);
-					req.onupgradeneeded = () =>
-						req.result.createObjectStore("t_full").put(
-							{
-								tags: [
-									{ file: "00010-c~23.html", name: "C#" },
-									{ file: "00020-ruby.html", name: "Ruby" },
-								],
-								etag: "e1",
-							},
-							"set",
-						);
+					const req = indexedDB.open("lcty_t", 2); // the schema of js/lcty_t.worker.js
+					req.onupgradeneeded = () => {
+						const rows = req.result.createObjectStore("t_full", {
+							keyPath: "file",
+						});
+						rows.put({ file: "00010-c~23.html", name: "C#" });
+						rows.put({ file: "00020-ruby.html", name: "Ruby" });
+						req.result.createObjectStore("t_set").put({ etag: "e1" }, "set");
+					};
 					req.onsuccess = () => {
 						req.result.close();
 						resolve();

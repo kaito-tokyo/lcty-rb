@@ -52,7 +52,8 @@ directory changes as follows. The rule on `_` is unchanged.
 | `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
 
 In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned by `js/lcty_c.worker.js`, below) and
-`lcty_t` (store `t_full`, owned by `js/lcty_t.worker.js`), a full copy of the tags with the set's `ETag`
+`lcty_t` (stores `t_full` and `t_set`, owned by `js/lcty_t.worker.js`), a full copy of the tags, one row per tag
+file, with the set's `ETag`
 ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). The database before the split,
 `lcty`, is deleted by `lcty_c.worker.js` after a sync, not converted.
 
