@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// UUIDv7 (RFC 9562), used for message ids (LCTYSP-003). The first 48 bits are milliseconds.
+// UUIDv7 (RFC 9562), used for message ids (LCTYSP-0003). The first 48 bits are milliseconds.
 
 export const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

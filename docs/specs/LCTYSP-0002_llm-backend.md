@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-002: LLM backend
+# LCTYSP-0002: LLM backend
 
 - Status: Accepted
-- Related: [LCTYSP-001](LCTYSP-001_architecture.md), [LCTYSP-004](LCTYSP-004_editing.md), [LCTYSP-010](LCTYSP-010_data-and-settings.md)
+- Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0004](LCTYSP-0004_editing.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 
 ## Summary
 
@@ -36,7 +36,7 @@ stream({ backend, instructions, input, extraBody, signal });
 ```
 
 - `extraBody` adds parameters to one request only (for example `response_format` for memory proposals,
-  [LCTYSP-009](LCTYSP-009_tags-and-memory.md)).
+  [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
 - Stopping is `AbortController`.
 
 ### Building the input (`public/js/llm/history.js`)
@@ -58,7 +58,7 @@ These rules keep the prefix identical from one request to the next:
 
 1. **Send saved content as the exact same string.** No trimming, newline normalization, Markdown reformatting or
    summarizing when sending. The saved string is exactly what was streamed
-   ([LCTYSP-003](LCTYSP-003_conversation-file.md) guarantees a byte-exact round trip).
+   ([LCTYSP-0003](LCTYSP-0003_conversation-file.md) guarantees a byte-exact round trip).
 2. **`instructions` is fixed when the conversation starts.** It never contains values that change per request, such as
    the date. Changing it mid-conversation means starting a new conversation.
 3. **Past thinking is never sent.** It is saved, but only reply text goes into the history. Doing this consistently
@@ -86,7 +86,7 @@ Measured on a 16k-token conversation:
 - **Editing an assistant message in the middle recomputes thousands of tokens** (24 s). Sliding-window models can only
   roll back to the previous checkpoint.
 
-These results shape the editing rules in [LCTYSP-004](LCTYSP-004_editing.md). The UI never sends server-specific slot
+These results shape the editing rules in [LCTYSP-0004](LCTYSP-0004_editing.md). The UI never sends server-specific slot
 controls such as `id_slot`, and llama-server keeps its default `--slot-prompt-similarity 0.10`.
 
 ## llama-server in router mode
@@ -112,7 +112,7 @@ controls such as `id_slot`, and llama-server keeps its default `--slot-prompt-si
 
 ## Backend settings
 
-The browser builds one backend from its settings ([LCTYSP-010](LCTYSP-010_data-and-settings.md)):
+The browser builds one backend from its settings ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
 
 ```json
 {
@@ -127,7 +127,7 @@ The browser builds one backend from its settings ([LCTYSP-010](LCTYSP-010_data-a
 }
 ```
 
-- The embedding dimension is fixed by the vector format ([LCTYSP-008](LCTYSP-008_vector-binary.md)) and is not a setting.
+- The embedding dimension is fixed by the vector format ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) and is not a setting.
 
 ## Verified assumptions
 

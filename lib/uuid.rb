@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# UUIDv7 (RFC 9562), used for message ids (LCTYSP-003). The first 48 bits are milliseconds, so ids sort roughly by creation time.
+# UUIDv7 (RFC 9562), used for message ids (LCTYSP-0003). The first 48 bits are milliseconds, so ids sort roughly by creation time.
 
 require 'securerandom'
 

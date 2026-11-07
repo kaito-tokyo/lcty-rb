@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-008: Vector binary and semantic search
+# LCTYSP-0008: Vector binary and semantic search
 
 - Status: Accepted
-- Related: [LCTYSP-006](LCTYSP-006_http-api.md), [LCTYSP-007](LCTYSP-007_search.md), [LCTYSP-010](LCTYSP-010_data-and-settings.md)
+- Related: [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 - Implementation: `lib/v1/vector_records.rb` (vector binary), `lib/v1/vector_db.rb` (vector DB), `public/js/search/vectors.js`, `public/fuzzy_search.worker.js` (search worker), `public/bdot264.wat` (kernel; built to `public/bdot264.wasm`), `public/js/search/embed.js`
 
 ## Summary
@@ -129,7 +129,7 @@ CREATE TABLE vectors (
 
 Semantic search runs in a worker, `/fuzzy_search.worker.js` (a classic script with no imports, served from `public/`
 with the kernel `/bdot264.wasm`; not `/c/` files, since a conversation file opened on its own does not need them,
-[LCTYSP-005](LCTYSP-005_page-and-elements.md)). `js/search/vectors.js` only sends it messages; the worker starts on first use.
+[LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). `js/search/vectors.js` only sends it messages; the worker starts on first use.
 
 1. **Load** (`{ op: "load", dat, idx }`, the two URLs): the worker fetches the distribution files itself (revalidated by `ETag`; when unchanged nothing is read
    again), checks that the two files agree in length and numbers the distinct ids from `vectors.eg2_264.idx` (a row → id index in an `Int32Array`; an id has a row per part of its round).

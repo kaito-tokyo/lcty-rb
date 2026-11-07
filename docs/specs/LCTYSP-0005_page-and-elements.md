@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-005: Pages and custom elements
+# LCTYSP-0005: Pages and custom elements
 
 - Status: Accepted
-- Related: [LCTYSP-001](LCTYSP-001_architecture.md), [LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-007](LCTYSP-007_search.md), [LCTYSP-011](LCTYSP-011_module-bundler.md)
+- Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0011](LCTYSP-0011_module-bundler.md)
 - Implementation: `lib/c/servlet.rb`, `public/c/lcty.v1.js` (documented in `public/c/lcty.v1.d.ts`), `public/c/lcty.v1.*`,
   `public/js/ui/lcty-elements.js`, `public/js/pages/*.js`
 
@@ -19,21 +19,23 @@ a module imported once the page has loaded attaches every feature without blocki
 
 ## Pages
 
-| URL            | Page                            | Content                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/`            | New conversation (the top page) | Separate components, not `<lcty-c>`: `<lcty-sidebar>` and a creation card in plain HTML (tag checkboxes ending with a ⚙︎ that opens the tag editor in a modal `<dialog>` — tag definitions and memory, [LCTYSP-009](LCTYSP-009_tags-and-memory.md) — and a system prompt draft) holding a `<lcty-composer>` for the first message. Sending creates the file and moves to `/c/<id>.html` ([LCTYSP-004](LCTYSP-004_editing.md)). `?fork=<id>&at=<n>` forks ([LCTYSP-004](LCTYSP-004_editing.md)); `?q=…` puts a query into the sidebar's search box. `/c/` redirects here (with its query) |
-| `/c/<id>.html` | Conversation                    | Messages, composer, undo / regenerate / fork, tags (labels), memory proposals. `#c-msg-<message UUIDv7>` (the message element's `id`) scrolls to that round; a bare `#<message UUIDv7>` from older links still works                                                                                                                                                                                                                                                                                                                                                                    |
+| URL            | Page                            | Content                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`            | New conversation (the top page) | Separate components, not `<lcty-c>`: `<lcty-sidebar>` and a creation card in plain HTML (tag checkboxes ending with a ⚙︎ that opens the same tags dialog as the sidebar's タグ button — tag definitions and memory, [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) — and a system prompt draft) holding a `<lcty-composer>` for the first message. Sending creates the file and moves to `/c/<id>.html` ([LCTYSP-0004](LCTYSP-0004_editing.md)). `?fork=<id>&at=<n>` forks ([LCTYSP-0004](LCTYSP-0004_editing.md)); `?q=…` puts a query into the sidebar's search box. `/c/` redirects here (with its query) |
+| `/c/<id>.html` | Conversation                    | Messages, composer, undo / regenerate / fork, tags (labels), memory proposals. `#c-msg-<message UUIDv7>` (the message element's `id`) scrolls to that round; a bare `#<message UUIDv7>` from older links still works                                                                                                                                                                                                                                                                                                                                                                                       |
 
 - **Every page has the same sidebar** (`<lcty-sidebar>`): new conversation (opened in a new window, so the current
-  conversation stays where it is), the settings button, the search box
+  conversation stays where it is), the tags button right of it, the refresh button, the settings button, the search box
   and the conversation list. The conversation page has it inside `lcty-c`'s Shadow DOM; the new conversation page puts it
   at the top of `<body>`. Its behavior is `js/ui/sidebar.js` (search is `js/search/search-panel.js`). Choosing a conversation
-  navigates to it; a match inside the current conversation scrolls to that round instead. The ⚙︎ button opens the
+  navigates to it; a match inside the current conversation scrolls to that round instead. The タグ (Tags) button opens the tags
+  dialog (the tag editor, a modal `<dialog id="tags-dialog">` built by `js/tags.js` and appended to `<body>`;
+  [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)) on every page; saving updates the page's tag choices. The ⚙︎ button opens the
   settings dialog (a modal `<dialog>`, `js/ui/settings-dialog.js`, appended to `<body>`): editing the browser settings and a connection test
-  ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+  ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
 - Narrow screens (720px or less): the conversation page hides the sidebar; the new conversation page shows it above its content.
 - The history sent back to the model is read from the DOM: each `<lcty-message>` reads its text from attributes, which
-  are exactly the saved strings ([LCTYSP-003](LCTYSP-003_conversation-file.md)). No JSON has to be fetched to open a
+  are exactly the saved strings ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). No JSON has to be fetched to open a
   conversation.
 
 ### Routing
@@ -47,8 +49,8 @@ a module imported once the page has loaded attaches every feature without blocki
   under a versioned path such as `/v1/`. The assets carry their version in the file name (`lcty.v1.*`).
 - Everything else under `/` is served from `public/` (`/` is
   `public/index.html`, the new conversation page).
-- Ruby answers dynamically under `/v1/*` ([LCTYSP-006](LCTYSP-006_http-api.md), including `/v1/defaults.json` of
-  [LCTYSP-010](LCTYSP-010_data-and-settings.md)). Everything under `/c/` is static.
+- Ruby answers dynamically under `/v1/*` ([LCTYSP-0006](LCTYSP-0006_http-api.md), including `/v1/defaults.json` of
+  [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Everything under `/c/` is static.
 - **Serving code lives per URL prefix:** `/c/` in `lib/c/servlet.rb` (`Chatty::C::Servlet`), `/v1/` in
   `lib/v1/servlet.rb` (`Chatty::V1::Servlet`). Everything about vectors (the vector binary and the vector DB) is under
   `lib/v1/` too.
@@ -63,17 +65,17 @@ a module imported once the page has loaded attaches every feature without blocki
 Every page loads the same files, from `/c/` over HTTP. What reading a conversation offline needs, `lcty.v1.js` (the
 frame) and `lcty.v1.css`, is also published at startup into `data/c/`, next to the conversation files: it belongs to
 the user together with the conversations it renders, so a backup of `data/` keeps both
-([LCTYSP-010](LCTYSP-010_data-and-settings.md)). Each copy is rewritten only when its content changed, and `/c/` never
+([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Each copy is rewritten only when its content changed, and `/c/` never
 serves them (above). Nothing else is published there; other files in `data/c/` (copies an older server made) are left
 as they are.
 
 **Rule (path design): `c/lcty.v1.*` holds what a conversation file loads.** The header lines load them by relative
 paths, so over HTTP they are `/c/lcty.v1.*` (in `public/c/`), and opened directly the two in `data/c/` are found next
 to the file. A file a conversation file does not need on its own (one that only serves the
-other pages, or a copy of server data such as the sidebar's meta database) is not a `/c/` file: it lives directly
-under `public/` and is served from the server's root, like the operation pages (`/meta_db.worker.js`,
-[LCTYSP-010](LCTYSP-010_data-and-settings.md); `/fuzzy_search.worker.js` and `/bdot264.wasm`,
-[LCTYSP-008](LCTYSP-008_vector-binary.md)). The `lcty.v1.` prefix is for `/c/` files only.
+other pages, or a copy of server data such as the sidebar's meta database) is not a `/c/` file: it lives under
+`public/` outside `public/c/` and is served from the server's root, like the operation pages (`/js/sync_c_meta.worker.js`,
+[LCTYSP-0010](LCTYSP-0010_data-and-settings.md); `/fuzzy_search.worker.js` and `/bdot264.wasm`,
+[LCTYSP-0008](LCTYSP-0008_vector-binary.md)). The `lcty.v1.` prefix is for `/c/` files only.
 
 The `/c/` files refer to each other by **relative paths only**, so they work wherever the folder is: over HTTP at
 `/c/` and opened directly from `data/c/` (`file://`, where only `lcty.v1.js` and `lcty.v1.css` are). The stylesheet is
@@ -94,13 +96,13 @@ Types and documentation of `lcty.v1.js` are in `public/c/lcty.v1.d.ts`. `public/
 The new conversation page has its own module entry, which is not part of `data/c/`: `public/index.js` (`/`,
 `js/pages/new.js`). It is bundled at startup and served from memory at `/index.js`
 (`lib/module_servlet.rb`). The entry only imports the page's init function (`initNewPage` in `js/pages/new.js`) and calls it.
-The workers are not `/c/` files either: `public/meta_db.worker.js` (`/meta_db.worker.js`, the sidebar's meta
-database, a copy of server data) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
+The workers are not `/c/` files either: `public/js/sync_c_meta.worker.js` (`/js/sync_c_meta.worker.js`, which fills the
+sidebar's meta database, a copy of server data; a module worker that no module imports, so it is never bundled) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
 with its kernel `public/bdot264.wasm`, built from `public/bdot264.wat`) work on server data, which a conversation file
 opened on its own does not need.
 
 - **The new conversation page's entry is bundled at startup** into one module file, by the module bundler
-  ([LCTYSP-011](LCTYSP-011_module-bundler.md)): every module becomes a block and its code is never rewritten. This
+  ([LCTYSP-0011](LCTYSP-0011_module-bundler.md)): every module becomes a block and its code is never rewritten. This
   relies on conventions the modules follow (imports and exports on single lines, immutable exports, and every module
   except the entry only declaring at its top level); the server does not start when one is broken. So module state is a
   `const state = { … }` literal, classes are returned by functions (`cmdElementClass`, `convListClass`), and only the
@@ -235,7 +237,7 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   `<lcty-cmd>`), the dialogs and forms (with the block `lcty-memory`), and last the narrow screens. A page's class that
   looks the same as a part shares its rule (`.hint, lcty-c::part(lcty-memory__hint)`), so one look is written once.
 - **Comments in the code say what a rule or element does; the reasons and the rules behind it are here.** The code
-  points to this section (LCTYSP-005) rather than repeating it.
+  points to this section (LCTYSP-0005) rather than repeating it.
 - Elements carry no stylesheet of their own, so many messages cost only their shadow roots. Measured with an 8 MB,
   6,000-message conversation: about 0.15 s from receiving it to `DOMContentLoaded` (about 20 ms without scripts; building
   each shadow root from `innerHTML` took 1–1.7 s).
@@ -307,12 +309,12 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
     hidden too. No script watches the children.
   - Buttons do nothing until the module has loaded.
 - **The sidebar's list is filled from the browser's copy of the meta, on every page.** `<lcty-sidebar>` fills its list
-  as soon as it is in the document, before any module has loaded ([LCTYSP-010](LCTYSP-010_data-and-settings.md)):
+  as soon as it is in the document, before any module has loaded ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
   - from the `localStorage` snapshot `lcty.meta.v1` (the newest 20 conversations: id, title, `updated_at_hint`,
     `tags_hint` and `messages_hint`),
     synchronously, so the first view is there at the first paint;
-  - when there is no snapshot, from IndexedDB `lcty` (store `meta`), asynchronously. The database is only read: when
-    it does not exist yet it is not created (the meta worker owns the schema), and the list stays empty.
+  - when there is no snapshot, from IndexedDB `lcty` (store `c_meta`), asynchronously. The database is only read: when
+    it does not exist yet it is not created (the meta sync worker owns the schema), and the list stays empty.
 
   These items have titles, dates, `tags_hint` as their tags and `messages_hint` as their counts (`showCached`), so
   they look the same as the module's items when the hints are up to date. `<lcty-c>`
@@ -321,7 +323,7 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   list, in this tab or another; a cached result that arrives after that is ignored. The sidebar does not fetch
   `/v1/conversations` to show the list. Before the first sync of a new browser the copy is empty, and the list stays
   blank instead of saying there are no conversations. A conversation created or changed outside this browser
-  appears when the copy is next invalidated ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+  appears when the copy is next invalidated ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
 - **Moving between pages keeps the sidebar in place.** `lcty.v1.css` turns on cross-document view transitions
   (`@view-transition { navigation: auto; }`) and names the sidebar (`view-transition-name: lcty-sidebar`), so on a
   same-origin navigation the browser keeps the sidebar where it is while the rest of the page changes. Only the sidebar

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Search box and conversation list of the sidebar, on every page (LCTYSP-007, LCTYSP-008).
+// Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0008).
 // With an empty box it lists newest first; otherwise it merges keyword search (server) and semantic search (browser) with RRF.
 // The list is the browser's copy of every conversation's meta (IndexedDB, api/meta-db.js): titles, dates, tags_hint as
 // the tags and messages_hint as the counts; it is read again whenever a sync has stored a new list. The rounds of each
@@ -12,7 +12,7 @@
 import {
 	onMetaDbChange,
 	readMetaDb,
-	syncMetaDbIfStale,
+	requestMetaDbSync,
 } from "../api/meta-db.js";
 import {
 	fetchSnippets,
@@ -66,7 +66,7 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		return state.rounds;
 	}
 
-	// The distribution files hold the vectors of the default embedding model only (LCTYSP-008)
+	// The distribution files hold the vectors of the default embedding model only (LCTYSP-0008)
 	let defaults = null;
 	async function checkModel(cfg) {
 		defaults ||= getDefaults().catch((e) => {
@@ -240,11 +240,11 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 	onMetaDbChange(load);
 
 	/**
-	 * Reload the list (on opening a page, after saving or renaming). The copy is refetched only when it was invalidated
-	 * (a change sent to the server), when idle; the new list then arrives through onMetaDbChange.
+	 * Reload the list (on opening a page, after saving or renaming) from the copy, and sync the copy when idle; the new
+	 * list then arrives through onMetaDbChange.
 	 */
 	async function refresh() {
-		syncMetaDbIfStale();
+		requestMetaDbSync();
 		await load();
 	}
 

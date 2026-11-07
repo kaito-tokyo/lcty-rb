@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Embeddings (LCTYSP-007, LCTYSP-008). The browser talks to the embedding model directly, to register the index and to vectorize queries.
+// Embeddings (LCTYSP-0007, LCTYSP-0008). The browser talks to the embedding model directly, to register the index and to vectorize queries.
 
 import { putVectors, vectorsPending } from "../api/storage.js";
 import { encodeRecords, FULL_DIM } from "./vectors.js";
@@ -48,7 +48,7 @@ export async function embedQuery(cfg, q, signal) {
 }
 
 /**
- * Embed and register the unindexed rounds one batch after another until none are left (LCTYSP-008).
+ * Embed and register the unindexed rounds one batch after another until none are left (LCTYSP-0008).
  * Every part of a round is embedded and PUT as a registration vector binary (768 dims). The server drops it if the revision (rev) changed.
  * Only one runs at a time. A kick() while running causes one more pass after it finishes.
  */

@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# The vector DB (persistent format, LCTYSP-008): a separate file per embedding model, data/_vectors.<model>.sqlite, ATTACHed
-# to the search index's connection so vectors can be joined with its rounds (chunks). Derived data (LCTYSP-010).
+# The vector DB (persistent format, LCTYSP-0008): a separate file per embedding model, data/_vectors.<model>.sqlite, ATTACHed
+# to the search index's connection so vectors can be joined with its rounds (chunks). Derived data (LCTYSP-0010).
 #
 #   vectors     vec = 768 dims (source of truth), vec256 = its first 256 dims renormalized (uniquely derived from vec).
 #               Both are Float32 BLOBs, L2-normalized. Stale when rev differs from chunks.rev
@@ -113,7 +113,7 @@ module Chatty
       ROW = OUT_DIM * 4 + ROW_PAD # 1,056 bytes
       ID = 16
 
-      # The distribution files of model's valid vectors (LCTYSP-008), [dat path, idx path], served as
+      # The distribution files of model's valid vectors (LCTYSP-0008), [dat path, idx path], served as
       # /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx. Derived data in data/, rewritten together on request when
       # stale (temporary files → rename, the idx first):
       #   _vectors.eg2_264.dat  n rows of 256 × Float32 LE + 32 zero bytes: the kernel's memory layout, copied as it is

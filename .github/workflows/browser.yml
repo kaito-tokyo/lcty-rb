@@ -47,10 +47,10 @@ jobs:
             [[ "$(docker compose ps --format '{{.Health}}' lcty)" == healthy ]] && exit 0
           done
 
-      - name: Run UI tests
+      - name: Run unit and UI tests
         env:
           LCTY_TEST_SERVER_URL: http://127.0.0.1:45290
-        run: npm run test:ui
+        run: npm test
 
       - name: Upload test results
         if: failure()

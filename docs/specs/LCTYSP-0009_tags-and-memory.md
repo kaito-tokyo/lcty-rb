@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-009: Tags and memory
+# LCTYSP-0009: Tags and memory
 
 - Status: Accepted
-- Related: [LCTYSP-002](LCTYSP-002_llm-backend.md), [LCTYSP-006](LCTYSP-006_http-api.md), [LCTYSP-007](LCTYSP-007_search.md), [LCTYSP-010](LCTYSP-010_data-and-settings.md)
+- Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 - Implementation: `lib/tag_store.rb`, `public/js/tags.js`
 
 ## Summary
@@ -18,12 +18,12 @@ the model and added only when the user approves it.
 
 ## Tags
 
-- There are no folders ([LCTYSP-007](LCTYSP-007_search.md)). Tags both shape a conversation and label it for filtering.
+- There are no folders ([LCTYSP-0007](LCTYSP-0007_search.md)). Tags both shape a conversation and label it for filtering.
 - **Tags are defined beforehand.** A tag has a name, an optional prompt and memory. Names are unique and contain no
   whitespace or `:` (to tell them apart from `tag:name` in search). The order of the definitions is the order in which
   drafts are composed.
 - **The system prompt can only be set before the conversation starts.** It is fixed by the first send and saved as the
-  conversation's instructions (the cache rule in [LCTYSP-002](LCTYSP-002_llm-backend.md)).
+  conversation's instructions (the cache rule in [LCTYSP-0002](LCTYSP-0002_llm-backend.md)).
 - **Tags are only a hint.** Choosing tags before starting composes a draft into the system prompt field; the user may
   edit it freely. What is sent is exactly the final content of that field.
 - **Adding or removing tags after the start does not change the system prompt.** Such changes only act as labels for
@@ -48,7 +48,7 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 - Changing tags before the start recomposes the draft and replaces the field. Once the user has edited the field by
   hand it is not replaced (so their text is not lost); a "Rebuild from tags" button appears instead.
 - More memory makes the first send of a new conversation heavier (prompt processing is about 450 tok/s, so 2,000 tokens
-  take about 4.5 s). The tag editor (the ⚙︎ at the end of the new conversation page's tag list) shows an estimate of the memory size.
+  take about 4.5 s). The tag editor (the sidebar's タグ button on every page, or the ⚙︎ at the end of the new conversation page's tag list) shows an estimate of the memory size.
 
 ### The tags of a conversation
 
@@ -57,15 +57,15 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 - **Changing tags later does not touch the conversation file.** The new tags are kept in `tags.sqlite` (table
   `conversation_tags`: the conversation id, the tags as a JSON array in the order given, and when they were set). The
   current tags are that row, or `data-setup-tags` when the tags were never changed
-  ([LCTYSP-003](LCTYSP-003_conversation-file.md)). Deleting a conversation deletes its row. Tag names need not be
+  ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). Deleting a conversation deletes its row. Tag names need not be
   defined (an undefined one shows as such), and renaming a tag definition does not rename it in conversations.
 - The page sends a change as a `tags` line (`POST /v1/conversations/:id/lines`), which the server stores in
   `tags.sqlite` instead of appending it; the search index (`conv_tags`) follows it.
 - **For now the header shows the tags at creation** (`data-setup-tags`), also after a change; the current tags live in
-  `tags.sqlite`, and the sidebar and search use them ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
+  `tags.sqlite`, and the sidebar and search use them ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 - Not adopted: appending an `lcty-tags` line to the file on each change. Tags are a hint for search and memory, not
   part of the record of the conversation, and keeping them out of the file keeps the file append-only for messages.
-- A fork inherits its source's instructions and current tags ([LCTYSP-004](LCTYSP-004_editing.md)).
+- A fork inherits its source's instructions and current tags ([LCTYSP-0004](LCTYSP-0004_editing.md)).
 
 ## Memory
 
@@ -92,7 +92,7 @@ UI → storage:  POST /v1/tags/:name/memory for each accepted one
 - **The temporary message is never saved** and does not enter the history.
 - **It is sent as a continuation, so the cache applies.** The prefix (instructions and the whole history) equals the
   previous state, so only the temporary message is computed. Continuing the conversation afterwards is also cheap, since
-  llama-server keeps a checkpoint before the last user message ([LCTYSP-002](LCTYSP-002_llm-backend.md)).
+  llama-server keeps a checkpoint before the last user message ([LCTYSP-0002](LCTYSP-0002_llm-backend.md)).
 - The targets are the conversation's current tags (including labels added after the start).
 - Proposals only add items. Rewriting or removing existing items is not proposed; the user tidies memory in the tag
   editor.
@@ -100,7 +100,7 @@ UI → storage:  POST /v1/tags/:name/memory for each accepted one
 ## Storage
 
 Tags and memory are source-of-truth data in `data/tags.sqlite`
-([LCTYSP-010](LCTYSP-010_data-and-settings.md)):
+([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
 
 ```sql
 CREATE TABLE tags (name TEXT PRIMARY KEY, prompt TEXT, position INTEGER NOT NULL);  -- position = draft order

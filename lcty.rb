@@ -7,14 +7,14 @@
 # -*- encoding: utf-8 -*-
 #
 # lcty-rb: static file server + JSON document store.
-# Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the LLM (LCTYSP-001).
+# Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the LLM (LCTYSP-0001).
 #
 #   /usr/bin/ruby lcty.rb                            # => http://127.0.0.1:45280
 #   LCTY_HOST=192.168.1.10 /usr/bin/ruby lcty.rb     # => http://192.168.1.10:45280 (that address only)
 #
-# This file only wires the servlets together (plus transparent gzip); the code lives in lib/ (LCTYSP-005).
+# This file only wires the servlets together (plus transparent gzip); the code lives in lib/ (LCTYSP-0005).
 
-# Without LANG the default is US-ASCII, so fix it first (LCTYSP-001).
+# Without LANG the default is US-ASCII, so fix it first (LCTYSP-0001).
 Encoding.default_external = Encoding::UTF_8
 
 require 'webrick'

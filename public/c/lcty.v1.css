@@ -5,7 +5,7 @@
  */
 
 /* lcty.v1.css: the stylesheet of every page and conversation file. Its rules (parts in BEM, no global reset,
-   box-sizing, the order of the sections): LCTYSP-005, Styling. */
+   box-sizing, the order of the sections): LCTYSP-0005, Styling. */
 
 /* ---- tokens ---- */
 :root {
@@ -177,7 +177,7 @@ lcty-c::part(lcty-c__tag--unknown) {
 
 /* ---- pages ---- */
 /* moving between pages: a cross-document view transition of the sidebar only (it has its own name); the rest of the
-   page is not captured, so it changes at once (LCTYSP-005) */
+   page is not captured, so it changes at once (LCTYSP-0005) */
 @view-transition {
 	navigation: auto;
 }
@@ -244,15 +244,23 @@ lcty-c::part(lcty-c__sidebar) {
 lcty-sidebar::part(lcty-sidebar__nav),
 lcty-c::part(lcty-sidebar__nav) {
 	display: flex;
-	gap: 6px;
+	gap: 4px;
 	padding: 10px;
-	flex-wrap: wrap;
 }
-/* the new link, the refresh button and the settings button are lcty-button (new: --primary) */
+/* the new link and the tags, refresh and settings buttons are lcty-button (new: --primary) */
 lcty-sidebar::part(lcty-sidebar__link),
 lcty-c::part(lcty-sidebar__link) {
 	display: inline-block;
 	text-decoration: none;
+	flex: none;
+}
+/* the buttons stay on one line: when they do not fit (a wide font, a long translation), the new link gives way */
+lcty-sidebar::part(lcty-sidebar__new),
+lcty-c::part(lcty-sidebar__new) {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 lcty-sidebar::part(lcty-sidebar__search-box),
 lcty-c::part(lcty-sidebar__search-box) {
@@ -350,7 +358,7 @@ lcty-c::part(lcty-conv-list__meta) {
 	font-weight: normal;
 }
 
-/* ---- <lcty-c>: the conversation screen (layout: LCTYSP-005) ---- */
+/* ---- <lcty-c>: the conversation screen (layout: LCTYSP-0005) ---- */
 lcty-c {
 	display: flex;
 	flex-direction: column;

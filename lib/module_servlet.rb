@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# The module entries of the operation pages (/index.js. LCTYSP-005):
+# The module entries of the operation pages (/index.js. LCTYSP-0005):
 # public/<name>.js bundled at startup (Bundle) and served from memory.
 
 require 'webrick'

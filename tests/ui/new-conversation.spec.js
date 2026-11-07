@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The new conversation page / (LCTYSP-004 "Starting a conversation", LCTYSP-005, LCTYSP-009).
+// The new conversation page / (LCTYSP-0004 "Starting a conversation", LCTYSP-0005, LCTYSP-0009).
 
 import {
 	composerInput,
@@ -26,7 +26,7 @@ test.afterEach(async ({ request }) => {
 	await putTags(request, []);
 });
 
-test("the top page shows the sidebar and the creation card (LCTYSP-005)", async ({
+test("the top page shows the sidebar and the creation card (LCTYSP-0005)", async ({
 	page,
 }) => {
 	await openNewPage(page);
@@ -36,7 +36,7 @@ test("the top page shows the sidebar and the creation card (LCTYSP-005)", async 
 	await expect(composerInput(page)).toBeFocused();
 });
 
-test("sending the first message creates the conversation and generates the reply (LCTYSP-004)", async ({
+test("sending the first message creates the conversation and generates the reply (LCTYSP-0004)", async ({
 	page,
 	request,
 	llm,
@@ -58,7 +58,7 @@ test("sending the first message creates the conversation and generates the reply
 	await waitForSaved(request, id, 2);
 });
 
-test("Shift+Enter inserts a newline instead of sending (LCTYSP-005)", async ({
+test("Shift+Enter inserts a newline instead of sending (LCTYSP-0005)", async ({
 	page,
 }) => {
 	await openNewPage(page);
@@ -77,7 +77,7 @@ test("an empty message is not sent", async ({ page }) => {
 	await expect(page).toHaveURL(/\/$/);
 });
 
-test("choosing a tag fills the system prompt draft from its prompt and memory (LCTYSP-009)", async ({
+test("choosing a tag fills the system prompt draft from its prompt and memory (LCTYSP-0009)", async ({
 	page,
 	request,
 	llm,
@@ -109,7 +109,7 @@ test("choosing a tag fills the system prompt draft from its prompt and memory (L
 	expect((await res.json()).tags).toEqual([name]);
 });
 
-test("a fork starts from the source's system prompt and puts the chosen message into the composer (LCTYSP-004)", async ({
+test("a fork starts from the source's system prompt and puts the chosen message into the composer (LCTYSP-0004)", async ({
 	page,
 	request,
 }) => {

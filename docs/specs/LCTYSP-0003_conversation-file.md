@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-003: Conversation file
+# LCTYSP-0003: Conversation file
 
 - Status: Accepted
-- Related: [LCTYSP-004](LCTYSP-004_editing.md), [LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-008](LCTYSP-008_vector-binary.md)
+- Related: [LCTYSP-0004](LCTYSP-0004_editing.md), [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md)
 - Implementation: `lib/conv_html.rb`, `lib/store.rb`
 
 ## Summary
@@ -20,7 +20,7 @@ is sent back to the model lives in attributes (the source of truth); child eleme
 
 JSONL's one-record-per-line rule only works around the fact that JSON cannot be appended to. HTML can be appended to by
 adding sibling elements at the end, keeps newlines in text as they are, and can be rendered directly as the
-conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
+conversation page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 
 ## File layout
 
@@ -41,19 +41,19 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
   with `</head>`. It loads `lcty.v1.js` (the element definitions, which define the elements at its end) and
   `lcty.v1.lang-ja.js` (the Japanese texts, registered with `LctyT`), in that order, as classic scripts, and links the
   stylesheet. The page's features, `lcty.v1.module.js`, are not in the header: `<lcty-c>` imports them once the page
-  has loaded, so they never block rendering ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). There is no inline script. The
+  has loaded, so they never block rendering ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). There is no inline script. The
   `/>` on `<html>` (and on `<lcty-c>`) is ignored by the HTML parser. Opened over HTTP, the file shows as the
   conversation.
 - **Opened directly (`file://`, offline), the file still shows as the conversation.** It needs nothing but
   `lcty.v1.js` and `lcty.v1.css` next to it in `data/c/`, loaded by relative paths from line 2 (no Shadow DOM loads
-  anything of its own, [LCTYSP-005](LCTYSP-005_page-and-elements.md)): the classic script builds the frame. Only
+  anything of its own, [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)): the classic script builds the frame. Only
   reading is supported there, and every error is left as it is: the language script is not next to it (the frame shows
   the English x-default texts; the conversation itself is in the file), and importing the module fails (browsers refuse
   module scripts from `file://`, whose origin is `null`), so nothing is sent, nothing reaches the LLM server, and the
   sidebar's list is empty unless that origin has its own cached copy. None of this is needed to read it.
 - **The head lines (1 to 4) hold only what a list of conversations needs:** the title, the id, the tags at creation and
   the creation time. Collecting them is enough to build the sidebar's database (`GET /v1/meta-all.json` reads only
-  these lines of each file, [LCTYSP-006](LCTYSP-006_http-api.md)). The system prompt, which may be long, is not among
+  these lines of each file, [LCTYSP-0006](LCTYSP-0006_http-api.md)). The system prompt, which may be long, is not among
   them; it is on line 5.
 - **Line 3 is the title slot:** `<title id="__512">[begin]…[end]<!---->`. The `<title>` comes after `</head>`; the
   parser moves it into the head, so it is the document's own title (the tab shows it even without JavaScript). The id
@@ -71,7 +71,7 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
   - `id`: `c-` followed by the conversation id (see the id prefixes below);
   - `data-setup-tags`: the tags the conversation was created with (space separated, omitted when empty). **Tag
     changes are not written to the file:** they are kept in `tags.sqlite`, and the current tags are those, or these
-    when the tags were never changed ([LCTYSP-009](LCTYSP-009_tags-and-memory.md));
+    when the tags were never changed ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md));
   - `data-created-at`: when the conversation was created.
 
   In HTML the `/>` is ignored, so `<lcty-c>` stays open until the end of the file and every element from line 5 on
@@ -110,19 +110,19 @@ conversation page ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `<title>`      | The title, in the slot on line 3 (not an element of the body); changing it overwrites the slot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `lcty-setup`   | The system prompt actually sent: `data-instructions` (or `data-instructions-base64`). Written on line 5 when the conversation is created. **Written exactly once and never overridden:** only the first `lcty-setup` counts, and a later one is ignored.                                                                                                                                                                                                                                                                                                                                                                   |
-| `lcty-cmd`     | A command tag: an operation to run, abstracted as `data-op` (lowercase letters, digits and `-`) with `data-at`. A command written to the file runs when the file is opened while it is still the last element (deferred execution); commands appended only in memory never reach the file (volatile execution). Unknown operations are ignored. Today only `send`, written as the last line when a conversation is created ([LCTYSP-004](LCTYSP-004_editing.md)). Shown only while running (spinner and stop).                                                                                                             |
+| `lcty-cmd`     | A command tag: an operation to run, abstracted as `data-op` (lowercase letters, digits and `-`) with `data-at`. A command written to the file runs when the file is opened while it is still the last element (deferred execution); commands appended only in memory never reach the file (volatile execution). Unknown operations are ignored. Today only `send`, written as the last line when a conversation is created ([LCTYSP-0004](LCTYSP-0004_editing.md)). Shown only while running (spinner and stop).                                                                                                           |
 | `lcty-message` | One message. `id` is `c-msg-` followed by the message UUIDv7, so `#c-msg-…` links to the element. Attributes: `data-role`, `data-at`, `data-status`, `data-error`, `data-inherited`; JSON attributes `data-timings`, `data-client`, `data-usage`. Text is `data-content`, thinking is `data-thinking` (each `-base64` when needed, see below). Children are presentation: `div.user-text` for the user and `<article>` for the assistant. **Thinking has no presentation in the file**: it is `data-thinking` only, since it is not needed to read the conversation, and the page shows it (collapsed) from the attribute. |
 
 - `data-status` is `completed` or `incomplete` (stopped or failed). A generating message is not written; it is appended
   once complete.
 - `data-timings` is shown on screen and used for debugging. Whether the cache applied is visible in `cache_n`
   (`usage.cached_tokens` stays 0 and cannot be trusted).
-- `data-inherited="true"` marks a message copied from the fork source ([LCTYSP-004](LCTYSP-004_editing.md)).
+- `data-inherited="true"` marks a message copied from the fork source ([LCTYSP-0004](LCTYSP-0004_editing.md)).
 
 ### Message ids
 
 - Message ids are **UUIDv7** in canonical lowercase form. The first 48 bits are milliseconds, so ids sort roughly by
-  creation time. They are 16 bytes in the vector binary ([LCTYSP-008](LCTYSP-008_vector-binary.md)).
+  creation time. They are 16 bytes in the vector binary ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)).
 - Both the browser (`newMsgId`) and Ruby (`Uuid.v7`) create them. Ruby rejects message ids that are not UUIDv7 with
   400 and assigns one to a message that has none.
 - A fork copies messages with their ids unchanged.

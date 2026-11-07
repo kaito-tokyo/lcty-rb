@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Tag definitions, memory and the tags of each conversation (LCTYSP-009). Source-of-truth data (the name does not start
+# Tag definitions, memory and the tags of each conversation (LCTYSP-0009). Source-of-truth data (the name does not start
 # with _).
 #
 #   tags               name, prompt, position (the order in which drafts are joined)

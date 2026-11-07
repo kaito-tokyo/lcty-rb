@@ -4,10 +4,10 @@
 
 // Shared fixtures of the UI tests.
 //
-// - llm: a fake llama-server. The browser talks to llama-server directly (LCTYSP-001, LCTYSP-002), so the tests point
+// - llm: a fake llama-server. The browser talks to llama-server directly (LCTYSP-0001, LCTYSP-0002), so the tests point
 //   the settings at LLM_URL and answer its requests inside the browser context (POST /v1/responses as SSE,
 //   POST /v1/embeddings). Replies are queued per test with llm.reply(…); with none queued it answers DEFAULT_REPLY.
-// - Helpers that create conversations through the HTTP API (LCTYSP-006) and that wait until a page's module has
+// - Helpers that create conversations through the HTTP API (LCTYSP-0006) and that wait until a page's module has
 //   attached its features.
 
 import { randomBytes, randomUUID } from "node:crypto";
@@ -120,9 +120,9 @@ export const test = base.extend({
 	],
 });
 
-// ---- Data through the HTTP API (LCTYSP-006) ----
+// ---- Data through the HTTP API (LCTYSP-0006) ----
 
-/** A UUIDv7 (message ids must be one, LCTYSP-003). */
+/** A UUIDv7 (message ids must be one, LCTYSP-0003). */
 export function uuidv7() {
 	const b = Buffer.from(randomUUID().replaceAll("-", ""), "hex");
 	b.writeUIntBE(Date.now(), 0, 6);
@@ -181,7 +181,7 @@ export async function waitForSaved(request, id, n) {
 		.toBe(n);
 }
 
-/** Replace every tag definition (PUT /v1/tags, LCTYSP-009). */
+/** Replace every tag definition (PUT /v1/tags, LCTYSP-0009). */
 export async function putTags(request, tags) {
 	const res = await request.put("/v1/tags", { data: { tags } });
 	expect(res.ok(), await res.text()).toBeTruthy();

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Saved data → Responses API input (LCTYSP-002).
+// Saved data → Responses API input (LCTYSP-0002).
 // To keep the cache effective, this is a pure function that lays out the saved strings mechanically, without changing them.
 //  - past thinking is not sent
 //  - assistant messages with an empty body (aborted by an error) are not sent

@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-001: Architecture
+# LCTYSP-0001: Architecture
 
 - Status: Accepted
-- Related: [LCTYSP-002](LCTYSP-002_llm-backend.md), [LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-010](LCTYSP-010_data-and-settings.md)
+- Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 
 ## Summary
 
@@ -41,7 +41,7 @@ Two principles drive the design:
 
 1. **Inference traffic never goes through Ruby.** The browser talks to llama-server directly.
 2. **The prefix of the history sent to the model stays identical across requests.** llama-server reuses its cache for
-   the shared prefix and recomputes everything after the first difference ([LCTYSP-002](LCTYSP-002_llm-backend.md)).
+   the shared prefix and recomputes everything after the first difference ([LCTYSP-0002](LCTYSP-0002_llm-backend.md)).
 
 ## Decisions
 
@@ -50,29 +50,29 @@ Two principles drive the design:
 - Removes the latency of a relay and the fragile part of relaying SSE through WEBrick. Stopping uses `AbortController`.
 - Verified: llama-server answers preflight requests, echoes the `Origin` in `Access-Control-Allow-Origin`, and allows
   every header (`*`), including `Authorization`.
-- The API key is a browser setting whose default comes from `GET /v1/defaults.json` ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+- The API key is a browser setting whose default comes from `GET /v1/defaults.json` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
   This is acceptable because everything is bound to localhost; the key only guards against connecting to the wrong server.
 
 ### Ruby has three jobs: serving static files, the storage API, and the search index
 
 - Ruby does not know the LLM exists. It never talks to the chat model or the embedding model.
 - Ruby barely interprets conversations. The exceptions are the rule that limits undo to one turn
-  ([LCTYSP-004](LCTYSP-004_editing.md)), validation of what it writes ([LCTYSP-003](LCTYSP-003_conversation-file.md)),
-  and deriving the search index ([LCTYSP-007](LCTYSP-007_search.md)).
+  ([LCTYSP-0004](LCTYSP-0004_editing.md)), validation of what it writes ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)),
+  and deriving the search index ([LCTYSP-0007](LCTYSP-0007_search.md)).
 - Pages are static files. Ruby never assembles HTML from templates; it only serves files (publishing `lcty.v1.js` and `lcty.v1.css` into `data/c/` and bundling the module entries at startup) and answers `/v1/*`
-  ([LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-006](LCTYSP-006_http-api.md)).
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0006](LCTYSP-0006_http-api.md)).
 
 ### The source of truth is files on the server
 
 - One conversation is one file, `data/c/<id>.html`, and it is append-only
-  ([LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-004](LCTYSP-004_editing.md)).
+  ([LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0004](LCTYSP-0004_editing.md)).
 - The browser keeps only caches for display.
-- Files whose names start with `_` are derived data and can be rebuilt ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+- Files whose names start with `_` are derived data and can be rebuilt ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
 
 ### No build step on the front end
 
 - Plain ES modules, no external libraries and no CDN.
-- Pages are a multi-page application: every page has its own URL ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
+- Pages are a multi-page application: every page has its own URL ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 
 ### Runs on macOS's Ruby.framework
 
@@ -83,7 +83,7 @@ Two principles drive the design:
 
 ## Security
 
-- Listens on `127.0.0.1` by default; `LCTY_HOST` names another address ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+- Listens on `127.0.0.1` by default; `LCTY_HOST` names another address ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
   There is no authentication, so an address other than loopback makes the conversations readable and writable by
   anyone who can reach it.
 - Requests are not checked: there is no `Host` / `Origin` check and no headers are added to every response. The server
@@ -112,5 +112,5 @@ Measured with gemma-4-26B-A4B on an Apple silicon Mac:
 - Prompt processing runs at about 450 tok/s and generation at about 40–55 tok/s, so perceived speed depends almost
   entirely on whether the prefix can be reused.
 - Browser and Ruby processing are noise compared with that, but stream rendering must never fall behind generation
-  ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 - **Search budget: an operation that finishes within 50 ms counts as instant.** Nothing is optimized beyond that.

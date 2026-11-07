@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Settings dialog (LCTYSP-010), a modal <dialog> opened from the sidebar's ⚙︎ button on every page. Edits the browser settings:
+// Settings dialog (LCTYSP-0010), a modal <dialog> opened from the sidebar's ⚙︎ button on every page. Edits the browser settings:
 // defaults come from /v1/defaults.json, changes go to localStorage.
 
 import { getDefaults } from "../api/storage.js";

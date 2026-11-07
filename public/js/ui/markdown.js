@@ -5,7 +5,7 @@
 // Markdown → HTML (pure functions, no DOM).
 //
 // For streaming rendering it is split into scanBlocks(), which cuts text into blocks,
-// and renderBlock(), which turns one block into HTML (LCTYSP-005).
+// and renderBlock(), which turns one block into HTML (LCTYSP-0005).
 // Supported: paragraphs / headings / rules / code blocks / quotes / lists (nested) / tables /
 //            bold, italic, strikethrough, inline code, links, bare-URL autolinks and suggested next messages
 //            (<suggestion-for-user-turn>text</suggestion-for-user-turn>, rendered as a button).

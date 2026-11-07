@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# /c/: conversation files and the files their header lines load (LCTYSP-005). Mounted at /c by chatty.rb.
+# /c/: conversation files and the files their header lines load (LCTYSP-0005). Mounted at /c by chatty.rb.
 # /c/ URLs are permanent, so the entry files carry their version in the name (lcty.v1.*), never in the path.
 #
 # The files under public/c/ (lcty.v1.*) are served as they are from public/c/ itself, so an edit there shows at the next
@@ -12,9 +12,9 @@
 # lcty.v1.module.js imports the modules in public/js/ itself (served from the server's root).
 # What reading a conversation offline needs, lcty.v1.js (the frame) and lcty.v1.css, is also published next to the
 # conversation files in data/c/ at startup, so a backup of data/ keeps conversations together with what renders them
-# (LCTYSP-010). Opened directly, a file shows with the English x-default texts and without features.
+# (LCTYSP-0010). Opened directly, a file shows with the English x-default texts and without features.
 # Path rule: c/lcty.v1.* holds exactly what a conversation file needs where it is (opened directly, offline); a file it
-# does not need on its own (the sidebar's meta database worker, …) lives directly under public/ instead (LCTYSP-005).
+# does not need on its own (the sidebar's meta sync worker, …) lives under public/ outside public/c/ instead (LCTYSP-0005).
 
 require 'fileutils'
 require 'securerandom'

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Features of the conversation elements (LCTYSP-005). The custom elements in /c/lcty.v1.js (built from public/c/lcty.v1.js) build the DOM structure and expose
+// Features of the conversation elements (LCTYSP-0005). The custom elements in /c/lcty.v1.js (built from public/c/lcty.v1.js) build the DOM structure and expose
 // their inner elements as fields (container.composer, composer.input, message.undoButton, …). Nothing is added to the elements here;
 // handlers are attached directly to the exposed elements, and features are plain functions that operate on the DOM.
 //
@@ -13,7 +13,7 @@
 //   appendText / appendThinking / finishMessage   incremental rendering while generating
 //   initComposer / setComposerValue / setComposerBusy / focusComposer
 //
-// Elements from the conversation file (dual recording. LCTYSP-003) read the message from attributes and keep the saved presentation children as they are.
+// Elements from the conversation file (dual recording. LCTYSP-0003) read the message from attributes and keep the saved presentation children as they are.
 // Per-element state lives in WeakMaps made on first use (state).
 
 import { tr } from "../i18n.js";
@@ -27,7 +27,7 @@ import { textAttr } from "./text-attr.js";
 
 const GENERATOR = "lcty.v1"; // The renderer that produced the saved presentation HTML (data-generator)
 
-// ---- Incremental Markdown rendering (the reply body <article>. LCTYSP-005) ----
+// ---- Incremental Markdown rendering (the reply body <article>. LCTYSP-0005) ----
 // Finished blocks are fixed in the DOM; only the unfinished block is redrawn inside .md-tail.
 // An unfinished code block is appended to a text node instead of being redrawn.
 
@@ -252,10 +252,10 @@ function jsonAttr(el, name) {
 	}
 }
 
-/** Build the message object from the attributes of a <lcty-message> from the conversation file (LCTYSP-003). */
+/** Build the message object from the attributes of a <lcty-message> from the conversation file (LCTYSP-0003). */
 function messageFromAttributes(el) {
 	const d = el.dataset;
-	const m = { id: el.id.replace(/^c-msg-/, ""), role: d.role, at: d.at }; // id="c-msg-<UUIDv7>" (LCTYSP-003)
+	const m = { id: el.id.replace(/^c-msg-/, ""), role: d.role, at: d.at }; // id="c-msg-<UUIDv7>" (LCTYSP-0003)
 	if (d.status) m.status = d.status;
 	if (d.error) m.error = d.error;
 	if (d.inherited === "true") m.inherited = true;

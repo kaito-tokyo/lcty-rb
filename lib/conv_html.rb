@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Reading and writing conversation files (HTML fragments of Custom Elements. LCTYSP-003).
+# Reading and writing conversation files (HTML fragments of Custom Elements. LCTYSP-0003).
 #
 #   Write: line objects ({type: meta|title|cmd|message, …}) → build elements with the Nokogiri DOM → to_xhtml
 #          → reparse as strict XML to make sure it is well-formed
@@ -23,7 +23,7 @@ module Chatty
     JSON_ATTRS = { 'timings' => 'data-timings', 'client' => 'data-client', 'usage' => 'data-usage' }.freeze
 
     class FormatError < StandardError; end
-    # A character XML 1.0 cannot represent, found outside the text strings (ids, tag names, …. LCTYSP-003)
+    # A character XML 1.0 cannot represent, found outside the text strings (ids, tag names, …. LCTYSP-0003)
     class InvalidCharError < FormatError; end
 
     # C0 controls other than tab, LF and CR, plus U+FFFE / U+FFFF (not even as character references; surrogates never appear in UTF-8 strings)
@@ -110,7 +110,7 @@ module Chatty
       end
     end
 
-    # The head of a conversation file (LCTYSP-003): lines 1 to 4. Ruby reads them on their own (the conversation list
+    # The head of a conversation file (LCTYSP-0003): lines 1 to 4. Ruby reads them on their own (the conversation list
     # needs only these), and the elements start on line 5:
     #   1. <!DOCTYPE html><html lang="ja" />
     #   2. <head> with the files it loads: lcty.v1.js and lcty.v1.lang-ja.js (classic scripts, so a file opened directly
@@ -190,13 +190,13 @@ module Chatty
     end
 
     # The meta: line 4's <lcty-c> attributes (id, tags at creation, created_at) and the first lcty-setup's
-    # instructions. Written once when the conversation is created and never overridden (LCTYSP-003).
+    # instructions. Written once when the conversation is created and never overridden (LCTYSP-0003).
     def current_meta(lines)
       lines.find { |l| l['type'] == 'meta' } || {}
     end
 
     # The whole conversation file: the header (lines 1 and 2), the title line, <lcty-c>, then lcty-setup and the other
-    # elements (LCTYSP-003)
+    # elements (LCTYSP-0003)
     def document(lines)
       title = current_title(lines)
       meta = current_meta(lines)
@@ -239,7 +239,7 @@ module Chatty
       text.each_line.drop(HEAD_LINES).join
     end
 
-    # ---- The head before 2026-11-07 (read only; the server rewrites such files at startup, LCTYSP-003) ----
+    # ---- The head before 2026-11-07 (read only; the server rewrites such files at startup, LCTYSP-0003) ----
     # Three lines starting with "<!": the header with data-lcty-tlrange="0x…,0x…" (the title slot's byte range), then
     # <!--lcty-meta--><title>…</title><!--…--> and <!--lcty-meta--><lcty-c …> (never closed).
     LEGACY_MARK = '<!--lcty-meta-->'
@@ -285,29 +285,29 @@ module Chatty
       doc = Nokogiri::HTML5::Document.parse('')
       case obj['type']
       when 'setup'
-        # The system prompt, line 4. Written once, when the conversation is created (LCTYSP-003).
+        # The system prompt, line 4. Written once, when the conversation is created (LCTYSP-0003).
         e = node(doc, 'lcty-setup')
         set_text(e, 'data-instructions', obj['instructions'].to_s)
         e
       when 'cmd'
         # A command tag: an operation to run, written at the end of the file. The page runs it when the file ends with it
-        # (send = generate a reply at once. LCTYSP-004)
+        # (send = generate a reply at once. LCTYSP-0004)
         raise FormatError, "invalid command: #{obj['op'].inspect}" unless CMD_OP_RE.match?(obj['op'].to_s)
         node(doc, 'lcty-cmd', 'data-op' => obj['op'], 'data-at' => obj['at'])
       when 'message'
         attrs = {
-          # id is "c-msg-" + the message UUIDv7, so #c-msg-… links to it (LCTYSP-003)
+          # id is "c-msg-" + the message UUIDv7, so #c-msg-… links to it (LCTYSP-0003)
           'id' => obj['id'] && "c-msg-#{obj['id']}", 'data-role' => obj['role'], 'data-at' => obj['at'], 'data-status' => obj['status'],
           'data-error' => obj['error'] && visible(obj['error']), 'data-inherited' => obj['inherited'] ? 'true' : nil
         }
         JSON_ATTRS.each { |k, a| attrs[a] = JSON.generate(obj[k]) if obj[k] }
         e = node(doc, 'lcty-message', attrs)
-        # The attribute is the source of truth; children are for display (dual recording. LCTYSP-003)
+        # The attribute is the source of truth; children are for display (dual recording. LCTYSP-0003)
         set_text(e, 'data-content', obj['content'].to_s)
         if obj['role'] == 'user'
           e.add_child(node(doc, 'div', { 'class' => 'user-text' }, visible(obj['content'])))
         else
-          # Thinking is the attribute only: it has no presentation in the file (the page builds one from it, LCTYSP-003)
+          # Thinking is the attribute only: it has no presentation in the file (the page builds one from it, LCTYSP-0003)
           thinking = obj['thinking'].to_s
           set_text(e, 'data-thinking', thinking) unless thinking.empty?
           # The browser renders the presentation HTML with markdown.js and sends it. Without it, leave this empty and the module renders from the attribute

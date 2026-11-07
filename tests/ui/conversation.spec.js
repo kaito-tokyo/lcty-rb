@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The conversation page /c/<id>.html: sending, the reply's rendering, undo / regenerate / fork, stopping and errors,
-// the title and deleting (LCTYSP-003, LCTYSP-004, LCTYSP-005).
+// the title and deleting (LCTYSP-0003, LCTYSP-0004, LCTYSP-0005).
 
 import {
 	composerInput,
@@ -34,7 +34,7 @@ async function openTwoTurns(page, request) {
 }
 
 test.describe("sending", () => {
-	test("a message sent on the conversation page gets a reply and both are saved (LCTYSP-004)", async ({
+	test("a message sent on the conversation page gets a reply and both are saved (LCTYSP-0004)", async ({
 		page,
 		request,
 		llm,
@@ -68,7 +68,7 @@ test.describe("sending", () => {
 		await expect(messages(page)).toHaveCount(6);
 	});
 
-	test("a reply starting with a level-1 heading becomes the title (LCTYSP-003)", async ({
+	test("a reply starting with a level-1 heading becomes the title (LCTYSP-0003)", async ({
 		page,
 		request,
 		llm,
@@ -104,7 +104,7 @@ test.describe("sending", () => {
 	});
 });
 
-test.describe("rendering a reply (LCTYSP-005)", () => {
+test.describe("rendering a reply (LCTYSP-0005)", () => {
 	test("Markdown is rendered and raw HTML or script URLs never reach the DOM", async ({
 		page,
 		request,
@@ -204,7 +204,7 @@ test.describe("rendering a reply (LCTYSP-005)", () => {
 	});
 });
 
-test.describe("undo, regenerate and fork (LCTYSP-004)", () => {
+test.describe("undo, regenerate and fork (LCTYSP-0004)", () => {
 	test("only the last user message has undo, and only the last reply has regenerate", async ({
 		page,
 		request,
@@ -291,7 +291,7 @@ test.describe("undo, regenerate and fork (LCTYSP-004)", () => {
 	});
 });
 
-test.describe("stopping and errors (LCTYSP-004)", () => {
+test.describe("stopping and errors (LCTYSP-0004)", () => {
 	test("the stop button ends the generation and keeps the reply as incomplete", async ({
 		page,
 		request,

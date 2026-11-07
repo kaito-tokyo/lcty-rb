@@ -4,17 +4,17 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-011: Module bundler
+# LCTYSP-0011: Module bundler
 
 - Status: Accepted
-- Related: [LCTYSP-005](LCTYSP-005_page-and-elements.md), [LCTYSP-010](LCTYSP-010_data-and-settings.md)
+- Related: [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 - Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/module_servlet.rb` (`/index.js`)
 
 ## Summary
 
 At startup the server turns the new conversation page's module entry (`/index.js`) and every module it imports into one
 module file. The conversation page's entry, `lcty.v1.module.js`, is not bundled: it is served as it is and the browser
-imports the modules itself ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). The bundler is
+imports the modules itself ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The bundler is
 a few regular expressions on whole lines: each module becomes a block, its import lines become `const` aliases, and a
 `var` at the end of the block publishes its exports. The code of a module is never rewritten. This is correct only
 because the modules follow strict conventions, and the bundler refuses to start the server when one does not.

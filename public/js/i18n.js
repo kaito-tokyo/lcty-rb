@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// UI texts (LCTYSP-005). Every text a user sees goes through tr(): it looks the key up in LctyT (lcty.v1.js; the
+// UI texts (LCTYSP-0005). Every text a user sees goes through tr(): it looks the key up in LctyT (lcty.v1.js; the
 // languages are lcty.v1.lang-<lang>.js, chosen by <html lang>) and falls back to the English x-default given with
 // the key. Code outside this mechanism writes no Japanese.
 

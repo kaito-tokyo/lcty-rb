@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// UI tests (tests/ui). The Ruby server runs on its own port with a fresh, empty data directory, and llama-server is
+// The unit tests (tests/unit; their Gherkin features are docs/specs/LCTYSP-1xxx) and the UI tests (tests/ui; LCTYSP-2xxx). Both run in
+// the browsers against the Ruby server, which runs on its own port with a fresh, empty data directory. llama-server is
 // replaced by a fake inside the browser (tests/ui/fixtures.js), so neither the real data nor the models are touched.
 
 import { mkdtempSync } from "node:fs";
@@ -19,7 +20,7 @@ if (!external)
 	process.env.LCTY_TEST_DATA_DIR ??= mkdtempSync(join(tmpdir(), "lcty-ui-"));
 
 export default defineConfig({
-	testDir: "tests/ui",
+	testDir: "tests", // tests/unit and tests/ui
 	globalTeardown: "./tests/ui/global-teardown.js", // LCTY_TEST_KEEP_DATA=1 keeps the data directory to look at
 	fullyParallel: false,
 	workers: 1, // one server and one data directory: the sidebar lists every conversation the tests make

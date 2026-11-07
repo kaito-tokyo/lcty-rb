@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Vector binary (exchange format lctyvLE0. LCTYSP-008). Everything is little-endian.
+# Vector binary (exchange format lctyvLE0. LCTYSP-0008). Everything is little-endian.
 #
 #   0   8  magic "lctyvLE0"
 #   8   4  byte size of the following vector (uint32 LE)

@@ -4,22 +4,22 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-007: Search
+# LCTYSP-0007: Search
 
 - Status: Accepted
-- Related: [LCTYSP-006](LCTYSP-006_http-api.md), [LCTYSP-008](LCTYSP-008_vector-binary.md), [LCTYSP-009](LCTYSP-009_tags-and-memory.md), [LCTYSP-010](LCTYSP-010_data-and-settings.md)
+- Related: [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 - Implementation: `lib/search_index.rb`, `public/js/search/`
 
 ## Summary
 
 Conversations are organized by search alone; there are no folders. Search combines keyword search, which runs on the
 server over a SQLite FTS5 index, with semantic search, which runs in the browser over embeddings
-([LCTYSP-008](LCTYSP-008_vector-binary.md)). The browser merges both with Reciprocal Rank Fusion.
+([LCTYSP-0008](LCTYSP-0008_vector-binary.md)). The browser merges both with Reciprocal Rank Fusion.
 
 ## The index
 
 - **The index is derived data** in `data/_index.sqlite` and can always be rebuilt from the conversation files
-  ([LCTYSP-010](LCTYSP-010_data-and-settings.md)).
+  ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
 - It uses the sqlite3 gem bundled with `/usr/bin/ruby` (1.3.13, SQLite 3.54). FTS5 and the trigram tokenizer are
   available. Extension loading is disabled (`OMIT_LOAD_EXTENSION`), so vector extensions such as sqlite-vec cannot be
   used. Only APIs that exist in that gem version are used (`Database#execute`, `#transaction`, `SQLite3::Blob`).
@@ -49,7 +49,7 @@ CREATE TABLE conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (c
 ```
 
 - The schema version is `PRAGMA user_version`. When it changes, the tables are dropped and rebuilt (derived data).
-- Vectors live in a separate database per model ([LCTYSP-008](LCTYSP-008_vector-binary.md)).
+- Vectors live in a separate database per model ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)).
 
 ## Keyword search (server)
 
@@ -65,7 +65,7 @@ CREATE TABLE conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (c
 - The query is embedded with the prefix `task: search result | query: `; documents are embedded with
   `title: none | text: ` (EmbeddingGemma 2's recommended prompts). Titles are not embedded because they can change.
 - Scoring runs in the browser over the distribution files (256 dims, brute force with WASM SIMD) and takes the
-  best score per id ([LCTYSP-008](LCTYSP-008_vector-binary.md)).
+  best score per id ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)).
 - When the embedding model is not configured or not running, only keyword search is used and a notice is shown.
 
 ## Merging (browser)
@@ -79,7 +79,7 @@ browser → POST /v1/snippets {ids, q}          only for rounds without a snippe
 ```
 
 - Rounds are mapped to conversations with `message_ids` from `GET /v1/conversations`. The sidebar's list comes from
-  the browser's copy of the meta ([LCTYSP-010](LCTYSP-010_data-and-settings.md)), so this is fetched only when a
+  the browser's copy of the meta ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)), so this is fetched only when a
   semantic search runs, and kept until the list changes. `tag:` filters use the copy's `tags_hint`.
 
 ## Filtering by tag
@@ -96,5 +96,5 @@ browser → POST /v1/snippets {ids, q}          only for rounds without a snippe
 
 ## Budget
 
-An operation within 50 ms counts as instant ([LCTYSP-001](LCTYSP-001_architecture.md)). Measured: one search, including
+An operation within 50 ms counts as instant ([LCTYSP-0001](LCTYSP-0001_architecture.md)). Measured: one search, including
 embedding the query, takes about 40 ms.

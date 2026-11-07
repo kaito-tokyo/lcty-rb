@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# A tiny ES module bundler (LCTYSP-005): an entry and the modules it imports become one module file, with regular
-# expressions on whole lines only. It builds the new conversation page's entry, /index.js (LCTYSP-011).
+# A tiny ES module bundler (LCTYSP-0005): an entry and the modules it imports become one module file, with regular
+# expressions on whole lines only. It builds the new conversation page's entry, /index.js (LCTYSP-0011).
 #
 # Each module becomes a block, in evaluation order (depth-first, dependencies first), and its code is never rewritten:
 #

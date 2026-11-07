@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Client for the chatty.rb storage API (LCTYSP-006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-003).
+// Client for the chatty.rb storage API (LCTYSP-0006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-0003).
 
 import { renderMarkdown } from "../ui/markdown.js";
-import { invalidateMetaDb } from "./meta-db.js";
+import { requestMetaDbSync } from "./meta-db.js";
 
 async function request(method, url, body, { raw = false } = {}) {
 	const init = { method };
@@ -19,14 +19,14 @@ async function request(method, url, body, { raw = false } = {}) {
 }
 
 /**
- * A request that changes conversations. The browser's copy of their meta is out of date afterwards (api/meta-db.js),
- * also when the request failed (the server may have written part of it).
+ * A request that changes conversations. The browser's copy of their meta is synced afterwards (api/meta-db.js), also
+ * when the request failed (the server may have written part of it).
  */
 async function write(method, url, body) {
 	try {
 		return await request(method, url, body);
 	} finally {
-		invalidateMetaDb();
+		requestMetaDbSync();
 	}
 }
 
@@ -35,7 +35,7 @@ function conv(id) {
 }
 
 /**
- * Message → line to append. Replies carry presentation HTML (content_html) (dual recording. LCTYSP-003).
+ * Message → line to append. Replies carry presentation HTML (content_html) (dual recording. LCTYSP-0003).
  * It is rendered with the same markdown.js as the screen, so what is saved matches what is shown.
  */
 export function toLine(m) {
@@ -59,19 +59,19 @@ export function createConversation(meta, lines) {
 export function appendLines(id, lines) {
 	return write("POST", `${conv(id)}/lines`, lines);
 }
-/** Delete messages from index from. One call may go back at most the last turn (LCTYSP-004). */
+/** Delete messages from index from. One call may go back at most the last turn (LCTYSP-0004). */
 export function popMessages(id, from) {
 	return write("POST", `${conv(id)}/pop`, { from });
 }
 export function deleteConversation(id) {
 	return write("DELETE", conv(id));
 }
-/** Defaults of the browser settings (LCTYSP-010). Changes are kept in localStorage, not on the server. */
+/** Defaults of the browser settings (LCTYSP-0010). Changes are kept in localStorage, not on the server. */
 export function getDefaults() {
 	return request("GET", "/v1/defaults.json");
 }
 
-// ---- Search index (LCTYSP-006, LCTYSP-007) ----
+// ---- Search index (LCTYSP-0006, LCTYSP-0007) ----
 /** Rounds waiting for embeddings: [{id, rev, parts: [text, …]}] */
 export function vectorsPending(model, limit = 16) {
 	return request(
@@ -81,7 +81,7 @@ export function vectorsPending(model, limit = 16) {
 }
 /**
  * revs: [[id, rev], …], records: { body: registration vector binary, size: bytes per vector, count: number of records }.
- * The vectors of the ids sent are replaced by those in the body (LCTYSP-008). The server checks magic, size and entry_count in the query against the body
+ * The vectors of the ids sent are replaced by those in the body (LCTYSP-0008). The server checks magic, size and entry_count in the query against the body
  */
 export async function putVectors(model, revs, { body, size, count }) {
 	const rev = revs.map(([id, r]) => `${id}:${r}`).join(",");
@@ -103,7 +103,7 @@ export function fetchSnippets(ids, q) {
 	return request("POST", "/v1/snippets", { ids, q });
 }
 
-// ---- Tags and memory (LCTYSP-009) ----
+// ---- Tags and memory (LCTYSP-0009) ----
 export function getTags() {
 	return request("GET", "/v1/tags");
 }
