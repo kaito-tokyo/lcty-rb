@@ -32,7 +32,7 @@ Agentic reviews SHOULD NOT duplicate DCO sign-off checks performed by the DCO Gi
 
 When creating a commit, follow these rules:
 
-- Every commit MUST be cryptographic signed and have a DCO sign-off.
+- Every commit MUST be cryptographically signed and have a DCO sign-off.
 - Write the commit title in the imperative mood and keep it within 50 characters whenever possible.
 - Do not add prefixes such as `feat:`, `fix:`, or `chore:` to the title.
 - Insert a blank line between the title and body.
