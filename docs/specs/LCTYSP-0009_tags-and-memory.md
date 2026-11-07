@@ -246,7 +246,7 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
 
 ### Reordering has its own page
 
-- Reordering moves to a separate page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tag editor loses its
+- Reordering moves to a separate page at `/t/` ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tag editor loses its
   ↑↓ buttons; a tag added in the editor gets the number after the last one (largest + 10).
 - The reorder page shows the tags in their current order, lets the user move them, and on save renumbers all of them
   in steps of 10 from `00010` and sends replace-all with the new file names and unchanged contents.
@@ -312,6 +312,6 @@ To be settled before implementation.
      the way; (c) a separate one-off script. What happens to `conversation_tags` is decided together with the
      reference form.
 
-Not yet discussed: the reorder page's URL (`/tag-order.html` is a placeholder); whether tag files are served at a URL
-(for example `/t/`) or only through the API; the markup of a tag file; the updates to
+Not yet discussed: whether tag files are served at a URL (for example `/t/NNNNN-<name>.html`, beside the reorder
+page) or only through the API; the markup of a tag file; the updates to
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (`t/`, `t.lock`) and to the tests (LCTYSP-3005).
