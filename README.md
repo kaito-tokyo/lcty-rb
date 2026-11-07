@@ -81,6 +81,18 @@ temporary folder, removed afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-
 requests to it are answered by a fake in `tests/ui/fixtures.js`, so your conversations and models are never touched.
 Run one browser with `npm run test:ui -- --project=chromium`, or watch the tests with `npm run test:ui -- --ui`.
 
+CI runs on Linux: the server runs in a `ruby:2.6.10` service container with the libraries of the `Gemfile` (the
+versions macOS's `/usr/bin/ruby` has; on a Mac the server needs neither the `Gemfile` nor Bundler), and the tests are
+pointed at it with `LCTY_TEST_SERVER_URL`. To do the same by hand (the server needs an empty data directory):
+
+```bash
+docker run --rm --init -p 127.0.0.1:45290:45290 -v "$PWD:/app:ro" -w /app -e PORT=45290 -e LCTY_HOST=0.0.0.0 -e LCTY_DATA_DIR=/tmp/lcty-data -e BUNDLE_FROZEN=true ruby:2.6.10 sh -c 'bundle install && exec bundle exec ruby lcty.rb'
+```
+
+```bash
+LCTY_TEST_SERVER_URL=http://127.0.0.1:45290 npm run test:ui
+```
+
 ## Documentation
 
 The design is in [docs/specs](docs/specs/README.md) (LCTYSP-001 to LCTYSP-011). Start with

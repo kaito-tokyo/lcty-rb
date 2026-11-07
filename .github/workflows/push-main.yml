@@ -17,6 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  browser:
+    uses: ./.github/workflows/browser.yml
+
   docs-deploy:
     runs-on: ubuntu-26.04
     timeout-minutes: 10

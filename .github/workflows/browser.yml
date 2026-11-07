@@ -1,0 +1,75 @@
+# This workflow is managed by gh actions-lock.
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Browser CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  test-ui:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    # The server, on macOS's Ruby: ruby:2.6.10 (the last 2.6 image, pinned to its manifest list) with the libraries of
+    # the Gemfile (the versions /usr/bin/ruby has). The service starts before the checkout, with the workspace mounted
+    # at /app. It waits for node_modules, which npm ci makes only after the checkout has finished (lcty.rb itself is
+    # written before lib/ and public/), then installs the libraries and starts the server.
+    services:
+      lcty:
+        image: ruby:2.6.10@sha256:a79c8ddb7f3d3748427e2d3a45dcae6d42f1d80d9ae3b98959b3a27b220bf434
+        ports:
+          - 127.0.0.1:45290:45290
+        volumes:
+          - ${{ github.workspace }}:/app:ro
+        env:
+          PORT: "45290"
+          LCTY_HOST: 0.0.0.0
+          LCTY_DATA_DIR: /tmp/lcty-data
+          BUNDLE_FROZEN: "true" # install exactly Gemfile.lock (the workspace is read-only here)
+        options: --init
+        entrypoint: sh
+        command: >-
+          -c "until [ -d /app/node_modules ]; do sleep 1; done
+          && cd /app && bundle install && exec bundle exec ruby lcty.rb"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Wait for the server
+        run: timeout 300 sh -c 'until curl -sf -o /dev/null http://127.0.0.1:45290/; do sleep 2; done'
+
+      - name: Run UI tests
+        env:
+          LCTY_TEST_SERVER_URL: http://127.0.0.1:45290
+        run: npm run test:ui
+
+      - name: Show the server log
+        if: failure()
+        run: docker logs "${{ job.services.lcty.id }}"
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7

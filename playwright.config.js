@@ -10,9 +10,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-// The config is loaded again by every worker: the directory is made once and passed down in the environment
-process.env.LCTY_TEST_DATA_DIR ??= mkdtempSync(join(tmpdir(), "lcty-ui-"));
+// The server: by default the tests start one on macOS's /usr/bin/ruby. LCTY_TEST_SERVER_URL points them at a server
+// that is already running instead, with an empty data directory of its own (in CI, the service container of
+// .github/workflows/browser.yml).
+const external = process.env.LCTY_TEST_SERVER_URL;
 const PORT = Number(process.env.LCTY_TEST_PORT || 45290);
+// The config is loaded again by every worker: the directory is made once and passed down in the environment
+if (!external)
+	process.env.LCTY_TEST_DATA_DIR ??= mkdtempSync(join(tmpdir(), "lcty-ui-"));
 
 export default defineConfig({
 	testDir: "tests/ui",
@@ -23,7 +28,7 @@ export default defineConfig({
 	retries: process.env.CI ? 1 : 0,
 	reporter: process.env.CI ? "github" : "list",
 	use: {
-		baseURL: `http://127.0.0.1:${PORT}`,
+		baseURL: external || `http://127.0.0.1:${PORT}`,
 		locale: "ja-JP",
 		trace: "retain-on-failure",
 	},
@@ -31,16 +36,18 @@ export default defineConfig({
 		{ name: "chromium", use: { ...devices["Desktop Chrome"] } },
 		{ name: "webkit", use: { ...devices["Desktop Safari"] } },
 	],
-	webServer: {
-		command: "/usr/bin/ruby lcty.rb",
-		url: `http://127.0.0.1:${PORT}/`,
-		reuseExistingServer: false,
-		env: {
-			PORT: String(PORT),
-			LCTY_HOST: "127.0.0.1",
-			LCTY_DATA_DIR: process.env.LCTY_TEST_DATA_DIR,
-		},
-		stdout: "ignore",
-		stderr: "pipe",
-	},
+	webServer: external
+		? undefined
+		: {
+				command: "/usr/bin/ruby lcty.rb",
+				url: `http://127.0.0.1:${PORT}/`,
+				reuseExistingServer: false,
+				env: {
+					PORT: String(PORT),
+					LCTY_HOST: "127.0.0.1",
+					LCTY_DATA_DIR: process.env.LCTY_TEST_DATA_DIR,
+				},
+				stdout: "ignore",
+				stderr: "pipe",
+			},
 });
