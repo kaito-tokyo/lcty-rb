@@ -42,7 +42,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1001](LCTYSP-1001_sync-c-meta.feature)                | `js/sync_c_meta.worker.js`: syncing the meta into c_meta |       0 |      10 |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                      |      21 |       0 |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts            |      22 |      10 |
-| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings            |       0 |      44 |
+| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings            |      18 |      26 |
 | [LCTYSP-1005](LCTYSP-1005_text-attributes.feature)            | `js/ui/text-attr.js`: text attributes and base64         |      17 |       0 |
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                      |      23 |       0 |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API |      29 |       0 |

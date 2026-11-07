@@ -2,20 +2,20 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// LCTYSP-1004: the scenarios of docs/specs/LCTYSP-1004_common.feature, written by hand. Each test has the title of its
-// Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
+// LCTYSP-1004: the scenarios of docs/specs/LCTYSP-1004_common.feature that need the browser, written by hand. Each
+// test has the title of its Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the
+// two read side by side. The Scenarios of the times, the ids, backendOf() and convUrl() run in Node.js
+// (common.test.js).
 //
-// js/common.js runs in a real browser on the test server's origin, on the empty page of unit-page.js. The time zone is
-// that of a browser context made by the test, the time is set with page.clock, and every request the module makes
-// (GET /v1/defaults.json, GET /v1/vectors/pending) is answered by a route, so the server's data does not matter.
+// js/common.js runs in a real browser on the test server's origin, on the empty page of unit-page.js. The time is set
+// with page.clock, and every request the module makes (GET /v1/defaults.json, GET /v1/vectors/pending) is answered by a
+// route, so the server's data does not matter.
 
 import { expect, test } from "@playwright/test";
 import { givenAPage } from "./unit-page.js";
 
 const SETTINGS_KEY = "lcty.settings.v1";
 const NOW = "2026-11-04T01:23:05.678Z";
-/** The conversation ids the server accepts (ID_RE of lib/config.rb). */
-const SERVER_ID_RE = /^[A-Za-z0-9_-]{1,80}$/;
 
 /**
  * fn(module, arg) in the page, where module is js/common.js and arg crosses as JSON. Like any function given to
@@ -25,25 +25,6 @@ function common(page, fn, arg) {
 	return page.evaluate(
 		`(async () => (${fn})(await import("/js/common.js"), ${JSON.stringify(arg ?? null)}))()`,
 	);
-}
-
-/** A browser context of its own in timezoneId, and a page in it; the test closes it. */
-async function pageIn(browser, baseURL, timezoneId) {
-	const context = await browser.newContext({
-		baseURL,
-		timezoneId,
-		locale: "ja-JP",
-	});
-	const page = await context.newPage();
-	return { context, page };
-}
-
-async function givenTheZoneAndTime(page, zone) {
-	await test.step(`Given the time zone is ${zone} and the time is ${NOW}`, async () => {
-		await page.clock.setFixedTime(new Date(NOW));
-		// (the zone itself is checked by the offsets of the Examples: WebKit names Asia/Kolkata Asia/Calcutta)
-		expect(await page.evaluate(() => Date.now())).toBe(Date.parse(NOW));
-	});
 }
 
 /** A fake clock that is paused (an installed clock otherwise runs on with the real time): only runFor moves it. */
@@ -151,113 +132,6 @@ test("query() returns the first element that matches", async ({
 	});
 });
 
-// ---- Times and ids ----
-
-for (const { zone, iso } of [
-	{ zone: "Asia/Tokyo", iso: "2026-11-04T10:23:05+09:00" },
-	{ zone: "UTC", iso: "2026-11-04T01:23:05+00:00" },
-	{ zone: "Asia/Kolkata", iso: "2026-11-04T06:53:05+05:30" },
-	{ zone: "America/St_Johns", iso: "2026-11-03T21:53:05-03:30" },
-]) {
-	test(`nowIso() writes the local time with the offset of the time zone (${zone})`, async ({
-		browser,
-		baseURL,
-	}) => {
-		const { context, page } = await pageIn(browser, baseURL, zone);
-		try {
-			await givenAPage(page, context);
-			await givenTheZoneAndTime(page, zone);
-			let got;
-			await test.step("When nowIso() is called", async () => {
-				got = await common(page, ({ nowIso }) => nowIso());
-			});
-			await test.step(`Then it returns "${iso}"`, () => {
-				expect(got).toBe(iso);
-			});
-			await test.step("And Date.parse of it is 2026-11-04T01:23:05Z", () => {
-				expect(Date.parse(got)).toBe(Date.parse("2026-11-04T01:23:05Z"));
-			});
-		} finally {
-			await context.close();
-		}
-	});
-}
-
-for (const { zone, start } of [
-	{ zone: "Asia/Tokyo", start: "20261104-102305-" },
-	{ zone: "America/St_Johns", start: "20261103-215305-" },
-]) {
-	test(`newConvId() is made of the local time and four random hex digits (${zone})`, async ({
-		browser,
-		baseURL,
-	}) => {
-		const { context, page } = await pageIn(browser, baseURL, zone);
-		try {
-			await givenAPage(page, context);
-			await givenTheZoneAndTime(page, zone);
-			let id;
-			await test.step("When newConvId() is called", async () => {
-				id = await common(page, ({ newConvId }) => newConvId());
-			});
-			await test.step(`Then it matches "${start}" followed by four lowercase hex digits`, () => {
-				expect(id).toMatch(new RegExp(`^${start}[0-9a-f]{4}$`));
-			});
-			await test.step("And it is a valid conversation id of the server", () => {
-				expect(id).toMatch(SERVER_ID_RE);
-			});
-		} finally {
-			await context.close();
-		}
-	});
-}
-
-test("Conversation ids made in the same second differ by their random digits", async ({
-	page,
-	context,
-}) => {
-	await givenAPage(page, context);
-	let ids;
-	await test.step("Given the time is fixed", async () => {
-		await page.clock.setFixedTime(new Date(NOW));
-	});
-	await test.step("When newConvId() is called 20 times", async () => {
-		ids = await common(page, ({ newConvId }) =>
-			Array.from({ length: 20 }, () => newConvId()),
-		);
-	});
-	await test.step("Then all of them start with the same time", () => {
-		expect(new Set(ids.map((id) => id.slice(0, 16))).size).toBe(1);
-	});
-	await test.step("And their hex digits are not all the same", () => {
-		expect(new Set(ids.map((id) => id.slice(16))).size).toBeGreaterThan(1);
-	});
-});
-
-test("newMsgId() is a UUIDv7 for now", async ({ page, context }) => {
-	await givenAPage(page, context);
-	let made;
-	await test.step("When newMsgId() is called", async () => {
-		made = await common(page, ({ newMsgId }) => {
-			const before = Date.now();
-			const id = newMsgId();
-			return { before, id, after: Date.now() };
-		});
-	});
-	await test.step("Then UUID_RE accepts it", async () => {
-		expect(
-			await page.evaluate(
-				async (id) => (await import("/js/uuid.js")).UUID_RE.test(id),
-				made.id,
-			),
-		).toBe(true);
-	});
-	await test.step("And the milliseconds in its first 48 bits are between those before and after the call", () => {
-		const ms = Number.parseInt(made.id.replace(/-/g, "").slice(0, 12), 16);
-		expect(ms).toBeGreaterThanOrEqual(made.before);
-		expect(ms).toBeLessThanOrEqual(made.after);
-	});
-});
-
 // ---- showToast() ----
 
 test("showToast() makes the #toast status element", async ({
@@ -355,112 +229,6 @@ test("A new toast replaces the shown one and restarts the 4 seconds", async ({
 		expect((await toasts(page))[0].hidden).toBe(true);
 	});
 });
-
-// ---- backendOf() and convUrl() ----
-
-for (const { label, def, id, backend } of [
-	{ label: "the id given", def: "a", id: "b", backend: "b" },
-	{ label: "the default without an id", def: "b", id: undefined, backend: "b" },
-	{ label: "the default for an empty id", def: "b", id: "", backend: "b" },
-	{ label: "the first for an unknown id", def: "b", id: "zzz", backend: "a" },
-	{
-		label: "the first for an unknown default",
-		def: "zzz",
-		id: undefined,
-		backend: "a",
-	},
-]) {
-	const show = (v) => (v === undefined ? "undefined" : `"${v}"`);
-	test(`backendOf() picks a backend (${label})`, async ({ page, context }) => {
-		await givenAPage(page, context);
-		let settings;
-		let got;
-		await test.step(`Given the settings have the backends "a" and "b" and the default backend ${show(def)}`, () => {
-			settings = {
-				backends: [
-					{ id: "a", model: "model-a" },
-					{ id: "b", model: "model-b" },
-				],
-				default_backend: def,
-			};
-		});
-		await test.step(`When backendOf() is called with the id ${show(id)}`, async () => {
-			got = await common(
-				page,
-				({ backendOf }, { settings, id }) => backendOf(settings, id),
-				{ settings, id },
-			);
-		});
-		await test.step(`Then it returns the backend ${show(backend)}`, () => {
-			expect(got).toEqual({ id: backend, model: `model-${backend}` });
-		});
-	});
-}
-
-test("backendOf() returns undefined without backends", async ({
-	page,
-	context,
-}) => {
-	await givenAPage(page, context);
-	let got;
-	await test.step("Given the settings have no backends", () => {});
-	await test.step("When backendOf() is called without an id", async () => {
-		got = await common(
-			page,
-			({ backendOf }) =>
-				backendOf({ backends: [], default_backend: "local" }) === undefined,
-		);
-	});
-	await test.step("Then it returns undefined", () => {
-		expect(got).toBe(true);
-	});
-});
-
-for (const { label, id, msgId, url } of [
-	{
-		label: "a conversation",
-		id: "20261104-102300-a1b2",
-		msgId: undefined,
-		url: "/c/20261104-102300-a1b2.html",
-	},
-	{
-		label: "an empty message id",
-		id: "20261104-102300-a1b2",
-		msgId: "",
-		url: "/c/20261104-102300-a1b2.html",
-	},
-	{
-		label: "a message",
-		id: "20261104-102300-a1b2",
-		msgId: "0190f3a1-7c2e-7abc-8def-0123456789ab",
-		url: "/c/20261104-102300-a1b2.html#c-msg-0190f3a1-7c2e-7abc-8def-0123456789ab",
-	},
-	{
-		label: "an id that needs escapes",
-		id: "a b/c?d#e",
-		msgId: undefined,
-		url: "/c/a%20b%2Fc%3Fd%23e.html",
-	},
-]) {
-	const show = (v) => (v === undefined ? "undefined" : `"${v}"`);
-	test(`convUrl() links to a conversation or one of its messages (${label})`, async ({
-		page,
-		context,
-	}) => {
-		await givenAPage(page, context);
-		let got;
-		await test.step(`When convUrl() is called with ${show(id)} and ${show(msgId)}`, async () => {
-			got = await common(
-				page,
-				({ convUrl }, { id, msgId }) => convUrl(id, msgId),
-				{ id, msgId },
-			);
-		});
-		await test.step(`Then it returns "${url}"`, () => {
-			expect(got).toBe(url);
-		});
-	});
-}
 
 // ---- Settings ----
 

@@ -36,7 +36,7 @@ backend features, `LCTYSP-3xxx`; see
 | [LCTYSP-1001](LCTYSP-1001_sync-c-meta.feature)                | Syncing the meta of every conversation into c_meta | `tests/unit/sync_c_meta.spec.js`                             |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | Message ids as UUIDv7                              | `tests/unit/uuid.test.js`                                    |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | UI texts                                           | `tests/unit/i18n.test.js`, `tests/unit/i18n.spec.js`         |
-| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | Ids, times, URLs and settings                      | `tests/unit/common.spec.js`                                  |
+| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | Ids, times, URLs and settings                      | `tests/unit/common.test.js`, `tests/unit/common.spec.js`     |
 | [LCTYSP-1005](LCTYSP-1005_text-attributes.feature)            | Reading text strings from attributes               | `tests/unit/text-attr.test.js`                               |
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | Reading server-sent events                         | `tests/unit/sse.test.js`                                     |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | Streaming a reply through the Responses API        | `tests/unit/responses.test.js`                               |
