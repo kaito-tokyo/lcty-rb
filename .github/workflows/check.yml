@@ -46,3 +46,37 @@ jobs:
 
       - name: Check with reuse
         run: pipx run reuse lint
+
+  test-ui:
+    # The server runs on macOS's own Ruby (/usr/bin/ruby with WEBrick, SQLite3 and Nokogiri), as in the README
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the system Ruby
+        run: /usr/bin/ruby -rwebrick -rsqlite3 -rnokogiri -e 'puts RUBY_DESCRIPTION'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install chromium webkit
+
+      - name: Run UI tests
+        run: npm run test:ui
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: playwright-test-results
+          path: test-results/
+          retention-days: 7

@@ -5,6 +5,7 @@ version: 'v0.0.3'
 workflows:
     '.github/workflows/check.yml':
         - 'actions/checkout@v7.0.1'
+        - 'actions/upload-artifact@v7.0.0'
     '.github/workflows/docs.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/configure-pages@v6.0.0'
@@ -30,6 +31,11 @@ dependencies:
         owner_id: 44036562
         repo_id: 438112499
     'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f':
+        ref: 'v7.0.0'
+        commit: 'sha1-bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
+        owner_id: 44036562
+        repo_id: 192625955
+    'actions/upload-artifact@v7.0.0':
         ref: 'v7.0.0'
         commit: 'sha1-bbbca2ddaa5d8feaa63e36b76fdaad77386f024f'
         owner_id: 44036562
