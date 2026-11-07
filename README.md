@@ -71,9 +71,9 @@ The tests run in Chromium and WebKit with [Playwright](https://playwright.dev/).
 the server itself still needs nothing installed.
 
 - **Unit tests** (`tests/unit/`): one part on its own, such as a worker on an empty page. Their behaviour is written as
-  Gherkin features, `LCTYSP-1xxx_*.feature`, next to a `.spec.js` of the same name that has one test per Scenario, with
-  the Scenario's title and its lines as the test's steps ([docs/specs/README.md](docs/specs/README.md)).
-- **UI tests** (`tests/ui/`): drive the pages. Their Gherkin features will be `LCTYSP-2xxx`.
+  Gherkin features, `docs/specs/LCTYSP-1xxx_*.feature`, and each feature has a `.spec.js` here that has one test per
+  Scenario, with the Scenario's title and its lines as the test's steps ([docs/specs/README.md](docs/specs/README.md)).
+- **UI tests** (`tests/ui/`): drive the pages. Their Gherkin features will be `docs/specs/LCTYSP-2xxx_*.feature`.
 
 ```bash
 npm install

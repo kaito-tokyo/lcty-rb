@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/sync_c_meta.worker.js (LCTYSP-0010). Each Scenario is a test of the same title in
-# LCTYSP-1001_sync-c-meta.spec.js, whose steps are the lines below.
+# tests/unit/sync_c_meta.spec.js, whose steps are the lines below.
 
 Feature: LCTYSP-1001 Syncing the meta of every conversation into c_meta
 

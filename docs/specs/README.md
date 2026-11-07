@@ -22,20 +22,31 @@ Specifications of lcty-rb. Each spec describes the current design of one topic a
 | [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) | Data directory and settings       | Accepted |
 | [LCTYSP-0011](LCTYSP-0011_module-bundler.md)    | Module bundler                    | Accepted |
 
+## Gherkin features
+
+Behaviour written as Gherkin. Each feature is tested by a Playwright spec that has one test per Scenario, with the
+Scenario's title and its lines as the test's steps.
+
+| ID                                             | Title                                              | Tested by                        |
+| ---------------------------------------------- | -------------------------------------------------- | -------------------------------- |
+| [LCTYSP-1001](LCTYSP-1001_sync-c-meta.feature) | Syncing the meta of every conversation into c_meta | `tests/unit/sync_c_meta.spec.js` |
+
 ## Number ranges
 
 IDs have four digits, and the first digit says what kind of document it is:
 
 | Range         | Kind                                |
 | ------------- | ----------------------------------- |
-| `LCTYSP-0xxx` | Specifications (this directory)     |
+| `LCTYSP-0xxx` | Specifications                      |
 | `LCTYSP-1xxx` | Gherkin features for the unit tests |
 | `LCTYSP-2xxx` | Gherkin features for the UI tests   |
 
 ## Conventions
 
-- File names are `LCTYSP-NNNN_short-name.md` (a Gherkin feature uses its own extension). `LCTYSP-NNNN` is the
-  permanent id; the short name may change.
+- Every `LCTYSP-` document lives in this directory, whatever its kind.
+- File names are `LCTYSP-NNNN_short-name.md`, or `LCTYSP-NNNN_short-name.feature` for a Gherkin feature.
+  `LCTYSP-NNNN` is the permanent id; the short name may change. Test code is not named after its feature: it lives
+  with its kind of tests (`tests/unit/`, `tests/ui/`) and names the feature in its head comment.
 - Refer to specs by id (`LCTYSP-0003`), including in code comments.
 - Numbers are never reused. A withdrawn or replaced spec keeps its number with the status `Withdrawn` or
   `Superseded by LCTYSP-NNNN`.

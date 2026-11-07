@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// LCTYSP-1001: the scenarios of LCTYSP-1001_sync-c-meta.feature, written by hand. Each test has the title of its
+// LCTYSP-1001: the scenarios of docs/specs/LCTYSP-1001_sync-c-meta.feature, written by hand. Each test has the title of its
 // Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
 //
 // The worker runs in a real browser on the test server's origin: the page is an empty document served by a route, so
