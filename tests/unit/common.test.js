@@ -4,17 +4,27 @@
 
 // LCTYSP-1004: the scenarios of docs/specs/LCTYSP-1004_common.feature that need no browser, written by hand. Each test
 // has the title of its Scenario (an Examples row is added in parentheses) and one step per line of it, so the two read
-// side by side. The Scenarios that need the page (query(), showToast(), the settings in localStorage and the indexer)
-// are in common.spec.js.
+// side by side. The Scenarios that need the page (query(), showToast() and the toasts of loadSettings() and of the
+// indexer) are in common.spec.js.
 //
 // js/common.js runs in Node.js (node-unit.js). The time zone is process.env.TZ, which Node.js reads again when it is
-// set, and the time is fixed with the Date of the test's mock timers; both are put back when the test ends.
+// set, and the time is fixed with the Date of the test's mock timers; both are put back when the test ends. The settings
+// are stored in Node.js's own localStorage, empty at the start of every Scenario (node-unit.js), and every request the
+// module makes (GET /v1/defaults.json, GET /v1/vectors/pending) is answered by the test (routeFetch).
 
-import { expect, publicUrl, scenario } from "./node-unit.js";
+import { expect, publicUrl, routeFetch, scenario } from "./node-unit.js";
 
-const { backendOf, convUrl, newConvId, newMsgId, nowIso } = await import(
-	publicUrl("js/common.js")
-);
+const {
+	appIndexer,
+	backendOf,
+	convUrl,
+	loadSettings,
+	mergeSettings,
+	newConvId,
+	newMsgId,
+	nowIso,
+	storeSettings,
+} = await import(publicUrl("js/common.js"));
 const { UUID_RE } = await import(publicUrl("js/uuid.js"));
 
 const NOW = "2026-11-04T01:23:05.678Z";
@@ -231,3 +241,327 @@ for (const { label, id, msgId, path } of [
 		},
 	);
 }
+
+// ---- Settings ----
+
+const SETTINGS_KEY = "lcty.settings.v1";
+
+async function givenStored(step, raw, label = raw) {
+	await step(`Given localStorage "${SETTINGS_KEY}" holds ${label}`, () => {
+		if (raw === null) localStorage.removeItem(SETTINGS_KEY);
+		else localStorage.setItem(SETTINGS_KEY, raw);
+	});
+}
+
+async function thenStored(step, raw) {
+	await step(`And localStorage "${SETTINGS_KEY}" holds ${raw}`, () => {
+		expect(localStorage.getItem(SETTINGS_KEY)).toBe(raw);
+	});
+}
+
+/** "Given the defaults …" (or "And the defaults …"), "When storeSettings() is given …", "Then it returns …". */
+async function storeSettingsSteps(step, { first, defaults, values, returns }) {
+	let got;
+	await step(`${first} the defaults ${defaults.label}`);
+	await step(`When storeSettings() is given ${values.label}`, () => {
+		got = storeSettings(values.value, defaults.value);
+	});
+	await step(`Then it returns ${returns.label}`, () => {
+		expect(got).toEqual(returns.value);
+	});
+}
+
+scenario(
+	"storeSettings() stores only the values that differ from the defaults",
+	async ({ step }) => {
+		await storeSettingsSteps(step, {
+			first: "Given",
+			defaults: {
+				label: '{ base_url: "http://d", model: "m", api_key: "k" }',
+				value: { base_url: "http://d", model: "m", api_key: "k" },
+			},
+			values: {
+				label: '{ base_url: "http://d", model: "other", api_key: "k" }',
+				value: { base_url: "http://d", model: "other", api_key: "k" },
+			},
+			returns: { label: '{ model: "other" }', value: { model: "other" } },
+		});
+		await thenStored(step, '{"model":"other"}');
+	},
+);
+
+scenario(
+	"storeSettings() ignores the keys the defaults do not have",
+	async ({ step }) => {
+		await storeSettingsSteps(step, {
+			first: "Given",
+			defaults: { label: '{ model: "m" }', value: { model: "m" } },
+			values: {
+				label: '{ model: "other", unknown: "x" }',
+				value: { model: "other", unknown: "x" },
+			},
+			returns: { label: '{ model: "other" }', value: { model: "other" } },
+		});
+		await thenStored(step, '{"model":"other"}');
+	},
+);
+
+scenario(
+	"storeSettings() keeps the default of a key the values do not have",
+	async ({ step }) => {
+		await storeSettingsSteps(step, {
+			first: "Given",
+			defaults: {
+				label: '{ model: "m", api_key: "k" }',
+				value: { model: "m", api_key: "k" },
+			},
+			values: { label: '{ api_key: "" }', value: { api_key: "" } },
+			returns: { label: '{ api_key: "" }', value: { api_key: "" } },
+		});
+		await thenStored(step, '{"api_key":""}');
+	},
+);
+
+scenario(
+	"storeSettings() removes the stored changes when nothing differs",
+	async ({ step }) => {
+		await givenStored(step, '{"model":"other"}');
+		await storeSettingsSteps(step, {
+			first: "And",
+			defaults: { label: '{ model: "m" }', value: { model: "m" } },
+			values: { label: '{ model: "m" }', value: { model: "m" } },
+			returns: { label: "{}", value: {} },
+		});
+		await step(`And localStorage has no "${SETTINGS_KEY}"`, () => {
+			expect(localStorage.getItem(SETTINGS_KEY)).toBeNull();
+		});
+	},
+);
+
+scenario(
+	"storeSettings() replaces the stored changes as a whole",
+	async ({ step }) => {
+		await givenStored(step, '{"model":"other"}');
+		await storeSettingsSteps(step, {
+			first: "And",
+			defaults: {
+				label: '{ model: "m", api_key: "k" }',
+				value: { model: "m", api_key: "k" },
+			},
+			values: {
+				label: '{ model: "m", api_key: "mine" }',
+				value: { model: "m", api_key: "mine" },
+			},
+			returns: { label: '{ api_key: "mine" }', value: { api_key: "mine" } },
+		});
+		await thenStored(step, '{"api_key":"mine"}');
+	},
+);
+
+scenario(
+	"mergeSettings() overlays the defaults with the stored changes",
+	async ({ step }) => {
+		await givenStored(step, '{"model":"other"}');
+		let got;
+		await step(
+			'When mergeSettings() is given the defaults { base_url: "http://d", model: "m" }',
+			() => {
+				got = mergeSettings({ base_url: "http://d", model: "m" });
+			},
+		);
+		await step(
+			'Then it returns { base_url: "http://d", model: "other" }',
+			() => {
+				expect(got).toEqual({ base_url: "http://d", model: "other" });
+			},
+		);
+	},
+);
+
+scenario(
+	"mergeSettings() ignores unknown keys and values of another type",
+	async ({ step }) => {
+		let got;
+		await step(
+			'When mergeSettings() is given the defaults { model: "m", count: 3 } and the changes { model: 5, count: 4, unknown: "x" }',
+			() => {
+				got = mergeSettings(
+					{ model: "m", count: 3 },
+					{ model: 5, count: 4, unknown: "x" },
+				);
+			},
+		);
+		await step('Then it returns { model: "m", count: 4 }', () => {
+			expect(got).toEqual({ model: "m", count: 4 });
+		});
+	},
+);
+
+for (const { label, raw } of [
+	{ label: "not JSON", raw: "not JSON" },
+	{ label: "null", raw: "null" },
+	{ label: '["model"]', raw: '["model"]' },
+	{ label: '"model"', raw: '"model"' },
+	{ label: "nothing", raw: null },
+]) {
+	scenario(
+		`mergeSettings() uses the defaults when the stored changes cannot be read (${label})`,
+		async ({ step }) => {
+			await givenStored(step, raw, label);
+			let got;
+			await step(
+				'When mergeSettings() is given the defaults { model: "m" }',
+				() => {
+					got = mergeSettings({ model: "m" });
+				},
+			);
+			await step('Then it returns { model: "m" }', () => {
+				expect(got).toEqual({ model: "m" });
+			});
+		},
+	);
+}
+
+scenario(
+	"loadSettings() makes the backend of the pages from the defaults and the stored changes",
+	async ({ step, t }) => {
+		await step(
+			'Given GET /v1/defaults.json returns { base_url: "http://d", api_key: "k", model: "m", embedding_model: "e" }',
+			() => {
+				routeFetch(t, (request) =>
+					new URL(request.url).pathname === "/v1/defaults.json"
+						? Response.json({
+								base_url: "http://d",
+								api_key: "k",
+								model: "m",
+								embedding_model: "e",
+							})
+						: undefined,
+				);
+			},
+		);
+		await step(
+			`And localStorage "${SETTINGS_KEY}" holds {"model":"other"}`,
+			() => {
+				localStorage.setItem(SETTINGS_KEY, '{"model":"other"}');
+			},
+		);
+		let got;
+		await step("When loadSettings() is called", async () => {
+			got = await loadSettings();
+		});
+		await step(
+			'Then it returns the one backend "local" of the default backend "local", with the model "other" and the rest of the defaults',
+			() => {
+				expect(got).toEqual({
+					backends: [
+						{
+							id: "local",
+							label: "llama-server",
+							base_url: "http://d",
+							api: "responses",
+							api_key: "k",
+							model: "other",
+							embedding_model: "e",
+							extra: {},
+						},
+					],
+					default_backend: "local",
+				});
+			},
+		);
+	},
+);
+
+// ---- appIndexer() ----
+
+/** The settings of the pages with one backend whose embedding model is model. */
+function settingsWith(model) {
+	return {
+		backends: [
+			{
+				id: "local",
+				label: "llama-server",
+				base_url: "http://127.0.0.1:9",
+				api: "responses",
+				api_key: "",
+				model: "chat",
+				embedding_model: model,
+				extra: {},
+			},
+		],
+		default_backend: "local",
+	};
+}
+
+/** GET /v1/vectors/pending answered with no rounds for the rest of the test t; returns the paths and queries asked. */
+function routePending(t) {
+	const urls = [];
+	routeFetch(t, (request) => {
+		const url = new URL(request.url);
+		if (url.pathname !== "/v1/vectors/pending") return undefined;
+		urls.push(`${url.pathname}${url.search}`);
+		return Response.json([]);
+	});
+	return urls;
+}
+
+scenario("The indexer does nothing without settings", async ({ step, t }) => {
+	let urls;
+	await step("Given GET /v1/vectors/pending is answered by the test", () => {
+		urls = routePending(t);
+	});
+	await step(
+		"When the indexer of appIndexer() with no settings is kicked",
+		() => appIndexer(() => null).kick(),
+	);
+	await step("Then no request is sent to /v1/vectors/pending", () => {
+		expect(urls).toEqual([]);
+	});
+});
+
+scenario(
+	"The indexer does nothing without an embedding model",
+	async ({ step, t }) => {
+		let urls;
+		await step("Given GET /v1/vectors/pending is answered by the test", () => {
+			urls = routePending(t);
+		});
+		await step(
+			'When the indexer of appIndexer() with settings whose embedding model is "" is kicked',
+			() => appIndexer(() => settingsWith("")).kick(),
+		);
+		await step("Then no request is sent to /v1/vectors/pending", () => {
+			expect(urls).toEqual([]);
+		});
+	},
+);
+
+scenario(
+	"The indexer reads the settings at every kick",
+	async ({ step, t }) => {
+		let urls;
+		let settings = null;
+		let indexer;
+		await step("Given GET /v1/vectors/pending returns no rounds", () => {
+			urls = routePending(t);
+		});
+		await step("And the indexer of appIndexer() has no settings", () => {
+			indexer = appIndexer(() => settings);
+		});
+		await step(
+			'When it is kicked, then given settings whose embedding model is "embed" and kicked again',
+			async () => {
+				await indexer.kick();
+				settings = settingsWith("embed");
+				await indexer.kick();
+			},
+		);
+		await step(
+			"Then GET /v1/vectors/pending?model=embed&limit=16 is sent once",
+			() => {
+				expect(urls).toEqual(["/v1/vectors/pending?model=embed&limit=16"]);
+			},
+		);
+	},
+);

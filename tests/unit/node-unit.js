@@ -9,6 +9,9 @@
 // node-preload.cjs). Each Scenario is a test, and each line of it a subtest made by step(), so the report reads like the
 // feature. A failed step stops the Scenario, as test.step() does in Playwright. expect() is Playwright's, so the
 // assertions read as in the browser's specs.
+//
+// localStorage is Node.js's own Web Storage (--localstorage-file=:memory:, npm run test:node): kept in memory, so each
+// test file's process starts with an empty one, and emptied before every Scenario, as a new browser context is.
 
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
@@ -28,6 +31,7 @@ class StepFailed extends Error {}
  */
 export function scenario(title, fn) {
 	return test(title, (t) => {
+		globalThis.localStorage?.clear();
 		t.after(endWorkers);
 		const step = async (line, body = () => {}) => {
 			let failed = null;
