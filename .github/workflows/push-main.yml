@@ -17,6 +17,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  backend:
+    uses: ./.github/workflows/backend.yml
+
   browser:
     uses: ./.github/workflows/browser.yml
 

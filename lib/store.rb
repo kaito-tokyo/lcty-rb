@@ -149,9 +149,11 @@ module Chatty
       raise HttpError.new(400, 'body must be an object') unless body.is_a?(Hash)
       meta = body['meta']
       raise HttpError.new(400, 'meta must be an object') unless meta.is_a?(Hash)
-      validate_tag_list!(meta['tags'] ||= [])
+      meta = meta.merge('tags' => meta['tags'] || []) # Copies, so the caller's objects are left as they were
+      validate_tag_list!(meta['tags'])
       lines = body['lines'] || []
       validate_lines!(lines, CREATABLE)
+      lines = lines.map(&:dup)
       path = conv_path(meta['id'])
       raise HttpError.new(409, 'already exists') if File.exist?(path)
       ensure_ids!(lines)
@@ -162,6 +164,7 @@ module Chatty
 
     def append(id, lines)
       validate_lines!(lines, APPENDABLE)
+      existing_conv_path(id) # 400 / 404 for a bad or unknown id, also when there is nothing to append
       return if lines.empty?
       ensure_ids!(lines)
       titles, lines = lines.partition { |l| l['type'] == 'title' }

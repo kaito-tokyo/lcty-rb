@@ -351,11 +351,17 @@ module Chatty
     end
 
     def decode_elements(text, label)
-      frag = Nokogiri::XML::DocumentFragment.parse(body_text(text))
+      body = body_text(text)
+      frag = Nokogiri::XML::DocumentFragment.parse(body)
       els = frag.element_children.to_a
       unless frag.errors.empty?
-        warn "conversation file #{label} is not well-formed (#{frag.errors.first.message.strip}); dropping the last element"
-        els.pop
+        # A write cut short leaves the last element unclosed: drop it only then, not for an error elsewhere (stray text
+        # after a whole element, for one), which would lose a message that was written whole
+        last = els.last
+        cut = last && !body.lines.drop(last.line - 1).join.include?("</#{last.name}>")
+        warn "conversation file #{label} is not well-formed (#{frag.errors.first.message.strip})" \
+             "#{cut ? '; dropping the last element, which is not closed' : ''}"
+        els.pop if cut
       end
       els.map { |e| (o = from_element(e)) && [o, e] }.compact
     end

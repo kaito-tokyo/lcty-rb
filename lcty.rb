@@ -48,7 +48,9 @@ module Chatty
       return unless GZIP_TYPES.match?(res['content-type'].to_s)
       size = res.body.respond_to?(:read) ? res['content-length'].to_i : res.body.to_s.bytesize
       return if size < MIN_SIZE
-      res['vary'] = 'Accept-Encoding' # Set for every client, so a cache never hands a plain copy as the gzip one or back
+      # Set for every client, so a cache never hands a plain copy as the gzip one or back. Added to the servlet's own Vary
+      vary = res['vary'].to_s.split(',').map(&:strip).reject(&:empty?)
+      res['vary'] = (vary + ['Accept-Encoding']).uniq { |v| v.downcase }.join(', ') unless vary.include?('*')
       return unless accepts_gzip?(req['accept-encoding'])
       body = res.body.respond_to?(:read) ? read_and_close(res.body) : res.body.to_s
       res.body = Zlib.gzip(body)

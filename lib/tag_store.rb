@@ -18,6 +18,7 @@ require 'sqlite3'
 require 'json'
 require 'securerandom'
 require 'time'
+require_relative 'config'
 
 module Chatty
   class TagStore
@@ -107,6 +108,7 @@ module Chatty
       @mutex.synchronize do
         raise HttpError.new(404, 'no such tag') unless tag_exists?(name)
         @db.execute('DELETE FROM memory WHERE id = ? AND tag = ?', [id, name])
+        raise HttpError.new(404, 'no such memory item') if @db.changes.zero? # As edit_memory
       end
     end
 

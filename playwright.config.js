@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The unit tests (tests/unit; their Gherkin features are docs/specs/LCTYSP-1xxx) and the UI tests (tests/ui; LCTYSP-2xxx). Both run in
+// The frontend unit tests (tests/unit; their Gherkin features are docs/specs/LCTYSP-1xxx) and the frontend UI tests
+// (tests/ui; LCTYSP-2xxx). Both run in
 // the browsers against the Ruby server, which runs on its own port with a fresh, empty data directory. llama-server is
 // replaced by a fake inside the browser (tests/ui/fixtures.js), so neither the real data nor the models are touched.
 

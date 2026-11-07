@@ -29,7 +29,9 @@ module Chatty
   BIND = ENV['LCTY_HOST'].to_s.empty? ? '127.0.0.1' : ENV['LCTY_HOST'] # The address to listen on
   BIND_URL_HOST = BIND.include?(':') ? "[#{BIND}]" : BIND # As written in a URL (an IPv6 address in brackets)
   ID_RE = /\A[A-Za-z0-9_-]{1,80}\z/
-  TAG_NAME_RE = /\A[^\s:]{1,40}\z/ # No whitespace or ':' (to tell it apart from tag:name in search)
+  # No ':' (to tell it apart from tag:name in search), no control character, and no whitespace, Unicode's included: the
+  # search box splits the query on JavaScript's \s, which also takes U+3000, U+00A0 and U+FEFF (LCTYSP-0007, LCTYSP-0009)
+  TAG_NAME_RE = /\A[^[:space:][:cntrl:]\u{FEFF}:]{1,40}\z/
 
   class HttpError < StandardError
     attr_reader :status

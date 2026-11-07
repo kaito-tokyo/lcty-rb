@@ -96,14 +96,18 @@ module Chatty
         known = conversations.keys
         stale = (@db.execute('SELECT DISTINCT conv_id FROM chunks').map(&:first) | @db.execute('SELECT DISTINCT conv_id FROM conv_tags').map(&:first) |
                  @db.execute('SELECT conv_id FROM conv_stats').map(&:first)) - known
-        @db.transaction do
-          stale.each do |cid|
-            @db.execute('SELECT DISTINCT msg_id FROM chunks WHERE conv_id = ?', [cid]).each { |(m)| delete_round(m) }
-            @db.execute('DELETE FROM conv_tags WHERE conv_id = ?', [cid])
-            @db.execute('DELETE FROM conv_stats WHERE conv_id = ?', [cid])
-          end
-        end
+        @db.transaction { stale.each { |cid| delete_conversation(cid) } }
         @listeners.each(&:call)
+      end
+    end
+
+    # A conversation was deleted: drop its rounds, tags and count, leaving no row behind (also for an id that was never
+    # indexed). Listeners are told when rounds went away.
+    def remove(conv_id)
+      @mutex.synchronize do
+        had_rounds = !@db.get_first_value('SELECT 1 FROM chunks WHERE conv_id = ? LIMIT 1', [conv_id]).nil?
+        @db.transaction { delete_conversation(conv_id) }
+        @listeners.each(&:call) if had_rounds
       end
     end
 
@@ -189,6 +193,12 @@ module Chatty
       end
     end
 
+    def delete_conversation(conv_id)
+      @db.execute('SELECT DISTINCT msg_id FROM chunks WHERE conv_id = ?', [conv_id]).each { |(m)| delete_round(m) }
+      @db.execute('DELETE FROM conv_tags WHERE conv_id = ?', [conv_id])
+      @db.execute('DELETE FROM conv_stats WHERE conv_id = ?', [conv_id])
+    end
+
     # Delete a round (vectors stay; the vector DB's garbage collection removes them at startup)
     def delete_round(msg_id)
       @db.execute('SELECT rowid FROM chunks WHERE msg_id = ?', [msg_id]).each { |(r)| @db.execute('DELETE FROM chunks_fts WHERE rowid = ?', [r]) }
@@ -216,16 +226,29 @@ module Chatty
         rows = rows.select { |r| short.all? { |t| r[3].include?(t) } } unless short.empty?
       end
       rows = rows.select { |r| allowed[r[1]] } if allowed
-      rows.first(limit).map { |r| r[0, 3] }
+      rows.uniq(&:first).first(limit).map { |r| r[0, 3] } # One row per round: limit counts rounds, not their parts
     end
 
     def snippet(text, terms, width = 140)
       t = text.to_s.gsub(/\s+/, ' ')
       norm = self.class.normalize(t)
       pos = terms.map { |w| norm.index(w) }.compact.min
+      pos = original_index(t, pos) if pos && norm.length != t.length
       return t[0, width] if pos.nil? || pos < width / 3
       start = pos - width / 3
       "…#{t[start, width]}"
+    end
+
+    # The index in t of the character at norm_pos of normalize(t). Normalizing can change the length of what comes before
+    # (㍿ becomes 株式会社, ﬁ becomes fi, İ lowercases to two characters), so count the normalized length character by
+    # character.
+    def original_index(t, norm_pos)
+      n = 0
+      t.each_char.with_index do |c, i|
+        n += self.class.normalize(c).length
+        return i if n > norm_pos
+      end
+      t.length
     end
   end
 end
