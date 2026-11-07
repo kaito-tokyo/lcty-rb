@@ -129,6 +129,20 @@ Feature: LCTYSP-1018 Tags, drafts and memory
       | another case  | "Ruby" |
       | upper case    | "RUBY" |
 
+  Scenario: An invalid tag is shown without fields and sent back as it is
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"
+    Then the second section has the name "broken", the button "Delete" and the note that "00020-broken.html" cannot be read, and no field
+    When the prompt of "ruby" is changed to "New prompt" and Save is clicked
+    Then PUT /v1/tags is sent "00010-ruby.html" with the new prompt and "00020-broken.html" as it was, with invalid true
+
+  Scenario: A new tag with the file-name part of an invalid tag is not saved
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"
+    When a new tag "Broken" is added and Save is clicked
+    Then the status says "Tag names must be unique"
+    And nothing is sent to PUT /v1/tags
+
   Scenario: A name is trimmed and may have 40 code points
     Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
@@ -250,6 +264,13 @@ Feature: LCTYSP-1018 Tags, drafts and memory
   Scenario: A conversation without defined tags gets no proposal
     Given the definitions "ruby"
     And a conversation with the tags "unknown"
+    When proposeMemory asks for proposals
+    Then it throws "The conversation has no defined tags"
+    And nothing is sent to the model
+
+  Scenario: An invalid tag gets no proposal, like an undefined one
+    Given the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"
+    And a conversation with the tags "broken"
     When proposeMemory asks for proposals
     Then it throws "The conversation has no defined tags"
     And nothing is sent to the model

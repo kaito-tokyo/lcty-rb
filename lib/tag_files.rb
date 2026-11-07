@@ -76,6 +76,17 @@ module Chatty
       name[6...-5]
     end
 
+    # The ASCII symbols the browser escapes in a file-name part as ~ and two lowercase hex digits (tagPart of
+    # js/tag-names.js)
+    ESCAPED_HEX_RE = /~(2[13-689a]|3[cef]|5[bde]|7[bd])/.freeze
+
+    # The display name a part stands for, as far as the file name tells it: the escapes undone, mechanically (a
+    # display name cannot contain ~, so ~xx is always an escape). The case and the form the user typed are not in the
+    # file name, so this is the name lowercased as the part is. Used for a tag file without <lcty-t>
+    def self.name_of_part(part)
+      part.gsub(ESCAPED_HEX_RE) { Regexp.last_match(1).hex.chr }
+    end
+
     # ---- Get all ----
 
     # [{"tags" => [...]}, etag]: every tag file in file-name order, parsed back into JSON
@@ -93,14 +104,22 @@ module Chatty
     # ---- Replace all ----
 
     # Replace the whole set (the tag editor, the reorder page). if_match is the ETag the browser got with the set it
-    # edited: nil is 428, a different one 412. Returns the new ETag.
+    # edited: nil is 428, a different one 412. A tag sent with invalid: true is a tag file without <lcty-t> that the
+    # set keeps as it is: it is neither written nor deleted. Returns the new ETag.
     def replace_all(obj, if_match)
       tags = validate_set!(obj)
       with_lock(File::LOCK_EX) do
         raise HttpError.new(428, 'If-Match is required') if if_match.nil? || if_match.empty?
         before = listed
         raise HttpError.new(412, 'the tags have changed') unless etag_matches?(if_match, etag_of(before))
-        written = tags.map do |t|
+        kept, written = tags.partition { |t| t['invalid'] }
+        kept = kept.map { |t| kept_path!(t['file'], before) }
+        written.each do |t|
+          path = File.join(@dir, t['file'])
+          next unless File.exist?(path) && kept.any? { |k| File.identical?(k, path) }
+          raise HttpError.new(400, "the tag file #{t['file'].inspect} cannot be read, so it cannot be overwritten")
+        end
+        written = written.map do |t|
           path = File.join(@dir, t['file'])
           write_atomic(path, build(t))
           path
@@ -109,7 +128,7 @@ module Chatty
         # byte-equal to the one sent (HFS+ decomposes names), so compare the files themselves, not their names.
         before.each_key do |name|
           path = File.join(@dir, name)
-          next if written.any? { |w| File.identical?(w, path) }
+          next if (written + kept).any? { |w| File.identical?(w, path) }
           File.unlink(path) if File.exist?(path)
         end
         etag_of(listed)
@@ -128,7 +147,7 @@ module Chatty
         path = File.join(@dir, file)
         raise HttpError.new(404, 'no such tag file') unless File.file?(path)
         tag = parse(file, File.read(path, mode: 'r:UTF-8'))
-        raise HttpError.new(500, 'the tag file cannot be read') unless tag
+        raise HttpError.new(409, 'the tag file cannot be read') if tag['invalid']
         item = { 'id' => Uuid.v7, 'text' => text.strip, 'at' => Time.now.iso8601 }
         item['source'] = src unless src.empty?
         tag['memory'] << item
@@ -170,13 +189,15 @@ module Chatty
       out
     end
 
-    # One tag file as JSON ({file, name, ops, prompt, memory}), or nil (with a warning) when it has no <lcty-t>
+    # One tag file as JSON ({file, name, ops, prompt, memory}). A file without <lcty-t> is still a tag (with a warning):
+    # its name is taken from the file name, the rest is empty, and it is marked invalid: true. Replace-all keeps such a
+    # file as it is and add-memory refuses it, so a file put in t/ by hand is never rewritten or deleted unasked.
     def parse(file, body)
-      doc = Nokogiri::HTML5.parse(body)
-      t = doc.at_css('lcty-t')
+      t = Nokogiri::HTML5.parse(body).at_css('lcty-t')
       unless t
-        warn "tag file #{file} has no <lcty-t>; ignoring it"
-        return nil
+        warn "tag file #{file} has no <lcty-t>; listing it as invalid"
+        return { 'file' => file, 'name' => TagFiles.name_of_part(TagFiles.part(file)), 'ops' => [], 'prompt' => '',
+                 'memory' => [], 'invalid' => true }
       end
       ops = []
       t.css('lcty-tagop').each do |e|
@@ -198,6 +219,16 @@ module Chatty
 
     private
 
+    # The path of the tag file `file` that replace-all keeps as it is: it must be listed (under this name, or under
+    # another name of the same file: HFS+) and have no <lcty-t>
+    def kept_path!(file, before)
+      path = File.join(@dir, file)
+      name = before.keys.find { |n| File.identical?(File.join(@dir, n), path) }
+      return path if name && Nokogiri::HTML5.parse(before[name]).at_css('lcty-t').nil?
+
+      raise HttpError.new(400, "only a tag file that cannot be read is kept as it is: #{file.inspect}")
+    end
+
     # Check the whole request before taking the lock and writing anything; returns the tags with defaults filled in
     def validate_set!(obj)
       raise HttpError.new(400, 'body must be {"tags": [...]}') unless obj.is_a?(Hash) && obj['tags'].is_a?(Array)
@@ -209,6 +240,8 @@ module Chatty
         err = TagFiles.file_name_error(t['file'])
         raise HttpError.new(400, "invalid tag file name #{t['file'].inspect}: #{err}") if err
         parts << TagFiles.part(t['file']).b
+        # A tag file without <lcty-t>, kept as it is: only its file name matters
+        next({ 'file' => String.new(t['file'], encoding: Encoding::UTF_8), 'invalid' => true }) if t['invalid'] == true
         raise HttpError.new(400, 'name must be a non-empty string') unless t['name'].is_a?(String) && !t['name'].empty?
         raise HttpError.new(400, 'prompt must be a string') unless t['prompt'].nil? || t['prompt'].is_a?(String)
         ops = t['ops'] || []

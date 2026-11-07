@@ -59,6 +59,8 @@ LctyT.addLang("ja", {
 	badTagName:
 		"タグの名前「{name}」は使えません（1〜40文字。空白、制御文字、: ; / \" ' ` ~ \\ | は不可）",
 	duplicateTagName: "タグの名前が重複しています",
+	invalidTagFile:
+		"タグファイル {file} は読めない（<lcty-t> がない）ため、ここでは編集できません。データディレクトリの t/ にあるファイルを直すか、削除してください。",
 	tagNumbersFull:
 		"新しいタグに付ける番号がありません。先に並べ替えのページで番号を振り直してください。",
 	tagsChangedElsewhere:

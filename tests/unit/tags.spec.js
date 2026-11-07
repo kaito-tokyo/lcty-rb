@@ -558,6 +558,78 @@ for (const { caseName, name } of [
 	});
 }
 
+/** The invalid tag of the feature: a file without <lcty-t>, as GET /v1/tags lists it. */
+const BROKEN = {
+	file: "00020-broken.html",
+	name: "broken",
+	ops: [],
+	prompt: "",
+	memory: [],
+	invalid: true,
+};
+
+test("An invalid tag is shown without fields and sent back as it is", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditor(
+		page,
+		[RUBY, BROKEN],
+		'Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
+	);
+	await test.step('Then the second section has the name "broken", the button "Delete" and the note that "00020-broken.html" cannot be read, and no field', async () => {
+		const shown = await section(page, 1).evaluate((s) => ({
+			head: [...s.querySelector(".tag-edit-head").children].map(
+				(e) => e.textContent,
+			),
+			note: s.querySelector("p.hint").textContent,
+			fields: s.querySelectorAll("input, textarea").length,
+		}));
+		expect(shown).toEqual({
+			head: ["broken", "Delete"],
+			note: "The tag file 00020-broken.html cannot be read (it has no <lcty-t>), so it cannot be edited here. Fix or delete the file in t/ of the data directory.",
+			fields: 0,
+		});
+	});
+	await test.step('When the prompt of "ruby" is changed to "New prompt" and Save is clicked', async () => {
+		await promptInput(page, 0).fill("New prompt");
+		await clickSave(page, server);
+	});
+	await test.step('Then PUT /v1/tags is sent "00010-ruby.html" with the new prompt and "00020-broken.html" as it was, with invalid true', () => {
+		expect(server.puts).toHaveLength(1);
+		const [ruby, broken] = server.puts[0].tags;
+		expect(ruby).toMatchObject({
+			file: "00010-ruby.html",
+			prompt: "New prompt",
+		});
+		expect(broken).toEqual(BROKEN);
+	});
+});
+
+test("A new tag with the file-name part of an invalid tag is not saved", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditor(
+		page,
+		[RUBY, BROKEN],
+		'Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
+	);
+	await test.step('When a new tag "Broken" is added and Save is clicked', async () => {
+		await button(page, "+ New tag").click();
+		await nameInput(page, 2).fill("Broken");
+		await clickSave(page, server);
+	});
+	await test.step('Then the status says "Tag names must be unique"', async () => {
+		expect(await status(page)).toBe("Tag names must be unique");
+	});
+	await test.step("And nothing is sent to PUT /v1/tags", () => {
+		expect(server.puts).toEqual([]);
+	});
+});
+
 test("A name is trimmed and may have 40 code points", async ({
 	page,
 	context,

@@ -5,7 +5,8 @@
 // The tag reorder page (/t/. LCTYSP-0005, LCTYSP-0009). Lists the tag files in their order (file-name order) with
 // their display names, lets the user move them, and on save renumbers them 00010, 00020, … and sends the whole set
 // with PUT /v1/tags; the contents of the tags are not changed. The tag editor has no order buttons: the order is
-// changed only here.
+// changed only here. An invalid tag (a file without <lcty-t>) is not listed: it is sent back as it is, and the server
+// keeps its file.
 
 import { getTags, putTags } from "../api/lcty-t.js";
 import { loadSettings, showToast } from "../common.js";
@@ -23,7 +24,14 @@ export function initTagOrderPage() {
 	const resetButton = $("#tag-order-reset");
 	const sidebar = document.querySelector("lcty-sidebar");
 
-	const state = { settings: null, saved: [], work: [], etag: null };
+	// saved and work are the tags that can be moved; invalid is sent back as it is
+	const state = {
+		settings: null,
+		saved: [],
+		work: [],
+		invalid: [],
+		etag: null,
+	};
 	const panel = initSidebar(sidebar, {
 		getSettings: () => state.settings,
 		// The tags dialog saved: show its set (it may have added, renamed or deleted tags)
@@ -83,7 +91,10 @@ export function initTagOrderPage() {
 
 	async function load() {
 		try {
-			({ tags: state.saved, etag: state.etag } = await getTags());
+			const { tags, etag } = await getTags();
+			state.saved = tags.filter((t) => !t.invalid);
+			state.invalid = tags.filter((t) => t.invalid);
+			state.etag = etag;
 		} catch (e) {
 			status.textContent = tr(
 				"tagsLoadFailed",
@@ -97,7 +108,7 @@ export function initTagOrderPage() {
 	}
 
 	saveButton.addEventListener("click", async () => {
-		const tags = renumber(state.work);
+		const tags = [...renumber(state.work), ...state.invalid];
 		saveButton.disabled = true;
 		try {
 			state.etag = await putTags(tags, state.etag);

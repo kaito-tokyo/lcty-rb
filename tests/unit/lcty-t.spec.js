@@ -280,6 +280,41 @@ test("A sync stores the set with NFC file names and the ETag", async ({
 	await thenTFullHolds(page, ["00010-café.html"], "e1", " composed");
 });
 
+test("A sync composes the name of an invalid tag, which comes from its file name", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenNoDatabase(page);
+	const nfd = (s) => s.normalize("NFD");
+	const invalid = {
+		...tag(nfd("00010-café.html")),
+		name: nfd("café"),
+		invalid: true,
+	};
+	const other = { ...tag(nfd("00020-café.html")), name: nfd("Café") };
+	await test.step('And GET /v1/tags returns the invalid tag "00010-café.html" named "café", both decomposed, and the tag "00020-cafe" U+0301 ".html" with the name decomposed', () => {
+		server.get = (route) =>
+			route.fulfill({
+				json: { tags: [invalid, other] },
+				headers: { ETag: "e1" },
+			});
+	});
+	await whenPosted(page, '{"op": "force_sync"}', { op: "force_sync" });
+	let db;
+	await test.step('Then "t_full" holds the invalid tag "00010-café.html" named "café", both composed, with invalid true', async () => {
+		db = await readDb(page);
+		expect(db.tags[0]).toEqual({
+			...invalid,
+			file: "00010-café.html",
+			name: "café",
+		});
+	});
+	await test.step("And the other tag keeps its decomposed name", () => {
+		expect(db.tags[1]).toEqual({ ...other, file: "00020-café.html" });
+	});
+});
+
 test("A database at version 1 is dropped and synced again", async ({
 	page,
 	context,

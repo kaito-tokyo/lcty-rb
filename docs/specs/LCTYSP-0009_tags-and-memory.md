@@ -174,6 +174,32 @@ Scope: tag definitions (name, prompt, order) and memory, and how conversations r
   The server writes the markup ([below](#the-server-writes-the-html)) in the form of
   [Tag file markup](#tag-file-markup).
 - Files in `t/` that do not match the tag file pattern (for example the temporary files below) are ignored.
+- A file that matches the pattern but has no `<lcty-t>` is still a tag, marked invalid
+  ([below](#tag-files-without-lcty-t)).
+
+#### Tag files without `<lcty-t>`
+
+The server always writes `<lcty-t>`, so such a file only appears when someone puts a file in `t/` by hand or breaks one
+while editing it. It is not dropped, because `t/` is data the user owns: the server never rewrites or deletes it
+unasked.
+
+- **Get-all lists it** with a warning, as `{file, name, ops: [], prompt: "", memory: [], invalid: true}`. `invalid`
+  is present only on such a tag.
+  - The name comes from the file name, as far as the file name tells it: the file-name part with its `~xx` escapes
+    undone (`00020-c~23.html` gives `c#`). This is mechanical, not Unicode processing: a display name cannot contain
+    `~`, so `~` followed by the two hex digits of an escaped symbol is always an escape. The case and the form the user
+    typed are not in the file name, so the name is lowercase like the part. The browser composes it to NFC with the
+    file name.
+- **Replace-all keeps it as it is** when the browser sends it back with `invalid: true`: the file is neither written
+  nor deleted, and the other fields of that entry are not read. Only a listed file without `<lcty-t>` can be kept so;
+  sending `invalid: true` for any other file is 400. Another tag of the set may not be written over a kept file (for
+  example under a name the file system takes as the same file), which is 400 too. Left out of the set, the file is
+  deleted like any other tag file: deleting it is asked for.
+- **Add-memory refuses it** with 409 and leaves the file unchanged.
+- **In the browser** the tag keeps its file name. The tag editor shows it with its name and a note that the file cannot
+  be read, without fields to edit; it can be deleted there. The reorder page does not list it, and saving sends it back
+  unchanged. A memory proposal leaves it out, as an undefined tag. Its prompt and memory are empty, so it adds nothing
+  to a draft.
 
 ### Tag file markup
 
@@ -325,7 +351,8 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   `GET /v1/tags`, every tag in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full"
   as opposed to `c_meta`'s head lines only: a tag file is small and every reader needs all of it.
   - **`t_full` is row-oriented, like `c_meta`:** one row per tag file, the tag as `GET /v1/tags` gives it, with the key
-    path `file` (NFC-normalized). Key order is file-name order, which is the order of the tags (`NNNNN-`), so the rows
+    path `file` (NFC-normalized; so is the `name` of an invalid tag, which comes from the file name). Key order is
+    file-name order, which is the order of the tags (`NNNNN-`), so the rows
     read in key order are the set in order. A reorder changes a tag's key; a sync rewrites every row anyway.
   - **`t_set` holds the set's `ETag`,** one record under the key `"set"`, `{etag}`: the ETag is the whole set's, so it
     is not a row. Its presence marks a copy, so an empty set (no rows) is a copy too.

@@ -12,7 +12,8 @@ Feature: LCTYSP-3014 Tag files
   JSON, with one ETag for the whole set. Replace-all takes the complete set, checks the file names mechanically, writes
   each file's HTML through a temporary file and a rename, and deletes the tag files left out; it needs If-Match with
   the current ETag. Add-memory appends one item to one file. Every operation takes flock on t.lock. Names are never
-  normalized or rewritten.
+  normalized or rewritten. A tag file without <lcty-t> is listed as invalid, named after its file name; replace-all
+  keeps it as it is when it is sent back as invalid, and add-memory refuses it.
 
   Scenario: A new tag directory has no tags
     Given a new tag directory
@@ -70,10 +71,53 @@ Feature: LCTYSP-3014 Tag files
     Then get-all lists only "00010-a.html"
     And replace-all with no tags deletes only "00010-a.html"
 
-  Scenario: A tag file without <lcty-t> is ignored with a warning
+  Scenario: A tag file without <lcty-t> is listed as invalid, with a warning
     Given a new tag directory with the tag file "00010-a.html"
-    And the tag file "00020-broken.html" without <lcty-t>
-    Then get-all lists only "00010-a.html" and warns about "00020-broken.html"
+    And the tag file "00020-c~23~2a.html" without <lcty-t>
+    Then get-all lists "00010-a.html" and then "00020-c~23~2a.html", and warns about "00020-c~23~2a.html"
+    And the second is named "c#*", with no ops, the prompt "", no memory and invalid true
+    And the first has no invalid
+
+  Scenario Outline: The name of a tag file without <lcty-t> is its part with the escapes undone
+    Then the part <part> gives the name <name>
+
+    Examples:
+      | part                                               | name                 |
+      | "ruby"                                             | "ruby"               |
+      | "c~23"                                             | "c#"                 |
+      | "~21~23~24~25~26~28~29~2a~3c~3e~3f~5b~5d~5e~7b~7d" | "!#$%&()*<>?[]^{}"   |
+      | "a~7e~20"                                          | "a~7e~20"            |
+      | "a~2A"                                             | "a~2A"               |
+      | "日本語"                                           | "日本語"             |
+
+  Scenario: Replace-all keeps a tag file sent back as invalid
+    Given a new tag directory with the tag file "00010-a.html" and the tag file "00020-broken.html" without <lcty-t>
+    When replace-all sends "00010-a.html" with the prompt "new" and "00020-broken.html" as invalid, with another name and a prompt
+    Then "00020-broken.html" is unchanged
+    And get-all lists "00010-a.html" with the prompt "new"
+
+  Scenario: Replace-all deletes a tag file without <lcty-t> left out of the set
+    Given a new tag directory with the tag file "00010-a.html" and the tag file "00020-broken.html" without <lcty-t>
+    When replace-all sends "00010-a.html" only
+    Then t/ has only the tag file "00010-a.html"
+
+  Scenario Outline: Only a tag file without <lcty-t> is kept as invalid
+    Given a new tag directory with the tag file "00010-a.html" and the tag file "00020-broken.html" without <lcty-t>
+    When replace-all sends "00020-broken.html" as invalid and <file> as invalid
+    Then it fails with 400 "only a tag file that cannot be read is kept as it is: <file>"
+    And t/ is unchanged
+
+    Examples:
+      | file           |
+      | "00010-a.html" |
+      | "00030-c.html" |
+
+  Scenario: No tag is written over a tag file kept as invalid
+    Given a new tag directory with the tag file "00020-broken.html" without <lcty-t>
+    And "00020-alias.html" in t/ that is the same file as "00020-broken.html"
+    When replace-all sends "00020-broken.html" as invalid and a tag in "00020-alias.html"
+    Then it fails with 400 "the tag file "00020-alias.html" cannot be read, so it cannot be overwritten"
+    And t/ is unchanged
 
   Scenario: Replace-all deletes the tag files left out of the set
     Given a new tag directory with the tag files "00010-a.html", "00020-b.html" and "00030-c.html"
@@ -195,3 +239,9 @@ Feature: LCTYSP-3014 Tag files
       | "x"       | "a.html"          | 400    | invalid tag file name: must be NNNNN-<name>.html      |
       | "   "     | "00010-a.html"    | 400    | text is required                                      |
       | a number  | "00010-a.html"    | 400    | text is required                                      |
+
+  Scenario: Add-memory refuses a tag file without <lcty-t>
+    Given a new tag directory with the tag file "00020-broken.html" without <lcty-t>
+    When add-memory adds "x" to "00020-broken.html"
+    Then it fails with 409 "the tag file cannot be read"
+    And "00020-broken.html" is unchanged

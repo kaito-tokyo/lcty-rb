@@ -31,6 +31,13 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
     And "t_full" has one row per tag, keyed by its file name
     And "t_full" holds the tags ["00010-café.html"] composed and the ETag "e1"
 
+  Scenario: A sync composes the name of an invalid tag, which comes from its file name
+    Given there is no database "lcty_t"
+    And GET /v1/tags returns the invalid tag "00010-café.html" named "café", both decomposed, and the tag "00020-cafe" U+0301 ".html" with the name decomposed
+    When the worker is posted {"op": "force_sync"}
+    Then "t_full" holds the invalid tag "00010-café.html" named "café", both composed, with invalid true
+    And the other tag keeps its decomposed name
+
   Scenario: A database at version 1 is dropped and synced again
     Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"
     And GET /v1/tags returns the tags ["00010-b.html"] with the ETag "e2"

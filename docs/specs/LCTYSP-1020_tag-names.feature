@@ -149,6 +149,12 @@ Feature: LCTYSP-1020 Tag names, file names and references
     Then it throws "full"
     And the tag "99999-a.html" named "a" alone keeps its file
 
+  Scenario: An invalid tag keeps its file name as it is
+    Given the invalid tag "00020-Broken~2A.html" named "Broken~2A", the tag "00030-a.html" named "a" and a new tag "b"
+    When assignFileNames gives them file names
+    Then the files are "00020-Broken~2A.html", "00030-a.html" and "00040-b.html"
+    And the invalid tag is the same object
+
   Scenario: Renumbering numbers the tags in the given order and keeps their parts
     Given the tags "00050-go.html" named "Go", "00010-c~23.html" named "C#" and "00011-ruby.html" named "Ruby", in this order
     When renumber renumbers them
