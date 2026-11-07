@@ -9,9 +9,11 @@
 		"test:ui": "playwright test tests/ui",
 		"test:ui:install": "playwright install chromium webkit",
 		"test:backend": "ruby tests/backend/run.rb",
-		"check:scenarios": "node tests/unit/check-scenarios.js"
+		"check:scenarios": "node tests/unit/check-scenarios.js",
+		"check:biome": "biome check"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.6.6",
 		"@playwright/test": "^1.65.0"
 	},
 	"engines": {

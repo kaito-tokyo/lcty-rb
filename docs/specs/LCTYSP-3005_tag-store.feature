@@ -4,6 +4,14 @@
 
 # The behaviour of lib/tag_store.rb (LCTYSP-0009, LCTYSP-0010). Each Scenario is a test of the same title in
 # tests/backend/tag_store_test.rb, whose steps are the lines below.
+#
+# Revision draft (LCTYSP-0009, "one HTML file per tag"; not implemented): when it is implemented, the Scenarios about
+# tag definitions and memory (all, replace_all, add_memory, edit_memory, delete_memory) leave this feature. The tag
+# files get a feature of their own: get-all and replace-all of t/ under t.lock, the mechanical checks of file names,
+# the ETag and If-Match (412, 428), add-memory on one file (404 when missing), the HTML written and parsed back, and
+# names that a case-insensitive or NFD file system lists differently. This feature keeps conversation_tags (whose tags
+# become file-name parts, checked mechanically) and the migration, which gains a Scenario: the tags and memory tables
+# are dropped without conversion while conversation_tags is kept. The Scenarios below describe the code as it is.
 
 Feature: LCTYSP-3005 The tag store
 

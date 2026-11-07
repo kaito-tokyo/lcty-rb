@@ -6,7 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0009: Tags and memory
 
-- Status: Accepted
+- Status: Accepted; revision drafted ([Revision draft: one HTML file per tag](#revision-draft-one-html-file-per-tag),
+  not implemented)
 - Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 - Implementation: `lib/tag_store.rb`, `public/js/tags.js`
 
@@ -99,6 +100,10 @@ UI → storage:  POST /v1/tags/:name/memory for each accepted one
 
 ## Storage
 
+> This section describes the current implementation. The
+> [revision draft](#revision-draft-one-html-file-per-tag) below moves tag definitions and memory to one HTML file per
+> tag; until it is implemented, `tags.sqlite` stays as described here.
+
 Tags and memory are source-of-truth data in `data/tags.sqlite`
 ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
 
@@ -141,3 +146,286 @@ API shape:
 	]
 }
 ```
+
+## Revision draft: one HTML file per tag
+
+Status: draft, not implemented. This section records what has been decided for moving tag definitions and memory out
+of `tags.sqlite` into one HTML file per tag, and lists what is still open. Where it disagrees with the sections above,
+this section is the intended design; the sections above describe the code as it is today.
+
+Scope: tag definitions (name, prompt, order) and memory, and how conversations refer to tags
+([below](#conversations-refer-to-tags-by-the-file-name-part)). The current tags of conversations stay in
+`conversation_tags` in `tags.sqlite` ([below](#tagssqlite-only-conversation_tags-remains-no-conversion)).
+
+### Tag files
+
+- **One file per tag:** `$LCTY_DATA_DIR/t/NNNNN-<file-name part>.html`.
+  - `NNNNN` is a 5-digit, zero-padded order prefix. Tags are composed into the draft in file-name order (zero padding
+    makes it the numeric order). Numbers are given in steps of 10 (`00010`, `00020`, …), so a tag can be put between
+    two others without renaming the rest.
+  - The file-name part is derived from the display name (below). Two names with the same file-name part are the same
+    tag; the browser rejects a second definition with the same part.
+  - **The browser always sends tags in this file-name form** (`00010-ruby.html`), never as a bare display name.
+- **The display name is stored inside the HTML.** It keeps its case as the user typed it (after NFC), which the file
+  name cannot give back (it is lowercased and escaped). The prompt and the memory items are stored in the same file.
+  The server writes the markup ([below](#the-server-writes-the-html)) in the form of
+  [Tag file markup](#tag-file-markup).
+- Files in `t/` that do not match the tag file pattern (for example the temporary files below) are ignored.
+
+### Tag file markup
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="lcty.v1.js"></script>
+<script src="lcty.v1.lang-ja.js"></script>
+<link rel="stylesheet" href="lcty.v1.css" />
+</head>
+<body>
+<lcty-t data-tag="タグ名">
+<lcty-tagop data-tag="タグ名" data-type="add-memory" data-content="一段落にまとめて"></lcty-tagop>
+<lcty-system data-tag="タグ名" data-content="# 指示"></lcty-system>
+<lcty-memory id="t-mem-0190…" data-tag="タグ名" data-at="…" data-source-conv="…" data-source-msg="…" data-content="メモリ1"></lcty-memory>
+<lcty-memory id="t-mem-0190…" data-tag="タグ名" data-at="…" data-content="メモリ2"></lcty-memory>
+</lcty-t>
+</body>
+</html>
+```
+
+- **Not append-only.** Unlike a conversation file ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)), a tag file is
+  always rewritten whole (replace-all, add-memory), so `<lcty-t>` is an ordinary element closed with `</lcty-t>`, and
+  the order of the lines carries no history.
+- **The header** is the same as a conversation file's: `lcty.v1.js`, `lcty.v1.lang-ja.js` and `lcty.v1.css` by relative
+  paths, so the file opens on its own (see [the assets](#lcty-v1-assets-in-every-directory) below).
+- **`<lcty-t>`** wraps the tag. `data-tag` is the display name (NFC, case kept), the one place the name is stored.
+- **Every child repeats `data-tag`,** with the same value, so each element says which tag it belongs to on its own (for
+  example when elements of several tags are shown together). The server writes the same name everywhere; a reader uses
+  `<lcty-t>`'s.
+- **`<lcty-tagop>`: a policy for an operation on the tag.** The decision is that a tag file can carry these elements.
+  `data-type` names the operation and `data-content` is the instruction for it; `add-memory` is the memory proposal
+  policy (what conversations with this tag should remember and how to write it). At most one `<lcty-tagop>` per
+  `data-type`; it is omitted when there is no policy. `data-type` is lowercase letters, digits and `-`; unknown types
+  are ignored (and not kept when the server rewrites the file).
+  - How the existing [proposal flow](#proposal-flow) uses the `add-memory` policy (instead of, or together with, the
+    tag's prompt) is adjusted later.
+- **`<lcty-system>`: the tag's prompt,** the part it contributes to the system prompt draft. At most one; omitted when
+  the prompt is empty.
+- **`<lcty-memory>`: one memory item,** in the order added. `data-content` is the text. `id` is `t-mem-` followed by the
+  item id (a UUIDv7 for new items), so it can sit in a URL fragment and never collides with other ids. `data-at` is
+  when it was added. `data-source-conv` and `data-source-msg` are the conversation and its last message it was proposed
+  from (omitted when there is none).
+- **Text strings** (`data-tag`, `data-content`) follow the conversation file's rule: when a string contains characters
+  XML cannot represent, it is written as `name-base64` instead
+  ([LCTYSP-0003](LCTYSP-0003_conversation-file.md#characters-xml-cannot-represent)). The display name cannot contain
+  them (category C is forbidden), so in practice only `data-content` can.
+- **No presentation children** for now: the elements are empty, and what is shown comes from `lcty.v1.js`.
+- **The JSON of the API** mirrors the markup:
+  `{file, name, ops: [{type, content}], prompt, memory: [{id, text, at, source?}]}`
+  ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
+
+#### lcty.v1 assets in every directory
+
+- Every directory that holds HTML has its own copy of `lcty.v1.*`, so a page or file refers to them by name alone
+  (`lcty.v1.js`). In the data directory: `$LCTY_DATA_DIR/` (the root), `c/` and `t/`, published at startup as `c/` is
+  today ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). On the site: `/`, `/c/` and `/t/`.
+
+### Character handling is the browser's
+
+All Unicode-aware processing (normalization, case mapping, character categories) happens in the browser. Ruby passes
+names through untouched and applies only mechanical checks; it uses no Unicode tables (Ruby 2.6's are old, and two
+implementations could disagree).
+
+**Display name (checked by the browser):**
+
+- NFC-normalized, then 1–40 code points.
+- Forbidden: every character of Unicode general categories Z (separators, including spaces) and C (controls, format
+  characters, private use, surrogates, unassigned), and the ASCII characters ``: ; / " ' ` ~ \ |``.
+  - `:` keeps `tag:name` in search unambiguous; `/ \ :` and `" |` are path separators or reserved on common file
+    systems; `~` is the escape character of the file-name part, so a name never contains a literal one.
+  - Category Cf includes ZWJ, so emoji ZWJ sequences cannot be used in names. Category Cn depends on the browser's
+    Unicode version, so a character newer than the browser is rejected there.
+- Case is kept in the display name.
+
+**File-name part (derived by the browser):**
+
+```js
+let part = name
+	.normalize("NFC")
+	.toLowerCase()
+	.replaceAll("ς", "σ")
+	.normalize("NFC");
+part = part.replace(
+	/[!#$%&()*<>?[\]^{}]/g,
+	(c) => "~" + c.charCodeAt(0).toString(16).padStart(2, "0"),
+);
+```
+
+- NFC → lowercase (JavaScript `toLowerCase`, with final sigma `ς` mapped to `σ` so that where a sigma stands does not
+  change the result) → NFC again (lowercasing can denormalize).
+- Then the ASCII symbols `! # $ % & ( ) * < > ? [ ] ^ { }` are escaped as `~` plus two lowercase hex digits:
+  `C#` → `c~23`, `100%` → `100~25`, `Ruby` → `ruby`. These characters have meaning in shells, URLs, globs or Windows
+  file names. Non-ASCII characters are left as they are.
+- **Lowercasing makes the files work on case-insensitive file systems** (APFS and HFS+ by default, NTFS): `Ruby` and
+  `ruby` would otherwise be one file there and two files elsewhere.
+- Typical names stay far below the 255-byte limit that Ruby checks; escaping triples an ASCII symbol, and lowercasing
+  lengthens a few characters (such as `İ`).
+
+**Checks in Ruby (mechanical only),** for each file name in a request:
+
+- starts with 5 ASCII digits and `-`, and ends with `.html`;
+- contains no `/`, `\`, `:` or NUL;
+- at most 255 bytes, and valid UTF-8;
+- the file-name parts (the name without the `NNNNN-` prefix) are unique within the request, compared byte by byte.
+
+Ruby does not normalize, lowercase or otherwise rewrite names; what it writes is exactly what the browser sent.
+
+**Notes:**
+
+- NFC replaces CJK compatibility ideographs (those in U+F900–U+FAFF and U+2F800–U+2FA1F that have a canonical
+  decomposition) with the unified ideographs. A user who typed a compatibility ideograph sees the unified one after
+  saving.
+- HFS+ stores file names decomposed (NFD-like). A name the server reads back from `t/` may therefore not be byte-equal
+  to the NFC name the browser sent. The browser NFC-normalizes names it receives before comparing them with its own.
+  The server must not rely on byte equality between names it wrote and names it lists either (see "Replace all").
+- Possible later addition: the server reports the file system's behaviour (case and normalization sensitivity) to the
+  browser, for example by probing `t/` at startup, so the browser can warn about names that would collide there.
+
+### API: get-all and replace-all
+
+Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
+
+- **Get all:** list `t/`, read every tag file, return them in file-name order. Takes the shared lock.
+- **Replace all:** the browser sends the complete set of tag files. Under the exclusive lock the server
+  1. checks every file name (above) and rejects the whole request, writing nothing, if one fails;
+  2. writes each file to a temporary file in `t/` (a name the listing ignores, for example starting with `.`) and
+     renames it into place;
+  3. deletes the tag files that were in `t/` before and are not in the request. A file the server has just written is
+     never deleted, even when its listed name is not byte-equal to the requested one (HFS+); the server checks this
+     mechanically, for example with `File.identical?` against the files it wrote.
+- **Locking:** `flock` on `$LCTY_DATA_DIR/t.lock`, exclusive for replace-all, shared for get-all. The lock is global
+  (one for all tags).
+- **The server has no reorder or rename feature.** Reordering, renaming and editing all send a new complete set
+  computed by the browser. The one per-tag operation is adding a memory item
+  ([below](#adding-memory-has-its-own-endpoint)).
+- Get-all returns an `ETag` and replace-all requires `If-Match`
+  ([below](#concurrent-tabs-etag-and-if-match-crashes-are-accepted)).
+
+### In the browser: t_full, like c_meta
+
+Tags are handled in the browser the way the conversation meta is (`c_meta`,
+[LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
+
+- **IndexedDB `lcty_t`, store `t_full`** (derived; it can be dropped at any time): a copy of `GET /v1/tags`, every tag
+  in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full" as opposed to `c_meta`'s
+  head lines only: a tag file is small and every reader needs all of it.
+- **One database per resource:** `lcty_c` for what is derived from `c/` (store `c_meta`) and `lcty_t` for what is
+  derived from `t/` (store `t_full`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the data
+  directory. The current database `lcty` is renamed `lcty_c`; since it is derived, the old `lcty` is simply deleted
+  (`indexedDB.deleteDatabase`) and `lcty_c` is filled by the next sync.
+  - Each database has exactly one piece of code that opens it with a version and defines its schema
+    (`sync_c_meta.worker.js` for `lcty_c`, `sync_t_full.worker.js` for `lcty_t`). The workers have no imports, so a
+    shared database would mean the same version and schema written in two places, and one worker's upgrade could be
+    blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never need
+    to be read in one transaction.
+  - The readers of `c_meta` (`lcty.v1.js`, `js/api/meta-db.js`) open `lcty_c` instead of `lcty`
+    ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md) is updated with the implementation).
+- **A sync is one worker:** `js/sync_t_full.worker.js`, a module worker with no imports like
+  `js/sync_c_meta.worker.js`. It fetches `../v1/tags` (resolved against its own URL), clears and fills `t_full` in one
+  transaction (so a tag deleted on the server disappears from it), stores the `ETag`, and posts `undefined`; a failure
+  is thrown at its top level and reaches the page as the `Worker`'s `error` event, leaving the copy as it was.
+- **When a sync runs:** opening a page and every change of tags sent by this browser (`PUT /v1/tags`,
+  `POST /v1/tags/:file/memory`) request one, run when idle, with at most one worker per tab, as for `c_meta`.
+- **Readers** open the database without a version, never create it, and close each connection after reading: the tag
+  editor, the tag choice on the new conversation page, the reorder page, the display of references (part → display
+  name) in the sidebar and the header, and `tag:` in search (display name → part).
+- **Replace-all sends the `ETag` held in `t_full` as `If-Match`.** On 412 the browser syncs and the user redoes the
+  edit on the new copy.
+- No `localStorage` snapshot for now.
+
+### Reordering has its own page
+
+- Reordering moves to a separate page at `/t/` ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tag editor loses its
+  ↑↓ buttons; a tag added in the editor gets the number after the last one (largest + 10).
+- The reorder page shows the tags in their current order, lets the user move them, and on save renumbers all of them
+  in steps of 10 from `00010` and sends replace-all with the new file names and unchanged contents.
+- Draft composition ([above](#composing-the-draft)) uses file-name order instead of the `position` column.
+
+### The server writes the HTML
+
+- The browser sends and receives JSON; the server builds each tag file's HTML from it and parses the files back into
+  JSON for get-all, as it does for conversation files ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). The markup
+  and its escaping live in one place (Ruby), and the server can vouch for what is in `t/`.
+- The server still does no Unicode processing: the display name, prompt and memory text are stored exactly as sent
+  (HTML-escaped), and the file name is the one the browser sent.
+- Memory items keep their `id` and `at` through replace-all; an item without `at` gets the current time, as
+  `PUT /v1/tags` does today.
+- Not adopted: the browser writes the HTML and the server stores the bytes. The markup would live in JavaScript and the
+  server could not vouch for the content.
+
+### Adding memory has its own endpoint
+
+- Accepting a proposal uses a small add-memory endpoint ([LCTYSP-0006](LCTYSP-0006_http-api.md)) that names the tag by
+  its file name (`00010-ruby.html`, as get-all returned it). Under the exclusive lock on `t.lock`, the server reads that
+  one file, appends the item (assigning `id` and `at`), and writes the file back via a temporary file and a rename.
+  A file that does not exist (for example renamed or renumbered by another tab) is 404, and the browser gets all again.
+- It changes the set, so it changes the set's `ETag` (below): a tab that loaded the tags before the addition cannot
+  replace-all over it without getting all again.
+- Not adopted: adding memory through replace-all. Every addition would rewrite every file and could undo another tab's
+  edits to other tags.
+- Editing and deleting memory items stay in the tag editor and go through replace-all.
+
+### Renaming is not a rename
+
+- A rename changes the file-name part, so the tag becomes a different file: the browser sends the new file (carrying
+  over the prompt and memory) and leaves out the old one, which replace-all deletes. The server has no notion of a
+  rename.
+- Conversations that refer to the old name show it as an undefined tag, as they do today after a rename.
+- Not adopted: a stable id (for example a UUIDv7) inside each tag file that conversations refer to. It would need the
+  id in conversation files or `conversation_tags` and a mapping for `tag:name` in search.
+
+### Concurrent tabs: ETag and If-Match; crashes are accepted
+
+- Get-all returns an `ETag` for the whole set of tag files, computed by the server under the lock from the listed file
+  names and their contents (so a change made outside the server also changes it).
+- Replace-all requires `If-Match` with that `ETag`. When another tab (or an add-memory request) has changed the set in
+  between, it fails with 412 and writes nothing; the browser gets all again and the user redoes the edit on the new
+  state. A request without `If-Match` is rejected with 428. A successful replace-all returns the new `ETag`.
+- **A crash during replace-all is accepted:** it can leave a mix of old and new files. Each file itself is whole, thanks
+  to the temporary file and rename.
+- Not adopted for now: writing the whole set to `t.new/` and swapping directories with recovery at startup. It can be
+  added later without changing the API.
+
+### Conversations refer to tags by the file-name part
+
+- **Every reference from a conversation is the file-name part without the number** (`C#` → `c~23`, `Ruby` → `ruby`):
+  `data-setup-tags` of new conversations, the rows of `conversation_tags`, the search index (`conv_tags`) and
+  `tag:` in search. It does not change when tags are reordered.
+- **The browser converts, Ruby compares bytes.** The browser derives the part from what the user chose or typed
+  (`tag:C#` is sent as `tag:c~23`), so `C#` and `c#` are one tag in search without Ruby lowercasing or normalizing
+  anything. `convs_with_tags` stays a byte comparison.
+- **Display:** the browser shows a reference with the display name of the tag file whose part it is. A reference with
+  no tag file (a deleted or renamed tag) is an undefined tag and shows as the part itself.
+- **Ruby checks references mechanically** (in `tags` lines and `data-setup-tags`): valid UTF-8, no whitespace or
+  control characters (`data-setup-tags` is space separated), no `/`, `\` or `:`, and at most 244 bytes (255 minus
+  `NNNNN-` and `.html`). Like file names, it does not rewrite them.
+
+### tags.sqlite: only conversation_tags remains; no conversion
+
+- **The `tags` and `memory` tables of `tags.sqlite` are abolished at once, without conversion.** The server no longer
+  reads or writes them; a migration (`PRAGMA user_version`) drops them. Existing tag definitions and memory are not
+  carried over to `t/`: tags start empty and are defined again in the tag editor.
+- **`conversation_tags` stays in `tags.sqlite`,** which then holds only that table: the current tags of each
+  conversation after a change, as before.
+- **Existing references are not converted** either. `data-setup-tags` in existing conversation files and existing rows
+  of `conversation_tags` keep the display names they were written with. Where such a name equals the part of a new
+  tag (lowercase names without the escaped symbols, such as `ruby`), it refers to that tag; otherwise it shows as an
+  undefined tag, until the conversation's tags are changed.
+- Not adopted: converting the old tags in the browser or with a one-off script.
+
+Not yet discussed: whether tag files are served at a URL (for example `/t/NNNNN-<name>.html`, beside the reorder
+page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later); which code deletes the old IndexedDB `lcty`.
+The data directory is drafted in [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), and the changes to the backend tests
+are noted at the top of [LCTYSP-3005](LCTYSP-3005_tag-store.feature).
