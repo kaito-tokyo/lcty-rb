@@ -11,7 +11,10 @@ export function textAttr(el, name) {
 	try {
 		const bin = atob(b);
 		const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+		// ignoreBOM: a leading U+FEFF is part of the text (byte-exact), not a byte order mark to drop
+		return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+			bytes,
+		);
 	} catch {
 		return null;
 	}

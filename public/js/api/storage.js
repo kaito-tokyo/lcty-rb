@@ -107,8 +107,9 @@ export function fetchSnippets(ids, q) {
 export function getTags() {
 	return request("GET", "/v1/tags");
 }
+/** Replace all tag definitions. Renames change the current tags of conversations (their tags_hint), so it syncs too. */
 export function putTags(obj) {
-	return request("PUT", "/v1/tags", obj);
+	return write("PUT", "/v1/tags", obj);
 }
 export function addMemory(name, body) {
 	return request("POST", `/v1/tags/${encodeURIComponent(name)}/memory`, body);
