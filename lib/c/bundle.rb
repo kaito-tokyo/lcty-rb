@@ -62,11 +62,13 @@ module Chatty
         raise Error, "import cycle: #{(stack + [id]).join(' -> ')}" if stack.include?(id)
         return if mods.key?(id)
         path = File.join(root, id)
+        raise Error, "cannot find the entry #{id}" if stack.empty? && !File.file?(path)
         raise Error, "#{stack.last}: cannot find #{id}" unless File.file?(path)
         src = File.read(path, encoding: 'UTF-8')
         check(id, src, id == entry)
         src.scan(IMPORT_RE) do |list, _, spec|
           dep = resolve(id, spec)
+          raise Error, "#{id}: #{spec} is outside the bundle's root" if dep == '..' || dep.start_with?('../', '/')
           load(root, dep, entry, mods, stack + [id])
           missing = names(list) - mods[dep][:exports]
           raise Error, "#{id}: #{dep} does not export #{missing.join(', ')}" unless missing.empty?
@@ -97,7 +99,8 @@ module Chatty
             err.('only export const NAME = <literal>; and export [async] function NAME() are allowed')
           end
           if entry
-            err.('top-level await is not allowed') if l =~ %r{^[^\s/*\}].*\bawait\b}
+            # A line at the top level (not indented, a comment or a closing brace) that uses await, at its start too
+            err.('top-level await is not allowed') if l =~ %r{\A(?![\s/*\}]).*\bawait\b}
             next
           end
           next if l.empty? || l =~ %r{\A(?:\s|//|/\*|\*|[\}\])])} || l.start_with?('import ') || l =~ FUNCTION_RE

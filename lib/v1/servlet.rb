@@ -99,7 +99,9 @@ module Chatty
           raise HttpError.new(400, 'body must be an object') unless body.is_a?(Hash)
           tags = Array(body['tags'])
           allowed = tags.empty? ? nil : INDEX.convs_with_tags(tags)
-          limit = [[(body['limit'] || 50).to_i, 1].max, 200].min
+          limit = body.fetch('limit', nil) || 50
+          raise HttpError.new(400, 'limit must be a number') unless limit.is_a?(Numeric)
+          limit = [[limit.to_i, 1].max, 200].min
           return json(res, 200, 'results' => INDEX.keyword_search(body['q'].to_s, limit: limit, allowed: allowed))
         when ['POST', 'snippets']
           body = parse_body(req)
@@ -141,7 +143,7 @@ module Chatty
           path = Store.conv_path(parts[1])
           File.unlink(path) if File.exist?(path)
           TAGS.delete_conversation_tags(parts[1])
-          INDEX.sync(parts[1], [])
+          INDEX.remove(parts[1])
           json(res, 200, 'ok' => true)
         else
           raise HttpError.new(404, 'no such endpoint')

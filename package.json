@@ -6,7 +6,8 @@
 		"test": "playwright test",
 		"test:unit": "playwright test tests/unit",
 		"test:ui": "playwright test tests/ui",
-		"test:ui:install": "playwright install chromium webkit"
+		"test:ui:install": "playwright install chromium webkit",
+		"test:backend": "ruby tests/backend/run.rb"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.65.0"

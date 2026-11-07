@@ -14,6 +14,7 @@
 # binary (256 dims). Both use the exchange format lctyvLE0 (VectorRecords).
 
 require 'sqlite3'
+require_relative '../config'
 require 'fileutils'
 require 'securerandom'
 require_relative 'vector_records'
@@ -25,13 +26,15 @@ module Chatty
       MODEL_RE = /\A[A-Za-z0-9._-]{1,80}\z/.freeze # Used in file names, so only these characters are allowed
       DIM = 768     # Dimensions of incoming vectors
       OUT_DIM = 256 # Dimensions of distributed vectors (take the head and renormalize)
+      MAX_ATTACHED = 8 # Models attached at once (SQLite's limit is 10 attached databases per connection)
 
       # index: the SearchIndex, which owns the connection, its mutex and the chunks table.
       def initialize(index, dir)
         @db = index.db
         @mutex = index.mutex
         @dir = dir
-        @attached = {} # model => ATTACH name (v0, v1, …)
+        @attached = {} # model => ATTACH name (v1, v2, …), least recently used first
+        @attach_count = 0
         @exported = nil # the model whose vectors data/_vectors.eg2_264.{dat,idx} hold, while they match the current vectors
         index.on_change { @exported = nil } # Rounds changed: the distribution files may be stale
       end
@@ -45,7 +48,7 @@ module Chatty
       # Vectors are not deleted when a round disappears or changes (the distribution files are joined on rev, so they never
       # mix in; after an undo returns to the same content, the remaining vectors are reused as is).
       def gc(model)
-        return 0 unless MODEL_RE.match?(model.to_s)
+        return 0 unless model.is_a?(String) && MODEL_RE.match?(model)
         @mutex.synchronize do
           v = vdb(model)
           @db.execute(<<~SQL)
@@ -81,7 +84,8 @@ module Chatty
         groups = records.group_by(&:first)
         missing = groups.keys - revs.keys
         raise HttpError.new(400, "rev is missing for #{missing.first}") unless missing.empty?
-        vecs = groups.map { |id, recs| [id, recs.map { |(_, v)| normalized(v) }] }
+        # [id, [[vec, vec256], …]], checked before anything is written
+        vecs = groups.map { |id, recs| [id, recs.map { |(_, v)| n = normalized(v); [n, truncated(n)] }] }
         accepted = []
         stale = []
         @mutex.synchronize do
@@ -95,9 +99,9 @@ module Chatty
                 next
               end
               @db.execute("DELETE FROM #{vt} WHERE msg_id = ?", [id])
-              list.each_with_index do |v, part|
+              list.each_with_index do |(v, v256), part|
                 @db.execute("INSERT INTO #{vt} (msg_id, part, rev, vec, vec256) VALUES (?, ?, ?, ?, ?)",
-                            [id, part, rev, SQLite3::Blob.new(v), SQLite3::Blob.new(truncated(v))])
+                            [id, part, rev, SQLite3::Blob.new(v), SQLite3::Blob.new(v256)])
               end
               accepted << id
             end
@@ -153,10 +157,20 @@ module Chatty
       private
 
       # ATTACH the model's vector DB (data/_vectors.<model>.sqlite) and return its name. Call outside transactions.
+      # SQLite attaches at most 10 databases to a connection, so at most MAX_ATTACHED models stay attached: the one used
+      # least recently is DETACHed to make room (a later request ATTACHes it again).
       def vdb(model)
-        raise HttpError.new(400, "invalid model name: #{model.inspect}") unless MODEL_RE.match?(model)
-        @attached[model] ||= begin
-          name = "v#{@attached.size}"
+        raise HttpError.new(400, "invalid model name: #{model.inspect}") unless model.is_a?(String) && MODEL_RE.match?(model)
+        if (name = @attached.delete(model))
+          return @attached[model] = name # Most recently used last
+        end
+        if @attached.size >= MAX_ATTACHED
+          old_model, old_name = @attached.first
+          @db.execute("DETACH DATABASE #{old_name}")
+          @attached.delete(old_model)
+        end
+        @attached[model] = begin
+          name = "v#{@attach_count += 1}"
           @db.execute("ATTACH DATABASE ? AS #{name}", [File.join(@dir, "_vectors.#{model}.sqlite")])
           if @db.get_first_value("PRAGMA #{name}.user_version").to_i != SCHEMA_VERSION
             @db.execute("DROP TABLE IF EXISTS #{name}.vectors") # Derived data, so rebuild when the format changes
@@ -179,11 +193,12 @@ module Chatty
         (n - 1.0).abs < 1e-4 ? bytes.b : v.map { |x| x / n }.pack('e*')
       end
 
-      # Take the first OUT_DIM of the 768 dims and L2-renormalize (Matryoshka representation)
+      # Take the first OUT_DIM of the 768 dims and L2-renormalize (Matryoshka representation). A vector whose first
+      # OUT_DIM dims are all zero has no direction there, so it would score 0 against everything: reject it
       def truncated(vec)
         v = vec.unpack("e#{OUT_DIM}")
         n = Math.sqrt(v.inject(0.0) { |s, x| s + x * x })
-        n = 1.0 unless n > 0
+        raise HttpError.new(400, "the first #{OUT_DIM} dimensions of a vector must not all be zero") unless n > 0
         v.map { |x| x / n }.pack('e*')
       end
     end

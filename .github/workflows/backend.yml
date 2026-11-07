@@ -1,0 +1,40 @@
+# This workflow is managed by gh actions-lock.
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# The backend unit tests (tests/backend, LCTYSP-3xxx) in the dev container .devcontainer/ruby-2.6.10: macOS's Ruby
+# (2.6.10) with the libraries of the Gemfile, started from its devcontainer.json with the Dev Container CLI.
+
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+env:
+  DEVCONTAINER_CLI: "@devcontainers/cli@0.89.0"
+  DEVCONTAINER_CONFIG: .devcontainer/ruby-2.6.10/devcontainer.json
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the dev container
+        run: npx --yes "$DEVCONTAINER_CLI" up --workspace-folder . --config "$DEVCONTAINER_CONFIG"
+
+      - name: Run backend unit tests
+        run: npx --yes "$DEVCONTAINER_CLI" exec --workspace-folder . --config "$DEVCONTAINER_CONFIG" ruby tests/backend/run.rb
