@@ -141,15 +141,31 @@ class V1ServletTest < Lcty::Scenarios
     res.json['results']
   end
 
-  def tag_defs
+  # [tags, ETag] from GET /v1/tags
+  def get_tags
     res = http('GET', '/v1/tags')
     assert_equal 200, res.status, res.raw
-    res.json['tags']
+    [res.json['tags'], res.header['etag']]
   end
 
-  # Add a tag definition (keeping every other one, which other tests may own)
-  def add_tag(name, memory = [])
-    assert_ok http('PUT', '/v1/tags', 'tags' => tag_defs + [{ 'name' => name, 'prompt' => nil, 'memory' => memory }])
+  def tag_defs
+    get_tags[0]
+  end
+
+  def put_tags(body, etag = get_tags[1])
+    http('PUT', '/v1/tags', body, etag ? { 'if-match' => etag } : {})
+  end
+
+  # A tag file of this test: a random part (other tests share t/)
+  def tag_file(part = "t-#{hex}", extra = {})
+    { 'file' => "00500-#{part}.html", 'name' => part, 'ops' => [], 'prompt' => '', 'memory' => [] }.merge(extra)
+  end
+
+  # Add a tag file (keeping every other one, which other tests may own)
+  def add_tag(tag)
+    tags, etag = get_tags
+    assert_ok put_tags({ 'tags' => tags + [tag] }, etag)
+    tag
   end
 
   def pending(model, limit = nil)
@@ -258,8 +274,10 @@ class V1ServletTest < Lcty::Scenarios
     ['no meta', '"meta must be an object"', -> { { 'lines' => [] } }, 'meta must be an object'],
     ['a meta without an id', '"invalid id"', -> { { 'meta' => {} } }, 'invalid id'],
     ['an id with a space', '"invalid id"', -> { { 'meta' => { 'id' => 'a b' } } }, 'invalid id'],
-    ['tags that are not unique', '"tags must be an array of unique tag names"',
-     -> { { 'meta' => { 'id' => new_id, 'tags' => %w[x x] } } }, 'tags must be an array of unique tag names'],
+    ['tags that are not unique', '"tags must be an array of unique tag references"',
+     -> { { 'meta' => { 'id' => new_id, 'tags' => %w[x x] } } }, 'tags must be an array of unique tag references'],
+    ['a tag reference with a slash', '"tags must be an array of unique tag references"',
+     -> { { 'meta' => { 'id' => new_id, 'tags' => %w[a/b] } } }, 'tags must be an array of unique tag references'],
     ['a tags line', '"line type not allowed: \"tags\""',
      -> { { 'meta' => { 'id' => new_id }, 'lines' => [{ 'type' => 'tags', 'tags' => [] }] } }, 'line type not allowed: "tags"'],
     ['a message id that is not a UUIDv7', '"message id must be a UUIDv7: \"abc\""',
@@ -371,8 +389,8 @@ class V1ServletTest < Lcty::Scenarios
      -> { [user('fine'), user('bad', 'id' => 'nope')] }, 'message id must be a UUIDv7: "nope"'],
     ['an assistant message whose content_html is a number', '"content_html must be a string"',
      -> { [assistant('x', 'content_html' => 1)] }, 'content_html must be a string'],
-    ['a tags line with a tag name with a space', '"tags must be an array of unique tag names"',
-     -> { [{ 'type' => 'tags', 'tags' => ['a b'] }] }, 'tags must be an array of unique tag names']
+    ['a tags line with a tag reference with a space', '"tags must be an array of unique tag references"',
+     -> { [{ 'type' => 'tags', 'tags' => ['a b'] }] }, 'tags must be an array of unique tag references']
   ].each do |label, error_label, lines, message|
     scenario "Lines that cannot be appended are rejected with 400 (#{label})" do
       id = before = res = nil
@@ -587,126 +605,122 @@ class V1ServletTest < Lcty::Scenarios
     end
   end
 
-  scenario 'The tag definitions are replaced as a whole' do
-    before = res = nil
-    name = "new-#{hex}"
+  scenario 'The tags are read with an ETag for the whole set' do
+    res = nil
+    add_tag(tag_file)
+    step('When GET /v1/tags is requested') { res = http('GET', '/v1/tags') }
+    step('Then the status is 200 and the body is {"tags": [...]}, each with file, name, ops, prompt and memory') do
+      assert_equal 200, res.status, res.raw
+      assert_equal %w[tags], res.json.keys
+      refute_empty res.json['tags']
+      res.json['tags'].each { |t| assert_equal %w[file memory name ops prompt], t.keys.sort }
+    end
+    step('And the response has an ETag') { assert_match(/\A"[0-9a-f]{64}"\z/, res.header['etag']) }
+  end
+
+  scenario 'The tag files are replaced as a whole with If-Match' do
+    before = etag = res = nil
     memory = { 'id' => "m-#{hex}", 'text' => 'a note', 'at' => '2026-11-07T00:00:00+09:00' }
-    step('Given the tag definitions from GET /v1/tags') { before = tag_defs }
-    step('When PUT /v1/tags sends them with a new tag that has a prompt and a memory item') do
-      res = http('PUT', '/v1/tags', 'tags' => before + [{ 'name' => name, 'prompt' => 'Be brief.', 'memory' => [memory] }])
+    tag = tag_file("new-#{hex}", 'name' => 'New', 'ops' => [{ 'type' => 'add-memory', 'content' => 'decisions' }],
+                                 'prompt' => 'Be brief.', 'memory' => [memory])
+    step('Given the tags and the ETag from GET /v1/tags') { before, etag = get_tags }
+    step('When PUT /v1/tags sends them and a new tag file with a policy, a prompt and a memory item, with the ETag in If-Match') do
+      res = put_tags({ 'tags' => before + [tag] }, etag)
     end
     step('Then the status is 200 and the body is {"ok": true}') { assert_ok res }
     after = nil
-    step('And GET /v1/tags has the new tag last, with its prompt and its memory item') do
-      after = tag_defs
-      assert_equal({ 'name' => name, 'prompt' => 'Be brief.', 'memory' => [memory] }, after.last)
+    step('And the response has a new ETag, the one GET /v1/tags gives next') do
+      after, now = get_tags
+      refute_equal etag, res.header['etag']
+      assert_equal now, res.header['etag']
     end
-    step('And the tags that were there before are kept') { assert_equal before, after[0...-1] }
+    step('And GET /v1/tags has the new tag with its policy, its prompt and its memory item') do
+      assert_equal tag, after.find { |t| t['file'] == tag['file'] }
+    end
+    step('And the tags that were there before are kept') { assert_equal before, after.reject { |t| t['file'] == tag['file'] } }
   end
 
-  scenario 'A renamed tag keeps its memory' do
-    old_name = "old-#{hex}"
-    new_name = "renamed-#{hex}"
-    memory = { 'id' => "m-#{hex}", 'text' => 'kept', 'at' => '2026-11-07T00:00:00+09:00' }
-    step('Given a tag with a memory item') { add_tag(old_name, [memory]) }
-    step('When PUT /v1/tags sends the same definitions with the tag under a new name and the same memory item') do
-      defs = tag_defs.map { |t| t['name'] == old_name ? t.merge('name' => new_name) : t }
-      assert_ok http('PUT', '/v1/tags', 'tags' => defs)
+  [
+    ['without If-Match', 428, '"If-Match is required"', 'If-Match is required', ->(_) { nil }],
+    ['with the old ETag in If-Match', 412, '"the tags have changed"', 'the tags have changed', ->(old) { old }]
+  ].each do |label, status, error_label, message, if_match|
+    scenario "Replacing the tags without the current ETag (#{label})" do
+      old = before = res = nil
+      step('Given the tags and the ETag from GET /v1/tags, changed since by another PUT') do
+        old = get_tags[1]
+        add_tag(tag_file)
+        before = tag_defs
+      end
+      step("When PUT /v1/tags sends a new set #{label}") do
+        res = http('PUT', '/v1/tags', { 'tags' => [] }, (h = if_match.(old)) ? { 'if-match' => h } : {})
+      end
+      step("Then the status is #{status} with the error #{error_label}") { assert_error res, status, message }
+      step('And the tags are unchanged') { assert_equal before, tag_defs }
     end
-    defs = nil
-    step('Then GET /v1/tags has the new name with the memory item') do
-      defs = tag_defs
-      tag = defs.find { |t| t['name'] == new_name }
-      assert tag, 'the new name'
-      assert_equal [memory], tag['memory']
-    end
-    step('And the old name is gone') { refute_includes defs.map { |t| t['name'] }, old_name }
   end
 
   [
     ['an array', '"body must be {\"tags\": [...]}"', -> { [] }, 'body must be {"tags": [...]}'],
-    ['a tag that is not an object', '"each tag must be an object"', -> { { 'tags' => ['x'] } }, 'each tag must be an object'],
-    ['a tag name with a space', '"invalid tag name: \"a b\""', -> { { 'tags' => [{ 'name' => 'a b' }] } },
-     'invalid tag name: "a b"'],
-    ['a prompt that is a number', '"prompt must be a string"', -> { { 'tags' => [{ 'name' => "p-#{hex}", 'prompt' => 1 }] } },
-     'prompt must be a string'],
+    ['a file name without its number', '"invalid tag file name \"ruby.html\": must be NNNNN-<name>.html"',
+     -> { { 'tags' => tag_defs + [tag_file.merge('file' => 'ruby.html')] } },
+     'invalid tag file name "ruby.html": must be NNNNN-<name>.html'],
+    ['two files with the same part', '"tag file names must be unique"',
+     -> { t = tag_file; { 'tags' => tag_defs + [t, t.merge('file' => t['file'].sub('00500', '00510'))] } },
+     'tag file names must be unique'],
     ['a memory item with a blank text', '"memory must be an array of {id, text}"',
-     -> { { 'tags' => [{ 'name' => "m-#{hex}", 'memory' => [{ 'id' => 'm1', 'text' => '  ' }] }] } },
-     'memory must be an array of {id, text}'],
-    ['two tags with the same name', '"tag names must be unique"',
-     -> { n = "d-#{hex}"; { 'tags' => [{ 'name' => n }, { 'name' => n }] } }, 'tag names must be unique'],
-    ['two memory items with the same id', '"memory ids must be unique"',
-     lambda do
-       m = "m-#{hex}"
-       { 'tags' => [{ 'name' => "x-#{hex}", 'memory' => [{ 'id' => m, 'text' => 'a' }] },
-                    { 'name' => "y-#{hex}", 'memory' => [{ 'id' => m, 'text' => 'b' }] }] }
-     end, 'memory ids must be unique']
+     -> { { 'tags' => tag_defs + [tag_file("m-#{hex}", 'memory' => [{ 'id' => 'm1', 'text' => '  ' }])] } },
+     'memory must be an array of {id, text}']
   ].each do |label, error_label, body, message|
-    scenario "Tag definitions that are not valid are rejected with 400 (#{label})" do
+    scenario "Tag sets that are not valid are rejected with 400 (#{label})" do
       before = tag_defs
       res = nil
-      step("When PUT /v1/tags sends #{label}") { res = http('PUT', '/v1/tags', instance_exec(&body)) }
+      step("When PUT /v1/tags sends #{label} with the current ETag") { res = put_tags(instance_exec(&body)) }
       step("Then the status is 400 with the error #{error_label}") { assert_error res, 400, message }
-      step('And the tag definitions are unchanged') { assert_equal before, tag_defs }
+      step('And the tags are unchanged') { assert_equal before, tag_defs }
     end
   end
 
-  scenario 'Memory items are added, edited and deleted' do
-    name = "メモ-#{hex}"
-    path = "/v1/tags/#{path_escape(name)}/memory"
-    res = item = nil
-    step('Given a tag with a name in Japanese') { add_tag(name) }
-    step('When POST /v1/tags/<name>/memory sends {"text": "  remember this  ", "source": {"conv_id": "c1"}}') do
-      res = http('POST', path, 'text' => '  remember this  ', 'source' => { 'conv_id' => 'c1' })
+  scenario 'A memory item is added to a tag file' do
+    tag = etag = res = item = nil
+    step('Given a tag file with a display name in Japanese and the ETag from GET /v1/tags') do
+      part = "メモ-#{hex}"
+      tag = add_tag(tag_file(part, 'name' => part))
+      etag = get_tags[1]
     end
-    step('Then the status is 201 and the item has an id starting with "mem-", the text "remember this", the time it was added and the source') do
+    step('When POST /v1/tags/<file>/memory sends {"text": "  remember this  ", "source": {"conv_id": "c1"}}') do
+      res = http('POST', "/v1/tags/#{path_escape(tag['file'])}/memory", 'text' => '  remember this  ', 'source' => { 'conv_id' => 'c1' })
+    end
+    step('Then the status is 201 and the item has a UUIDv7 id, the text "remember this", the time it was added and the source') do
       assert_equal 201, res.status, res.raw
       item = res.json
-      assert_match(/\Amem-/, item['id'])
+      assert Uuid.valid?(item['id']), item['id']
       assert_equal 'remember this', item['text']
       assert_in_delta Time.now.to_f, Time.iso8601(item['at']).to_f, 60
       assert_equal({ 'conv_id' => 'c1' }, item['source'])
     end
-    step('When PATCH /v1/tags/<name>/memory/<item id> sends {"text": "edited"}') do
-      res = http('PATCH', "#{path}/#{item['id']}", 'text' => 'edited')
+    step('And GET /v1/tags has the item under the tag') do
+      assert_equal [item], tag_defs.find { |t| t['file'] == tag['file'] }['memory']
     end
-    step('Then the status is 200 and the item has the text "edited"') do
-      assert_equal 200, res.status, res.raw
-      assert_equal({ 'id' => item['id'], 'text' => 'edited', 'at' => item['at'] }, res.json)
-    end
-    step('When DELETE /v1/tags/<name>/memory/<item id> is requested') { res = http('DELETE', "#{path}/#{item['id']}") }
-    step('Then the status is 200 and the body is {"ok": true}') { assert_ok res }
-    step('And GET /v1/tags has the tag without memory') do
-      assert_equal [], tag_defs.find { |t| t['name'] == name }['memory']
-    end
+    step('And GET /v1/tags has another ETag') { refute_equal etag, get_tags[1] }
   end
 
   [
-    ['POST /v1/tags/<unknown tag>/memory with a text', 404, '"no such tag"', 'no such tag',
-     ->(_, _) { http('POST', "/v1/tags/nope-#{hex}/memory", 'text' => 'x') }],
-    ['POST /v1/tags/<name>/memory with a blank text', 400, '"text is required"', 'text is required',
-     ->(name, _) { http('POST', "/v1/tags/#{name}/memory", 'text' => '   ') }],
-    ['POST /v1/tags/<name>/memory with an array', 400, '"text is required"', 'text is required',
-     ->(name, _) { http('POST', "/v1/tags/#{name}/memory", []) }],
-    ['PATCH /v1/tags/<unknown tag>/memory/<item id> with a text', 404, '"no such tag"', 'no such tag',
-     ->(_, item) { http('PATCH', "/v1/tags/nope-#{hex}/memory/#{item}", 'text' => 'x') }],
-    ['PATCH /v1/tags/<name>/memory/<unknown id> with a text', 404, '"no such memory item"', 'no such memory item',
-     ->(name, _) { http('PATCH', "/v1/tags/#{name}/memory/mem-#{hex}", 'text' => 'x') }],
-    ['DELETE /v1/tags/<unknown tag>/memory/<item id>', 404, '"no such tag"', 'no such tag',
-     ->(_, item) { http('DELETE', "/v1/tags/nope-#{hex}/memory/#{item}") }],
-    ['DELETE /v1/tags/<name>/memory/<unknown id>', 404, '"no such memory item"', 'no such memory item',
-     ->(name, _) { http('DELETE', "/v1/tags/#{name}/memory/mem-#{hex}") }]
+    ['POST /v1/tags/<unknown file>/memory with a text', 404, '"no such tag file"', 'no such tag file',
+     ->(_) { http('POST', "/v1/tags/00500-nope-#{hex}.html/memory", 'text' => 'x') }],
+    ['POST /v1/tags/<name without number>/memory with a text', 400, '"invalid tag file name: must be NNNNN-<name>.html"',
+     'invalid tag file name: must be NNNNN-<name>.html', ->(t) { http('POST', "/v1/tags/#{t['name']}/memory", 'text' => 'x') }],
+    ['POST /v1/tags/<file>/memory with a blank text', 400, '"text is required"', 'text is required',
+     ->(t) { http('POST', "/v1/tags/#{t['file']}/memory", 'text' => '   ') }],
+    ['POST /v1/tags/<file>/memory with an array', 400, '"body must be an object"', 'body must be an object',
+     ->(t) { http('POST', "/v1/tags/#{t['file']}/memory", []) }]
   ].each do |request, status, error_label, message, send|
     scenario "Memory requests that cannot be done (#{request})" do
-      name = "mem-tag-#{hex}"
+      tag = res = nil
       memory = { 'id' => "m-#{hex}", 'text' => 'kept', 'at' => '2026-11-07T00:00:00+09:00' }
-      res = nil
-      step('Given a tag with a memory item') { add_tag(name, [memory]) }
-      step("When #{request} is requested") { res = instance_exec(name, memory['id'], &send) }
-      step("Then the status is #{status} with the error #{error_label}") do
-        assert_error res, status, message
-        assert_equal [memory], tag_defs.find { |t| t['name'] == name }['memory']
-      end
+      step('Given a tag file with a memory item') { tag = add_tag(tag_file("mem-tag-#{hex}", 'memory' => [memory])) }
+      step("When #{request} is requested") { res = instance_exec(tag, &send) }
+      step("Then the status is #{status} with the error #{error_label}") { assert_error res, status, message }
+      step('And the tag file is unchanged') { assert_equal tag, tag_defs.find { |t| t['file'] == tag['file'] } }
     end
   end
 
@@ -875,6 +889,8 @@ class V1ServletTest < Lcty::Scenarios
     ['DELETE /v1/defaults.json', ->() { http('DELETE', '/v1/defaults.json') }],
     ['PATCH /v1/conversations', ->() { http('PATCH', '/v1/conversations', {}) }],
     ['GET /v1/tags/a/memory', ->() { http('GET', '/v1/tags/a/memory') }],
+    ['PATCH /v1/tags/a/memory/b', ->() { http('PATCH', '/v1/tags/a/memory/b', 'text' => 'x') }],
+    ['DELETE /v1/tags/a/memory/b', ->() { http('DELETE', '/v1/tags/a/memory/b') }],
     ['GET /v1/conversations/a/lines', ->() { http('GET', '/v1/conversations/a/lines') }]
   ].each do |request, send|
     scenario "An unknown endpoint is 404 (#{request})" do

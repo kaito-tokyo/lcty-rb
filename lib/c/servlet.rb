@@ -31,20 +31,26 @@ module Chatty
     SKIP_RE = /(?:\.d\.ts|\.license)\z/.freeze # Documentation and REUSE files stay in the repository
 
     OFFLINE = %w[lcty.v1.js lcty.v1.css].freeze # Copied into data/c/: what a conversation file opened directly reads
+    # Every data directory that holds HTML gets its own copy, so its files load them by name alone (LCTYSP-0010): the
+    # root, c/ (conversation files) and t/ (tag files)
+    OFFLINE_DIRS = [DATA_DIR, CONV_DIR, TAG_DIR].freeze
 
     @published = [].freeze # Names under public/c/ that /c/ serves (from public/c/) besides conversation files
     class << self
       attr_reader :published
     end
 
-    # At startup: list what /c/ serves, and copy OFFLINE into data/c/ (atomic replace per file, only when the content
-    # changed). /c/ never serves these copies. Other files in data/c/ (copies an older server made, …) are left as they
-    # are: they belong to the user.
+    # At startup: list what /c/ serves, and copy OFFLINE into each of OFFLINE_DIRS (atomic replace per file, only when
+    # the content changed). /c/ never serves these copies. Other files there (copies an older server made, …) are left
+    # as they are: they belong to the user.
     def self.publish_assets
       @published = Dir.glob('**/*', base: SRC_DIR).sort.reject do |rel|
         File.directory?(File.join(SRC_DIR, rel)) || SKIP_RE.match?(rel)
       end.freeze
-      OFFLINE.each { |name| write_if_changed(File.join(CONV_DIR, name), File.binread(File.join(SRC_DIR, name))) }
+      OFFLINE.each do |name|
+        body = File.binread(File.join(SRC_DIR, name))
+        OFFLINE_DIRS.each { |dir| write_if_changed(File.join(dir, name), body) }
+      end
     end
 
     def self.write_if_changed(path, body)

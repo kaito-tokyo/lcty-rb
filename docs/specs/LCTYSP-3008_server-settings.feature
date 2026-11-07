@@ -11,8 +11,8 @@ Feature: LCTYSP-3008 Server settings
   LCTY_HOST and LCTY_DATA_DIR. An unset or empty one takes its default: the port 45280, the address 127.0.0.1 and the
   per-user application data folder (~/Library/Application Support on macOS and Windows, $XDG_DATA_HOME or
   ~/.local/share elsewhere). A relative LCTY_DATA_DIR is resolved against the repository root, and the conversations,
-  the tags and the search index live at fixed places in the data directory. It also defines the patterns of ids and
-  tag names, and HttpError, the error that carries an HTTP status. Each setting is read in a new Ruby process that
+  the tag files and their lock, the tags of conversations and the search index live at fixed places in the data
+  directory. It also defines the patterns of ids and tag references, and HttpError, the error that carries an HTTP status. Each setting is read in a new Ruby process that
   loads lib/config.rb with only the given environment.
 
   Scenario: Without settings the server listens on 127.0.0.1:45280
@@ -57,7 +57,7 @@ Feature: LCTYSP-3008 Server settings
     Given LCTY_DATA_DIR is an absolute path
     When lib/config.rb is loaded
     Then DATA_DIR is that path
-    And CONV_DIR is its "c", TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"
+    And CONV_DIR is its "c", TAG_DIR its "t", TAG_LOCK_PATH its "t.lock", TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"
 
   Scenario: A relative LCTY_DATA_DIR is resolved against the repository root
     Given LCTY_DATA_DIR is "tmp/lcty-data"
@@ -120,28 +120,34 @@ Feature: LCTYSP-3008 Server settings
       | "abc\n" (a trailing newline) |
       | "日本語" (not ASCII)         |
 
-  Scenario Outline: TAG_NAME_RE accepts names of 1 to 40 characters without whitespace or ":"
-    Then TAG_NAME_RE accepts <value>
+  Scenario Outline: tag_ref? accepts tag references of at most 244 bytes
+    Then tag_ref? accepts <value>
 
     Examples:
-      | value                  |
-      | "x" (one character)    |
-      | "work-2026"            |
-      | "日本語" (not ASCII)   |
-      | "a/b#c" (punctuation)  |
-      | 40 characters          |
+      | value                      |
+      | "x" (one character)        |
+      | "work-2026"                |
+      | "日本語" (not ASCII)       |
+      | "c~23" (an escaped symbol) |
+      | "a#b" (punctuation)        |
+      | 244 bytes                  |
 
-  Scenario Outline: TAG_NAME_RE rejects anything else
-    Then TAG_NAME_RE rejects <value>
+  Scenario Outline: tag_ref? rejects whitespace, controls, path separators, colons and more than 244 bytes
+    Then tag_ref? rejects <value>
 
     Examples:
-      | value                             |
-      | "" (empty)                    |
-      | 41 characters                 |
-      | "tag:work" (a colon)          |
-      | "two words" (a space)         |
-      | "tab\there" (a tab)           |
-      | "work\n" (a trailing newline) |
+      | value                    |
+      | "" (empty)               |
+      | 245 bytes                |
+      | "tag:work" (a colon)     |
+      | "a/b" (a slash)          |
+      | a backslash              |
+      | "two words" (a space)    |
+      | an ideographic space     |
+      | a tab                    |
+      | a trailing newline       |
+      | bytes that are not UTF-8 |
+      | a number                 |
 
   Scenario: HttpError carries an HTTP status and a message
     When an HttpError is made with the status 404 and the message "no such conversation"

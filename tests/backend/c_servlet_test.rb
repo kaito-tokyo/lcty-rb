@@ -210,6 +210,15 @@ class CServletTest < Lcty::Scenarios
     end
   end
 
+  scenario 'C.publish_assets copies the same files into the root of data/ and into data/t/, for the tag files' do
+    step('When C.publish_assets runs') { C.publish_assets }
+    step('Then data/lcty.v1.js, data/lcty.v1.css, data/t/lcty.v1.js and data/t/lcty.v1.css have the bytes of those in public/c/') do
+      [Chatty::DATA_DIR, Chatty::TAG_DIR].product(%w[lcty.v1.js lcty.v1.css]).each do |dir, name|
+        assert_equal public_c(name), File.binread(File.join(dir, name))
+      end
+    end
+  end
+
   scenario 'C.publish_assets leaves copies that are up to date alone' do
     before = nil
     step('Given C.publish_assets has run') do

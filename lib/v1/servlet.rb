@@ -89,9 +89,13 @@ module Chatty
           res.body = File.binread(parts[0] == 'vectors.eg2_264.dat' ? dat_path : idx_path)
           return
         when ['GET', 'tags']
-          return json(res, 200, Store.tags)
+          # Every tag file, with one ETag for the set (LCTYSP-0009)
+          body, etag = TAG_FILES.all
+          res['ETag'] = etag
+          return json(res, 200, body)
         when ['PUT', 'tags']
-          Store.put_tags(parse_body(req))
+          # Replace all: If-Match must be the ETag of the set the browser edited (428 without it, 412 when it changed)
+          res['ETag'] = TAG_FILES.replace_all(parse_body(req), req['if-match'])
           return json(res, 200, 'ok' => true)
         when ['POST', 'search']
           # Keyword search only (semantic search and the RRF merge happen in the browser. LCTYSP-0007)
@@ -109,15 +113,11 @@ module Chatty
           return json(res, 200, INDEX.snippets(body['ids'].first(200).map(&:to_s), body['q'].to_s))
         end
 
-        if parts[0] == 'tags' && parts[2] == 'memory'
-          name = parts[1]
-          case [method, parts.size]
-          when ['POST', 3] then return json(res, 201, Store.add_memory(name, parse_body(req)))
-          when ['PATCH', 4] then return json(res, 200, Store.edit_memory(name, parts[3], parse_body(req)))
-          when ['DELETE', 4]
-            Store.delete_memory(name, parts[3])
-            return json(res, 200, 'ok' => true)
-          end
+        if method == 'POST' && parts.size == 3 && parts[0] == 'tags' && parts[2] == 'memory'
+          # Add a memory item to the tag in file parts[1] (00010-ruby.html). Editing and deleting go through PUT /v1/tags
+          body = parse_body(req)
+          raise HttpError.new(400, 'body must be an object') unless body.is_a?(Hash)
+          return json(res, 201, TAG_FILES.add_memory(parts[1], body['text'], body['source']))
         end
 
         case [method, parts[0], parts.size, parts[2]]

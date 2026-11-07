@@ -19,8 +19,8 @@ class ConfigTest < Lcty::Scenarios
   CONFIG = File.expand_path('../../lib/config.rb', __dir__)
   REPO_ROOT = File.expand_path('../..', __dir__)
   SETTINGS = %w[PORT LCTY_HOST LCTY_DATA_DIR XDG_DATA_HOME].freeze
-  CONSTANTS = %w[ROOT PUBLIC_DIR XDG_DATA_HOME DEFAULT_DATA_DIR DATA_DIR CONV_DIR TAGS_DB_PATH INDEX_PATH PORT BIND
-                 BIND_URL_HOST].freeze
+  CONSTANTS = %w[ROOT PUBLIC_DIR XDG_DATA_HOME DEFAULT_DATA_DIR DATA_DIR CONV_DIR TAG_DIR TAG_LOCK_PATH TAGS_DB_PATH
+                 INDEX_PATH PORT BIND BIND_URL_HOST].freeze
   # Prints the constants of lib/config.rb and the platform of the process as JSON
   SCRIPT = "require #{CONFIG.dump}; require 'json'; " \
            "puts JSON.generate(Hash[#{CONSTANTS.inspect}.map { |n| [n, Chatty.const_get(n)] }]" \
@@ -120,8 +120,10 @@ class ConfigTest < Lcty::Scenarios
     end
     step('When lib/config.rb is loaded') { c = load_config }
     step('Then DATA_DIR is that path') { assert_equal dir, c['DATA_DIR'] }
-    step('And CONV_DIR is its "c", TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"') do
+    step('And CONV_DIR is its "c", TAG_DIR its "t", TAG_LOCK_PATH its "t.lock", TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"') do
       assert_equal File.join(dir, 'c'), c['CONV_DIR']
+      assert_equal File.join(dir, 't'), c['TAG_DIR']
+      assert_equal File.join(dir, 't.lock'), c['TAG_LOCK_PATH']
       assert_equal File.join(dir, 'tags.sqlite'), c['TAGS_DB_PATH']
       assert_equal File.join(dir, '_index.sqlite'), c['INDEX_PATH']
     end
@@ -217,24 +219,30 @@ class ConfigTest < Lcty::Scenarios
     '"x" (one character)' => 'x',
     '"work-2026"' => 'work-2026',
     '"日本語" (not ASCII)' => '日本語',
-    '"a/b#c" (punctuation)' => 'a/b#c',
-    '40 characters' => 'あ' * 40
+    '"c~23" (an escaped symbol)' => 'c~23',
+    '"a#b" (punctuation)' => 'a#b',
+    '244 bytes' => 'あ' * 81 + 'a'
   }.each do |label, value|
-    scenario "TAG_NAME_RE accepts names of 1 to 40 characters without whitespace or \":\" (#{label})" do
-      step("Then TAG_NAME_RE accepts #{label}") { assert_match Chatty::TAG_NAME_RE, value }
+    scenario "tag_ref? accepts tag references of at most 244 bytes (#{label})" do
+      step("Then tag_ref? accepts #{label}") { assert Chatty.tag_ref?(value), value.inspect }
     end
   end
 
   {
     '"" (empty)' => '',
-    '41 characters' => 'a' * 41,
+    '245 bytes' => 'あ' * 81 + 'ab',
     '"tag:work" (a colon)' => 'tag:work',
+    '"a/b" (a slash)' => 'a/b',
+    'a backslash' => 'a\\b',
     '"two words" (a space)' => 'two words',
-    '"tab\there" (a tab)' => "tab\there",
-    '"work\n" (a trailing newline)' => "work\n"
+    'an ideographic space' => "全角　空白",
+    'a tab' => "tab\there",
+    'a trailing newline' => "work\n",
+    'bytes that are not UTF-8' => "a\xFFb".dup.force_encoding(Encoding::UTF_8),
+    'a number' => 1
   }.each do |label, value|
-    scenario "TAG_NAME_RE rejects anything else (#{label})" do
-      step("Then TAG_NAME_RE rejects #{label}") { refute_match Chatty::TAG_NAME_RE, value }
+    scenario "tag_ref? rejects whitespace, controls, path separators, colons and more than 244 bytes (#{label})" do
+      step("Then tag_ref? rejects #{label}") { refute Chatty.tag_ref?(value), value.inspect }
     end
   end
 

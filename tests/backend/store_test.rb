@@ -170,9 +170,9 @@ class StoreTest < Lcty::Scenarios
     'a body that is not an object' => ['body must be an object', ->(_id) { [] }],
     'a meta that is not an object' => ['meta must be an object', ->(_id) { { 'meta' => 'x' } }],
     'the id "a b"' => ['invalid id', ->(_id) { { 'meta' => { 'id' => 'a b' } } }],
-    'the tags ["x", "x"]' => ['tags must be an array of unique tag names',
+    'the tags ["x", "x"]' => ['tags must be an array of unique tag references',
                               ->(id) { { 'meta' => { 'id' => id, 'tags' => %w[x x] } } }],
-    'the tag "a:b"' => ['tags must be an array of unique tag names', ->(id) { { 'meta' => { 'id' => id, 'tags' => ['a:b'] } } }],
+    'the tag "a:b"' => ['tags must be an array of unique tag references', ->(id) { { 'meta' => { 'id' => id, 'tags' => ['a:b'] } } }],
     'lines that are not an array' => ['lines must be an array of objects', ->(id) { { 'meta' => { 'id' => id }, 'lines' => {} } }],
     'a tags line' => ['line type not allowed: "tags"',
                       ->(id) { { 'meta' => { 'id' => id }, 'lines' => [{ 'type' => 'tags', 'tags' => [] }] } }],
@@ -186,9 +186,9 @@ class StoreTest < Lcty::Scenarios
       'lines[1].role contains a character that XML cannot represent: U+0001 at 4',
       ->(id) { { 'meta' => { 'id' => id }, 'lines' => [{ 'type' => 'title', 'title' => 't' }, { 'type' => 'message', 'role' => "user\u0001" }] } }
     ],
-    'a tag of the meta holding U+0001' => ['tags must be an array of unique tag names',
+    'a tag of the meta holding U+0001' => ['tags must be an array of unique tag references',
                                            ->(id) { { 'meta' => { 'id' => id, 'tags' => ["a\u0001"] } } }],
-    'a tag of the meta holding U+3000' => ['tags must be an array of unique tag names',
+    'a tag of the meta holding U+3000' => ['tags must be an array of unique tag references',
                                            ->(id) { { 'meta' => { 'id' => id, 'tags' => ["a　b"] } } }]
   }.each do |request, (message, body)|
     scenario "Store.create rejects a bad request with 400 and writes nothing (#{request})" do
@@ -301,7 +301,7 @@ class StoreTest < Lcty::Scenarios
     'no lines for the id "../x"' => [400, 'invalid id', ->(_t) { Store.append('../x', []) }],
     'a command line' => [400, 'line type not allowed: "cmd"', ->(t) { Store.append(t.id, [{ 'type' => 'cmd', 'op' => 'send' }]) }],
     'a meta line' => [400, 'line type not allowed: "meta"', ->(t) { Store.append(t.id, [{ 'type' => 'meta', 'id' => 'x' }]) }],
-    'a tags line whose tags are not a list' => [400, 'tags must be an array of unique tag names',
+    'a tags line whose tags are not a list' => [400, 'tags must be an array of unique tag references',
                                                 ->(t) { Store.append(t.id, [{ 'type' => 'tags', 'tags' => 'a' }]) }],
     'a good line and a line with U+0001 in its at' => [
       400, 'lines[1].at contains a character that XML cannot represent: U+0001 at 0',
@@ -646,110 +646,6 @@ class StoreTest < Lcty::Scenarios
     end
     step('And Store.encode_lines raises HttpError 500 for an unknown line type') do
       assert_http(500, 'unknown line type: "nope"') { Store.encode_lines([{ 'type' => 'nope' }]) }
-    end
-  end
-
-  # ---- Tags and memory ----
-
-  # The current definitions as a body for Store.put_tags, so a test adds to them and leaves the others' tags alone
-  def existing_tags
-    Store.tags['tags']
-  end
-
-  def add_tag(name, prompt = nil, memory = [])
-    Store.put_tags('tags' => existing_tags + [{ 'name' => name, 'prompt' => prompt, 'memory' => memory }])
-  end
-
-  def new_tag_name
-    "t3003-#{SecureRandom.hex(4)}"
-  end
-
-  scenario 'Tag definitions are saved and read back in order' do
-    background
-    a = new_tag_name
-    b = new_tag_name
-    mem_id = "mem-#{SecureRandom.hex(6)}"
-    count = nil
-    step('When Store.put_tags saves two new tags after the existing ones, the second with a memory item') do
-      old = existing_tags
-      count = old.size
-      Store.put_tags('tags' => old + [{ 'name' => a, 'prompt' => 'Prompt A' },
-                                      { 'name' => b, 'memory' => [{ 'id' => mem_id, 'text' => 'Remember B', 'at' => AT }] }])
-    end
-    step('Then Store.tags returns them in that order with their prompts and memory') do
-      tags = Store.tags['tags']
-      assert_equal [a, b], tags[count, 2].map { |t| t['name'] }
-      assert_equal({ 'name' => a, 'prompt' => 'Prompt A', 'memory' => [] }, tags[count])
-      assert_equal({ 'name' => b, 'prompt' => nil, 'memory' => [{ 'id' => mem_id, 'text' => 'Remember B', 'at' => AT }] },
-                   tags[count + 1])
-    end
-  end
-
-  {
-    'a list instead of {"tags": [...]}' => ['body must be {"tags": [...]}', -> { [] }],
-    'a tag that is not an object' => ['each tag must be an object', -> { { 'tags' => ['x'] } }],
-    'the tag name "a b"' => ['invalid tag name: "a b"', -> { { 'tags' => [{ 'name' => 'a b' }] } }],
-    'a prompt that is a number' => ['prompt must be a string', -> { { 'tags' => [{ 'name' => 'a', 'prompt' => 1 }] } }],
-    'a memory item with a blank text' => ['memory must be an array of {id, text}',
-                                          -> { { 'tags' => [{ 'name' => 'a', 'memory' => [{ 'id' => 'm', 'text' => ' ' }] }] } }],
-    'two tags of the same name' => ['tag names must be unique', -> { { 'tags' => [{ 'name' => 'a' }, { 'name' => 'a' }] } }],
-    'two memory items of the same id' => [
-      'memory ids must be unique',
-      -> { { 'tags' => [{ 'name' => 'a', 'memory' => [{ 'id' => 'm', 'text' => '1' }] }, { 'name' => 'b', 'memory' => [{ 'id' => 'm', 'text' => '2' }] }] } }
-    ]
-  }.each do |body, (message, make)|
-    scenario "Store.put_tags rejects a bad body with 400 (#{body})" do
-      background
-      before = nil
-      step("When Store.put_tags is given #{body}") { before = Store.tags }
-      step("Then it raises HttpError 400 #{message.include?('"') ? "'#{message}'" : "\"#{message}\""}") do
-        assert_http(400, message) { Store.put_tags(make.call) }
-        assert_equal before, Store.tags
-      end
-    end
-  end
-
-  scenario 'Memory items are added, edited and deleted' do
-    background
-    name = new_tag_name
-    item = nil
-    memory = -> { Store.tags['tags'].find { |t| t['name'] == name }['memory'] }
-    step('Given a tag') { add_tag(name, 'p') }
-    step('When Store.add_memory adds "  remember this  " with a source') do
-      item = Store.add_memory(name, 'text' => '  remember this  ', 'source' => { 'conv_id' => 'c1', 'msg_id' => 'm1' })
-    end
-    step('Then it returns the item with a new id, the stripped text, a time and the source') do
-      assert_match(/\Amem-\h{12}\z/, item['id'])
-      assert_equal 'remember this', item['text']
-      assert Time.iso8601(item['at'])
-      assert_equal({ 'conv_id' => 'c1', 'msg_id' => 'm1' }, item['source'])
-      assert_equal [item], memory.call
-    end
-    step('And Store.edit_memory changes its text') do
-      edited = Store.edit_memory(name, item['id'], 'text' => ' changed ')
-      assert_equal({ 'id' => item['id'], 'text' => 'changed', 'at' => item['at'] }, edited)
-      assert_equal ['changed'], memory.call.map { |m| m['text'] }
-    end
-    step('And Store.delete_memory removes it from the tag') do
-      Store.delete_memory(name, item['id'])
-      assert_equal [], memory.call
-    end
-  end
-
-  {
-    'Store.add_memory with the text "   "' => [400, 'text is required', ->(n) { Store.add_memory(n, 'text' => '   ') }],
-    'Store.add_memory without a body' => [400, 'text is required', ->(n) { Store.add_memory(n, nil) }],
-    'Store.add_memory for an unknown tag' => [404, 'no such tag', ->(_n) { Store.add_memory("u-#{SecureRandom.hex(4)}", 'text' => 'x') }],
-    'Store.edit_memory of an unknown item' => [404, 'no such memory item', ->(n) { Store.edit_memory(n, 'mem-none', 'text' => 'x') }],
-    'Store.delete_memory for an unknown tag' => [404, 'no such tag', ->(_n) { Store.delete_memory("u-#{SecureRandom.hex(4)}", 'mem-none') }]
-  }.each do |call, (status, message, run)|
-    scenario "Memory needs a text and an existing tag and item (#{call})" do
-      background
-      name = new_tag_name
-      step('Given a tag') { add_tag(name) }
-      step("Then #{call} raises HttpError #{status} \"#{message}\"") do
-        assert_http(status, message) { run.call(name) }
-      end
     end
   end
 end
