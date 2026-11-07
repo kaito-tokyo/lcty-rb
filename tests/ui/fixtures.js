@@ -216,8 +216,8 @@ export async function messageAction(message, name) {
 	return message.locator(`[part~="lcty-message__action--${name}"]`);
 }
 
-/** Open / and wait until js/pages/new.js has started (the tag list ends with its ⚙︎ button). */
-export async function openNewPage(page, path = "/") {
+/** Open the new conversation page /c/ and wait until js/pages/new.js has started (the tag list ends with its ⚙︎ button). */
+export async function openNewPage(page, path = "/c/") {
 	await page.goto(path);
 	await expect(page.locator("#setup-tags > button")).toBeVisible();
 }

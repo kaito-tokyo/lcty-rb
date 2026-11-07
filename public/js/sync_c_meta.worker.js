@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // sync_c_meta.worker.js: replaces the browser's copy of every conversation's meta (LCTYSP-0010). A module worker with no
-// imports, started by js/api/meta-db.js as new Worker("/js/sync_c_meta.worker.js", { type: "module" }); no module
-// imports it, so the bundler never sees it. Each worker does one sync and ends:
+// imports, started by js/api/meta-db.js as new Worker(siteUrl("js/sync_c_meta.worker.js"), { type: "module" }); no
+// module imports it, so the bundler never sees it. Each worker does one sync and ends:
 //
-//   GET /v1/meta-all.json → the store "c_meta" of the database "lcty" is cleared and filled in one transaction (so
+//   GET v1/meta-all.json of the site (found from this file's URL: it is js/ under the root, LCTYSP-0005) → the store "c_meta" of the database "lcty" is cleared and filled in one transaction (so
 //   conversations deleted on the server disappear from it too) → postMessage(undefined). On failure the error is
 //   thrown at the top level and reaches the page as the Worker's error event; the copy is then left as it was.
 //
@@ -21,7 +21,7 @@ const DB_NAME = "lcty";
 const DB_VERSION = 5; // raised when what is stored changes
 const STORE = "c_meta";
 
-const response = await fetch("/v1/meta-all.json");
+const response = await fetch(new URL("../v1/meta-all.json", import.meta.url));
 if (!response.ok)
 	throw new Error(`Failed to fetch /v1/meta-all.json: ${response.status}`);
 const metaAllJson = await response.json();

@@ -44,7 +44,7 @@ changed.
 | [LCTYSP-3007](LCTYSP-3007_vector-db.feature)            | `lib/v1/vector_db.rb`: the vector DB                 |
 | [LCTYSP-3008](LCTYSP-3008_server-settings.feature)      | `lib/config.rb`: the environment variables           |
 | [LCTYSP-3009](LCTYSP-3009_module-bundler.feature)       | `lib/c/bundle.rb`: the module bundler                |
-| [LCTYSP-3010](LCTYSP-3010_module-servlet.feature)       | `lib/module_servlet.rb`: `/index.js`                 |
+| [LCTYSP-3010](LCTYSP-3010_module-servlet.feature)       | `lib/module_servlet.rb`: `/c/index.js`               |
 | [LCTYSP-3011](LCTYSP-3011_conversation-servlet.feature) | `lib/c/servlet.rb`: `/c/`                            |
 | [LCTYSP-3012](LCTYSP-3012_http-api.feature)             | `lib/v1/servlet.rb`: the HTTP API `/v1/`             |
 | [LCTYSP-3013](LCTYSP-3013_gzip.feature)                 | `lcty.rb`: transparent gzip (`Chatty::GzipServer`)   |

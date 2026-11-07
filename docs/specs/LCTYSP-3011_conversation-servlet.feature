@@ -8,8 +8,9 @@
 Feature: LCTYSP-3011 Conversation servlet
 
   Chatty::C::Servlet, mounted at /c, serves under /c/ the conversation files of data/c/ (/c/<id>.html, untouched) and
-  the files of public/c/ that C.publish_assets listed at startup (lcty.v1.*, without the .d.ts and .license files);
-  everything else is 404, and /c/ itself redirects to the top page with its query. C.publish_assets also copies what a
+  the files of public/c/ that C.publish_assets listed at startup (lcty.v1.* and the new conversation page index.html,
+  without the .d.ts and .license files); everything else is 404. /c/ itself is the new conversation page, and /c
+  without the slash redirects to c/ with its query, so that the page's relative paths resolve (LCTYSP-0005). C.publish_assets also copies what a
   conversation file opened directly needs (lcty.v1.js and lcty.v1.css) into data/c/, and C.write_if_changed writes a
   file by an atomic replace only when its bytes change.
 
@@ -35,15 +36,24 @@ Feature: LCTYSP-3011 Conversation servlet
       | /c/lcty.v1.d.ts            |
       | /c/..%2Fsecret.html        |
 
-  Scenario Outline: /c/ redirects to the top page with its query
+  Scenario Outline: /c/ is the new conversation page, public/c/index.html
     When GET <path> is requested
-    Then the status is 302 with the Location <location> on the same server
+    Then the status is 200 with the type "text/html; charset=utf-8"
+    And the body is public/c/index.html
 
     Examples:
-      | path                  | location            |
-      | /c/                   | "/"                 |
-      | /c                    | "/"                 |
-      | /c/?fork=abc&at=3     | "/?fork=abc&at=3"   |
+      | path              |
+      | /c/               |
+      | /c/?fork=abc&at=3 |
+
+  Scenario Outline: /c redirects to c/ with its query
+    When GET <path> is requested
+    Then the status is 302 with the Location <location>, relative to the request
+
+    Examples:
+      | path             | location             |
+      | /c               | "c/"                 |
+      | /c?fork=abc&at=3 | "c/?fork=abc&at=3"   |
 
   Scenario Outline: The published files are served from public/c/
     When GET /c/<name> is requested

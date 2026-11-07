@@ -3,17 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Client for the chatty.rb storage API (LCTYSP-0006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-0003).
+// The paths are relative to the root of the site (v1/…), which siteUrl() turns into URLs (LCTYSP-0005).
 
+import { siteUrl } from "../site.js";
 import { renderMarkdown } from "../ui/markdown.js";
 import { requestMetaDbSync } from "./meta-db.js";
 
-async function request(method, url, body, { raw = false } = {}) {
+async function request(method, path, body, { raw = false } = {}) {
 	const init = { method };
 	if (body !== undefined) {
 		init.headers = { "Content-Type": "application/json" };
 		init.body = JSON.stringify(body);
 	}
-	const r = await fetch(url, init);
+	const r = await fetch(siteUrl(path), init);
 	if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
 	return raw ? r.text() : r.json();
 }
@@ -31,7 +33,7 @@ async function write(method, url, body) {
 }
 
 function conv(id) {
-	return `/v1/conversations/${encodeURIComponent(id)}`;
+	return `v1/conversations/${encodeURIComponent(id)}`;
 }
 
 /**
@@ -46,7 +48,7 @@ export function toLine(m) {
 }
 
 export function listConversations() {
-	return request("GET", "/v1/conversations");
+	return request("GET", "v1/conversations");
 }
 /** { meta, title, tags, messages } (for reading a conversation outside its page, e.g. forking) */
 export function getConversation(id) {
@@ -54,7 +56,7 @@ export function getConversation(id) {
 }
 /** Create a conversation from meta and initial lines (e.g. lines copied from the fork source). */
 export function createConversation(meta, lines) {
-	return write("POST", "/v1/conversations", { meta, lines });
+	return write("POST", "v1/conversations", { meta, lines });
 }
 export function appendLines(id, lines) {
 	return write("POST", `${conv(id)}/lines`, lines);
@@ -68,7 +70,7 @@ export function deleteConversation(id) {
 }
 /** Defaults of the browser settings (LCTYSP-0010). Changes are kept in localStorage, not on the server. */
 export function getDefaults() {
-	return request("GET", "/v1/defaults.json");
+	return request("GET", "v1/defaults.json");
 }
 
 // ---- Search index (LCTYSP-0006, LCTYSP-0007) ----
@@ -76,7 +78,7 @@ export function getDefaults() {
 export function vectorsPending(model, limit = 16) {
 	return request(
 		"GET",
-		`/v1/vectors/pending?model=${encodeURIComponent(model)}&limit=${limit}`,
+		`v1/vectors/pending?model=${encodeURIComponent(model)}&limit=${limit}`,
 	);
 }
 /**
@@ -86,7 +88,7 @@ export function vectorsPending(model, limit = 16) {
 export async function putVectors(model, revs, { body, size, count }) {
 	const rev = revs.map(([id, r]) => `${id}:${r}`).join(",");
 	const qs = `model=${encodeURIComponent(model)}&magic=lctyvLE0&size=${size}&entry_count=${count}&rev=${rev}`;
-	const r = await fetch(`/v1/vectors?${qs}`, {
+	const r = await fetch(siteUrl(`v1/vectors?${qs}`), {
 		method: "PUT",
 		headers: { "Content-Type": "application/octet-stream" },
 		body,
@@ -96,21 +98,21 @@ export async function putVectors(model, revs, { body, size, count }) {
 }
 /** Keyword search: {q, tags, limit} → {results: [{id, conv_id, snippet}]} (in rank order) */
 export function searchConversations(body) {
-	return request("POST", "/v1/search", body);
+	return request("POST", "v1/search", body);
 }
 /** Snippets of rounds: {ids, q} → { id: {conv_id, snippet} } */
 export function fetchSnippets(ids, q) {
-	return request("POST", "/v1/snippets", { ids, q });
+	return request("POST", "v1/snippets", { ids, q });
 }
 
 // ---- Tags and memory (LCTYSP-0009) ----
 export function getTags() {
-	return request("GET", "/v1/tags");
+	return request("GET", "v1/tags");
 }
 /** Replace all tag definitions. Renames change the current tags of conversations (their tags_hint), so it syncs too. */
 export function putTags(obj) {
-	return write("PUT", "/v1/tags", obj);
+	return write("PUT", "v1/tags", obj);
 }
 export function addMemory(name, body) {
-	return request("POST", `/v1/tags/${encodeURIComponent(name)}/memory`, body);
+	return request("POST", `v1/tags/${encodeURIComponent(name)}/memory`, body);
 }

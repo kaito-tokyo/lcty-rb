@@ -113,7 +113,10 @@ scenario("A new id is a canonical UUIDv7", async ({ step }) => {
   named after it, and a failed step stops the Scenario, as `test.step()` does in Playwright. `expect` is Playwright's,
   so the assertions read the same in both runners. `publicUrl(path)` is the file of `public/` to import,
   `useLctyT({ lang, langs })` makes the global `LctyT` that `js/i18n.js` needs from `/c/lcty.v1.mjs` and its languages,
-  and `routeFetch(t, handler)` answers every request of the test with `handler(request)`.
+  and `routeFetch(t, handler)` answers every request of the test with `handler(request)`. In Node.js the root of the
+  site that `siteUrl()` of `js/site.js` finds is `public/` itself ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)),
+  so `routeFetch` gives the handler a URL under `public/` as the same path on the page's origin
+  (`http://127.0.0.1:45290/v1/tags`), the request a page would send.
 
 In the browser:
 

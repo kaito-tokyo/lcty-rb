@@ -41,11 +41,11 @@ import {
 // lcty.v1.js (the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese texts) and links lcty.v1.css.
 // <lcty-c> imports this module once the page has loaded, so it never blocks rendering; it then attaches the event
 // listeners and features the page needs. Served as it is from public/c/, not bundled: the browser imports the modules
-// in public/js/ through the paths below (/js/…, from the server's root), so the features work over HTTP only.
+// in public/js/ through the paths below (../js/…, js/ of the site), so the features work over HTTP only.
 //
 // The conversation file itself (data/c/<id>.html); the conversation is rebuilt from the elements in <lcty-c>. New
-// conversations are made on / (js/pages/new.js). Saving is append-only; the one exception is popping the last turn
-// (LCTYSP-0004).
+// conversations are made on the new conversation page, /c/ next to it ("./", js/pages/new.js). Saving is append-only;
+// the one exception is popping the last turn (LCTYSP-0004).
 import { initSidebar } from "../js/ui/sidebar.js";
 import { textAttr } from "../js/ui/text-attr.js";
 import { UUID_RE } from "../js/uuid.js";
@@ -357,7 +357,7 @@ async function onFork(message) {
 	const i = state.conv.messages.indexOf(message);
 	if (i < 0) return;
 	await saveChain;
-	location.href = `/?fork=${encodeURIComponent(state.conv.meta.id)}&at=${i}`;
+	location.href = `./?fork=${encodeURIComponent(state.conv.meta.id)}&at=${i}`;
 }
 
 // ---- Memory proposals (LCTYSP-0009) ----
@@ -431,7 +431,7 @@ log.deleteButton.addEventListener("click", async () => {
 	try {
 		await saveChain;
 		await deleteConversation(conv.meta.id);
-		location.href = "/";
+		location.href = "./";
 	} catch (e) {
 		showToast(
 			tr("deleteFailed", "Failed to delete: {error}", { error: e.message }),

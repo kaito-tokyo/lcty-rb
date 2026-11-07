@@ -280,13 +280,13 @@ test.describe("undo, regenerate and fork (LCTYSP-0004)", () => {
 			.toBe("作り直した答え");
 	});
 
-	test("fork from here moves to / with the source and the message index", async ({
+	test("fork from here moves to the new conversation page /c/ with the source and the message index", async ({
 		page,
 		request,
 	}) => {
 		const conv = await openTwoTurns(page, request);
 		await (await messageAction(messages(page, "user").first(), "fork")).click();
-		await page.waitForURL(`/?fork=${conv.id}&at=0`);
+		await page.waitForURL(`/c/?fork=${conv.id}&at=0`);
 		await expect(composerInput(page)).toHaveValue("最初の質問");
 	});
 });
@@ -336,7 +336,7 @@ test.describe("stopping and errors (LCTYSP-0004)", () => {
 	});
 });
 
-test("deleting the conversation asks first and returns to /", async ({
+test("deleting the conversation asks first and returns to the new conversation page /c/", async ({
 	page,
 	request,
 }) => {
@@ -349,7 +349,7 @@ test("deleting the conversation asks first and returns to /", async ({
 
 	page.once("dialog", (d) => d.accept());
 	await page.locator('[part~="lcty-c__delete"]').click();
-	await page.waitForURL("/");
+	await page.waitForURL("/c/");
 	const res = await request.get(`/v1/conversations/${conv.id}`);
 	expect(res.status()).toBe(404);
 });

@@ -61,9 +61,22 @@ export function setLang(lang) {
 }
 
 /**
+ * The URL a module asked for, as the browser would request it from a site whose root is base. In Node.js the root of
+ * the site that js/site.js finds is public/ itself (siteUrl("v1/tags") is file:…/public/v1/tags), so a URL under
+ * public/ is the same path under base; any other URL is resolved against base, as in a page.
+ */
+function onSite(url, base) {
+	const root = publicUrl("").href;
+	const href = String(url);
+	return href.startsWith(root)
+		? new URL(href.slice(root.length), base)
+		: new URL(href, base);
+}
+
+/**
  * Replace the global fetch with handler(request) for the rest of the test t: every request a module makes is answered
- * by the test, as context.route() does in the browser. URLs are resolved against base (the page's origin in a page).
- * Returns the requests made, in order.
+ * by the test, as context.route() does in the browser. URLs are those of a site whose root is base (onSite: the page's
+ * origin in a page). Returns the requests made, in order.
  */
 export function routeFetch(
 	t,
@@ -77,7 +90,7 @@ export function routeFetch(
 			input instanceof Request && !init
 				? input
 				: new Request(
-						new URL(String(input instanceof Request ? input.url : input), base),
+						onSite(input instanceof Request ? input.url : input, base),
 						init,
 					);
 		requests.push(request.clone());

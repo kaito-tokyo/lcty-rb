@@ -3,13 +3,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# /c/: conversation files and the files their header lines load (LCTYSP-0005). Mounted at /c by chatty.rb.
-# /c/ URLs are permanent, so the entry files carry their version in the name (lcty.v1.*), never in the path.
+# /c/: conversation files, the files their header lines load, and the new conversation page (LCTYSP-0005). Mounted at
+# /c by chatty.rb. /c/ URLs are permanent, so the entry files carry their version in the name (lcty.v1.*), never in the
+# path.
 #
-# The files under public/c/ (lcty.v1.*) are served as they are from public/c/ itself, so an edit there shows at the next
-# load without a restart; data/c/ serves only conversation files. lcty.v1.js and lcty.v1.lang-<lang>.js are classic
-# scripts generated from the ES modules next to them (.mjs; the command is in each one's head) and committed, and
-# lcty.v1.module.js imports the modules in public/js/ itself (served from the server's root).
+# The files under public/c/ (lcty.v1.*, and index.html, the new conversation page served at /c/ itself) are served as
+# they are from public/c/ itself, so an edit there shows at the next load without a restart; data/c/ serves only
+# conversation files. The page's entry /c/index.js is the bundle that ModuleServlet mounts over it. lcty.v1.js and
+# lcty.v1.lang-<lang>.js are classic scripts generated from the ES modules next to them (.mjs; the command is in each
+# one's head) and committed, and lcty.v1.module.js imports the modules in public/js/ itself (../js/, js/ of the site).
+# The pages here link to each other with paths relative to /c/ ("./", "<id>.html"), so the site may be served under any
+# path; /c without its slash is redirected to c/ so that they resolve.
 # What reading a conversation offline needs, lcty.v1.js (the frame) and lcty.v1.css, is also published next to the
 # conversation files in data/c/ at startup, so a backup of data/ keeps conversations together with what renders them
 # (LCTYSP-0010). Opened directly, a file shows with the English x-default texts and without features.
@@ -52,7 +56,8 @@ module Chatty
     end
 
     # Under /c/: <id>.html returns data/c/<id>.html (the conversation file) untouched, the only thing served from data/c/;
-    # the published files (C.published) are static files in public/c/; and /c/ itself redirects to the top page (a new conversation; the query, e.g. ?fork=<id>&at=<n>, goes along).
+    # the published files (C.published) are static files in public/c/; and /c/ itself is the new conversation page,
+    # public/c/index.html (its query, e.g. ?fork=<id>&at=<n>, is read by the page). /c is redirected to c/ with its query.
     class Servlet < WEBrick::HTTPServlet::AbstractServlet
       def initialize(server, *options)
         super
@@ -62,7 +67,10 @@ module Chatty
       def do_GET(req, res)
         name = String.new(req.path_info.to_s.sub(%r{\A/}, ''), encoding: Encoding::UTF_8)
         if name.empty?
-          res.set_redirect(WEBrick::HTTPStatus::Found, req.query_string.to_s.empty? ? '/' : "/?#{req.query_string}")
+          if req.path_info.to_s.empty? # /c: the page's relative paths need the slash (a relative Location: c/)
+            res.set_redirect(WEBrick::HTTPStatus::Found, req.query_string.to_s.empty? ? 'c/' : "c/?#{req.query_string}")
+          end
+          return @files.do_GET(req, res) # /c/: public/c/index.html
         end
         return @files.do_GET(req, res) if C.published.include?(name)
         id = name[/\A(.+)\.html\z/, 1].to_s

@@ -12,7 +12,7 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
   carry it in data-at; newConvId() makes a conversation id from the local time and four random hex digits
   (20261104-102300-a1b2), and newMsgId() a message id (a UUIDv7). showToast(msg) shows a message in the one #toast
   element for 4 seconds. backendOf(settings, id) picks a backend and convUrl(id, msgId) links to a conversation or to
-  one of its messages. The settings are the defaults of GET /v1/defaults.json overlaid with the changes stored in
+  one of its messages, c/<id>.html of the site (siteUrl of js/site.js, LCTYSP-0005). The settings are the defaults of GET /v1/defaults.json overlaid with the changes stored in
   localStorage "lcty.settings.v1": storeSettings keeps only the values that differ from the defaults, mergeSettings
   overlays them, ignoring unknown keys and values of another type, and loadSettings turns the result into the one
   backend the pages use, or shows a toast and returns null when the defaults cannot be loaded. appIndexer(getSettings)
@@ -115,14 +115,14 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
 
   Scenario Outline: convUrl() links to a conversation or one of its messages
     When convUrl() is called with <id> and <msgId>
-    Then it returns "<url>"
+    Then it returns the URL of "<path>" on the site
 
     Examples:
-      | case                     | id                     | msgId                                  | url                                                                     |
-      | a conversation           | "20261104-102300-a1b2" | undefined                              | /c/20261104-102300-a1b2.html                                            |
-      | an empty message id      | "20261104-102300-a1b2" | ""                                     | /c/20261104-102300-a1b2.html                                            |
-      | a message                | "20261104-102300-a1b2" | "0190f3a1-7c2e-7abc-8def-0123456789ab" | /c/20261104-102300-a1b2.html#c-msg-0190f3a1-7c2e-7abc-8def-0123456789ab |
-      | an id that needs escapes | "a b/c?d#e"            | undefined                              | /c/a%20b%2Fc%3Fd%23e.html                                               |
+      | case                     | id                     | msgId                                  | path                                                                   |
+      | a conversation           | "20261104-102300-a1b2" | undefined                              | c/20261104-102300-a1b2.html                                            |
+      | an empty message id      | "20261104-102300-a1b2" | ""                                     | c/20261104-102300-a1b2.html                                            |
+      | a message                | "20261104-102300-a1b2" | "0190f3a1-7c2e-7abc-8def-0123456789ab" | c/20261104-102300-a1b2.html#c-msg-0190f3a1-7c2e-7abc-8def-0123456789ab |
+      | an id that needs escapes | "a b/c?d#e"            | undefined                              | c/a%20b%2Fc%3Fd%23e.html                                               |
 
   Scenario: storeSettings() stores only the values that differ from the defaults
     Given a page on the server's origin

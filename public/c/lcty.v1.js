@@ -394,8 +394,9 @@
 				{},
 				...this.#items.map((c) => {
 					const on = c.id === this.#current;
-					// a link, so it can be opened in a new tab (the same URL as convUrl in js/common.js)
-					const href = `/c/${encodeURIComponent(c.id)}.html${c.chunk_id ? `#c-msg-${c.chunk_id}` : ""}`;
+					// a link, so it can be opened in a new tab (the same file as convUrl in js/common.js, relative to the page,
+					// which is in /c/ with the conversations)
+					const href = `${encodeURIComponent(c.id)}.html${c.chunk_id ? `#c-msg-${c.chunk_id}` : ""}`;
 					const b = $(
 						"a",
 						on ? "item item--current" : "item",
@@ -460,11 +461,12 @@
 			return el;
 		};
 
-		// a new chat opens in a new window (tab), so the current conversation stays where it is
+		// a new chat opens in a new window (tab), so the current conversation stays where it is. The pages that show the
+		// sidebar are in /c/, next to this file (LCTYSP-0005), so "./" is the new conversation page
 		this.newLink = $(
 			document.createElement("a"),
 			"new",
-			{ href: "/", target: "_blank", rel: "noopener" },
+			{ href: "./", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
 		// opens the tags dialog (the tag editor, LCTYSP-0009), attached by js/ui/sidebar.js
@@ -547,7 +549,7 @@
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
 	// before any module has loaded (LCTYSP-0010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
 	// there at the first paint, or else from IndexedDB ("lcty", store "c_meta"), asynchronously. The database is only
-	// read: when it does not exist it is not created (/js/sync_c_meta.worker.js owns the schema). A module that has already
+	// read: when it does not exist it is not created (js/sync_c_meta.worker.js owns the schema). A module that has already
 	// shown its own items wins.
 	connectedCallback() {
 		if (this.#filled) return;
