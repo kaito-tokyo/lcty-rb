@@ -47,7 +47,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                      |      23 |       0 |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API |      29 |       0 |
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation     |      17 |       0 |
-| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API          |      29 |       9 |
+| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API          |      25 |       9 |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the browser's copy of the meta      |       0 |      17 |
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search        |      25 |       0 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing             |      27 |       0 |
@@ -59,6 +59,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                    |      14 |      39 |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel            |       0 |      21 |
 | [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references  |      55 |       0 |
+| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `js/lcty_t.worker.js` and `js/api/lcty-t.js`: the tags   |       0 |      13 |
 
 ## How a feature is written
 

@@ -157,7 +157,7 @@ test("Requests that do not change conversations do not ask for a sync", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheServerAnswers(server, { ok: true });
-	await test.step("When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations, fetchSnippets, putTags and addMemory are called", async () => {
+	await test.step("When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations and fetchSnippets are called", async () => {
 		const results = await page.evaluate(async () => {
 			const s = await import("/js/api/storage.js");
 			return Promise.all([
@@ -172,12 +172,10 @@ test("Requests that do not change conversations do not ask for a sync", async ({
 				}),
 				s.searchConversations({ q: "x" }),
 				s.fetchSnippets(["r1"], "x"),
-				s.putTags([], "e1"),
-				s.addMemory("00010-t.html", { text: "x" }),
 			]);
 		});
-		expect(results).toHaveLength(9);
-		expect(server.requests).toHaveLength(9);
+		expect(results).toHaveLength(7);
+		expect(server.requests).toHaveLength(7);
 	});
 	await test.step("Then no GET /v1/meta-all.json is fetched within 3 seconds", async () => {
 		await page.waitForTimeout(3000);

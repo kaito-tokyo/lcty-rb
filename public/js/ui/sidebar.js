@@ -6,6 +6,7 @@
 // /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box, the list's items and handlers, the tags dialog
 // (LCTYSP-0009), the refresh button and the settings dialog (LCTYSP-0010) here.
 
+import { requestTagsSync } from "../api/lcty-t.js";
 import { resetMetaDb } from "../api/meta-db.js";
 import { showToast } from "../common.js";
 import { tr } from "../i18n.js";
@@ -54,6 +55,8 @@ export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
 		toast: showToast,
 		onSaved: (defs) => onTagsSaved?.(defs),
 	});
+	// Every page has the sidebar: the browser's copy of the tags is synced when a page loads (LCTYSP-0009)
+	requestTagsSync();
 	initSettingsDialog(sidebar.settingsButton);
 	return panel;
 }

@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import { getTags } from "../js/api/lcty-t.js";
 import {
 	appendLines,
 	deleteConversation,
 	getConversation,
-	getTags,
 	popMessages,
 	toLine,
 } from "../js/api/storage.js";

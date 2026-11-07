@@ -8,12 +8,8 @@
 // moves to /c/<id>.html, which generates the reply because the file ends with that command.
 // With ?fork=<id>&at=<n> it forks; ?q=… puts a query into the sidebar's search box.
 
-import {
-	createConversation,
-	getConversation,
-	getTags,
-	toLine,
-} from "../api/storage.js";
+import { getTags } from "../api/lcty-t.js";
+import { createConversation, getConversation, toLine } from "../api/storage.js";
 import {
 	appIndexer,
 	convUrl,
