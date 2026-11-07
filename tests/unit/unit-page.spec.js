@@ -26,6 +26,7 @@ test("the unit page loads LctyT and the languages it is given", async ({
 // them, so a module that only Node.js can load fails here. Not a Scenario of a feature.
 const NODE_TESTED = [
 	"js/uuid.js",
+	"js/site.js",
 	"js/common.js",
 	"js/ui/text-attr.js",
 	"js/llm/sse.js",

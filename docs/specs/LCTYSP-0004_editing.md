@@ -102,7 +102,7 @@ composer with a spinner and a stop button, and can be aborted; [LCTYSP-0005](LCT
 
 ```
 User → UI:      "Fork from here" on user message #n
-UI:             navigates to /?fork=<id>&at=<n>
+UI:             navigates to /c/?fork=<id>&at=<n> (the new conversation page, ./?fork=… from /c/<id>.html)
 UI   → storage: GET /v1/conversations/<id>
 UI:             fills in the source's system prompt and tags, notes "forked from …" and puts message #n into
                 the composer (messages 0..n-1 are not shown; they are copied when sending)

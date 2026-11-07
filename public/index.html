@@ -10,28 +10,11 @@ SPDX-License-Identifier: Apache-2.0
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lcty</title>
-<link rel="stylesheet" href="/c/lcty.v1.css">
-<script src="/c/lcty.v1.js"></script>
-<script src="/c/lcty.v1.lang-ja.js"></script>
-<script type="module" src="/index.js"></script>
+<!-- The pages are in the directories below the root (LCTYSP-0005): the new conversation page is c/. No inline
+     script (LCTYSP-0005), so the query is not carried over -->
+<meta http-equiv="refresh" content="0; url=c/">
 </head>
-<body class="page new">
-<lcty-sidebar></lcty-sidebar>
-<main class="new-card">
-  <h2 data-lcty-t="newChatHeading">New chat</h2>
-  <p id="fork-note" class="hint" hidden></p>
-  <fieldset>
-    <legend data-lcty-t="setupTags">Tags (choosing them fills in a system prompt draft from their prompts and memory)</legend>
-    <div id="setup-tags"></div>
-  </fieldset>
-  <label class="field">
-    <span data-lcty-t="systemPrompt">System prompt</span>
-    <textarea id="setup-instructions" rows="4" placeholder="(none)" data-lcty-t-placeholder="none"></textarea>
-  </label>
-  <div><button id="setup-recompose" type="button" hidden data-lcty-t="recompose">Rebuild from the tags</button></div>
-  <p class="hint" data-lcty-t="setupHint">The system prompt is fixed when the first message is sent (changing them later would defeat the cache). Tags can be added and removed after starting, but they only work as labels for search.</p>
-  <lcty-composer></lcty-composer>
-</main>
-<div id="toast" role="status" hidden></div>
+<body>
+<p><a href="c/">lcty</a></p>
 </body>
 </html>

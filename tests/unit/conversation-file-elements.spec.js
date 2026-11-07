@@ -1381,9 +1381,9 @@ test("The conversation list shows each conversation as a link", async ({
 			["li", "lcty-conv-list__entry"],
 		]);
 	});
-	await test.step('And the first is a link to "/c/a.html" with data-id "a" holding the title "Alpha", the snippet, the tag chip "ruby" titled "Search tag:ruby" and the meta "2026-11-02 03:04 · 2 messages"', () => {
+	await test.step('And the first is a link to "a.html" with data-id "a" holding the title "Alpha", the snippet, the tag chip "ruby" titled "Search tag:ruby" and the meta "2026-11-02 03:04 · 2 messages"', () => {
 		expect(list.links[0]).toEqual({
-			href: "/c/a.html",
+			href: "a.html",
 			id: "a",
 			chunk: null,
 			parts: [
@@ -1397,9 +1397,9 @@ test("The conversation list shows each conversation as a link", async ({
 			chipTitle: "Search tag:ruby",
 		});
 	});
-	await test.step('And the second is a link to "/c/b.html#c-msg-0190abcd" with data-chunk "0190abcd" holding the title "(untitled)" and the meta "2026-11-02 03:04"', () => {
+	await test.step('And the second is a link to "b.html#c-msg-0190abcd" with data-chunk "0190abcd" holding the title "(untitled)" and the meta "2026-11-02 03:04"', () => {
 		expect(list.links[1]).toEqual({
-			href: "/c/b.html#c-msg-0190abcd",
+			href: "b.html#c-msg-0190abcd",
 			id: "b",
 			chunk: "0190abcd",
 			parts: [
@@ -1664,9 +1664,9 @@ test("The sidebar holds its links, the search box and the list", async ({
 		expect(s.listPart).toBe("lcty-sidebar__list");
 		expect(s.navPart).toBe("lcty-sidebar__nav");
 	});
-	await test.step('And the nav holds the link "+ New chat" to "/" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"', () => {
+	await test.step('And the nav holds the link "+ New chat" to "./" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"', () => {
 		expect(s.fields).toEqual([true, true, true, true]);
-		expect(s.link).toEqual(["+ New chat", "/", "_blank", "noopener"]);
+		expect(s.link).toEqual(["+ New chat", "./", "_blank", "noopener"]);
 		expect(s.buttons).toEqual([
 			["Tags", "Edit tags", "Edit tags", "button"],
 			["↻", "Reload the list", "Reload the list", "button"],

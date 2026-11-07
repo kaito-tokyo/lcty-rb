@@ -39,23 +39,23 @@ class ModuleServletTest < Lcty::Scenarios
     ModuleServlet.mount_all(@server)
   end
 
-  scenario 'mount_all serves the bundle of public/index.js at /index.js' do
+  scenario 'mount_all serves the bundle of public/c/index.js at /c/index.js' do
     res = nil
     step('Given a server on which ModuleServlet.mount_all has mounted the entries') { mount_all }
-    step('When GET /index.js is requested') { res = request('GET', '/index.js') }
+    step('When GET /c/index.js is requested') { res = request('GET', '/c/index.js') }
     step('Then the status is 200') { assert_equal '200', res.code }
-    step('And the body is the bundle of "index.js" in public/') do
-      assert_equal Bundle.bundle(Chatty::PUBLIC_DIR, 'index.js'), res.body.force_encoding('UTF-8')
+    step('And the body is the bundle of "c/index.js" in public/') do
+      assert_equal Bundle.bundle(Chatty::PUBLIC_DIR, 'c/index.js'), res.body.force_encoding('UTF-8')
     end
-    step('And its last block is the entry, "// index.js"') do
-      assert_equal '// index.js', res.body.scan(%r{^// \S+\.js$}).last
+    step('And its last block is the entry, "// c/index.js"') do
+      assert_equal '// c/index.js', res.body.scan(%r{^// \S+\.js$}).last
     end
   end
 
   scenario 'The bundle is JavaScript that is revalidated on every load' do
     res = nil
     step('Given a server on which ModuleServlet.mount_all has mounted the entries') { mount_all }
-    step('When GET /index.js is requested') { res = request('GET', '/index.js') }
+    step('When GET /c/index.js is requested') { res = request('GET', '/c/index.js') }
     step('Then Content-Type is "text/javascript; charset=utf-8"') do
       assert_equal 'text/javascript; charset=utf-8', res['Content-Type']
     end
@@ -70,12 +70,12 @@ class ModuleServletTest < Lcty::Scenarios
     Bundle.stub(:bundle, fake) do
       step('When ModuleServlet.mount_all mounts the entries on a server') { mount_all }
     end
-    step('And GET /index.js is requested twice') { answers = Array.new(2) { request('GET', '/index.js').body } }
-    step('Then the bundler was called once, with public/ and "index.js"') do
-      assert_equal [[Chatty::PUBLIC_DIR, 'index.js']], calls
+    step('And GET /c/index.js is requested twice') { answers = Array.new(2) { request('GET', '/c/index.js').body } }
+    step('Then the bundler was called once, with public/ and "c/index.js"') do
+      assert_equal [[Chatty::PUBLIC_DIR, 'c/index.js']], calls
     end
     step('And both answers are the body it returned') do
-      assert_equal ["// index.js\n{\nrun();\n}\n"] * 2, answers
+      assert_equal ["// c/index.js\n{\nrun();\n}\n"] * 2, answers
     end
   end
 
@@ -89,7 +89,7 @@ class ModuleServletTest < Lcty::Scenarios
       end
     end
     step("Then it raises the bundler's error") { assert_same err, raised }
-    step('And GET /index.js is not found') { assert_equal '404', request('GET', '/index.js').code }
+    step('And GET /c/index.js is not found') { assert_equal '404', request('GET', '/c/index.js').code }
   end
 
   scenario 'The servlet answers the body it was mounted with, byte for byte' do

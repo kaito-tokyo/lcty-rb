@@ -109,17 +109,30 @@ class CServletTest < Lcty::Scenarios
     end
   end
 
-  [
-    ['/c/', '"/"', '/'],
-    ['/c', '"/"', '/'],
-    ['/c/?fork=abc&at=3', '"/?fork=abc&at=3"', '/?fork=abc&at=3']
-  ].each do |path, location_label, location|
-    scenario "/c/ redirects to the top page with its query (#{path})" do
+  ['/c/', '/c/?fork=abc&at=3'].each do |path|
+    scenario "/c/ is the new conversation page, public/c/index.html (#{path})" do
       res = nil
       step("When GET #{path} is requested") { res = get(path) }
-      step("Then the status is 302 with the Location #{location_label} on the same server") do
+      step('Then the status is 200 with the type "text/html; charset=utf-8"') do
+        assert_equal '200', res.code
+        assert_equal 'text/html; charset=utf-8', res['content-type']
+      end
+      step('And the body is public/c/index.html') do
+        assert_equal File.binread(File.join(Chatty::PUBLIC_DIR, 'c', 'index.html')), res.body.b
+      end
+    end
+  end
+
+  [
+    ['/c', '"c/"', '/c/'],
+    ['/c?fork=abc&at=3', '"c/?fork=abc&at=3"', '/c/?fork=abc&at=3']
+  ].each do |path, location_label, location|
+    scenario "/c redirects to c/ with its query (#{path})" do
+      res = nil
+      step("When GET #{path} is requested") { res = get(path) }
+      step("Then the status is 302 with the Location #{location_label}, relative to the request") do
         assert_equal '302', res.code
-        # WEBrick makes the Location absolute
+        # WEBrick makes the Location absolute, against the URL of the request
         assert_equal "http://127.0.0.1:#{self.class.port}#{location}", res['location']
       end
     end

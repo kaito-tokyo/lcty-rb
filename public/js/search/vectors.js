@@ -15,6 +15,7 @@
 // kernel's rows) and /v1/vectors.eg2_264.idx (the 16-byte ids); the worker fetches both whole (full sync only).
 // Storage is left to the HTTP cache (the server returns an ETag and the browser revalidates every time).
 
+import { siteUrl } from "../site.js";
 import { uuidToBytes } from "../uuid.js";
 
 const MAGIC = [0x6c, 0x63, 0x74, 0x79, 0x76, 0x4c, 0x45, 0x30]; // "lctyvLE0"
@@ -57,8 +58,8 @@ function truncate(vec) {
 }
 
 /**
- * Semantic search in a worker (/fuzzy_search.worker.js): it fetches the distribution files, keeps them, and scores the query against every row with bdot264 (LCTYSP-0008). The main thread only sends
- * messages; the worker starts on first use.
+ * Semantic search in a worker (fuzzy_search.worker.js at the root of the site): it fetches the distribution files, keeps them, and scores the query against every row with bdot264 (LCTYSP-0008). The main thread only sends
+ * messages; the worker starts on first use. The worker is given the files as whole URLs (siteUrl, LCTYSP-0005).
  */
 export function createVectorStore() {
 	const state = {
@@ -70,7 +71,7 @@ export function createVectorStore() {
 	};
 
 	function start() {
-		const w = new Worker("/fuzzy_search.worker.js");
+		const w = new Worker(siteUrl("fuzzy_search.worker.js"));
 		w.onmessage = ({ data }) => {
 			const p = state.pending.get(data.id);
 			if (!p) return;
@@ -110,7 +111,7 @@ export function createVectorStore() {
 
 		/** Refetch if the files changed (concurrent calls share one fetch) */
 		async refresh() {
-			const at = (name) => `/v1/${name}`;
+			const at = (name) => siteUrl(`v1/${name}`).href;
 			state.loading ||= call({
 				op: "load",
 				dat: at("vectors.eg2_264.dat"),

@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // fuzzy_search.worker.js: semantic search off the main thread (LCTYSP-0008). A classic worker with no imports, started
-// by js/search/vectors.js as new Worker("/fuzzy_search.worker.js"). It is not a /c/ file: it works on the server's
-// vector data, which a conversation file opened on its own does not need (LCTYSP-0005).
+// by js/search/vectors.js as new Worker(siteUrl("fuzzy_search.worker.js")), at the root of the site. It is not a /c/
+// file: it works on the server's vector data, which a conversation file opened on its own does not need (LCTYSP-0005).
+// bdot264.wasm is found next to this file (self.location), the distribution files at the URLs the page gives.
 //
 // It fetches the distribution files itself (vectors.eg2_264.dat, the rows, and vectors.eg2_264.idx, the 16-byte id of each row, at the
 // URLs the page gives), keeps them, and scores a query against every row with bdot264.wasm. Rows and query

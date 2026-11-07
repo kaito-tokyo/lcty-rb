@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The new conversation page / (LCTYSP-0004 "Starting a conversation", LCTYSP-0005, LCTYSP-0009).
+// The new conversation page /c/ (LCTYSP-0004 "Starting a conversation", LCTYSP-0005, LCTYSP-0009).
 
 import {
 	composerInput,
@@ -26,7 +26,7 @@ test.afterEach(async ({ request }) => {
 	await putTags(request, []);
 });
 
-test("the top page shows the sidebar and the creation card (LCTYSP-0005)", async ({
+test("the new conversation page shows the sidebar and the creation card (LCTYSP-0005)", async ({
 	page,
 }) => {
 	await openNewPage(page);
@@ -34,6 +34,15 @@ test("the top page shows the sidebar and the creation card (LCTYSP-0005)", async
 	await expect(page.locator("main.new-card h2")).toHaveText("新しい会話"); // localized (html lang="ja")
 	await expect(page.locator("#setup-instructions")).toBeVisible();
 	await expect(composerInput(page)).toBeFocused();
+});
+
+test("the root of the site moves to the new conversation page /c/, and /c with its query (LCTYSP-0005)", async ({
+	page,
+}) => {
+	await openNewPage(page, "/");
+	await expect(page).toHaveURL(/\/c\/$/);
+	await openNewPage(page, "/c?q=abc");
+	await expect(page).toHaveURL(/\/c\/\?q=abc$/);
 });
 
 test("sending the first message creates the conversation and generates the reply (LCTYSP-0004)", async ({
@@ -67,14 +76,14 @@ test("Shift+Enter inserts a newline instead of sending (LCTYSP-0005)", async ({
 	await input.press("Shift+Enter");
 	await input.pressSequentially("二行目");
 	await expect(input).toHaveValue("一行目\n二行目");
-	await expect(page).toHaveURL(/\/$/);
+	await expect(page).toHaveURL(/\/c\/$/);
 });
 
 test("an empty message is not sent", async ({ page }) => {
 	await openNewPage(page);
 	await composerInput(page).fill("   ");
 	await composerInput(page).press("Enter");
-	await expect(page).toHaveURL(/\/$/);
+	await expect(page).toHaveURL(/\/c\/$/);
 });
 
 test("choosing a tag fills the system prompt draft from its prompt and memory (LCTYSP-0009)", async ({
@@ -123,12 +132,13 @@ test("a fork starts from the source's system prompt and puts the chosen message 
 			["assistant", "二番目の答え"],
 		],
 	});
-	await openNewPage(page, `/?fork=${src.id}&at=2`);
+	await openNewPage(page, `/c/?fork=${src.id}&at=2`);
 
 	await expect(page.locator("#fork-note")).toBeVisible();
+	// convUrl(): the URL of c/<id>.html on the site
 	await expect(page.locator("#fork-note a")).toHaveAttribute(
 		"href",
-		`/c/${src.id}.html`,
+		new URL(`/c/${src.id}.html`, page.url()).href,
 	);
 	await expect(page.locator("#setup-instructions")).toHaveValue(
 		"分岐元のシステムプロンプト",

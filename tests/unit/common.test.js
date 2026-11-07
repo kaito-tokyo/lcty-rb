@@ -188,30 +188,30 @@ scenario("backendOf() returns undefined without backends", async ({ step }) => {
 	});
 });
 
-for (const { label, id, msgId, url } of [
+for (const { label, id, msgId, path } of [
 	{
 		label: "a conversation",
 		id: "20261104-102300-a1b2",
 		msgId: undefined,
-		url: "/c/20261104-102300-a1b2.html",
+		path: "c/20261104-102300-a1b2.html",
 	},
 	{
 		label: "an empty message id",
 		id: "20261104-102300-a1b2",
 		msgId: "",
-		url: "/c/20261104-102300-a1b2.html",
+		path: "c/20261104-102300-a1b2.html",
 	},
 	{
 		label: "a message",
 		id: "20261104-102300-a1b2",
 		msgId: "0190f3a1-7c2e-7abc-8def-0123456789ab",
-		url: "/c/20261104-102300-a1b2.html#c-msg-0190f3a1-7c2e-7abc-8def-0123456789ab",
+		path: "c/20261104-102300-a1b2.html#c-msg-0190f3a1-7c2e-7abc-8def-0123456789ab",
 	},
 	{
 		label: "an id that needs escapes",
 		id: "a b/c?d#e",
 		msgId: undefined,
-		url: "/c/a%20b%2Fc%3Fd%23e.html",
+		path: "c/a%20b%2Fc%3Fd%23e.html",
 	},
 ]) {
 	scenario(
@@ -224,8 +224,9 @@ for (const { label, id, msgId, url } of [
 					got = convUrl(id, msgId);
 				},
 			);
-			await step(`Then it returns "${url}"`, () => {
-				expect(got).toBe(url);
+			await step(`Then it returns the URL of "${path}" on the site`, () => {
+				// the root of the site is public/ in Node.js (js/site.js)
+				expect(got).toBe(new URL(path, publicUrl("")).href);
 			});
 		},
 	);

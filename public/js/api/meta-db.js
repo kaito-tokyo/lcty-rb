@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The browser's copy of every conversation's meta (IndexedDB "lcty", store "c_meta", LCTYSP-0010). A sync starts a
-// worker, /js/sync_c_meta.worker.js, which fetches GET /v1/meta-all.json, replaces the whole store, posts undefined and
+// worker, js/sync_c_meta.worker.js of the site, which fetches GET v1/meta-all.json, replaces the whole store, posts undefined and
 // ends; a failure is thrown in the worker and arrives here as its error event. This module reads the store itself (the worker owns the schema: the database is never created here)
 // and closes each connection right away, so the worker's upgrade is never blocked.
 //
@@ -19,7 +19,9 @@
 // written from the main thread (workers have no localStorage) after each sync. When it does not fit, it is removed and
 // the sidebar reads the database instead.
 
-const WORKER_URL = "/js/sync_c_meta.worker.js";
+import { siteUrl } from "../site.js";
+
+const WORKER_PATH = "js/sync_c_meta.worker.js"; // relative to the root of the site (LCTYSP-0005)
 const DB_NAME = "lcty";
 const STORE = "c_meta"; // the schema is the worker's
 const IDLE_TIMEOUT_MS = 10000; // run by then even if the browser never becomes idle
@@ -39,7 +41,7 @@ const state = {
 // One worker, one sync: resolves when the store has been replaced
 function runWorker() {
 	return new Promise((resolve, reject) => {
-		const worker = new Worker(WORKER_URL, { type: "module" });
+		const worker = new Worker(siteUrl(WORKER_PATH), { type: "module" });
 		// The worker posts only on success
 		worker.onmessage = () => {
 			worker.terminate();

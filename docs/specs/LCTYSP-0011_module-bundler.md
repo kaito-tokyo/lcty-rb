@@ -8,11 +8,11 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
-- Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/module_servlet.rb` (`/index.js`)
+- Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/module_servlet.rb` (`/c/index.js`)
 
 ## Summary
 
-At startup the server turns the new conversation page's module entry (`/index.js`) and every module it imports into one
+At startup the server turns the new conversation page's module entry (`/c/index.js`) and every module it imports into one
 module file. The conversation page's entry, `lcty.v1.module.js`, is not bundled: it is served as it is and the browser
 imports the modules itself ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The bundler is
 a few regular expressions on whole lines: each module becomes a block, its import lines become `const` aliases, and a
@@ -21,7 +21,7 @@ because the modules follow strict conventions, and the bundler refuses to start 
 
 ## Why a bundler, and why this one
 
-- **One file per page.** The new conversation page loads one module file, `/index.js`, and the modules themselves
+- **One file per page.** The new conversation page loads one module file, `/c/index.js`, and the modules themselves
   (`public/js/`) stay in the repository.
 - **No external tools.** The server runs on macOS's `/usr/bin/ruby` with no Node.js or npm, so the bundler is part of
   the server and has to be small enough to read in one sitting.
@@ -105,8 +105,12 @@ A module that breaks one of these is rejected with its file, line and the reason
   - a class is a class expression returned by a function (`cmdElementClass()`, `convListClass()`), and a custom
     element is defined by a function the page calls (`defineConvList()` from `initSidebar`);
   - only the entry runs code at the top level, which starts the page: `lcty.v1.module.js` holds the conversation
-    page's code, and `public/index.js` calls an init function (`initNewPage()`).
+    page's code, and `public/c/index.js` calls an init function (`initNewPage()`).
 - **No top-level await,** in the entry either: every module evaluates synchronously.
+- **An entry sits one directory below the root of the site,** as the pages do (`public/c/index.js`). _Why:_ in the
+  bundle, `import.meta.url` is the bundle's URL, not the module's; `siteUrl()` of `js/site.js` resolves the root as
+  the directory above it, which is right for `js/site.js` and for an entry at that depth alike
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 
 What the conventions do not restrict: the names a module uses (the same name in several modules, a key or string equal
 to an export, `$`), and anything inside functions.

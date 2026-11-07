@@ -7,6 +7,7 @@
 import { getDefaults } from "./api/storage.js";
 import { tr } from "./i18n.js";
 import { createIndexer, embeddingConfig } from "./search/embed.js";
+import { siteUrl } from "./site.js";
 import { uuidv7 } from "./uuid.js";
 
 export function query(s) {
@@ -64,9 +65,12 @@ export function backendOf(settings, id) {
 	);
 }
 
-// msgId links to the message element itself (id="c-msg-<UUIDv7>". LCTYSP-0003)
+// The URL of a conversation, c/<id>.html of the site (LCTYSP-0005). msgId links to the message element itself
+// (id="c-msg-<UUIDv7>". LCTYSP-0003)
 export function convUrl(id, msgId) {
-	return `/c/${encodeURIComponent(id)}.html${msgId ? `#c-msg-${msgId}` : ""}`;
+	return siteUrl(
+		`c/${encodeURIComponent(id)}.html${msgId ? `#c-msg-${msgId}` : ""}`,
+	).href;
 }
 
 /** Index registration (LCTYSP-0007). Every page calls kick() after saving and on open. */
