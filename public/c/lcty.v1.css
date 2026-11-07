@@ -698,7 +698,7 @@ lcty-message > article hr {
 lcty-message > article a {
 	color: var(--accent);
 }
-/* Suggested next messages (<x-suggestion-for-user-turn:…>): a click puts the text into the composer */
+/* Suggested next messages (<suggestion-for-user-turn>): a click puts the text into the composer */
 lcty-message > article button.suggestion {
 	font: inherit;
 	color: var(--accent);
