@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"test": "npm run test:node && playwright test",
-		"test:node": "node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tests/unit/scenarios-reporter.js --test-reporter-destination=stdout \"tests/unit/*.test.js\"",
+		"test:node": "node --experimental-web-worker --require ./tests/unit/node-preload.cjs --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tests/unit/scenarios-reporter.js --test-reporter-destination=stdout \"tests/unit/*.test.js\"",
 		"test:unit": "npm run test:node && playwright test tests/unit",
 		"test:ui": "playwright test tests/ui",
 		"test:ui:install": "playwright install chromium webkit",
@@ -15,6 +15,6 @@
 		"@playwright/test": "^1.65.0"
 	},
 	"engines": {
-		"node": ">=24"
+		"node": ">=26"
 	}
 }

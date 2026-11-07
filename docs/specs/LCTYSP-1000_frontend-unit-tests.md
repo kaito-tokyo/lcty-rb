@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md)
-- Implementation: `tests/unit/`: in Node.js `node-unit.js` and the `*.test.js`, run by `node:test`, in CI by
+- Implementation: `tests/unit/`: in Node.js `node-unit.js`, `node-preload.cjs` and the `*.test.js`, run by `node:test`, in CI by
   `.github/workflows/node.yml`; in the browser `unit-page.js` and the `*.spec.js`, run by Playwright
   (`playwright.config.js`), in CI by `.github/workflows/browser.yml`; `check-scenarios.js` checks both against the
   features
@@ -49,9 +49,9 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation     |      17 |       0 |
 | [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API          |      29 |       9 |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the browser's copy of the meta      |       0 |      17 |
-| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search        |       8 |      17 |
+| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search        |      25 |       0 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing             |      27 |       0 |
-| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                |       0 |      28 |
+| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                |      28 |       0 |
 | [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | `js/ui/markdown.js`: Markdown rendering                  |      67 |      15 |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                        |       0 |      17 |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/c/lcty.v1.mjs`: the elements of a conversation file    |       0 |      66 |
@@ -76,12 +76,19 @@ As in [LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md):
 ## Node.js or the browser
 
 A Scenario runs in Node.js unless it needs the browser: elements and the HTML parser (`document`, `innerHTML`,
-custom elements, Shadow DOM, dialogs), IndexedDB, `localStorage`, workers, wasm, or the page's origin read by the
-module itself. Such a Scenario has "Given a page on the server's origin" among its lines: in the Background when every
+custom elements, Shadow DOM, dialogs), IndexedDB, `localStorage`, or the page's origin read by the module itself.
+Such a Scenario has "Given a page on the server's origin" among its lines: in the Background when every
 Scenario of the feature needs it, or else as the first line of each Scenario that does, so a feature can be split
 between the two (LCTYSP-1009, for example). Node.js gets no fake DOM (no jsdom or happy-dom): what is tested there is
 what the module does without one. Only a global the module merely reads on the way is stood in for, and the test file's
 head comment says which; for example `document.documentElement.lang`, the only part of the page `LctyT._()` reads.
+
+Workers and wasm run in Node.js too: Node.js 26 has Web Workers (`--experimental-web-worker`) and WebAssembly, so a
+worker is the real script of `public/` running as a real worker (LCTYSP-1011, LCTYSP-1013). What the test stands in
+for is the site around it, as `context.route` does in the browser: `tests/unit/node-preload.cjs` (loaded with
+`--require`, which also runs in classic workers, unlike `--import`) sends each request of a worker to the test, and
+requests a worker's script from the test before starting it, so a script that cannot be loaded is the worker's error
+event, as in a browser. A worker whose Scenario also needs IndexedDB (LCTYSP-1001) stays in the browser.
 
 The browser keeps one more check that is not a Scenario: `unit-page.spec.js` imports every module tested in Node.js in
 both browsers, so a module that only Node.js can load fails there.
@@ -116,7 +123,10 @@ scenario("A new id is a canonical UUIDv7", async ({ step }) => {
   and `routeFetch(t, handler)` answers every request of the test with `handler(request)`. In Node.js the root of the
   site that `siteUrl()` of `js/site.js` finds is `public/` itself ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)),
   so `routeFetch` gives the handler a URL under `public/` as the same path on the page's origin
-  (`http://127.0.0.1:45290/v1/tags`), the request a page would send.
+  (`http://127.0.0.1:45290/v1/tags`), the request a page would send. The handler also answers the requests of the
+  workers and of their scripts (`node-preload.cjs`); a handler that answers `undefined` lets the site serve the file of
+  `public/` (`route.continue()` in the browser), and one that throws fails the request without a response
+  (`route.abort()`). The workers a test started are ended when it ends, as closing the page does.
 
 In the browser:
 
@@ -150,8 +160,9 @@ test:node` uses) and Playwright's JSON reporter.
 
 ## The test environment
 
-- **Node.js.** 24 or later. Each test file runs in a process of its own, its tests one after another; a test that
-  replaces a global (`fetch`) puts it back when it ends.
+- **Node.js.** 26 or later, run as `node --experimental-web-worker --require ./tests/unit/node-preload.cjs --test`
+  (`npm run test:node`; Node.js 24 has no Web Workers). Each test file runs in a process of its own, its tests one
+  after another; a test that replaces a global (`fetch`) puts it back when it ends.
 - **Browsers.** Chromium and WebKit, as for the UI tests; every browser test runs in both.
 - **Server.** The browser tests share the server the UI tests start (`playwright.config.js`): port 45290 by default
   (`LCTY_TEST_PORT` to change it), with an empty data directory in the temporary folder. Unit tests use it only to
