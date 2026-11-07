@@ -242,7 +242,7 @@ implementations could disagree).
 
 - NFC-normalized, then 1–40 code points.
 - Forbidden: every character of Unicode general categories Z (separators, including spaces) and C (controls, format
-  characters, private use, surrogates, unassigned), and the ASCII characters `` : ; / " ' ` ~ \ | ``.
+  characters, private use, surrogates, unassigned), and the ASCII characters ``: ; / " ' ` ~ \ |``.
   - `:` keeps `tag:name` in search unambiguous; `/ \ :` and `" |` are path separators or reserved on common file
     systems; `~` is the escape character of the file-name part, so a name never contains a literal one.
   - Category Cf includes ZWJ, so emoji ZWJ sequences cannot be used in names. Category Cn depends on the browser's
@@ -252,8 +252,15 @@ implementations could disagree).
 **File-name part (derived by the browser):**
 
 ```js
-let part = name.normalize("NFC").toLowerCase().replaceAll("ς", "σ").normalize("NFC");
-part = part.replace(/[!#$%&()*<>?[\]^{}]/g, (c) => "~" + c.charCodeAt(0).toString(16).padStart(2, "0"));
+let part = name
+	.normalize("NFC")
+	.toLowerCase()
+	.replaceAll("ς", "σ")
+	.normalize("NFC");
+part = part.replace(
+	/[!#$%&()*<>?[\]^{}]/g,
+	(c) => "~" + c.charCodeAt(0).toString(16).padStart(2, "0"),
+);
 ```
 
 - NFC → lowercase (JavaScript `toLowerCase`, with final sigma `ς` mapped to `σ` so that where a sigma stands does not
