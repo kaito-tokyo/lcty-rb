@@ -314,11 +314,17 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 - **IndexedDB `lcty_t`, store `t_full`** (derived; it can be dropped at any time): a copy of `GET /v1/tags`, every tag
   in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full" as opposed to `c_meta`'s
   head lines only: a tag file is small and every reader needs all of it.
-- **A separate database from `lcty`.** Each database has exactly one piece of code that opens it with a version and
-  defines its schema (`sync_c_meta.worker.js` for `lcty`, `sync_t_full.worker.js` for `lcty_t`); the workers have no
-  imports, so sharing one database would mean the same version and schema written in two places, and one worker's
-  upgrade could be blocked by the other's connection. The two copies never need to be read in one transaction. The
-  database name `lcty_t` is provisional.
+- **One database per resource:** `lcty_c` for what is derived from `c/` (store `c_meta`) and `lcty_t` for what is
+  derived from `t/` (store `t_full`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the data
+  directory. The current database `lcty` is renamed `lcty_c`; since it is derived, the old `lcty` is simply deleted
+  (`indexedDB.deleteDatabase`) and `lcty_c` is filled by the next sync.
+  - Each database has exactly one piece of code that opens it with a version and defines its schema
+    (`sync_c_meta.worker.js` for `lcty_c`, `sync_t_full.worker.js` for `lcty_t`). The workers have no imports, so a
+    shared database would mean the same version and schema written in two places, and one worker's upgrade could be
+    blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never need
+    to be read in one transaction.
+  - The readers of `c_meta` (`lcty.v1.js`, `js/api/meta-db.js`) open `lcty_c` instead of `lcty`
+    ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md) is updated with the implementation).
 - **A sync is one worker:** `js/sync_t_full.worker.js`, a module worker with no imports like
   `js/sync_c_meta.worker.js`. It fetches `../v1/tags` (resolved against its own URL), clears and fills `t_full` in one
   transaction (so a tag deleted on the server disappears from it), stores the `ETag`, and posts `undefined`; a failure
