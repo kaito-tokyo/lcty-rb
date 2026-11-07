@@ -2,16 +2,19 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// LCTYSP-1018: the scenarios of docs/specs/LCTYSP-1018_tags.feature, written by hand. Each test has the title of its
-// Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
+// LCTYSP-1018: the scenarios of docs/specs/LCTYSP-1018_tags.feature that need the browser, written by hand. Each test
+// has the title of its Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two
+// read side by side.
 //
-// js/tags.js runs in a real browser on the test server's origin, on the empty unit page. GET and PUT /v1/tags,
+// The editor and the dialogs of js/tags.js (renderTagsEditor, initTagsDialog, openMemoryDialog) build DOM elements and
+// open <dialog>s: they run in a real browser on the test server's origin, on the empty unit page. sortTags,
+// composeDraft and proposeMemory run in Node.js, in tests/unit/tags.test.js. GET and PUT /v1/tags,
 // POST /v1/tags/:name/memory and the fake llama-server at http://llm.test are answered by routes the test sets
 // (server.*), which also record what was sent, so the server's data does not matter. What the module calls back
 // (onSaved, toast, onDone) is pushed to window.seen.
 
 import { expect, test } from "@playwright/test";
-import { givenAPage } from "./unit-page.js";
+import { openUnitPage } from "./unit-page.js";
 
 const LLM_URL = "http://llm.test";
 const CORS = {
@@ -42,8 +45,11 @@ function replyWith(text, timings = { prompt_n: 3, predicted_n: 9 }) {
 
 // ---- Background ----
 
+/**
+ * The Background, then the Scenario's first line "Given a page on the server's origin" (the routes are set on the
+ * context, so they are in place before the page opens).
+ */
 async function background(page, context) {
-	await givenAPage(page, context);
 	const server = {
 		tags: { tags: [] },
 		puts: [],
@@ -55,7 +61,7 @@ async function background(page, context) {
 			route.fulfill({ status: 201, json: { id: "m", text: "t", at: "now" } }),
 		answerLlm: replyWith('{"proposals":[]}'),
 	};
-	await test.step("And /v1/tags, /v1/tags/:name/memory and the llama-server at http://llm.test are answered by the test", async () => {
+	await test.step("Given /v1/tags, /v1/tags/:name/memory and the llama-server at http://llm.test are answered by the test", async () => {
 		await context.route("**/v1/tags", (route) => {
 			const req = route.request();
 			if (req.method() === "PUT") {
@@ -83,6 +89,9 @@ async function background(page, context) {
 			});
 			return server.answerLlm(route);
 		});
+	});
+	await test.step("Given a page on the server's origin", async () => {
+		await openUnitPage(page, context);
 		await page.evaluate(async () => {
 			window.T = await import("/js/tags.js");
 			window.seen = [];
@@ -187,111 +196,6 @@ async function clickSave(page) {
 				.textContent !== "",
 	);
 }
-
-// ---- sortTags and composeDraft ----
-
-test("Tag names are sorted in the order of the definitions", async ({
-	page,
-	context,
-}) => {
-	await background(page, context);
-	let defs;
-	await test.step('Given the definitions "ruby", "go" and "rust"', () => {
-		defs = [{ name: "ruby" }, { name: "go" }, { name: "rust" }];
-	});
-	let sorted;
-	await test.step('When sortTags sorts "rust", "zig", "ruby", "ada" and "rust"', async () => {
-		sorted = await page.evaluate(
-			(defs) => window.T.sortTags(defs, ["rust", "zig", "ruby", "ada", "rust"]),
-			defs,
-		);
-	});
-	await test.step('Then it returns "ruby", "rust", "zig" and "ada"', () => {
-		expect(sorted).toEqual(["ruby", "rust", "zig", "ada"]);
-	});
-});
-
-const compose = (page, defs, selected) =>
-	page.evaluate(({ defs, selected }) => window.T.composeDraft(defs, selected), {
-		defs,
-		selected,
-	});
-
-test("The draft follows the definitions, not the order of the choice", async ({
-	page,
-	context,
-}) => {
-	await background(page, context);
-	let defs;
-	await test.step('Given the definitions "ruby" with a prompt and two memory items and "go" with a prompt and no memory', () => {
-		defs = [RUBY, GO];
-	});
-	let draft;
-	await test.step('When composeDraft composes the draft of "go" and "ruby"', async () => {
-		draft = await compose(page, defs, ["go", "ruby"]);
-	});
-	await test.step('Then it is the prompt of "ruby", its memory under "# Memory (ruby)" and the prompt of "go", joined by blank lines', () => {
-		expect(draft).toBe(
-			"Ruby prompt\n\n# Memory (ruby)\n- fact\n- rules\n\nGo prompt",
-		);
-	});
-});
-
-test("Empty prompts and blank memory items are left out of the draft", async ({
-	page,
-	context,
-}) => {
-	await background(page, context);
-	let defs;
-	await test.step('Given the definitions "a" with a blank prompt and the memory items " x " and "  ", "b" with neither and "c" with the prompt " only "', () => {
-		defs = [
-			{ name: "a", prompt: " \n ", memory: [{ text: " x " }, { text: "  " }] },
-			{ name: "b" },
-			{ name: "c", prompt: " only " },
-		];
-	});
-	let draft;
-	await test.step('When composeDraft composes the draft of "a", "b" and "c"', async () => {
-		draft = await compose(page, defs, ["a", "b", "c"]);
-	});
-	await test.step('Then it is "# Memory (a)\\n- x\\n\\nonly"', () => {
-		expect(draft).toBe("# Memory (a)\n- x\n\nonly");
-	});
-	await test.step('And the draft of no tags is ""', async () => {
-		expect(await compose(page, defs, [])).toBe("");
-	});
-});
-
-test("The memory heading of the draft is in the page's language", async ({
-	page,
-	context,
-}) => {
-	await background(page, context);
-	await test.step("Given the page is in Japanese", async () => {
-		await page.evaluate(
-			() =>
-				new Promise((resolve, reject) => {
-					document.documentElement.lang = "ja";
-					const s = document.createElement("script");
-					s.src = "/c/lcty.v1.lang-ja.js";
-					s.onload = resolve;
-					s.onerror = reject;
-					document.head.append(s);
-				}),
-		);
-	});
-	let draft;
-	await test.step('When composeDraft composes the draft of a tag "ruby" with the memory item "x"', async () => {
-		draft = await compose(
-			page,
-			[{ name: "ruby", prompt: "", memory: [{ text: "x" }] }],
-			["ruby"],
-		);
-	});
-	await test.step('Then it is "# メモリ（ruby）\\n- x"', () => {
-		expect(draft).toBe("# メモリ（ruby）\n- x");
-	});
-});
 
 // ---- renderTagsEditor ----
 
@@ -766,293 +670,6 @@ test("Closing the tags dialog with unsaved edits asks first", async ({
 		expect(await dialogOpen(page)).toBe(false);
 	});
 });
-
-// ---- proposeMemory ----
-
-/** proposeMemory in the page: {result} or {error}, and the conversation's messages afterwards. */
-function propose(
-	page,
-	{ conv, defs, backend = { base_url: LLM_URL, model: "m" } },
-) {
-	return page.evaluate(
-		async ({ conv, defs, backend }) => {
-			try {
-				const result = await window.T.proposeMemory({ conv, backend, defs });
-				return { result, messages: conv.messages };
-			} catch (e) {
-				return { error: e.message, messages: conv.messages };
-			}
-		},
-		{ conv, defs, backend },
-	);
-}
-
-const PROMPT = [
-	"From this conversation so far, propose what should be added to the memory of the following tags.",
-	"Follow the policy written in each system prompt about what to remember. For a tag without a policy, you need not propose anything.",
-	"Do not propose what is already in memory or what matters only for this conversation. Write each item in one or two sentences that can be understood on their own.",
-	"If there is nothing to add, make proposals an empty array.",
-	"",
-	'- Current memory of the tag "ruby":',
-	"  - existing",
-	'- Current memory of the tag "go":',
-	"  (none yet)",
-].join("\n");
-
-test("A memory proposal continues the conversation with one temporary message", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	let defs;
-	await test.step('Given the definitions "ruby" with the memory item "existing", "go" without memory and "python"', () => {
-		defs = [
-			{ name: "ruby", prompt: "p", memory: [{ text: "existing" }] },
-			{ name: "go", prompt: "p" },
-			{ name: "python", prompt: "p", memory: [] },
-		];
-	});
-	const messages = [
-		{ id: "u1", role: "user", content: "q" },
-		{ id: "a1", role: "assistant", content: "a", thinking: "t" },
-		{ id: "a2", role: "assistant", content: "", error: "failed" },
-	];
-	let conv;
-	await test.step('And a conversation with the tags "ruby", "unknown" and "go", the instructions "Be brief" and a user message, a reply and an empty reply', () => {
-		conv = {
-			meta: { id: "c1", instructions: "Be brief" },
-			tags: ["ruby", "unknown", "go"],
-			messages,
-		};
-	});
-	await test.step('And the model replies with proposals for "ruby", "python", "go" with blank text and "go"', () => {
-		server.answerLlm = replyWith(
-			JSON.stringify({
-				proposals: [
-					{ tag: "ruby", text: "  New fact  " },
-					{ tag: "python", text: "Py fact" },
-					{ tag: "go", text: "   " },
-					{ tag: "go", text: "Go fact" },
-				],
-			}),
-			{ prompt_n: 12, predicted_n: 30 },
-		);
-	});
-	let out;
-	await test.step('When proposeMemory asks for proposals with the backend "m" at http://llm.test/ and the key "k"', async () => {
-		out = await propose(page, {
-			conv,
-			defs,
-			backend: {
-				base_url: `${LLM_URL}/`,
-				api_key: "k",
-				model: "m",
-				extra: { temperature: 0.2 },
-			},
-		});
-	});
-	await test.step("Then one request is sent to http://llm.test/v1/responses with the key as a bearer token", () => {
-		expect(server.llm.map((r) => [r.url, r.authorization])).toEqual([
-			[`${LLM_URL}/v1/responses`, "Bearer k"],
-		]);
-	});
-	await test.step("And its body has the backend's extra, the model \"m\", stream, the instructions and the conversation's user message and reply", () => {
-		const { body } = server.llm[0];
-		expect(body).toMatchObject({
-			temperature: 0.2,
-			model: "m",
-			stream: true,
-			instructions: "Be brief",
-		});
-		expect(body.input.slice(0, -1)).toEqual([
-			{ role: "user", content: "q" },
-			{ type: "message", role: "assistant", content: "a" },
-		]);
-	});
-	await test.step('And its last input is the temporary user message listing the current memory of "ruby" and "go"', () => {
-		expect(server.llm[0].body.input.at(-1)).toEqual({
-			role: "user",
-			content: PROMPT,
-		});
-	});
-	await test.step('And its response_format is the JSON schema "memory_proposals" with the tags "ruby" and "go"', () => {
-		expect(server.llm[0].body.response_format).toEqual({
-			type: "json_schema",
-			json_schema: {
-				name: "memory_proposals",
-				schema: {
-					type: "object",
-					properties: {
-						proposals: {
-							type: "array",
-							items: {
-								type: "object",
-								properties: {
-									tag: { type: "string", enum: ["ruby", "go"] },
-									text: { type: "string" },
-								},
-								required: ["tag", "text"],
-							},
-						},
-					},
-					required: ["proposals"],
-				},
-			},
-		});
-	});
-	await test.step('And it returns the trimmed proposals for "ruby" and "go", the tags "ruby" and "go" and the timings of the reply', () => {
-		expect(out.result).toEqual({
-			proposals: [
-				{ tag: "ruby", text: "New fact" },
-				{ tag: "go", text: "Go fact" },
-			],
-			tags: ["ruby", "go"],
-			timings: { prompt_n: 12, predicted_n: 30 },
-		});
-	});
-	await test.step("And the conversation's messages are unchanged", () => {
-		expect(out.messages).toEqual(messages);
-	});
-});
-
-test("A conversation without defined tags gets no proposal", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	let defs;
-	let conv;
-	await test.step('Given the definitions "ruby"', () => {
-		defs = [{ name: "ruby", prompt: "p" }];
-	});
-	await test.step('And a conversation with the tags "unknown"', () => {
-		conv = { meta: {}, tags: ["unknown"], messages: [] };
-	});
-	let out;
-	await test.step("When proposeMemory asks for proposals", async () => {
-		out = await propose(page, { conv, defs });
-	});
-	await test.step('Then it throws "The conversation has no defined tags"', () => {
-		expect(out.error).toBe("The conversation has no defined tags");
-	});
-	await test.step("And nothing is sent to the model", () => {
-		expect(server.llm).toEqual([]);
-	});
-});
-
-async function givenRubyAndAConversation() {
-	const defs = [{ name: "ruby", prompt: "p" }];
-	const conv = {
-		meta: {},
-		tags: ["ruby"],
-		messages: [{ role: "user", content: "q" }],
-	};
-	await test.step('Given the definitions "ruby"', () => {});
-	await test.step('And a conversation with the tags "ruby"', () => {});
-	return { defs, conv };
-}
-
-test("A reply without proposals proposes nothing", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	const { defs, conv } = await givenRubyAndAConversation();
-	await test.step('And the model replies with "{}"', () => {
-		server.answerLlm = replyWith("{}");
-	});
-	let out;
-	await test.step("When proposeMemory asks for proposals", async () => {
-		out = await propose(page, { conv, defs });
-	});
-	await test.step('Then it returns no proposals and the tags "ruby"', () => {
-		expect(out.result).toMatchObject({ proposals: [], tags: ["ruby"] });
-	});
-});
-
-test("Proposals that are not objects are skipped", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	const { defs, conv } = await givenRubyAndAConversation();
-	await test.step('And the model replies with the proposals null, 5, "x", a list and one for "ruby"', () => {
-		server.answerLlm = replyWith(
-			JSON.stringify({
-				proposals: [null, 5, "x", ["ruby", "y"], { tag: "ruby", text: "ok" }],
-			}),
-		);
-	});
-	let out;
-	await test.step("When proposeMemory asks for proposals", async () => {
-		out = await propose(page, { conv, defs });
-	});
-	await test.step('Then it returns only the proposal for "ruby"', () => {
-		expect(out).toMatchObject({
-			result: { proposals: [{ tag: "ruby", text: "ok" }], tags: ["ruby"] },
-		});
-	});
-});
-
-for (const { answer, message, fulfill } of [
-	{
-		answer: "replies with text that is not JSON",
-		message: "Could not read the proposal as JSON",
-		fulfill: replyWith("Sure! Here are some proposals"),
-	},
-	{
-		answer: 'replies with "null"',
-		message: "Could not read the proposal as JSON",
-		fulfill: replyWith("null"),
-	},
-	{
-		answer: "replies with a list",
-		message: "Could not read the proposal as JSON",
-		fulfill: replyWith('[{"tag":"ruby","text":"x"}]'),
-	},
-	{
-		answer: "replies with proposals that is a text",
-		message: "Could not read the proposal as JSON",
-		fulfill: replyWith('{"proposals":"ruby: x"}'),
-	},
-	{
-		answer: 'sends the error event "overloaded"',
-		message: "overloaded",
-		fulfill: (route) =>
-			route.fulfill({
-				headers: { ...CORS, "Content-Type": "text/event-stream" },
-				body: sse([
-					{ type: "response.output_text.delta", delta: '{"prop' },
-					{ type: "error", error: { message: "overloaded" } },
-				]),
-			}),
-	},
-	{
-		answer: 'answers with the status 500 and "boom"',
-		message: "HTTP 500: boom",
-		fulfill: (route) =>
-			route.fulfill({
-				status: 500,
-				headers: CORS,
-				json: { error: { message: "boom" } },
-			}),
-	},
-]) {
-	test(`A failed proposal throws (${answer})`, async ({ page, context }) => {
-		const server = await background(page, context);
-		const { defs, conv } = await givenRubyAndAConversation();
-		await test.step(`And the model ${answer}`, () => {
-			server.answerLlm = fulfill;
-		});
-		let out;
-		await test.step("When proposeMemory asks for proposals", async () => {
-			out = await propose(page, { conv, defs });
-		});
-		await test.step(`Then it throws "${message}"`, () => {
-			expect(out.error).toBe(message);
-		});
-	});
-}
 
 // ---- openMemoryDialog ----
 

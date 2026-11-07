@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/api/storage.js (LCTYSP-0003, LCTYSP-0006, LCTYSP-0007, LCTYSP-0009, LCTYSP-0010). Each
-# Scenario is a test of the same title in tests/unit/storage.spec.js, whose steps are the lines below.
+# Scenario is a test of the same title in tests/unit/storage.test.js (in Node.js) or tests/unit/storage.spec.js (in the
+# browser), whose steps are the lines below.
 
 Feature: LCTYSP-1009 The client of the HTTP API
 
@@ -19,8 +20,7 @@ Feature: LCTYSP-1009 The client of the HTTP API
   In the steps the requests of the meta sync worker, GET /v1/meta-all.json, are counted apart from the others.
 
   Background:
-    Given a page on the server's origin
-    And requests to /v1/ are answered by the test, which records them
+    Given requests to /v1/ are answered by the test, which records them
 
   Scenario: A user message becomes a message line without HTML
     Given the user message {"id": "m1", "role": "user", "content": "**Hi**", "at": "2026-11-07T00:00:00.000Z"}
@@ -109,6 +109,7 @@ Feature: LCTYSP-1009 The client of the HTTP API
     Then it rejects with a TypeError
 
   Scenario Outline: A change of conversations asks for a sync of the meta
+    Given a page on the server's origin
     Given the server answers {"ok": true}
     When <call> is called
     Then it resolves
@@ -123,6 +124,7 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | putTags({"tags": []})                   |
 
   Scenario Outline: A change of conversations that fails still asks for a sync
+    Given a page on the server's origin
     Given <answer>
     When appendLines("c1", []) is called
     Then it rejects
@@ -134,12 +136,14 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | the request to the server fails without an answer |
 
   Scenario: Replacing the tag definitions still asks for a sync when it fails
+    Given a page on the server's origin
     Given the server answers with the status 500 and the text "boom"
     When putTags({"tags": []}) is called
     Then it rejects with the Error "500 boom"
     And the meta sync worker then fetches GET /v1/meta-all.json
 
   Scenario: Requests that do not change conversations do not ask for a sync
+    Given a page on the server's origin
     Given the server answers {"ok": true}
     When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations, fetchSnippets and getTags are called
     Then no GET /v1/meta-all.json is fetched within 3 seconds

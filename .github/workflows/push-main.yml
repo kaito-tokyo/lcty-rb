@@ -19,9 +19,18 @@ concurrency:
 jobs:
   backend:
     uses: ./.github/workflows/backend.yml
+    permissions:
+      contents: read
 
   browser:
     uses: ./.github/workflows/browser.yml
+    permissions:
+      contents: read
+
+  node:
+    uses: ./.github/workflows/node.yml
+    permissions:
+      contents: read
 
   docs-deploy:
     runs-on: ubuntu-26.04

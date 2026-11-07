@@ -23,7 +23,11 @@ if (!external)
 // The unit tests answer every request they make themselves (LCTYSP-1000), so they run in parallel. The UI tests share
 // one server and one data directory (the sidebar lists every conversation the tests make), so they run one at a time:
 // one worker per browser, and WebKit's after Chromium's.
-const unit = { testDir: "tests/unit", fullyParallel: true };
+const unit = {
+	testDir: "tests/unit",
+	testMatch: "*.spec.js",
+	fullyParallel: true,
+};
 const ui = { testDir: "tests/ui", workers: 1 };
 
 export default defineConfig({

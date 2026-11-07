@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/ui/text-attr.js (LCTYSP-0003, "Characters XML cannot represent"). Each Scenario is a test
-# of the same title in tests/unit/text-attr.spec.js, whose steps are the lines below.
+# of the same title in tests/unit/text-attr.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1005 Reading text strings from attributes
 
@@ -12,9 +12,6 @@ Feature: LCTYSP-1005 Reading text strings from attributes
   LF and CR, U+FFFE, U+FFFF), as name-base64: base64 of its UTF-8 bytes. textAttr(el, name) of js/ui/text-attr.js
   reads the string back, whichever form was written. name-base64 is the one read when it is there; when it is not
   base64 of valid UTF-8 the text is unreadable and textAttr returns null, as it does when neither attribute is there.
-
-  Background:
-    Given a page on the server's origin
 
   Scenario: A plain attribute is read as it is
     Given an element with data-content "Hello, <world> & \"you\"\nsecond line"

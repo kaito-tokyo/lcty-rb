@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/search/vectors.js (LCTYSP-0008; the server reads the records as LCTYSP-3006, the worker is
-# LCTYSP-1013). Each Scenario is a test of the same title in tests/unit/vectors.spec.js, whose steps are the lines
-# below.
+# LCTYSP-1013). Each Scenario is a test of the same title in tests/unit/vectors.test.js (in Node.js) or
+# tests/unit/vectors.spec.js (in the browser), whose steps are the lines below.
 
 Feature: LCTYSP-1011 Vector records and the vector store
 
@@ -22,10 +22,6 @@ Feature: LCTYSP-1011 Vector records and the vector store
   (its error event), the calls waiting for it reject and the next call starts a new worker.
 
   In the Scenarios a row's score is its first value: the queries are 1 in their first dimension unless said otherwise.
-
-  Background:
-    Given a page on the server's origin
-    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
 
   Scenario: A record is the control block, the id and the vector
     Given a UUIDv7 id and a vector of 768 Float32 values
@@ -65,6 +61,8 @@ Feature: LCTYSP-1011 Vector records and the vector store
     Then FULL_DIM is 768
 
   Scenario: A new store is empty and starts no worker
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     When createVectorStore() makes a store
     And it searches with k 3
     Then its size is 0
@@ -72,6 +70,8 @@ Feature: LCTYSP-1011 Vector records and the vector store
     And /fuzzy_search.worker.js was not requested
 
   Scenario: A refresh loads the distribution files in the worker
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a", "b" and "c"
     And a store made by createVectorStore()
     When refresh() is called
@@ -80,6 +80,8 @@ Feature: LCTYSP-1011 Vector records and the vector store
     And each file was requested once
 
   Scenario: Concurrent refreshes share one load
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a" and "b"
     And a store made by createVectorStore()
     When refresh() is called twice at once
@@ -87,6 +89,8 @@ Feature: LCTYSP-1011 Vector records and the vector store
     And each file was requested once
 
   Scenario: A refresh after the files changed loads the new rows in the same worker
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a" and "b", with the ETag "v1"
     And a store that has been refreshed
     And the files now hold the row of "c", with the ETag "v2"
@@ -96,6 +100,8 @@ Feature: LCTYSP-1011 Vector records and the vector store
     And /fuzzy_search.worker.js was requested once
 
   Scenario: Refreshing empty files leaves the store empty
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files are empty
     And a store made by createVectorStore()
     When refresh() is called
@@ -103,42 +109,56 @@ Feature: LCTYSP-1011 Vector records and the vector store
     And a search with k 3 answers no ids
 
   Scenario: A search answers the k best ids by their best row, with their scores
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a", "b", "c", "d" and "a" again, scoring 0.25, 0.5, 0.75, 0.125 and 0.875
     And a store that has been refreshed
     When it searches with k 3
     Then it answers "a" 0.875, "c" 0.75 and "b" 0.5
 
   Scenario: The query is cut to its first 256 dimensions and renormalized
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "x", "y" and "z", 1 in their first, second and third dimension
     And a store that has been refreshed
     When it searches with k 3 for a query of 3 and 4 in its first two dimensions, 100 in the 257th and -50 in the 768th
     Then it answers "y" 0.8, "x" 0.6 and "z" 0
 
   Scenario: A query of zeros scores every row 0
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a" and "b"
     And a store that has been refreshed
     When it searches with k 3 for a query of 768 zeros
     Then it answers "a" and "b", both with the score 0
 
   Scenario: A store searched without k answers at most 50 ids
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold one row for each of 60 ids, every one scoring differently
     And a store that has been refreshed
     When it searches without k
     Then it answers the 50 best ids, descending
 
   Scenario: allow is the only ids the worker may answer
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a", "b", "c", "d" and "a" again, scoring 0.25, 0.5, 0.75, 0.125 and 0.875
     And a store that has been refreshed
     When it searches with k 3 and allow "b" and "d"
     Then it answers "b" 0.5 and "d" 0.125
 
   Scenario: accept drops ids on the main thread before k are taken
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a", "b", "c", "d" and "a" again, scoring 0.25, 0.5, 0.75, 0.125 and 0.875
     And a store that has been refreshed
     When it searches with k 2 and an accept that rejects "a"
     Then it answers "c" 0.75 and "b" 0.5
 
   Scenario: accept is given only the 2k best ids
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a", "b", "c", "d" and "a" again, scoring 0.25, 0.5, 0.75, 0.125 and 0.875
     And a store that has been refreshed
     When it searches with k 1 and an accept that takes only "d"
@@ -146,12 +166,16 @@ Feature: LCTYSP-1011 Vector records and the vector store
     And accept was asked about "a" and "c" only
 
   Scenario: A query shorter than 256 dimensions is rejected by the worker
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a" and "b"
     And a store that has been refreshed
     When it searches with k 3 for a query of 100 dimensions
     Then the search rejects with "wrong query dimensions (100 ≠ 256)"
 
   Scenario Outline: A failed refresh rejects and keeps what was loaded
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a" and "b", with the ETag "v1"
     And a store that has been refreshed
     And with the ETag "v2", <change>
@@ -166,6 +190,8 @@ Feature: LCTYSP-1011 Vector records and the vector store
       | the rows are one byte short                         | broken vectors (2111 bytes of rows for 2 ids) |
 
   Scenario: A worker that cannot be loaded rejects the refresh
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a" and "b"
     And /fuzzy_search.worker.js answers with the status 404
     And a store made by createVectorStore()
@@ -174,6 +200,8 @@ Feature: LCTYSP-1011 Vector records and the vector store
     And the size is still 0
 
   Scenario: A store whose worker failed starts a new worker at the next call
+    Given a page on the server's origin
+    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     Given the files hold the rows of "a" and "b"
     And /fuzzy_search.worker.js answers with the status 404 once, then is served
     And a store made by createVectorStore()

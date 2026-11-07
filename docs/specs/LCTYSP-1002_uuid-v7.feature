@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/uuid.js (LCTYSP-0003, LCTYSP-0008), the browser's side of LCTYSP-3001. Each Scenario is a
-# test of the same title in tests/unit/uuid.spec.js, whose steps are the lines below.
+# test of the same title in tests/unit/uuid.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1002 Message ids as UUIDv7
 
@@ -12,9 +12,6 @@ Feature: LCTYSP-1002 Message ids as UUIDv7
   48 bits, the version 7 and the variant 10 into their bits, and random bits into the rest; newMsgId() of js/common.js
   calls it. UUID_RE accepts only such a string. uuidToBytes(id, out, off) writes the 16 bytes of an id into a byte
   array at an offset, as the vector binary of LCTYSP-0008 holds them.
-
-  Background:
-    Given a page on the server's origin
 
   Scenario: A new id is a canonical UUIDv7
     When uuidv7() makes an id

@@ -12,4 +12,5 @@ dist/
 # UI tests (Playwright)
 node_modules/
 test-results/
+test-results-node/
 playwright-report/

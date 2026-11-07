@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/ui/markdown.js (LCTYSP-0005 "Rendering streams", LCTYSP-0003 "Presentation allowlist").
-# Each Scenario is a test of the same title in tests/unit/markdown.spec.js, whose steps are the lines below.
+# Each Scenario is a test of the same title in tests/unit/markdown.test.js (in Node.js) or, when it puts the HTML into a
+# page, in tests/unit/markdown.spec.js (in the browser), whose steps are the lines below.
 
 Feature: LCTYSP-1014 Rendering Markdown to HTML
 
@@ -14,10 +15,6 @@ Feature: LCTYSP-1014 Rendering Markdown to HTML
   escaped and only http:, https: and mailto: links are made, so the output never carries markup from the model; the
   one tag it reads is <suggestion-for-user-turn>, shown as a button. In the steps, \n in a quoted text or in a table
   cell is a newline, \| is | and \\ is \.
-
-  Background:
-    Given a page on the server's origin
-    And the module /js/ui/markdown.js is imported
 
   Scenario Outline: A block renders as its HTML element
     When renderMarkdown renders "<markdown>"
@@ -77,6 +74,8 @@ Feature: LCTYSP-1014 Rendering Markdown to HTML
       | a bare URL in brackets     | <https://e.com>                | <p>&lt;<a href="https://e.com/" target="_blank" rel="noopener noreferrer">https://e.com</a>&gt;</p>                      |
 
   Scenario Outline: Only http, https and mailto links are made
+    Given a page on the server's origin
+    And the module /js/ui/markdown.js is imported
     When renderMarkdown renders "<markdown>"
     Then the HTML is <html>
     And the HTML put into a page has no element but <p> and <a>, and no attribute but href, target and rel
@@ -89,6 +88,8 @@ Feature: LCTYSP-1014 Rendering Markdown to HTML
       | a quote inside a link URL | [x](https://e.com/\"onmouseover=) | <p><a href="https://e.com/%22onmouseover=" target="_blank" rel="noopener noreferrer">x</a></p> |
 
   Scenario: HTML in the text is escaped
+    Given a page on the server's origin
+    And the module /js/ui/markdown.js is imported
     When renderMarkdown renders "<script>alert(1)</script> <img src=x onerror=\"alert(1)\"> & 'a'"
     Then the HTML is <p>&lt;script&gt;alert(1)&lt;/script&gt; &lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;a&#39;</p>
     And the HTML put into a page has no element but <p>, and the text reads as written
@@ -106,6 +107,8 @@ Feature: LCTYSP-1014 Rendering Markdown to HTML
       | one inside a code span        | `<suggestion-for-user-turn>x</suggestion-for-user-turn>`          | <p><code>&lt;suggestion-for-user-turn&gt;x&lt;/suggestion-for-user-turn&gt;</code></p> |
 
   Scenario Outline: A code block shows its language and its code as text
+    Given a page on the server's origin
+    And the module /js/ui/markdown.js is imported
     When renderMarkdown renders "<markdown>"
     Then the HTML put into a page is one code block with the language "<lang>" and the code "<code>"
 
@@ -125,6 +128,8 @@ Feature: LCTYSP-1014 Rendering Markdown to HTML
     Then the HTML is <div class="codeblock"><div class="codebar"><span class="lang">&lt;x&gt;</span><button type="button" class="select">Select all</button></div><pre><code data-lang="&lt;x&gt;">&lt;b&gt;</code></pre></div>
 
   Scenario: A table aligns its columns and fills missing cells
+    Given a page on the server's origin
+    And the module /js/ui/markdown.js is imported
     When renderMarkdown renders "| a | b | c |\n|:--|:-:|--:|\n| 1 | 2 |\n| x \\| y | z | w |"
     Then the HTML put into a page is one table inside div.table-wrap
     And its header cells are "a", "b" and "c", aligned left, center and right
@@ -201,6 +206,8 @@ Feature: LCTYSP-1014 Rendering Markdown to HTML
     Then the HTML is <div class="codeblock"><div class="codebar"><span class="lang"></span><button type="button" class="select">Select all</button></div><pre><code>x</code></pre></div>
 
   Scenario: The "Select all" button follows the page's language
+    Given a page on the server's origin
+    And the module /js/ui/markdown.js is imported
     Given the page is in Japanese
     When codeBlockHTML is given the language "" and the code "x"
     Then the button reads "すべて選択"

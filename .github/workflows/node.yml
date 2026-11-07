@@ -1,0 +1,41 @@
+# This workflow is managed by gh actions-lock.
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Node CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  test-unit-node:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests in Node.js
+        run: npm run test:node
+
+      - name: Check the Scenarios tested in Node.js
+        run: npm run check:scenarios -- --node test-results-node/scenarios.json

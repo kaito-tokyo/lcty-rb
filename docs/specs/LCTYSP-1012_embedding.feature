@@ -4,7 +4,7 @@
 
 # The behaviour of public/js/search/embed.js (LCTYSP-0007, LCTYSP-0008; the records are those of LCTYSP-1011 and
 # LCTYSP-3006, the pending rounds and the PUT those of LCTYSP-3007). Each Scenario is a test of the same title in
-# tests/unit/embed.spec.js, whose steps are the lines below.
+# tests/unit/embed.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1012 Embedding and indexing
 
@@ -21,8 +21,7 @@ Feature: LCTYSP-1012 Embedding and indexing
   records sent can be read back as texts.
 
   Background:
-    Given a page on the server's origin
-    And POST /llm/v1/embeddings of the embedding model is answered by the test
+    Given POST /llm/v1/embeddings of the embedding model is answered by the test
     And GET /v1/vectors/pending and PUT /v1/vectors are answered by the test, which registers the rounds it is sent
 
   Scenario Outline: A backend without an embedding model has no config

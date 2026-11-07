@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/llm/responses.js and public/js/llm/client.js (LCTYSP-0002). Each Scenario is a test of
-# the same title in tests/unit/responses.spec.js, whose steps are the lines below.
+# the same title in tests/unit/responses.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1007 Streaming a reply through the Responses API
 
@@ -20,8 +20,7 @@ Feature: LCTYSP-1007 Streaming a reply through the Responses API
   In the steps the backend is {"base_url": "http://llm.test", "model": "gemma"} unless a step says otherwise.
 
   Background:
-    Given a page on the server's origin
-    And POST http://llm.test/v1/responses is answered by the test, with CORS
+    Given POST http://llm.test/v1/responses is answered by the test, with CORS
 
   Scenario: The request is a POST of the conversation as JSON
     Given the instructions "Be brief" and the input [{"role": "user", "content": "Hi"}]
