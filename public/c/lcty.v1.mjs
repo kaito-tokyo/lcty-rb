@@ -297,9 +297,15 @@ export class LctyCElement extends HTMLElement {
  * are styled through lcty-sidebar::part(…) (LCTYSP-0005). A page gives it items and the current conversation, and listens for
  * select {detail: {id, chunkId}} (search results carry chunkId, the user message id of the matching round; the items
  * are links, and a page cancels select to stay instead of following one) and
- * tag {detail: {name}} (a tag chip was clicked).
+ * tag {detail: {name}} (a tag chip was clicked; name is what the chip shows).
+ *
+ * The items' tags are references (file-name parts, LCTYSP-0009). data-tag-defs holds the references of the defined
+ * tags and data-tag-names their display names, in the same order, as on <lcty-c>: a chip shows the display name of its
+ * reference, or the reference itself when it has none. Setting them redraws the items.
  */
 export class LctyConvListElement extends HTMLElement {
+	static observedAttributes = ["data-tag-defs", "data-tag-names"];
+
 	#items = [];
 
 	#current = null;
@@ -351,6 +357,17 @@ export class LctyConvListElement extends HTMLElement {
 		this.#items = items || [];
 		this.#empty = empty;
 		this.#render();
+	}
+
+	attributeChangedCallback() {
+		if (this.#items.length) this.#render();
+	}
+
+	/** The display name of a reference (data-tag-defs, data-tag-names), or the reference itself. */
+	#label(ref) {
+		const words = (name) =>
+			(this.getAttribute(name) || "").split(/\s+/).filter(Boolean);
+		return words("data-tag-names")[words("data-tag-defs").indexOf(ref)] || ref;
 	}
 
 	/** Show items from a cache (the browser's copy of the meta) unless show() has already been called. */
@@ -426,19 +443,24 @@ export class LctyConvListElement extends HTMLElement {
 								"span",
 								"tags",
 								{},
-								...c.tags.map((name) =>
+								...c.tags.map((ref) =>
 									$(
 										"span",
 										"tag",
 										{
 											class: "tag-chip",
-											"data-tag": name,
+											"data-tag": ref,
 											title: _("searchTag", "Search tag:{name}").replace(
 												"{name}",
-												name,
+												this.#label(ref),
 											),
 										},
-										$("span", "tag-name", { class: "tag-name" }, name),
+										$(
+											"span",
+											"tag-name",
+											{ class: "tag-name" },
+											this.#label(ref),
+										),
 									),
 								),
 							),
@@ -560,6 +582,41 @@ export class LctySidebarElement extends HTMLElement {
 
 	#filled = false;
 
+	// The display names of the list's tags, for the first paint too: the browser's copy of the tags (IndexedDB "lcty_t",
+	// store "t_full") through the worker that alone opens it (js/lcty_t.worker.js, operation "get", which fetches
+	// GET /v1/tags first when there is no copy yet; LCTYSP-0009), found from the page's URL like lcty_c.worker.js below.
+	// The references are the tag files' names without the number and .html (tagRef in js/tag-names.js). The module sets
+	// the same attributes when it has read the tags; whichever comes first, the second sets the same values.
+	#loadTagNames() {
+		let worker;
+		try {
+			worker = new Worker(new URL("../js/lcty_t.worker.js", document.baseURI), {
+				type: "module",
+			});
+		} catch {
+			return;
+		}
+		worker.onmessage = ({ data }) => {
+			worker.terminate();
+			const tags = data?.result?.tags;
+			if (!Array.isArray(tags) || this.list.hasAttribute("data-tag-defs"))
+				return;
+			try {
+				const refs = tags.map((t) => t.file.normalize("NFC").slice(6, -5));
+				this.list.setAttribute(
+					"data-tag-names",
+					tags.map((t) => t.name).join(" "),
+				);
+				this.list.setAttribute("data-tag-defs", refs.join(" "));
+			} catch {} // a broken copy: the chips keep their references
+		};
+		worker.onerror = (e) => {
+			e.preventDefault();
+			worker.terminate();
+		};
+		worker.postMessage({ op: "get" });
+	}
+
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
 	// before any module has loaded (LCTYSP-0010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
 	// there at the first paint, or else from IndexedDB ("lcty_c", store "c_meta"), asynchronously, through the worker that
@@ -569,6 +626,7 @@ export class LctySidebarElement extends HTMLElement {
 	connectedCallback() {
 		if (this.#filled) return;
 		this.#filled = true;
+		this.#loadTagNames();
 		// The cached tags and count are tags_hint and messages_hint (as the server's index recorded them)
 		const newestFirst = (items) =>
 			items

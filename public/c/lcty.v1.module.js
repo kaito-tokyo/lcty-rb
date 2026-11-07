@@ -190,7 +190,9 @@ log.tags.addEventListener("click", (e) => {
 	const name = chip.dataset.tag;
 	if (e.target.closest(".tag-x"))
 		setConvTags(state.conv.tags.filter((x) => x !== name));
-	else if (e.target.closest(".tag-name")) panel.setQuery(`tag:${name}`);
+	// the shown name: tag:C# and tag:c~23 are one tag (LCTYSP-0009), and the name reads better
+	else if (e.target.closest(".tag-name"))
+		panel.setQuery(`tag:${e.target.closest(".tag-name").textContent}`);
 });
 log.tagPicker.addEventListener("change", () => {
 	if (log.tagPicker.value)

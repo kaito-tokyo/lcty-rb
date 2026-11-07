@@ -264,6 +264,10 @@ interface LctyConvListItem {
 	snippet?: string;
 	chunk_id?: string;
 }
+/**
+ * Attributes: data-tag-defs (the references of the defined tags, space-separated) and data-tag-names (their display
+ * names, in the same order): a tag chip shows the display name of its reference, or the reference itself.
+ */
 declare class LctyConvListElement extends HTMLElement {
 	/** Show items; empty is what to show for zero items */
 	show(items: LctyConvListItem[], empty?: string): void;
@@ -284,7 +288,8 @@ declare class LctyConvListElement extends HTMLElement {
  *
  * When it is in the document it fills its list from the browser's copy of every conversation's meta,
  * before any module has loaded: the localStorage snapshot lcty.meta.v1 synchronously (so it is there at the first paint),
- * or IndexedDB "lcty_c" (store "c_meta"; only read, never created) when there is none. Named lcty-sidebar for
+ * or IndexedDB "lcty_c" (store "c_meta"; only read, never created) when there is none. It also sets its list's
+ * data-tag-defs and data-tag-names from IndexedDB "lcty_t" (store "t_full", through js/lcty_t.worker.js). Named lcty-sidebar for
  * cross-document view transitions (lcty.v1.css).
  */
 declare class LctySidebarElement extends HTMLElement {

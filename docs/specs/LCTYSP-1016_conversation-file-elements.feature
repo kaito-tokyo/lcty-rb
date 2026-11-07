@@ -298,6 +298,18 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And select is not fired
     And the link is not followed
 
+  Scenario: A tag chip shows the display name of its reference
+    Given the body holds <lcty-conv-list data-tag-defs="c~23 ruby" data-tag-names="C# Ruby"></lcty-conv-list>
+    When show() is given "a" with the tags "c~23" and "gone"
+    Then the chips show "C#" titled "Search tag:C#" with data-tag "c~23", and "gone" titled "Search tag:gone" with data-tag "gone"
+
+  Scenario: Setting the tag names redraws the chips, and a click fires the shown name
+    Given the body holds <lcty-conv-list> showing the conversation "a" with the tag "c~23"
+    When data-tag-defs is set to "c~23" and data-tag-names to "C#"
+    Then the chip shows "C#"
+    When the tag name "C#" is clicked
+    Then tag is fired with {"name": "C#"}
+
   Scenario: The sidebar holds its links, the search box and the list
     Given the body holds <lcty-sidebar></lcty-sidebar>
     Then its Shadow DOM is its field nav, the search box and its field list (part lcty-sidebar__list)
@@ -324,6 +336,11 @@ Feature: LCTYSP-1016 The elements of a conversation file
       | holds []         |
       | holds "not json" |
       | holds {"a": 1}   |
+
+  Scenario: The sidebar names its list's tags from the browser's copy of the tags
+    Given "t_full" of the database "lcty_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"
+    When a <lcty-sidebar> is put into the body
+    Then its list's data-tag-defs becomes "c~23 ruby" and data-tag-names "C# Ruby"
 
   Scenario: The sidebar never creates the database
     Given there is no database "lcty_c"

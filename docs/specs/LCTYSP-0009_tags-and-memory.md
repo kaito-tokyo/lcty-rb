@@ -151,11 +151,9 @@ API shape:
 
 ## Revision draft: one HTML file per tag
 
-Status: implemented (2026-11-08), except: the sidebar's list,
-which reads `c_meta` before any module has loaded, shows references (file-name parts) instead of display names (the
-header and `tag:` in search do not read `t_full` yet either). [The browser copy `t_full`](#in-the-browser-t_full-like-c_meta)
-and its worker `js/lcty_t.worker.js` are implemented; the tag editor, the tag choice on the new conversation page, the
-conversation page and the reorder page read and change the tags through it. Where this section disagrees with the sections above, this
+Status: implemented (2026-11-08). [The browser copy `t_full`](#in-the-browser-t_full-like-c_meta) and its worker
+`js/lcty_t.worker.js` are implemented; every page reads and changes the tags through it, and shows references by their
+display names. Where this section disagrees with the sections above, this
 section is the design; the sections above (the old `Storage`) record the design before it.
 
 Scope: tag definitions (name, prompt, order) and memory, and how conversations refer to tags
@@ -367,8 +365,15 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   `put` and `addMemory` sync after the request; the reorder page syncs before it reads, since it edits the set; and the
   first `get` in a browser syncs.
 - **Readers** go through the worker's `get`: the tag editor, the tag choice on the new conversation page, the
-  conversation page, the memory dialog and the reorder page. Still to come: the display of references (part → display
-  name) in the sidebar and the header, and `tag:` in search (display name → part).
+  conversation page, the memory dialog and the reorder page, and the display of references (part → display name):
+  - **the header** (`<lcty-c>`'s chips) gets `data-tag-defs` and `data-tag-names` from the conversation page;
+  - **the sidebar's list** (`<lcty-conv-list>`) gets the same two attributes, from `<lcty-sidebar>` itself as soon
+    as it is in the document (the worker's `get`, found at `../js/lcty_t.worker.js` from the page, so the names are
+    there with the first view of the list) and from `js/ui/sidebar.js` once the module has read the tags and whenever
+    the tags dialog saves them. A chip shows the display name and keeps its reference in `data-tag`;
+  - **`tag:` in search** needs no copy: the search panel derives the part from what was typed (`tagPart`), which
+    gives the same part for a display name and for the part itself (`tag:C#` and `tag:c~23`). A click on a chip, in
+    the header or the list, puts the shown name into the search box.
 - **On 412** (the set was changed elsewhere since the caller's `get`) the worker has already synced, so the page reads
   the new set with `get` and the user redoes the edit on it.
 - No `localStorage` snapshot for now.
