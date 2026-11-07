@@ -9,17 +9,15 @@
 //
 // In a tab the operations run one at a time, in the order they were called, so an older GET never overwrites a newer
 // copy in this tab and a read after a change sees it. Changes not made through this browser (a file edited by hand,
-// another browser) are seen at the next sync: pages request one when they load (requestTagsSync), and a save made on
-// an older set fails with 412.
+// another browser) are seen at the next sync: every page runs forceSyncTags() whenever it is shown (js/ui/sidebar.js),
+// and a save made on an older set fails with 412.
 
 import { siteUrl } from "../site.js";
 
 const WORKER_PATH = "js/lcty_t.worker.js"; // relative to the root of the site (LCTYSP-0005)
-const IDLE_TIMEOUT_MS = 10000; // run by then even if the browser never becomes idle
-const FALLBACK_DELAY_MS = 1000; // where requestIdleCallback is missing
 
-// tail: the last operation called in this tab; scheduled: a requested sync waits for idle time
-const state = { tail: null, scheduled: false };
+// tail: the last operation called in this tab
+const state = { tail: null };
 
 // One worker, one operation: resolves to its result, rejects with its error (with the HTTP status as status)
 function runWorker(message) {
@@ -75,20 +73,7 @@ export function addMemory(file, body) {
 	return run({ op: "addMemory", file, body });
 }
 
-/** Sync the copy now: resolves when GET /v1/tags has been stored, rejects with the worker's error. */
-export function syncTags() {
-	return run({ op: "sync" });
-}
-
-/** Sync the copy when the browser is idle: pages call it when they load, to see changes not made in this browser. */
-export function requestTagsSync() {
-	if (state.scheduled) return;
-	state.scheduled = true;
-	const go = () => {
-		state.scheduled = false;
-		syncTags().catch((e) => console.warn("the tags could not be synced", e));
-	};
-	if (typeof requestIdleCallback === "function")
-		requestIdleCallback(go, { timeout: IDLE_TIMEOUT_MS });
-	else setTimeout(go, FALLBACK_DELAY_MS);
+/** Replace the copy with GET /v1/tags now (force_sync): resolves when it has been stored, rejects with the error. */
+export function forceSyncTags() {
+	return run({ op: "force_sync" });
 }

@@ -7,7 +7,7 @@
 // with PUT /v1/tags; the contents of the tags are not changed. The tag editor has no order buttons: the order is
 // changed only here.
 
-import { getTags, putTags, syncTags } from "../api/lcty-t.js";
+import { getTags, putTags } from "../api/lcty-t.js";
 import { loadSettings, showToast } from "../common.js";
 import { localize, tr } from "../i18n.js";
 import { renumber } from "../tag-names.js";
@@ -133,8 +133,8 @@ export function initTagOrderPage() {
 
 	(async () => {
 		state.settings = await loadSettings();
-		// The page edits the set: start from the server's, not from an older copy (a failure is reported by load)
-		await syncTags().catch(() => {});
+		// The page edits the set, so it starts from the server's: initSidebar has already run force_sync, and the calls
+		// of a tab run in order, so this read comes after it (LCTYSP-0009)
 		await load();
 		panel.refresh();
 	})();

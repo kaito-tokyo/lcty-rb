@@ -8,7 +8,7 @@
 Feature: LCTYSP-1010 The browser's copy of the meta
 
   The module keeps the browser's copy of every conversation's meta, the store "c_meta" of the IndexedDB database
-  "lcty_c". A sync posts {"op": "sync"} to the worker /js/lcty_c.worker.js (LCTYSP-1001), which replaces the store with
+  "lcty_c". A sync posts {"op": "force_sync"} to the worker /js/lcty_c.worker.js (LCTYSP-1001), which replaces the store with
   GET /v1/meta-all.json; then the module writes a snapshot of the newest 20 conversations to localStorage
   "lcty.meta.v1" for the first paint and calls the listeners of onMetaDbChange. requestMetaDbSync() syncs when the
   browser is idle (the pages call it on loading the list and after sending a change), resetMetaDb() removes the

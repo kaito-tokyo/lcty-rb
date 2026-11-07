@@ -338,7 +338,7 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
     blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never need
     to be read in one transaction.
   - **The same pattern for both:** each worker is also the only code that opens its database, readers included.
-    `lcty_c.worker.js` has the operations `sync` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
+    `lcty_c.worker.js` has the operations `force_sync` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
     [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)); `js/api/meta-db.js` and `lcty.v1.js` read `c_meta` through it.
 - **Every asynchronous operation on the tags is one worker:** `js/lcty_t.worker.js`, a module worker with no imports
   like `js/lcty_c.worker.js`, and the only code that opens `lcty_t` (readers included). `js/api/lcty-t.js` starts
@@ -347,12 +347,12 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   handler does not reliably reach the page as the `Worker`'s `error` event; that event is left for a worker that could
   not be loaded. The worker resolves `../v1/` against its own URL ([LCTYSP-1021](LCTYSP-1021_lcty-t.feature)).
 
-  | `op`        | What the worker does                                                                            | `result`          |
-  | ----------- | ----------------------------------------------------------------------------------------------- | ----------------- |
-  | `sync`      | `GET v1/tags`, then replaces the record in one transaction; a failure leaves the copy as it was | none              |
-  | `get`       | reads the record; when there is none yet, syncs first                                           | `{tags, etag}`    |
-  | `put`       | `PUT v1/tags` with `{tags}` and the `If-Match` it is given, then syncs (also on failure)        | the new `ETag`    |
-  | `addMemory` | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                           | the server's JSON |
+  | `op`         | What the worker does                                                                            | `result`          |
+  | ------------ | ----------------------------------------------------------------------------------------------- | ----------------- |
+  | `force_sync` | `GET v1/tags`, then replaces the record in one transaction; a failure leaves the copy as it was | none              |
+  | `get`        | reads the record; when there is none yet, syncs first                                           | `{tags, etag}`    |
+  | `put`        | `PUT v1/tags` with `{tags}` and the `If-Match` it is given, then syncs (also on failure)        | the new `ETag`    |
+  | `addMemory`  | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                           | the server's JSON |
   - **`put` takes the ETag from the caller,** the one `get` returned with the tags the user edited, not the copy's:
     the copy may have been synced to a newer set meanwhile, and sending its ETag would let the save overwrite a change
     the user never saw.
@@ -361,9 +361,11 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 - **In a tab the calls run one at a time,** in the order they were made (`js/api/lcty-t.js` chains them), so an older
   `GET` never overwrites a newer copy in this tab and a `get` after a change sees it. Tabs are not coordinated: their
   copies are the same database, and the last sync wins.
-- **When a sync runs:** every page requests one when it loads (the sidebar calls `requestTagsSync()`, run when idle);
-  `put` and `addMemory` sync after the request; the reorder page syncs before it reads, since it edits the set; and the
-  first `get` in a browser syncs.
+- **When a sync runs:** every page runs `force_sync` whenever it is shown: at once when it loads, and again when it
+  comes back from the back/forward cache (`pageshow` with `persisted`), where no script runs anew. `js/ui/sidebar.js`
+  does it, for the tags and the meta alike (every page has the sidebar), and then shows the new display names. `put`
+  and `addMemory` sync after the request, and the first `get` in a browser syncs. The reorder page, which edits the
+  set, reads it after the sidebar's `force_sync` (the calls of a tab run in order), so it starts from the server's.
 - **Readers** go through the worker's `get`: the tag editor, the tag choice on the new conversation page, the
   conversation page, the memory dialog and the reorder page, and the display of references (part → display name):
   - **the header** (`<lcty-c>`'s chips) gets `data-tag-defs` and `data-tag-names` from the conversation page;
