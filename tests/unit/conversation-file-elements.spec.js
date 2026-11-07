@@ -1631,6 +1631,73 @@ test("A click on a tag chip fires tag instead of select", async ({
 	});
 });
 
+test("A tag chip shows the display name of its reference", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenBody(
+		page,
+		'<lcty-conv-list data-tag-defs="c~23 ruby" data-tag-names="C# Ruby"></lcty-conv-list>',
+	);
+	await test.step('When show() is given "a" with the tags "c~23" and "gone"', () =>
+		page.evaluate(() =>
+			document
+				.querySelector("lcty-conv-list")
+				.show([{ id: "a", title: "A", tags: ["c~23", "gone"] }]),
+		));
+	await test.step('Then the chips show "C#" titled "Search tag:C#" with data-tag "c~23", and "gone" titled "Search tag:gone" with data-tag "gone"', async () => {
+		expect(await chips(page)).toEqual([
+			["C#", "Search tag:C#", "c~23"],
+			["gone", "Search tag:gone", "gone"],
+		]);
+	});
+});
+
+test("Setting the tag names redraws the chips, and a click fires the shown name", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('Given the body holds <lcty-conv-list> showing the conversation "a" with the tag "c~23"', async () => {
+		await setBody(page, "<lcty-conv-list></lcty-conv-list>");
+		await page.evaluate(() =>
+			document
+				.querySelector("lcty-conv-list")
+				.show([{ id: "a", title: "A", tags: ["c~23"] }]),
+		);
+	});
+	await test.step('When data-tag-defs is set to "c~23" and data-tag-names to "C#"', () =>
+		page.evaluate(() => {
+			const list = document.querySelector("lcty-conv-list");
+			list.setAttribute("data-tag-defs", "c~23");
+			list.setAttribute("data-tag-names", "C#");
+		}));
+	await test.step('Then the chip shows "C#"', async () => {
+		expect((await chips(page)).map(([text]) => text)).toEqual(["C#"]);
+	});
+	await test.step('When the tag name "C#" is clicked', async () => {
+		await listenToList(page, false);
+		await clickIn(page, ".tag-name", { button: 0 });
+	});
+	await test.step('Then tag is fired with {"name": "C#"}', async () => {
+		expect((await page.evaluate(() => window.seen)).tag).toEqual([
+			{ name: "C#" },
+		]);
+	});
+});
+
+/** The tag chips of <lcty-conv-list>: [shown name, title, data-tag]. */
+function chips(page) {
+	return page.evaluate(() =>
+		[...document.querySelectorAll("lcty-conv-list .tag-chip")].map((c) => [
+			c.querySelector(".tag-name").textContent,
+			c.title,
+			c.dataset.tag,
+		]),
+	);
+}
+
 // ---- <lcty-sidebar> ----
 
 test("The sidebar holds its links, the search box and the list", async ({
@@ -1790,6 +1857,50 @@ for (const [snapshot, value] of [
 		});
 	});
 }
+
+test("The sidebar names its list's tags from the browser's copy of the tags", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('Given "t_full" of the database "lcty_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"', () =>
+		page.evaluate(
+			() =>
+				new Promise((resolve, reject) => {
+					const req = indexedDB.open("lcty_t", 1);
+					req.onupgradeneeded = () =>
+						req.result.createObjectStore("t_full").put(
+							{
+								tags: [
+									{ file: "00010-c~23.html", name: "C#" },
+									{ file: "00020-ruby.html", name: "Ruby" },
+								],
+								etag: "e1",
+							},
+							"set",
+						);
+					req.onsuccess = () => {
+						req.result.close();
+						resolve();
+					};
+					req.onerror = () => reject(req.error);
+				}),
+		));
+	await whenSidebarPut(page);
+	await test.step('Then its list\'s data-tag-defs becomes "c~23 ruby" and data-tag-names "C# Ruby"', async () => {
+		await expect
+			.poll(() =>
+				page.evaluate(() => {
+					const list = document.querySelector("lcty-sidebar").list;
+					return [
+						list.getAttribute("data-tag-defs"),
+						list.getAttribute("data-tag-names"),
+					];
+				}),
+			)
+			.toEqual(["c~23 ruby", "C# Ruby"]);
+	});
+});
 
 test("The sidebar never creates the database", async ({ page, context }) => {
 	await background(page, context);

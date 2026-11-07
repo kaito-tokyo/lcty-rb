@@ -6,11 +6,12 @@
 // /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box, the list's items and handlers, the tags dialog
 // (LCTYSP-0009), the refresh button and the settings dialog (LCTYSP-0010) here.
 
-import { requestTagsSync } from "../api/lcty-t.js";
+import { getTags, requestTagsSync } from "../api/lcty-t.js";
 import { resetMetaDb } from "../api/meta-db.js";
 import { showToast } from "../common.js";
 import { tr } from "../i18n.js";
 import { createSearchPanel } from "../search/search-panel.js";
+import { tagRef } from "../tag-names.js";
 import { initTagsDialog } from "../tags.js";
 import { initSettingsDialog } from "./settings-dialog.js";
 
@@ -53,10 +54,25 @@ export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
 	});
 	initTagsDialog(sidebar.tagsButton, {
 		toast: showToast,
-		onSaved: (defs) => onTagsSaved?.(defs),
+		onSaved: (defs) => {
+			showTagNames(sidebar.list, defs);
+			onTagsSaved?.(defs);
+		},
 	});
+	getTags()
+		.then(({ tags }) => showTagNames(sidebar.list, tags))
+		.catch(() => {}); // the chips keep their references
 	// Every page has the sidebar: the browser's copy of the tags is synced when a page loads (LCTYSP-0009)
 	requestTagsSync();
 	initSettingsDialog(sidebar.settingsButton);
 	return panel;
+}
+
+/**
+ * The list's tag chips show display names: data-tag-defs holds the references of the defined tags and data-tag-names
+ * their names, in the same order (LCTYSP-0009). Names contain no whitespace.
+ */
+function showTagNames(list, defs) {
+	list.setAttribute("data-tag-names", defs.map((t) => t.name).join(" "));
+	list.setAttribute("data-tag-defs", defs.map(tagRef).join(" "));
 }
