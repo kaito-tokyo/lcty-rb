@@ -38,6 +38,24 @@ source of truth at startup or by the browser. Everything else is source-of-truth
 | `_vectors.<model>.sqlite` (+ `-wal`, `-shm`)   | Derived (vector DB)                                                                                                    | Re-embedded by the browser while a page is open ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) |
 | `_vectors.eg2_264.dat`, `_vectors.eg2_264.idx` | Derived (distribution files of the default embedding model: the rows and their ids, served as `/v1/vectors.eg2_264.*`) | Rebuilt from the vector DB on the next request                                                |
 
+### Revision draft: tag files (not implemented)
+
+With tag definitions and memory moved to one HTML file per tag
+([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), the data
+directory changes as follows. The rule on `_` is unchanged.
+
+| File                                      | Kind                                                                                                                                                                   |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `t/NNNNN-<file-name part>.html`           | Source (one file per tag: display name, operation policies, prompt and memory; rewritten whole, via a temporary file whose name starts with `.` and a rename)          |
+| `lcty.v1.*`, `c/lcty.v1.*`, `t/lcty.v1.*` | Source (a copy of the assets in every directory that holds HTML, so each file loads them by name alone; published at startup, rewritten only when changed)             |
+| `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out             |
+| `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
+
+In the browser, IndexedDB is split by resource: `lcty` is renamed `lcty_c` (store `c_meta`, filled by
+`js/sync_c_meta.worker.js`), and `lcty_t` (store `t_full`, filled by `js/sync_t_full.worker.js`) holds a full copy of
+the tags with the set's `ETag`. Both are derived; the old `lcty` is deleted and refilled by the next sync. The section
+below describes `lcty` as it is today.
+
 - SQLite files use WAL mode. To back up `tags.sqlite`, copy `tags.sqlite-wal` with it or run `PRAGMA wal_checkpoint`
   first.
 
@@ -74,7 +92,7 @@ source of truth at startup or by the browser. Everything else is source-of-truth
   upgrade is not blocked.
 - **`localStorage` key `lcty.meta.v1`**: a snapshot for the first view only: the newest 20 conversations by
   `updated_at_hint`, with only what the sidebar shows before a module has loaded (`[{id, title, updated_at_hint,
-  tags_hint, messages_hint}]`). Unlike
+tags_hint, messages_hint}]`). Unlike
   IndexedDB, it can be read synchronously: the sidebar is filled from it before the first paint. Derived from the database:
   `js/api/meta-db.js` writes it on the main thread (workers have no `localStorage`) after each sync; when it does not
   fit, it is removed and the sidebar reads the database instead. A snapshot that is not a list is ignored, and the

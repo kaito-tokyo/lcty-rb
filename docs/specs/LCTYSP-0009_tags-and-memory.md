@@ -419,5 +419,6 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 - Not adopted: converting the old tags in the browser or with a one-off script.
 
 Not yet discussed: whether tag files are served at a URL (for example `/t/NNNNN-<name>.html`, beside the reorder
-page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later); the updates to
-[LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (`t/`, `t.lock`) and to the tests (LCTYSP-3005).
+page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later); which code deletes the old IndexedDB `lcty`.
+The data directory is drafted in [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), and the changes to the backend tests
+are noted at the top of [LCTYSP-3005](LCTYSP-3005_tag-store.feature).
