@@ -306,6 +306,32 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
 - Get-all returns an `ETag` and replace-all requires `If-Match`
   ([below](#concurrent-tabs-etag-and-if-match-crashes-are-accepted)).
 
+### In the browser: t_full, like c_meta
+
+Tags are handled in the browser the way the conversation meta is (`c_meta`,
+[LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
+
+- **IndexedDB `lcty_t`, store `t_full`** (derived; it can be dropped at any time): a copy of `GET /v1/tags`, every tag
+  in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full" as opposed to `c_meta`'s
+  head lines only: a tag file is small and every reader needs all of it.
+- **A separate database from `lcty`.** Each database has exactly one piece of code that opens it with a version and
+  defines its schema (`sync_c_meta.worker.js` for `lcty`, `sync_t_full.worker.js` for `lcty_t`); the workers have no
+  imports, so sharing one database would mean the same version and schema written in two places, and one worker's
+  upgrade could be blocked by the other's connection. The two copies never need to be read in one transaction. The
+  database name `lcty_t` is provisional.
+- **A sync is one worker:** `js/sync_t_full.worker.js`, a module worker with no imports like
+  `js/sync_c_meta.worker.js`. It fetches `../v1/tags` (resolved against its own URL), clears and fills `t_full` in one
+  transaction (so a tag deleted on the server disappears from it), stores the `ETag`, and posts `undefined`; a failure
+  is thrown at its top level and reaches the page as the `Worker`'s `error` event, leaving the copy as it was.
+- **When a sync runs:** opening a page and every change of tags sent by this browser (`PUT /v1/tags`,
+  `POST /v1/tags/:file/memory`) request one, run when idle, with at most one worker per tab, as for `c_meta`.
+- **Readers** open the database without a version, never create it, and close each connection after reading: the tag
+  editor, the tag choice on the new conversation page, the reorder page, the display of references (part → display
+  name) in the sidebar and the header, and `tag:` in search (display name → part).
+- **Replace-all sends the `ETag` held in `t_full` as `If-Match`.** On 412 the browser syncs and the user redoes the
+  edit on the new copy.
+- No `localStorage` snapshot for now.
+
 ### Reordering has its own page
 
 - Reordering moves to a separate page at `/t/` ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tag editor loses its
