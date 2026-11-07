@@ -29,7 +29,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version: 26 # the Web Workers of the unit tests (--experimental-web-worker, LCTYSP-1000)
 
       - name: Install dependencies
         run: npm ci

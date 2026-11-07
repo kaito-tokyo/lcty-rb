@@ -43,9 +43,9 @@ backend features, `LCTYSP-3xxx`; see
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | Building the request from a conversation           | `tests/unit/history.test.js`                                 |
 | [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | The client of the HTTP API                         | `tests/unit/storage.test.js`, `tests/unit/storage.spec.js`   |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | The browser's copy of the meta                     | `tests/unit/meta-db.spec.js`                                 |
-| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | Vector records and the vector store                | `tests/unit/vectors.test.js`, `tests/unit/vectors.spec.js`   |
+| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | Vector records and the vector store                | `tests/unit/vectors.test.js`                                 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | Embedding and indexing                             | `tests/unit/embed.test.js`                                   |
-| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | The semantic search worker                         | `tests/unit/fuzzy-search-worker.spec.js`                     |
+| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | The semantic search worker                         | `tests/unit/fuzzy-search-worker.test.js`                     |
 | [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | Rendering Markdown to HTML                         | `tests/unit/markdown.test.js`, `tests/unit/markdown.spec.js` |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | Command tags                                       | `tests/unit/lcty-cmd.spec.js`                                |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | The elements of a conversation file                | `tests/unit/conversation-file-elements.spec.js`              |

@@ -3,12 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/fuzzy_search.worker.js (LCTYSP-0008, the search of LCTYSP-0007). Each Scenario is a test of
-# the same title in tests/unit/fuzzy-search-worker.spec.js, whose steps are the lines below.
+# the same title in tests/unit/fuzzy-search-worker.test.js (in Node.js; the worker runs as a Web Worker of Node.js 26,
+# LCTYSP-1000), whose steps are the lines below.
 
 Feature: LCTYSP-1013 The semantic search worker
 
-  The worker is started with new Worker("/fuzzy_search.worker.js") (a classic worker; js/search/vectors.js starts it,
-  LCTYSP-1011). It answers each message with a message of the same id. { op: "load", dat, idx } fetches the two
+  The worker is started with new Worker(siteUrl("fuzzy_search.worker.js")) (a classic worker; js/search/vectors.js
+  starts it, LCTYSP-1011). It answers each message with a message of the same id. { op: "load", dat, idx } fetches the two
   distribution files at the URLs given, the rows (256 Float32 and 32 zero bytes each, 1,056 bytes) and the ids (16
   bytes each), keeps them and answers { rows }; a pair with the ETag already loaded is not read again. { op: "search",
   query, k, allow } scores the 256-dimension query against every row with the kernel /bdot264.wasm, or in JavaScript
@@ -19,8 +20,7 @@ Feature: LCTYSP-1013 The semantic search worker
   In the Scenarios the query is 1 in its first dimension and 0 in the others, so a row's score is its first value.
 
   Background:
-    Given a page on the server's origin
-    And /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
+    Given /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test
     And the worker is started
 
   Scenario: Loading fetches both files and answers the row count
@@ -152,7 +152,7 @@ Feature: LCTYSP-1013 The semantic search worker
     Then it answers with the message's id and the error "unknown op: drop"
 
   Scenario Outline: Scoring in JavaScript gives the results of bdot264.wasm
-    Given /bdot264.wasm can be instantiated in this browser with its memory of 256 MiB
+    Given /bdot264.wasm can be instantiated with its memory of 256 MiB
     And the files hold 300 rows of 100 ids, the rows and the query being random unit vectors
     When one worker loads them and searches with k 20
     And a second worker, for which /bdot264.wasm <wasm>, loads them and searches with k 20

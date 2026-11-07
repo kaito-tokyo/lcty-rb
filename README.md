@@ -67,7 +67,7 @@ rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/D
 
 ## Tests
 
-The frontend unit tests that need no browser run in Node.js (24 or later) with its test runner, `node:test`; the other
+The frontend unit tests that need no browser run in Node.js (26 or later, for its Web Workers) with its test runner, `node:test`; the other
 frontend tests run in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js is needed for them only;
 the server itself still needs nothing installed. The backend tests run on the server's Ruby with Minitest, which Ruby
 2.6 bundles.
