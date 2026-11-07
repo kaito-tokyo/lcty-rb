@@ -309,6 +309,7 @@ lcty-c::part(lcty-conv-list__item) {
 	border-radius: var(--radius-control);
 	padding: 6px 10px;
 	text-align: left;
+	text-decoration: none;
 	cursor: pointer;
 }
 lcty-sidebar::part(lcty-conv-list__item):hover,

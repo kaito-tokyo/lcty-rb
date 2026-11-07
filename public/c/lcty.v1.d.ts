@@ -243,7 +243,8 @@ declare class LctyCElement extends HTMLElement {
 /**
  * <lcty-conv-list>: the sidebar's conversation list (also search results), in <lcty-sidebar>'s Shadow DOM. Parts:
  * lcty-conv-list__items, __entry, __item (--current), __title, __snippet, __tags, __tag, __tag-name, __meta, __empty. Fires
- * select {detail: {id, chunkId}} (chunkId: the user message id of a matching round, for search results) and
+ * select {detail: {id, chunkId}} (chunkId: the user message id of a matching round, for search results; fired on a plain
+ * click of an item, which is a link: cancel it to stay instead of following the link) and
  * tag {detail: {name}} (a tag chip was clicked).
  */
 interface LctyConvListItem {
