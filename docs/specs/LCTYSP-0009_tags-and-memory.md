@@ -321,13 +321,20 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
 Tags are handled in the browser the way the conversation meta is (`c_meta`,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
 
-- **IndexedDB `lcty_t`, store `t_full`** (derived; it can be dropped at any time): a copy of `GET /v1/tags`, every tag
-  in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full" as opposed to `c_meta`'s
-  head lines only: a tag file is small and every reader needs all of it. The store has out-of-line keys and holds one
-  record under the key `"set"`, `{tags, etag}`, file names NFC-normalized: the set is always read and replaced whole,
-  so one record keeps the tags and their ETag in step.
+- **IndexedDB `lcty_t`, stores `t_full` and `t_set`** (derived; they can be dropped at any time): a copy of
+  `GET /v1/tags`, every tag in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full"
+  as opposed to `c_meta`'s head lines only: a tag file is small and every reader needs all of it.
+  - **`t_full` is row-oriented, like `c_meta`:** one row per tag file, the tag as `GET /v1/tags` gives it, with the key
+    path `file` (NFC-normalized). Key order is file-name order, which is the order of the tags (`NNNNN-`), so the rows
+    read in key order are the set in order. A reorder changes a tag's key; a sync rewrites every row anyway.
+  - **`t_set` holds the set's `ETag`,** one record under the key `"set"`, `{etag}`: the ETag is the whole set's, so it
+    is not a row. Its presence marks a copy, so an empty set (no rows) is a copy too.
+  - **The two stores are always written and read in one transaction** (`force_sync` clears the rows, puts every tag
+    and the ETag; `get` reads both), so the rows and the ETag are always the same set.
+  - Version 1 held the set as one record `"set"`, `{tags, etag}`, in `t_full` with out-of-line keys. Since the copy is
+    derived, an upgrade drops every store and recreates them empty, and the next `get` syncs; nothing is converted.
 - **One database per resource:** `lcty_c` for what is derived from `c/` (store `c_meta`) and `lcty_t` for what is
-  derived from `t/` (store `t_full`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the data
+  derived from `t/` (stores `t_full` and `t_set`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the data
   directory. The database before the split, `lcty`, became `lcty_c`; since it is derived, it was not converted:
   `lcty_c.worker.js` fills `lcty_c` at the next sync and then deletes the old `lcty` (`indexedDB.deleteDatabase`; a
   deletion blocked by a connection of a page still running older code is not waited for, and the next sync tries
@@ -347,12 +354,12 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   handler does not reliably reach the page as the `Worker`'s `error` event; that event is left for a worker that could
   not be loaded. The worker resolves `../v1/` against its own URL ([LCTYSP-1021](LCTYSP-1021_lcty-t.feature)).
 
-  | `op`         | What the worker does                                                                            | `result`          |
-  | ------------ | ----------------------------------------------------------------------------------------------- | ----------------- |
-  | `force_sync` | `GET v1/tags`, then replaces the record in one transaction; a failure leaves the copy as it was | none              |
-  | `get`        | reads the record; when there is none yet, syncs first                                           | `{tags, etag}`    |
-  | `put`        | `PUT v1/tags` with `{tags}` and the `If-Match` it is given, then syncs (also on failure)        | the new `ETag`    |
-  | `addMemory`  | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                           | the server's JSON |
+  | `op`         | What the worker does                                                                                       | `result`          |
+  | ------------ | ---------------------------------------------------------------------------------------------------------- | ----------------- |
+  | `force_sync` | `GET v1/tags`, then replaces the rows and the ETag in one transaction; a failure leaves the copy as it was | none              |
+  | `get`        | reads the rows (in file-name order) and the ETag; when there is no copy yet, syncs first                   | `{tags, etag}`    |
+  | `put`        | `PUT v1/tags` with `{tags}` and the `If-Match` it is given, then syncs (also on failure)                   | the new `ETag`    |
+  | `addMemory`  | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                                      | the server's JSON |
   - **`put` takes the ETag from the caller,** the one `get` returned with the tags the user edited, not the copy's:
     the copy may have been synced to a newer set meanwhile, and sending its ETag would let the save overwrite a change
     the user never saw.

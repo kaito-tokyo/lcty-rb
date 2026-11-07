@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // lcty_t.worker.js: every asynchronous operation on the tags in the browser (LCTYSP-0009): the browser's copy of
-// GET /v1/tags (IndexedDB "lcty_t", store "t_full") and the requests that change the tags. A module worker with no
+// GET /v1/tags (IndexedDB "lcty_t", stores "t_full" and "t_set") and the requests that change the tags. A module worker with no
 // imports, started by js/api/lcty-t.js as new Worker(siteUrl("js/lcty_t.worker.js"), { type: "module" }); no module
 // imports it, so the bundler never sees it. This worker is the only code that opens "lcty_t": it alone defines the
 // schema, and every connection is closed when the operation ends, so an upgrade is never blocked.
@@ -13,9 +13,10 @@
 // posted, not thrown, because a rejection inside an async handler does not reliably reach the page as the Worker's
 // error event; that event is left for a worker that could not be loaded.
 //
-//   {op: "force_sync"}           GET v1/tags → t_full replaced in one transaction → result undefined; every page
-//                                runs it whenever it is shown (js/ui/sidebar.js)
-//   {op: "get"}                  t_full → result {tags, etag}; when there is no copy yet, a sync first
+//   {op: "force_sync"}           GET v1/tags → the rows of t_full and the ETag in t_set replaced in one transaction
+//                                → result undefined; every page runs it whenever it is shown (js/ui/sidebar.js)
+//   {op: "get"}                  t_full and t_set → result {tags (in file-name order), etag}; when there is no copy
+//                                yet, a sync first
 //   {op: "put", tags, etag}      PUT v1/tags with If-Match etag (the one the caller read the tags with, never the
 //                                copy's: the copy may be newer than what the caller edited) → result the new ETag
 //   {op: "addMemory", file, body} POST v1/tags/:file/memory → result the server's JSON
@@ -25,15 +26,20 @@
 // what the caller asked about, and the next sync fixes the copy.
 //
 //   database "lcty_t" (version DB_VERSION)
-//     store "t_full" (out-of-line keys), one record under the key "set": {tags, etag}, as GET /v1/tags gives them
-//       (tags: [{file, name, ops, prompt, memory}], file names NFC-normalized; etag: the ETag of the set)
+//     store "t_full" (key path "file"): one row per tag, {file, name, ops, prompt, memory} as GET /v1/tags gives it,
+//       the file name NFC-normalized; key order is file-name order, which is the order of the tags
+//     store "t_set" (out-of-line keys): one record under the key "set", {etag}, the ETag of the set the rows are.
+//       Its presence marks a copy (an empty set has no rows but has the record)
+//   Both stores are written and read in one transaction, so the rows and the ETag are always one set.
+//   The copy is derived: an upgrade drops every store and recreates them empty; the next get syncs.
 //
 // The site's v1/ is found from this file's URL: it is js/ under the root (LCTYSP-0005).
 
 const DB_NAME = "lcty_t";
-const DB_VERSION = 1; // raised when what is stored changes
-const STORE = "t_full";
-const KEY = "set";
+const DB_VERSION = 2; // raised when what is stored changes
+const TAGS = "t_full";
+const SET = "t_set";
+const SET_KEY = "set";
 const V1 = new URL("../v1/", import.meta.url);
 
 /** The error of a failed request: the message is "<status> <body>", and status is the HTTP status (as api/storage.js). */
@@ -59,10 +65,9 @@ function openDb() {
 		const req = indexedDB.open(DB_NAME, DB_VERSION);
 		req.onupgradeneeded = () => {
 			const db = req.result;
-			for (const name of [...db.objectStoreNames]) {
-				if (name !== STORE) db.deleteObjectStore(name);
-			}
-			if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+			for (const name of [...db.objectStoreNames]) db.deleteObjectStore(name);
+			db.createObjectStore(TAGS, { keyPath: "file" });
+			db.createObjectStore(SET);
 		};
 		req.onsuccess = () => {
 			const db = req.result;
@@ -73,19 +78,23 @@ function openDb() {
 	});
 }
 
-/** Run fn(store) in one transaction of mode; resolves to what fn returned (a request's result) when it completes. */
-async function withStore(mode, fn) {
+/** Run fn(tags, set) in one transaction over both stores; resolves to what fn returned, with every request in it
+ * replaced by its result, when the transaction completes. */
+async function withStores(mode, fn) {
 	const db = await openDb();
 	try {
-		const tx = db.transaction(STORE, mode);
-		const req = fn(tx.objectStore(STORE));
+		const tx = db.transaction([TAGS, SET], mode);
+		const reqs = fn(tx.objectStore(TAGS), tx.objectStore(SET));
 		await new Promise((resolve, reject) => {
 			tx.oncomplete = () => resolve();
 			tx.onerror = () => reject(tx.error);
 			tx.onabort = () =>
 				reject(tx.error || new Error("the transaction was aborted"));
 		});
-		return req?.result;
+		return (
+			reqs &&
+			Object.fromEntries(Object.entries(reqs).map(([k, r]) => [k, r.result]))
+		);
 	} finally {
 		db.close();
 	}
@@ -98,16 +107,26 @@ async function forceSync() {
 	// A file system may list the names decomposed (HFS+); the server compares the files themselves
 	const tags = json.tags.map((t) => ({ ...t, file: t.file.normalize("NFC") }));
 	const etag = r.headers.get("ETag");
-	await withStore("readwrite", (store) => store.put({ tags, etag }, KEY));
+	await withStores("readwrite", (rows, set) => {
+		rows.clear();
+		for (const t of tags) rows.put(t);
+		set.put({ etag }, SET_KEY);
+	});
 }
 
+const readCopy = () =>
+	withStores("readonly", (rows, set) => ({
+		tags: rows.getAll(),
+		set: set.get(SET_KEY),
+	}));
+
 async function get() {
-	let set = await withStore("readonly", (store) => store.get(KEY));
-	if (!set) {
+	let copy = await readCopy();
+	if (!copy.set) {
 		await forceSync();
-		set = await withStore("readonly", (store) => store.get(KEY));
+		copy = await readCopy();
 	}
-	return { tags: set.tags, etag: set.etag };
+	return { tags: copy.tags, etag: copy.set.etag };
 }
 
 /** fn(), then a sync whatever happened; fn's result or error is what counts. */

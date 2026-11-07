@@ -9,13 +9,14 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
 
   Every asynchronous operation on the tags runs in a worker started with new Worker("/js/lcty_t.worker.js",
   { type: "module" }): the page posts it one message {op, ...} and gets one message back, {result} or {error, status}.
-  The worker keeps the browser's copy of GET /v1/tags, one record "set" {tags, etag} in the store "t_full" of the
-  IndexedDB database "lcty_t", which no other code opens. "force_sync" replaces the copy, "get" reads it (syncing first when
+  The worker keeps the browser's copy of GET /v1/tags in the IndexedDB database "lcty_t", which no other code opens:
+  one row per tag in the store "t_full", keyed by its file name, and the set's ETag as the record "set" {etag} in the
+  store "t_set", both written in one transaction. "force_sync" replaces the copy, "get" reads it (syncing first when
   there is none), "put" sends PUT /v1/tags with the If-Match it is given and "addMemory" sends
   POST /v1/tags/:file/memory; both sync afterwards, also when they fail. js/api/lcty-t.js starts one worker per call
   (getTags, putTags, addMemory, forceSyncTags) and runs the calls of a tab one at a time, in the order they were made.
 
-  In the steps a record of the copy is written as its tags' file names and its ETag.
+  In the steps the copy is written as the file names of the rows of "t_full", in key order, and the ETag in "t_set".
 
   Background:
     Given a page on the server's origin
@@ -26,8 +27,30 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
     And GET /v1/tags returns the tag "00010-café.html" with the name decomposed and the ETag "e1"
     When the worker is posted {"op": "force_sync"}
     Then it answers with no result
-    And the database "lcty_t" is at version 1 with only the store "t_full"
+    And the database "lcty_t" is at version 2 with only the stores "t_full" and "t_set"
+    And "t_full" has one row per tag, keyed by its file name
     And "t_full" holds the tags ["00010-café.html"] composed and the ETag "e1"
+
+  Scenario: A database at version 1 is dropped and synced again
+    Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"
+    And GET /v1/tags returns the tags ["00010-b.html"] with the ETag "e2"
+    When the worker is posted {"op": "get"}
+    Then it answers the tags ["00010-b.html"] and the ETag "e2"
+    And the requests sent are GET /v1/tags
+    And the database "lcty_t" is at version 2 with only the stores "t_full" and "t_set"
+
+  Scenario: Getting answers the tags in the order of their file names
+    Given "t_full" holds the tags ["00020-b.html", "00010-c.html", "00030-a.html"] and the ETag "e1"
+    When the worker is posted {"op": "get"}
+    Then it answers the tags ["00010-c.html", "00020-b.html", "00030-a.html"] and the ETag "e1"
+
+  Scenario: An empty set is a copy too
+    Given there is no database "lcty_t"
+    And GET /v1/tags returns the tags [] with the ETag "e1"
+    When the worker is posted {"op": "force_sync"}
+    And then a new worker is posted {"op": "get"}
+    Then it answers the tags [] and the ETag "e1"
+    And the requests sent are GET /v1/tags
 
   Scenario: A sync replaces the set as a whole
     Given "t_full" holds the tags ["00010-a.html", "00020-b.html"] and the ETag "e1"
@@ -102,7 +125,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
     And GET /v1/tags returns the tags ["00010-a.html"] with the ETag "e1"
     When the worker is posted {"op": "get"}
     Then it answers the tags ["00010-a.html"] and the ETag "e1"
-    And the database "lcty_t" can be opened at version 2 without being blocked, while the worker is still alive
+    And the database "lcty_t" can be opened at version 3 without being blocked, while the worker is still alive
 
   Scenario: The calls of a tab run one at a time, in order
     Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1"

@@ -59,7 +59,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                    |      14 |      39 |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel            |       0 |      21 |
 | [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references  |      55 |       0 |
-| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `js/lcty_t.worker.js` and `js/api/lcty-t.js`: the tags   |       0 |      13 |
+| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `js/lcty_t.worker.js` and `js/api/lcty-t.js`: the tags   |       0 |      16 |
 
 ## How a feature is written
 

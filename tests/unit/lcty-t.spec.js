@@ -57,7 +57,8 @@ async function background(page, context) {
 
 // ---- The database, from the page ----
 
-/** The database "lcty_t" as it is: {exists, version, stores, set (the record "set" of t_full)}. Never creates it. */
+/** The database "lcty_t" as it is: {exists, version, stores, keyPath (of t_full), tags (the rows of t_full in key
+ * order), etag (of the record "set" of t_set)}. Never creates it. */
 function readDb(page) {
 	return page.evaluate(
 		() =>
@@ -75,27 +76,60 @@ function readDb(page) {
 						version: db.version,
 						stores: [...db.objectStoreNames].sort(),
 					};
-					if (!db.objectStoreNames.contains("t_full")) {
+					if (
+						!["t_full", "t_set"].every((s) => db.objectStoreNames.contains(s))
+					) {
 						db.close();
-						resolve({ ...result, set: null });
+						resolve(result);
 						return;
 					}
-					const get = db.transaction("t_full").objectStore("t_full").get("set");
-					get.onsuccess = () => {
+					const tx = db.transaction(["t_full", "t_set"]);
+					const { keyPath } = tx.objectStore("t_full");
+					const rows = tx.objectStore("t_full").getAll();
+					const set = tx.objectStore("t_set").get("set");
+					tx.oncomplete = () => {
 						db.close();
-						resolve({ ...result, set: get.result ?? null });
+						resolve({
+							...result,
+							keyPath,
+							tags: rows.result,
+							etag: set.result?.etag ?? null,
+						});
 					};
-					get.onerror = () => {
+					tx.onerror = () => {
 						db.close();
-						reject(get.error);
+						reject(tx.error);
 					};
 				};
 			}),
 	);
 }
 
-/** t_full at version 1, as the worker leaves it, holding the set {tags, etag}. */
+/** "lcty_t" at version 2, as the worker leaves it, holding the set {tags, etag}: the rows are put in the given order. */
 function seedSet(page, set) {
+	return page.evaluate(
+		(set) =>
+			new Promise((resolve, reject) => {
+				const req = indexedDB.open("lcty_t", 2);
+				req.onupgradeneeded = () => {
+					const rows = req.result.createObjectStore("t_full", {
+						keyPath: "file",
+					});
+					for (const t of set.tags) rows.put(t);
+					req.result.createObjectStore("t_set").put({ etag: set.etag }, "set");
+				};
+				req.onsuccess = () => {
+					req.result.close();
+					resolve();
+				};
+				req.onerror = () => reject(req.error);
+			}),
+		set,
+	);
+}
+
+/** "lcty_t" at version 1 as the worker before rows left it: t_full with out-of-line keys and one record "set". */
+function seedVersion1(page, set) {
 	return page.evaluate(
 		(set) =>
 			new Promise((resolve, reject) => {
@@ -198,9 +232,17 @@ async function thenNoRequest(server) {
 
 async function thenTFullHolds(page, files, etag, composed = "") {
 	await test.step(`And "t_full" holds the tags ${list(files)}${composed} and the ETag "${etag}"`, async () => {
-		const { set } = await readDb(page);
-		expect(set.tags.map((t) => t.file)).toEqual(files);
-		expect(set.etag).toBe(etag);
+		const db = await readDb(page);
+		expect(db.tags.map((t) => t.file)).toEqual(files);
+		expect(db.etag).toBe(etag);
+	});
+}
+
+async function thenVersion2(page) {
+	await test.step('And the database "lcty_t" is at version 2 with only the stores "t_full" and "t_set"', async () => {
+		const db = await readDb(page);
+		expect(db.version).toBe(2);
+		expect(db.stores).toEqual(["t_full", "t_set"]);
 	});
 }
 
@@ -226,12 +268,66 @@ test("A sync stores the set with NFC file names and the ETag", async ({
 		expect(answer.hasResult).toBe(true);
 		expect(answer.message).toEqual({ result: undefined });
 	});
-	await test.step('And the database "lcty_t" is at version 1 with only the store "t_full"', async () => {
+	await thenVersion2(page);
+	await test.step('And "t_full" has one row per tag, keyed by its file name', async () => {
 		const db = await readDb(page);
-		expect(db.version).toBe(1);
-		expect(db.stores).toEqual(["t_full"]);
+		expect(db.keyPath).toBe("file");
+		// the row is the tag as GET /v1/tags gave it, with only the file name composed
+		expect(db.tags).toEqual([
+			{ ...tag("00010-café.html".normalize("NFD")), file: "00010-café.html" },
+		]);
 	});
 	await thenTFullHolds(page, ["00010-café.html"], "e1", " composed");
+});
+
+test("A database at version 1 is dropped and synced again", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await test.step('Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"', () =>
+		seedVersion1(page, { tags: [tag("00010-a.html")], etag: "e1" }));
+	await givenGetReturns(server, ["00010-b.html"], "e2");
+	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	await thenAnswersTags(answer, ["00010-b.html"], "e2");
+	await thenRequests(server, "And the requests sent are GET /v1/tags", [
+		"GET /v1/tags",
+	]);
+	await thenVersion2(page);
+});
+
+test("Getting answers the tags in the order of their file names", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenTFullHolds(
+		page,
+		["00020-b.html", "00010-c.html", "00030-a.html"],
+		"e1",
+	);
+	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	await thenAnswersTags(
+		answer,
+		["00010-c.html", "00020-b.html", "00030-a.html"],
+		"e1",
+	);
+});
+
+test("An empty set is a copy too", async ({ page, context }) => {
+	const server = await background(page, context);
+	await givenNoDatabase(page);
+	await givenGetReturns(server, [], "e1");
+	await whenPosted(page, '{"op": "force_sync"}', { op: "force_sync" });
+	let answer;
+	await test.step('And then a new worker is posted {"op": "get"}', async () => {
+		await page.evaluate(() => window.lctyWorker?.terminate());
+		answer = await post(page, { op: "get" });
+	});
+	await thenAnswersTags(answer, [], "e1");
+	await thenRequests(server, "And the requests sent are GET /v1/tags", [
+		"GET /v1/tags",
+	]);
 });
 
 test("A sync replaces the set as a whole", async ({ page, context }) => {
@@ -398,12 +494,12 @@ test("The worker closes its connection after the operation", async ({
 	await givenGetReturns(server, ["00010-a.html"], "e1");
 	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
 	await thenAnswersTags(answer, ["00010-a.html"], "e1");
-	await test.step('And the database "lcty_t" can be opened at version 2 without being blocked, while the worker is still alive', async () => {
+	await test.step('And the database "lcty_t" can be opened at version 3 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
 			() =>
 				new Promise((resolve) => {
 					let blocked = false;
-					const req = indexedDB.open("lcty_t", 2);
+					const req = indexedDB.open("lcty_t", 3);
 					req.onblocked = () => {
 						blocked = true;
 					};
