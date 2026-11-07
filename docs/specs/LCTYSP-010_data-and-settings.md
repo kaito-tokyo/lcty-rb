@@ -53,9 +53,9 @@ source of truth at startup or by the browser. Everything else is source-of-truth
   `/js/sync_c_meta.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
   [LCTYSP-005](LCTYSP-005_page-and-elements.md)). Started by `new Worker(url, { type: "module" })`, it fetches `GET /v1/meta-all.json`, clears and
   fills `c_meta` in one transaction (so a conversation deleted on the server disappears from it too), and posts
-  `undefined`, or an `Error` when any step failed (the copy is then left as it was). Then `js/api/meta-db.js` terminates
-  it. It is the only code that opens the database with a version, so the schema is defined there alone; a database it
-  cannot open (a newer version left by other code, a broken database) is deleted and created again.
+  `undefined`. When any step fails, the error is thrown at the worker's top level and reaches the page as the
+  `Worker`'s `error` event (the copy is then left as it was). Either way `js/api/meta-db.js` terminates it. It is the only code that opens the database with a version, so the schema is defined there alone. When it
+  cannot open the database (a newer version left by other code, a broken database), the sync fails with that error.
 - **When a sync runs:** opening a page and sending a change of conversations to the server (creating, appending lines,
   popping, deleting: `js/api/storage.js`) request one, run when the browser is idle (`requestIdleCallback`, at most 10 s
   later; 1 s later where it is missing); requests made before it starts share it. In a tab at most one worker runs: a

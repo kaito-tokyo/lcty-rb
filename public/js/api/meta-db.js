@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The browser's copy of every conversation's meta (IndexedDB "lcty", store "c_meta", LCTYSP-010). A sync starts a
-// worker, /js/sync_c_meta.worker.js, which fetches GET /v1/meta-all.json, replaces the whole store, posts undefined or an
-// Error and ends. This module reads the store itself (the worker owns the schema: the database is never created here)
+// worker, /js/sync_c_meta.worker.js, which fetches GET /v1/meta-all.json, replaces the whole store, posts undefined and
+// ends; a failure is thrown in the worker and arrives here as its error event. This module reads the store itself (the worker owns the schema: the database is never created here)
 // and closes each connection right away, so the worker's upgrade is never blocked.
 //
 // Pages request a sync when they load the list and after sending a change of conversations to the server
@@ -40,22 +40,17 @@ const state = {
 function runWorker() {
 	return new Promise((resolve, reject) => {
 		const worker = new Worker(WORKER_URL, { type: "module" });
-		const end = (error) => {
+		// The worker posts only on success
+		worker.onmessage = () => {
 			worker.terminate();
-			if (error) reject(error);
-			else resolve();
+			resolve();
 		};
-		worker.onmessage = ({ data }) =>
-			end(
-				data === undefined
-					? null
-					: data instanceof Error
-						? data
-						: new Error(String(data?.message || data)),
-			);
+		// What the worker threw (or a failure to load it). Chromium prefixes the message with "Uncaught "
 		worker.onerror = (e) => {
 			e.preventDefault();
-			end(new Error(e.message || "the meta sync worker failed"));
+			worker.terminate();
+			const message = (e.message || "").replace(/^Uncaught /, "");
+			reject(new Error(message || "the meta sync worker failed"));
 		};
 	});
 }
