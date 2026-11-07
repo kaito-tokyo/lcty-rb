@@ -7,7 +7,8 @@
 // For streaming rendering it is split into scanBlocks(), which cuts text into blocks,
 // and renderBlock(), which turns one block into HTML (LCTYSP-005).
 // Supported: paragraphs / headings / rules / code blocks / quotes / lists (nested) / tables /
-//            bold, italic, strikethrough, inline code, links and bare-URL autolinks.
+//            bold, italic, strikethrough, inline code, links, bare-URL autolinks and suggestion autolinks
+//            (<x-suggestion-for-user-turn:text>, rendered as a button).
 //
 // Safety: text is always escaped and only http / https / mailto links are allowed.
 import { tr } from "../i18n.js";
@@ -384,6 +385,13 @@ function inlineText(raw) {
 	let s = esc(raw);
 	const slots = [];
 	const hold = (html) => `\u0000${slots.push(html) - 1}\u0000`;
+	// <x-suggestion-for-user-turn:text>: a suggested next user message, an autolink with its own scheme. Unlike
+	// CommonMark, the text may contain spaces; it runs to the first > on the line. It becomes a button, not a link
+	s = s.replace(/&lt;x-suggestion-for-user-turn:([^\n]*?)&gt;/g, (all, text) =>
+		text.trim()
+			? hold(`<button type="button" class="suggestion">${text.trim()}</button>`)
+			: all,
+	);
 	// [text](url)
 	s = s.replace(/\[([^\]\n]+)\]\(([^()\s]+)\)/g, (all, text, u) => {
 		const href = safeUrl(unesc(u));
