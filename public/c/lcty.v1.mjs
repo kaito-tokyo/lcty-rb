@@ -413,7 +413,9 @@ export class LctyConvListElement extends HTMLElement {
 							),
 						);
 					}
-					const date = String(c.updated_at_hint || "").slice(0, 16).replace("T", " ");
+					const date = String(c.updated_at_hint || "")
+						.slice(0, 16)
+						.replace("T", " ");
 					const count =
 						c.messages == null
 							? ""
