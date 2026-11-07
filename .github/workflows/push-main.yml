@@ -23,6 +23,9 @@ jobs:
   browser:
     uses: ./.github/workflows/browser.yml
 
+  node:
+    uses: ./.github/workflows/node.yml
+
   docs-deploy:
     runs-on: ubuntu-26.04
     timeout-minutes: 10

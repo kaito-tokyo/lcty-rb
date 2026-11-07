@@ -50,7 +50,11 @@ jobs:
       - name: Run unit and UI tests
         env:
           LCTY_TEST_SERVER_URL: http://127.0.0.1:45290
-        run: npm test
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/playwright.json
+        run: npx playwright test --reporter=github,json
+
+      - name: Check the Scenarios tested in the browser
+        run: npm run check:scenarios -- --browser test-results/playwright.json
 
       - name: Upload test results
         if: failure()

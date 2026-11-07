@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/tags.js (LCTYSP-0002, LCTYSP-0006, LCTYSP-0009). Each Scenario is a test of the same title
-# in tests/unit/tags.spec.js, whose steps are the lines below.
+# in tests/unit/tags.test.js (in Node.js) or tests/unit/tags.spec.js (in the browser), whose steps are the lines below.
 
 Feature: LCTYSP-1018 Tags, drafts and memory
 
@@ -15,8 +15,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
   adopted ones with POST /v1/tags/:name/memory. The server's answers and llama-server are answered by the test.
 
   Background:
-    Given a page on the server's origin
-    And /v1/tags, /v1/tags/:name/memory and the llama-server at http://llm.test are answered by the test
+    Given /v1/tags, /v1/tags/:name/memory and the llama-server at http://llm.test are answered by the test
 
   Scenario: Tag names are sorted in the order of the definitions
     Given the definitions "ruby", "go" and "rust"
@@ -40,6 +39,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then it is "# メモリ（ruby）\n- x"
 
   Scenario: The editor shows every definition with its memory
+    Given a page on the server's origin
     Given the definitions "ruby" with a prompt and two memory items, "go" with none and "big" with six memory items
     When renderTagsEditor draws them
     Then it shows a section per tag with its name and prompt, in order
@@ -49,12 +49,14 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And isDirty() is false
 
   Scenario: Moving a tag makes the editor dirty
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
     When ↓ of "ruby" is clicked
     Then the tags are in the order "go", "ruby"
     And isDirty() is true
 
   Scenario: Saving puts the definitions and takes the saved ones back
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go"
     And GET /v1/tags will return the definitions with timestamps
     When the prompt of "ruby" is changed to "New prompt", a new tag "rust" is added and Save is clicked
@@ -63,6 +65,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And the toast says "Tags saved", the status is empty and isDirty() is false
 
   Scenario Outline: A tag name that cannot be used is not saved
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
     When the name of "go" is changed to <name> and Save is clicked
     Then the status says <message>
@@ -78,11 +81,13 @@ Feature: LCTYSP-1018 Tags, drafts and memory
       | a duplicate | "ruby"       | "Tag names must be unique"                                                                                        |
 
   Scenario: A name is trimmed and may have 40 characters
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
     When the name of "go" is changed to " 40 times "y" " and Save is clicked
     Then PUT /v1/tags is sent the tags "ruby" and 40 times "y"
 
   Scenario: A failed save keeps the edits
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
     And PUT /v1/tags answers with the status 500 and "boom"
     When the prompt of "ruby" is changed and Save is clicked
@@ -90,6 +95,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And onSaved is not called and isDirty() is true
 
   Scenario: A failed save keeps the blank memory items
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go"
     And PUT /v1/tags answers with the status 500 and "boom"
     When Save is clicked
@@ -100,6 +106,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then "ruby" shows the memory items "fact" and "  "
 
   Scenario: Deleting a tag asks first
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
     When Delete of "ruby" is clicked and the question is dismissed
     Then the question was 'Delete the tag "ruby"? (Conversations keep the tag name.)'
@@ -108,12 +115,14 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then the tags are "go"
 
   Scenario: Deleting a memory item removes it at once
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" with a prompt and two memory items
     When Delete of the first memory item is clicked
     Then "ruby" shows one memory item under "Memory (1 items, about 5 characters)"
     And isDirty() is true
 
   Scenario: Discarding the changes asks first and goes back to the saved state
+    Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
     And the name of "go" is changed to "golang"
     When Discard changes is clicked and the question is dismissed
@@ -123,6 +132,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And isDirty() is false
 
   Scenario: The tags dialog opens on the saved definitions
+    Given a page on the server's origin
     Given initTagsDialog has wired a button
     And GET /v1/tags returns the definitions "ruby" and "go"
     When the button is clicked
@@ -130,6 +140,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And the function it returned opens it as well after the dialog is closed
 
   Scenario: The tags dialog stays closed when the definitions cannot be loaded
+    Given a page on the server's origin
     Given initTagsDialog has wired a button
     And GET /v1/tags answers with the status 500 and "boom"
     When the button is clicked
@@ -137,6 +148,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And the dialog is closed
 
   Scenario Outline: The tags dialog closes at once without edits
+    Given a page on the server's origin
     Given initTagsDialog has wired a button
     And GET /v1/tags returns the definitions "ruby" and "go"
     And the button is clicked
@@ -150,6 +162,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
       | the backdrop is clicked |
 
   Scenario: Closing the tags dialog with unsaved edits asks first
+    Given a page on the server's origin
     Given initTagsDialog has wired a button
     And GET /v1/tags returns the definitions "ruby" and "go"
     And the button is clicked
@@ -210,6 +223,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then it returns only the proposal for "ruby"
 
   Scenario: The memory dialog shows every proposal, adopted
+    Given a page on the server's origin
     Given a <dialog id="memory-dialog"> in the page
     When openMemoryDialog shows the proposals "A" for "ruby" and "B" for "go" with the tags "ruby" and "go"
     Then "#memory-dialog" is open as a modal dialog
@@ -217,6 +231,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And it has the buttons "Close" and "Add the adopted items"
 
   Scenario: The adopted proposals are added as edited
+    Given a page on the server's origin
     Given a <dialog id="memory-dialog"> in the page
     And openMemoryDialog shows the proposals "A" for "ruby", "B" for "go" and "C" for "ruby" with the source of the conversation
     When the text of "A" is changed to "  A2  ", the tag of "B" to "ruby", "C" is not adopted and Add the adopted items is clicked
@@ -224,6 +239,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And the dialog is closed, onDone is called and the toast says "Added 2 items to memory"
 
   Scenario: Adding nothing adopted sends nothing
+    Given a page on the server's origin
     Given a <dialog id="memory-dialog"> in the page
     And openMemoryDialog shows the proposals "A" for "ruby" and "B" for "go"
     When "A" is not adopted, the text of "B" is made blank and Add the adopted items is clicked
@@ -231,6 +247,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And the dialog is closed, onDone is called and the toast says "Nothing was added"
 
   Scenario: A failed addition keeps the dialog open
+    Given a page on the server's origin
     Given a <dialog id="memory-dialog"> in the page
     And openMemoryDialog shows the proposal "A" for "ruby"
     And POST /v1/tags/ruby/memory answers with the status 404 and "no such tag"
@@ -239,6 +256,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And the dialog is still open and onDone is not called
 
   Scenario: The memory dialog without proposals says so
+    Given a page on the server's origin
     Given a <dialog id="memory-dialog"> in the page
     When openMemoryDialog shows no proposals
     Then it says "Nothing to add was found."

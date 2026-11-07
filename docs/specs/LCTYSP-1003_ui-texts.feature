@@ -4,7 +4,8 @@
 
 # The behaviour of public/js/i18n.js, of the LctyT object of public/c/lcty.v1.js it uses and of the Japanese table
 # public/c/lcty.v1.lang-ja.js (LCTYSP-0005, "UI texts"). Each Scenario is a test of the same title in
-# tests/unit/i18n.spec.js, whose steps are the lines below.
+# tests/unit/i18n.test.js (in Node.js) or, for localize(), in tests/unit/i18n.spec.js (in the browser), whose steps are
+# the lines below.
 
 Feature: LCTYSP-1003 UI texts
 
@@ -15,9 +16,6 @@ Feature: LCTYSP-1003 UI texts
   {name} placeholders filled from vars, so a language can order the parts its own way. localize(root) localizes
   static HTML: data-lcty-t="key" replaces an element's text, and data-lcty-t-placeholder, data-lcty-t-title and
   data-lcty-t-aria-label replace that attribute; the English written in the HTML is the x-default.
-
-  Background:
-    Given a page on the server's origin
 
   Scenario: An English page shows the English text
     Given the page's lang is "en" and the Japanese table is loaded
@@ -123,24 +121,28 @@ Feature: LCTYSP-1003 UI texts
     And every Japanese text is a non-empty string
 
   Scenario: localize() replaces the text of data-lcty-t elements
+    Given a page on the server's origin
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <button data-lcty-t="delete">Delete</button>
     When localize() runs
     Then the button's text is "削除"
 
   Scenario: localize() keeps the English written in the HTML on an English page
+    Given a page on the server's origin
     Given the page's lang is "en" and the Japanese table is loaded
     And the body has <button data-lcty-t="delete">Delete</button>
     When localize() runs
     Then the button's text is "Delete"
 
   Scenario: localize() keeps the English written in the HTML for a key the language does not have
+    Given a page on the server's origin
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <button data-lcty-t="noSuchKey">Written</button>
     When localize() runs
     Then the button's text is "Written"
 
   Scenario Outline: localize() replaces the attribute an element names for localization
+    Given a page on the server's origin
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <input data-lcty-t-<attribute>="searchPlaceholder" <attribute>="Search conversations">
     When localize() runs
@@ -154,12 +156,14 @@ Feature: LCTYSP-1003 UI texts
       | aria-label  |
 
   Scenario: localize() keeps an attribute's English for a key the language does not have
+    Given a page on the server's origin
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <input data-lcty-t-title="noSuchKey" title="Written">
     When localize() runs
     Then the input's title is "Written"
 
   Scenario: localize() replaces the text and the attributes of one element
+    Given a page on the server's origin
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <button data-lcty-t="delete" data-lcty-t-title="refreshList" title="Refresh">Delete</button>
     When localize() runs
@@ -167,12 +171,14 @@ Feature: LCTYSP-1003 UI texts
     And the button's title is "一覧を読み込み直す"
 
   Scenario: localize() leaves placeholders in the texts as they are
+    Given a page on the server's origin
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <span data-lcty-t="messageCount">{n} messages</span>
     When localize() runs
     Then the span's text is "{n}件"
 
   Scenario: localize(root) localizes only the elements inside root
+    Given a page on the server's origin
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <div id="root"><b data-lcty-t="delete">Delete</b></div><i data-lcty-t="delete">Delete</i>
     When localize() runs on the div

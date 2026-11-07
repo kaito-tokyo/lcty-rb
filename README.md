@@ -67,13 +67,15 @@ rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/D
 
 ## Tests
 
-The frontend tests run in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js is needed for them
-only; the server itself still needs nothing installed. The backend tests run on the server's Ruby with Minitest, which
-Ruby 2.6 bundles.
+The frontend unit tests that need no browser run in Node.js (24 or later) with its test runner, `node:test`; the other
+frontend tests run in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js is needed for them only;
+the server itself still needs nothing installed. The backend tests run on the server's Ruby with Minitest, which Ruby
+2.6 bundles.
 
-- **Frontend unit tests** (`tests/unit/`): one module of `public/` on its own, such as a worker or a function, on an
-  empty page. Their behaviour is written as Gherkin features, `docs/specs/LCTYSP-1xxx_*.feature`, and each feature has
-  a `.spec.js` here that has one test per Scenario, with the Scenario's title and its lines as the test's steps
+- **Frontend unit tests** (`tests/unit/`): one module of `public/` on its own, such as a worker or a function. Their
+  behaviour is written as Gherkin features, `docs/specs/LCTYSP-1xxx_*.feature`, and each feature is tested by one test
+  per Scenario, with the Scenario's title and its lines as the test's steps: in Node.js (a `.test.js` here) when the
+  module needs no browser, or else on an empty page in the browsers (a `.spec.js`); a feature may have both
   ([LCTYSP-1000](docs/specs/LCTYSP-1000_frontend-unit-tests.md) explains them).
 - **Frontend UI tests** (`tests/ui/`): drive the pages. Their Gherkin features will be
   `docs/specs/LCTYSP-2xxx_*.feature`.
@@ -103,15 +105,19 @@ npm run test:ui:install
 npm test
 ```
 
-`npm test` runs the frontend unit and UI tests; `npm run test:unit` and `npm run test:ui` run one of the two. The tests start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the
-temporary folder, removed afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's
-requests to it are answered by a fake in `tests/ui/fixtures.js`, so your conversations and models are never touched.
-Run one browser with `npm test -- --project='*-chromium'`, or watch the tests with `npm test -- --ui`. The unit tests
-run in parallel; the UI tests share the server's data directory, so they run one at a time, WebKit's after
-Chromium's.
+`npm test` runs the frontend unit and UI tests; `npm run test:unit` and `npm run test:ui` run one of the two. The unit
+tests in Node.js need neither the server nor the browsers and take about a second: `npm run test:node` runs only them
+(it also writes `test-results-node/scenarios.json`, which
+`npm run check:scenarios -- --node test-results-node/scenarios.json` compares with the features). The browser tests
+start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the temporary folder, removed afterwards
+(`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's requests to it are answered by a fake in
+`tests/ui/fixtures.js`, so your conversations and models are never touched. Run one browser with
+`npm test -- --project='*-chromium'`, or watch the browser tests with `npm test -- --ui`. The unit tests run in
+parallel; the UI tests share the server's data directory, so they run one at a time, WebKit's after Chromium's.
 
-CI runs on Linux. The backend unit tests run inside the dev container `.devcontainer/ruby-2.6.10`, started from its
-`devcontainer.json` with the Dev Container CLI (`.github/workflows/backend.yml`; the commands are in LCTYSP-3000). For
+CI runs on Linux. The unit tests in Node.js run on their own, without the server or the browsers
+(`.github/workflows/node.yml`). The backend unit tests run inside the dev container `.devcontainer/ruby-2.6.10`, started
+from its `devcontainer.json` with the Dev Container CLI (`.github/workflows/backend.yml`; the commands are in LCTYSP-3000). For
 the frontend tests, `.devcontainer/ruby-2.6.10/compose.yml` runs the server on its own in the image of that dev container
 (`ruby:2.6.10` with the libraries of the `Gemfile`, the versions macOS's `/usr/bin/ruby` has; on a Mac the server needs
 neither the `Gemfile` nor Bundler), and the tests are pointed at it with `LCTY_TEST_SERVER_URL`. To do the same by

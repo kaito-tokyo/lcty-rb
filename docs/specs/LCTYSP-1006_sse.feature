@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/llm/sse.js (LCTYSP-0002). Each Scenario is a test of the same title in
-# tests/unit/sse.spec.js, whose steps are the lines below.
+# tests/unit/sse.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1006 Reading server-sent events
 
@@ -15,9 +15,6 @@ Feature: LCTYSP-1006 Reading server-sent events
   ignored. At the end of the stream an event that has data is yielded even without its blank line.
 
   In the steps a chunk is written as a JavaScript string, and an event as its name followed by its data.
-
-  Background:
-    Given a page on the server's origin
 
   Scenario: An event is yielded at its blank line
     Given a body that arrives as the chunk "data: hello\n\n"

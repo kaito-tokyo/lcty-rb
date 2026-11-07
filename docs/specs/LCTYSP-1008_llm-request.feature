@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/llm/history.js (LCTYSP-0002, LCTYSP-0003). Each Scenario is a test of the same title in
-# tests/unit/history.spec.js, whose steps are the lines below.
+# tests/unit/history.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1008 Building the request from a conversation
 
@@ -13,9 +13,6 @@ Feature: LCTYSP-1008 Building the request from a conversation
   prefix as the one before and llama-server's prompt cache applies. A user message is sent as {role, content}, an
   assistant message as {type: "message", role, content}; past thinking and assistant messages with an empty body are
   not sent, and the instructions go to the top level.
-
-  Background:
-    Given a page on the server's origin
 
   Scenario: A user message is sent with its role and content
     Given the messages [{"role": "user", "content": "Hello"}]
