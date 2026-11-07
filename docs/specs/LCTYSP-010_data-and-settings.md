@@ -49,9 +49,9 @@ source of truth at startup or by the browser. Everything else is source-of-truth
     tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
     messages, from the search index); the last three are only hints. It is the only store: upgrading from an older
     version (the stores `meta` and `sync` of the retired `meta_db.worker.js`) drops every other store.
-- **A sync is one worker:** `js/sync_c_meta.worker.js` (a classic worker with no imports, served at
+- **A sync is one worker:** `js/sync_c_meta.worker.js` (a module worker with no imports, using top-level `await`, served at
   `/js/sync_c_meta.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
-  [LCTYSP-005](LCTYSP-005_page-and-elements.md)). Started by `new Worker`, it fetches `GET /v1/meta-all.json`, clears and
+  [LCTYSP-005](LCTYSP-005_page-and-elements.md)). Started by `new Worker(url, { type: "module" })`, it fetches `GET /v1/meta-all.json`, clears and
   fills `c_meta` in one transaction (so a conversation deleted on the server disappears from it too), and posts
   `undefined`, or an `Error` when any step failed (the copy is then left as it was). Then `js/api/meta-db.js` terminates
   it. It is the only code that opens the database with a version, so the schema is defined there alone; a database it

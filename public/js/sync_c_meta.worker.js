@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// sync_c_meta.worker.js: replaces the browser's copy of every conversation's meta (LCTYSP-010). A classic worker with no
-// imports, started by js/api/meta-db.js as new Worker("/js/sync_c_meta.worker.js"); it is not a module, so the bundler
-// never sees it. Each worker does one sync and ends:
+// sync_c_meta.worker.js: replaces the browser's copy of every conversation's meta (LCTYSP-010). A module worker with no
+// imports, started by js/api/meta-db.js as new Worker("/js/sync_c_meta.worker.js", { type: "module" }), so it can use
+// top-level await; no module imports it, so the bundler never sees it. Each worker does one sync and ends:
 //
 //   GET /v1/meta-all.json → the store "c_meta" of the database "lcty" is cleared and filled in one transaction (so
 //   conversations deleted on the server disappear from it too) → postMessage(undefined), or postMessage(Error) when
@@ -74,8 +74,10 @@ async function sync() {
 	}
 }
 
-// A plain Error, so the message can be cloned whatever failed (a DOMException from IndexedDB, a TypeError from fetch)
-sync().then(
-	() => self.postMessage(undefined),
-	(e) => self.postMessage(new Error(String(e?.message || e))),
-);
+try {
+	await sync();
+	self.postMessage(undefined);
+} catch (e) {
+	// A plain Error, so the message can be cloned whatever failed (a DOMException from IndexedDB, a TypeError from fetch)
+	self.postMessage(new Error(String(e?.message || e)));
+}

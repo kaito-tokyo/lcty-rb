@@ -97,7 +97,7 @@ The new conversation page has its own module entry, which is not part of `data/c
 `js/pages/new.js`). It is bundled at startup and served from memory at `/index.js`
 (`lib/module_servlet.rb`). The entry only imports the page's init function (`initNewPage` in `js/pages/new.js`) and calls it.
 The workers are not `/c/` files either: `public/js/sync_c_meta.worker.js` (`/js/sync_c_meta.worker.js`, which fills the
-sidebar's meta database, a copy of server data; a classic worker, never bundled) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
+sidebar's meta database, a copy of server data; a module worker that no module imports, so it is never bundled) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
 with its kernel `public/bdot264.wasm`, built from `public/bdot264.wat`) work on server data, which a conversation file
 opened on its own does not need.
 

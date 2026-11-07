@@ -39,7 +39,7 @@ const state = {
 // One worker, one sync: resolves when the store has been replaced
 function runWorker() {
 	return new Promise((resolve, reject) => {
-		const worker = new Worker(WORKER_URL);
+		const worker = new Worker(WORKER_URL, { type: "module" });
 		const end = (error) => {
 			worker.terminate();
 			if (error) reject(error);
