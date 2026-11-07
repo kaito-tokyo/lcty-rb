@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// New conversation (/, the top page. LCTYSP-004, LCTYSP-005). Plain HTML (the creation card in public/index.html) plus
+// New conversation (/, the top page. LCTYSP-0004, LCTYSP-0005). Plain HTML (the creation card in public/index.html) plus
 // the interactive components <lcty-sidebar> and <lcty-composer>. Sending decides the conversation id, creates the file (meta, tags, title and
 // the first message; for a fork also the inherited messages), ending with the command tag <lcty-cmd data-op="send">, and
 // moves to /c/<id>.html, which generates the reply because the file ends with that command.
@@ -62,7 +62,7 @@ export function initNewPage() {
 	});
 	const indexer = appIndexer(() => state.settings);
 
-	// ---- Tags and the system prompt draft (LCTYSP-009) ----
+	// ---- Tags and the system prompt draft (LCTYSP-0009) ----
 
 	// The ⚙︎ at the end of the tag list opens the same tags dialog as the sidebar's tag button (js/tags.js)
 	const tagsButton = document.createElement("button");
@@ -147,7 +147,7 @@ export function initNewPage() {
 		renderTags();
 	});
 
-	// ---- Fork (/?fork=<id>&at=<n>. LCTYSP-004) ----
+	// ---- Fork (/?fork=<id>&at=<n>. LCTYSP-0004) ----
 
 	async function loadFork(params) {
 		const src = await getConversation(params.get("fork"));
@@ -199,7 +199,7 @@ export function initNewPage() {
 			{ type: "title", title, at },
 			...(state.fork ? state.fork.messages.map(toLine) : []),
 			toLine({ id: newMsgId(), role: "user", content: text, at }),
-			{ type: "cmd", op: "send", at }, // command tag: generate the reply on the conversation page (LCTYSP-004)
+			{ type: "cmd", op: "send", at }, // command tag: generate the reply on the conversation page (LCTYSP-0004)
 		];
 		try {
 			await createConversation(meta, lines);

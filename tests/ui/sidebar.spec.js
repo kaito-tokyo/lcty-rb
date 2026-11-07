@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The sidebar shared by every page: the conversation list, search and the settings dialog (LCTYSP-005, LCTYSP-007,
-// LCTYSP-010).
+// The sidebar shared by every page: the conversation list, search and the settings dialog (LCTYSP-0005, LCTYSP-0007,
+// LCTYSP-0010).
 
 import {
 	createConversation,
@@ -55,7 +55,7 @@ test("the open conversation is marked as current", async ({
 	);
 });
 
-test("keyword search finds a conversation by a word in its messages (LCTYSP-007)", async ({
+test("keyword search finds a conversation by a word in its messages (LCTYSP-0007)", async ({
 	page,
 	request,
 }) => {
@@ -92,7 +92,7 @@ test("?q= puts the query into the search box", async ({ page }) => {
 	);
 });
 
-test("the settings dialog shows the browser settings and saves changes (LCTYSP-010)", async ({
+test("the settings dialog shows the browser settings and saves changes (LCTYSP-0010)", async ({
 	page,
 }) => {
 	await openNewPage(page);
@@ -112,7 +112,7 @@ test("the settings dialog shows the browser settings and saves changes (LCTYSP-0
 	await expect(dialog).toBeHidden();
 });
 
-test("the tag button next to 新しい会話 opens the tags dialog, and a saved tag shows up in the picker (LCTYSP-009)", async ({
+test("the tag button next to 新しい会話 opens the tags dialog, and a saved tag shows up in the picker (LCTYSP-0009)", async ({
 	page,
 	request,
 }) => {
@@ -139,7 +139,7 @@ test("the tag button next to 新しい会話 opens the tags dialog, and a saved 
 	await expect(dialog).toBeHidden();
 });
 
-test("the tag button opens the tags dialog on a conversation page too (LCTYSP-009)", async ({
+test("the tag button opens the tags dialog on a conversation page too (LCTYSP-0009)", async ({
 	page,
 	request,
 }) => {

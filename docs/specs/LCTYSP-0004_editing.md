@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LCTYSP-004: Editing a conversation
+# LCTYSP-0004: Editing a conversation
 
 - Status: Accepted
-- Related: [LCTYSP-002](LCTYSP-002_llm-backend.md), [LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-006](LCTYSP-006_http-api.md)
+- Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0006](LCTYSP-0006_http-api.md)
 
 ## Summary
 
@@ -33,13 +33,13 @@ while keeping the original, the user forks. Editing assistant messages is not of
    conversation that **copies** everything before that message (excluding the message itself); the edited message is
    then sent there. The original stays as it is.
    - Copied messages get `inherited: true`. The search index skips them so the same content is not found twice
-     ([LCTYSP-007](LCTYSP-007_search.md)).
+     ([LCTYSP-0007](LCTYSP-0007_search.md)).
    - `instructions` is taken over from the source, and so are its current tags. The new conversation
      does not record where it was forked from.
    - Each file stands on its own: deleting the source does not break the fork.
 4. **Editing assistant messages is not offered.**
 5. **Returning to the original after a fork can be slow.** Forking is fast, but continuing the original conversation
-   afterwards may need a recompute ([LCTYSP-002](LCTYSP-002_llm-backend.md)).
+   afterwards may need a recompute ([LCTYSP-0002](LCTYSP-0002_llm-backend.md)).
 
 ## Server-side check (`pop`)
 
@@ -47,7 +47,7 @@ while keeping the original, the user forks. Editing assistant messages is not of
 only). **If `n` is before the last user message, it is rejected with 409.**
 
 - `title` and `tags` elements after the cut are kept.
-- The file is rewritten through a temporary file and `rename` ([LCTYSP-003](LCTYSP-003_conversation-file.md)).
+- The file is rewritten through a temporary file and `rename` ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)).
 - Ruby checks only this one rule; it does not otherwise know what the messages mean.
 
 ## Sequences
@@ -84,7 +84,7 @@ UI (/c/<id>.html): the file ends with the send command → generates the reply a
 
 An operation to run is a command tag, `<lcty-cmd data-op="…">`, and a command is a command object: when it becomes the
 last element of `<lcty-c>`, it runs its operation and is responsible for it (while running it floats above the
-composer with a spinner and a stop button, and can be aborted; [LCTYSP-005](LCTYSP-005_page-and-elements.md)). **How it is appended controls when it runs:**
+composer with a spinner and a stop button, and can be aborted; [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). **How it is appended controls when it runs:**
 
 | Appended to                                       | Execution                                                                                          | Used for                                                                                                     |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |

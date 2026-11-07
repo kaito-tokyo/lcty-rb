@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# /v1/: the JSON API and the vector binaries (LCTYSP-006). Mounted at /v1 by chatty.rb.
+# /v1/: the JSON API and the vector binaries (LCTYSP-0006). Mounted at /v1 by chatty.rb.
 
 require 'webrick'
 require 'json'
@@ -17,7 +17,7 @@ module Chatty
     MAX_BODY = 64 * 1024 * 1024
     MAX_PUT_IDS = 16 # The rev list of PUT /v1/vectors is in the query, so keep the URL short (WEBrick allows up to 2083 bytes)
 
-    # Defaults of the browser settings (GET /v1/defaults.json). The browser stores its own changes (LCTYSP-010).
+    # Defaults of the browser settings (GET /v1/defaults.json). The browser stores its own changes (LCTYSP-0010).
     # The API key matches llm-backend/run-llama-cpp.sh ("<hostname>-<user>"): a guard against connecting to the wrong server.
     def self.defaults
       {
@@ -57,7 +57,7 @@ module Chatty
           limit = [[(req.query['limit'] || 16).to_i, 1].max, MAX_PUT_IDS].min
           return json(res, 200, VECTORS.pending(model, limit))
         when ['PUT', 'vectors']
-          # The body is a registration vector binary (768 dims). Revisions come in the query as ?rev=<id>:<rev>,… (LCTYSP-008)
+          # The body is a registration vector binary (768 dims). Revisions come in the query as ?rev=<id>:<rev>,… (LCTYSP-0008)
           q = WEBrick::HTTPUtils.parse_query(req.query_string.to_s)
           model = query_model(q)
           revs = q['rev'].to_s.split(',').map { |p| p.split(':', 2) }.select { |a| a.size == 2 }.to_h
@@ -74,7 +74,7 @@ module Chatty
           end
           return json(res, 200, VECTORS.put(model, revs, (req.body || '').b))
         when ['GET', 'vectors.eg2_264.dat'], ['GET', 'vectors.eg2_264.idx']
-          # The distribution files of the default embedding model (LCTYSP-008), rewritten on request when stale. Both
+          # The distribution files of the default embedding model (LCTYSP-0008), rewritten on request when stale. Both
           # carry the same ETag (the pair's version), so the browser can tell a pair fetched across a rewrite; 304 if
           # unchanged
           dat_path, idx_path = VECTORS.export(V1.defaults['embedding_model'])
@@ -94,7 +94,7 @@ module Chatty
           Store.put_tags(parse_body(req))
           return json(res, 200, 'ok' => true)
         when ['POST', 'search']
-          # Keyword search only (semantic search and the RRF merge happen in the browser. LCTYSP-007)
+          # Keyword search only (semantic search and the RRF merge happen in the browser. LCTYSP-0007)
           body = parse_body(req)
           raise HttpError.new(400, 'body must be an object') unless body.is_a?(Hash)
           tags = Array(body['tags'])

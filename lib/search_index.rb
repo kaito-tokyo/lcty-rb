@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# The search index (LCTYSP-007). Derived data in data/_index.sqlite (starts with _ = can be rebuilt from the conversation files. LCTYSP-010).
+# The search index (LCTYSP-0007). Derived data in data/_index.sqlite (starts with _ = can be rebuilt from the conversation files. LCTYSP-0010).
 #
 #   chunks      One round (user message + reply). Long ones are split into parts. msg_id is the user message id (UUIDv7)
 #               rev marks the version of the whole round's text; it changes when the text changes
@@ -125,7 +125,7 @@ module Chatty
       @mutex.synchronize { @db.execute('SELECT conv_id, messages FROM conv_stats').to_h }
     end
 
-    # Ids of conversations that have all the tags (LCTYSP-009)
+    # Ids of conversations that have all the tags (LCTYSP-0009)
     def convs_with_tags(tags)
       tags = tags.uniq
       @mutex.synchronize do

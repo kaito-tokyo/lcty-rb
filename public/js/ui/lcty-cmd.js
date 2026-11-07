@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// <lcty-cmd>: a command tag as a command object (LCTYSP-003, LCTYSP-004, LCTYSP-005). Unlike the elements in lcty.v1.js
+// <lcty-cmd>: a command tag as a command object (LCTYSP-0003, LCTYSP-0004, LCTYSP-0005). Unlike the elements in lcty.v1.js
 // (structure only), a command is behavior itself, so it is defined here.
 //
 //   <lcty-cmd data-op="send" data-at="…"></lcty-cmd>

@@ -23,7 +23,7 @@ import { stream } from "../js/llm/client.js";
 import { buildRequest } from "../js/llm/history.js";
 import { openMemoryDialog, proposeMemory, sortTags } from "../js/tags.js";
 import { appendCommand, defineCommands } from "../js/ui/lcty-cmd.js";
-// Element features (the structure comes from the custom elements in /c/lcty.v1.js, which expose their inner elements as fields. LCTYSP-005)
+// Element features (the structure comes from the custom elements in /c/lcty.v1.js, which expose their inner elements as fields. LCTYSP-0005)
 import {
 	appendMessage,
 	appendText,
@@ -37,7 +37,7 @@ import {
 	setComposerBusy,
 	setComposerValue,
 } from "../js/ui/lcty-elements.js";
-// lcty.v1.module.js: the entry of the conversation page /c/<id>.html (LCTYSP-005). Line 2 of a conversation file loads
+// lcty.v1.module.js: the entry of the conversation page /c/<id>.html (LCTYSP-0005). Line 2 of a conversation file loads
 // lcty.v1.js (the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese texts) and links lcty.v1.css.
 // <lcty-c> imports this module once the page has loaded, so it never blocks rendering; it then attaches the event
 // listeners and features the page needs. Served as it is from public/c/, not bundled: the browser imports the modules
@@ -45,12 +45,12 @@ import {
 //
 // The conversation file itself (data/c/<id>.html); the conversation is rebuilt from the elements in <lcty-c>. New
 // conversations are made on / (js/pages/new.js). Saving is append-only; the one exception is popping the last turn
-// (LCTYSP-004).
+// (LCTYSP-0004).
 import { initSidebar } from "../js/ui/sidebar.js";
 import { textAttr } from "../js/ui/text-attr.js";
 import { UUID_RE } from "../js/uuid.js";
 
-// The frame and the message list are <lcty-c> (built by lcty.v1.js during parsing. LCTYSP-005). Its inner elements are taken from fields
+// The frame and the message list are <lcty-c> (built by lcty.v1.js during parsing. LCTYSP-0005). Its inner elements are taken from fields
 const log = document.querySelector("lcty-c");
 const { composer } = log;
 
@@ -67,7 +67,7 @@ const state = {
 
 const backend = () => backendOf(state.settings);
 
-// Sidebar: search and conversation list, shared by every page (<lcty-sidebar> inside the container. LCTYSP-005, LCTYSP-007)
+// Sidebar: search and conversation list, shared by every page (<lcty-sidebar> inside the container. LCTYSP-0005, LCTYSP-0007)
 const panel = initSidebar(log.sidebar, {
 	getSettings: () => state.settings,
 	// A round of this conversation: scroll to it instead of reloading
@@ -93,23 +93,23 @@ const splitTags = (s) => (s || "").split(/\s+/).filter(Boolean);
 
 // ---- Building the conversation ----
 
-/** Build the conversation from the elements of the conversation file (LCTYSP-003). */
+/** Build the conversation from the elements of the conversation file (LCTYSP-0003). */
 function convFromDom() {
-	// The meta is <lcty-c>'s attributes and the first lcty-setup, written once at creation (LCTYSP-003)
+	// The meta is <lcty-c>'s attributes and the first lcty-setup, written once at creation (LCTYSP-0003)
 	if (!log.id) return null;
 	const d = log.dataset;
 	const setup = log.querySelector(":scope > lcty-setup");
 	const meta = {
-		id: log.id.replace(/^c-/, ""), // id="c-<conversation id>" (LCTYSP-003)
+		id: log.id.replace(/^c-/, ""), // id="c-<conversation id>" (LCTYSP-0003)
 		created_at: d.createdAt,
 		instructions: (setup && textAttr(setup, "data-instructions")) ?? "",
 	};
-	// The tags at creation are data-setup-tags. The current tags are not in the file (tags.sqlite, LCTYSP-009): they
+	// The tags at creation are data-setup-tags. The current tags are not in the file (tags.sqlite, LCTYSP-0009): they
 	// start as the tags at creation and are loaded from the server at startup (loadConvTags)
 	meta.tags = splitTags(d.setupTags);
 	return {
 		meta,
-		title: document.querySelector("title")?.textContent || "", // the <title> on line 2, in the head (LCTYSP-003)
+		title: document.querySelector("title")?.textContent || "", // the <title> on line 2, in the head (LCTYSP-0003)
 		tags: meta.tags,
 		messages: readMessages(log),
 	};
@@ -152,7 +152,7 @@ function renderHeader() {
 }
 
 // document.title writes into the document's first <title>, which here is the conversation file's own (line 2,
-// LCTYSP-003). So it gets exactly what the file's title line holds, nothing added: the page stays a mirror of the file.
+// LCTYSP-0003). So it gets exactly what the file's title line holds, nothing added: the page stays a mirror of the file.
 function showTitle(title) {
 	if (document.title !== title) document.title = title;
 }
@@ -230,11 +230,11 @@ async function onSend(text) {
 	if (firstTitle)
 		lines.unshift({ type: "title", title: conv.title, at: nowIso() });
 	persist(lines);
-	appendCommand(log, "send"); // in memory only: generates now, nothing to resume after the page closes (LCTYSP-004)
+	appendCommand(log, "send"); // in memory only: generates now, nothing to resume after the page closes (LCTYSP-0004)
 }
 
 /**
- * The title a reply proposes (LCTYSP-003): its first line, when that is a level-1 Markdown heading ("# タイトル").
+ * The title a reply proposes (LCTYSP-0003): its first line, when that is a level-1 Markdown heading ("# タイトル").
  * The system prompt asks for one on every reply, but it is optional; null when there is none.
  */
 function titleFromReply(content) {
@@ -325,7 +325,7 @@ async function generate(controller = new AbortController()) {
 	await run;
 }
 
-// ---- Undo, regenerate, fork (LCTYSP-004) ----
+// ---- Undo, regenerate, fork (LCTYSP-0004) ----
 
 function onUndo() {
 	if (state.busy) return;
@@ -349,7 +349,7 @@ async function onRegenerate() {
 	pop(i);
 	msgs.length = i;
 	removeFrom(log, i);
-	appendCommand(log, "send"); // in memory only (LCTYSP-004)
+	appendCommand(log, "send"); // in memory only (LCTYSP-0004)
 }
 
 async function onFork(message) {
@@ -360,7 +360,7 @@ async function onFork(message) {
 	location.href = `/?fork=${encodeURIComponent(state.conv.meta.id)}&at=${i}`;
 }
 
-// ---- Memory proposals (LCTYSP-009) ----
+// ---- Memory proposals (LCTYSP-0009) ----
 
 async function onProposeMemory() {
 	if (state.busy || !state.persisted) return;
@@ -438,7 +438,7 @@ log.deleteButton.addEventListener("click", async () => {
 		);
 	}
 });
-// Leaving the page while generating loses the partial reply (LCTYSP-005)
+// Leaving the page while generating loses the partial reply (LCTYSP-0005)
 window.addEventListener("beforeunload", (e) => {
 	if (!state.busy) return;
 	e.preventDefault();
@@ -491,7 +491,7 @@ window.addEventListener("beforeunload", (e) => {
 		);
 	}
 	renderHeader(); // again, with the tag definitions (the tag picker)
-	// Commands (<lcty-cmd>, LCTYSP-004): defining the element now upgrades the ones in the file; one that is still the last
+	// Commands (<lcty-cmd>, LCTYSP-0004): defining the element now upgrades the ones in the file; one that is still the last
 	// element (a conversation just created on /, or a creation that was interrupted) runs. send generates a reply to the
 	// last user message.
 	defineCommands({

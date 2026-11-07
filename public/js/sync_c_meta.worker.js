@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// sync_c_meta.worker.js: replaces the browser's copy of every conversation's meta (LCTYSP-010). A module worker with no
+// sync_c_meta.worker.js: replaces the browser's copy of every conversation's meta (LCTYSP-0010). A module worker with no
 // imports, started by js/api/meta-db.js as new Worker("/js/sync_c_meta.worker.js", { type: "module" }); no module
 // imports it, so the bundler never sees it. Each worker does one sync and ends:
 //
@@ -12,7 +12,7 @@
 //
 //   database "lcty" (version DB_VERSION)
 //     store "c_meta" (key: id): {id, title, created_at, updated_at_hint, setup_tags, tags_hint, messages_hint}, as
-//       GET /v1/meta-all.json gives it (built by the server from each conversation file's "<!" meta lines, LCTYSP-003)
+//       GET /v1/meta-all.json gives it (built by the server from each conversation file's "<!" meta lines, LCTYSP-0003)
 //
 // This worker is the only code that changes the schema. The pages only read the store, and close their connections
 // right away, so an upgrade is not blocked by them. Upgrading drops every other store (those of the old meta_db worker).

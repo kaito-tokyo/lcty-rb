@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The browser's copy of every conversation's meta (IndexedDB "lcty", store "c_meta", LCTYSP-010). A sync starts a
+// The browser's copy of every conversation's meta (IndexedDB "lcty", store "c_meta", LCTYSP-0010). A sync starts a
 // worker, /js/sync_c_meta.worker.js, which fetches GET /v1/meta-all.json, replaces the whole store, posts undefined and
 // ends; a failure is thrown in the worker and arrives here as its error event. This module reads the store itself (the worker owns the schema: the database is never created here)
 // and closes each connection right away, so the worker's upgrade is never blocked.
@@ -56,7 +56,7 @@ function runWorker() {
 }
 
 // Newest first by updated_at_hint, then by id (it starts with the creation time): the same order as the server and
-// the sidebar (LCTYSP-010)
+// the sidebar (LCTYSP-0010)
 function newestFirst(a, b) {
 	if (a.updated_at_hint !== b.updated_at_hint)
 		return a.updated_at_hint < b.updated_at_hint ? 1 : -1;

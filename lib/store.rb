@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Storage (LCTYSP-003, LCTYSP-004, LCTYSP-009): conversation files in data/c/ and tag definitions in data/tags.sqlite.
+# Storage (LCTYSP-0003, LCTYSP-0004, LCTYSP-0009): conversation files in data/c/ and tag definitions in data/tags.sqlite.
 # open_data opens every store and brings the derived data (search index, vector DB) in line with the files.
 
 require 'json'
@@ -21,13 +21,13 @@ module Chatty
   module Store
     module_function
 
-    APPENDABLE = %w[message title tags].freeze # tags lines go to tags.sqlite, not to the file (LCTYSP-009)
-    # A new conversation may also end with a command tag (send: generate a reply at once. LCTYSP-004)
+    APPENDABLE = %w[message title tags].freeze # tags lines go to tags.sqlite, not to the file (LCTYSP-0009)
+    # A new conversation may also end with a command tag (send: generate a reply at once. LCTYSP-0004)
     CREATABLE = %w[message title cmd].freeze # the tags at creation are meta.tags
 
     # Write to a temporary file, then rename (atomic replace). Used whenever a conversation file is written whole.
     # Files whose head is not the current one (the format before 2026-11-07, a head edited by hand, or a header, lines 1
-    # and 2, that has changed since) are rewritten with the current one at startup (LCTYSP-003). What they hold is kept as read; so is their modification time, which
+    # and 2, that has changed since) are rewritten with the current one at startup (LCTYSP-0003). What they hold is kept as read; so is their modification time, which
     # is updated_at_hint (the order of the list). A file whose meta cannot be read at all is left as it is.
     def migrate_heads
       conversation_paths.each do |path|
@@ -71,7 +71,7 @@ module Chatty
     end
 
     # The whole conversation file (the header on lines 1 and 2, the title slot on line 3, <lcty-c> on line 4, then the
-    # elements. LCTYSP-003)
+    # elements. LCTYSP-0003)
     def document(lines)
       ConvHtml.document(lines)
     rescue ConvHtml::InvalidCharError => e
@@ -80,7 +80,7 @@ module Chatty
       raise HttpError.new(500, e.message)
     end
 
-    # Conversations are HTML fragments of Custom Elements (LCTYSP-003). Line objects are written as elements.
+    # Conversations are HTML fragments of Custom Elements (LCTYSP-0003). Line objects are written as elements.
     def encode_lines(lines)
       ConvHtml.encode(lines)
     rescue ConvHtml::InvalidCharError => e
@@ -101,7 +101,7 @@ module Chatty
       end
     end
 
-    # Give message lines without an id a UUIDv7 id (so the index stays sane even if a client forgets. LCTYSP-003).
+    # Give message lines without an id a UUIDv7 id (so the index stays sane even if a client forgets. LCTYSP-0003).
     def ensure_ids!(lines)
       lines.each { |l| l['id'] ||= Uuid.v7 if l['type'] == 'message' }
     end
@@ -133,7 +133,7 @@ module Chatty
     end
 
     # Current tags: tags.sqlite when they were changed after creation, else the tags at creation (data-setup-tags.
-    # LCTYSP-009). Tag changes are not written to the conversation file.
+    # LCTYSP-0009). Tag changes are not written to the conversation file.
     def current_tags(entries)
       meta = ConvHtml.current_meta(entries)
       (meta['id'] && TAGS.conversation_tags(meta['id'])) || Array(meta['tags'])
@@ -185,7 +185,7 @@ module Chatty
       end
     end
 
-    # The title is the <title> on line 3, in the slot whose length its id carries (LCTYSP-003). The slot is overwritten
+    # The title is the <title> on line 3, in the slot whose length its id carries (LCTYSP-0003). The slot is overwritten
     # in place; when the file has no valid slot (an older head, or a broken one) the whole file is rewritten instead.
     def set_title(id, title_line)
       path = existing_conv_path(id)
@@ -208,7 +208,7 @@ module Chatty
     end
 
     # Delete from the n-th message (0-based, counting message lines only).
-    # One call may go back at most one turn: reject n before the last user message (LCTYSP-004).
+    # One call may go back at most one turn: reject n before the last user message (LCTYSP-0004).
     def pop(id, from)
       raise HttpError.new(400, 'from must be an integer') unless from.is_a?(Integer) && from >= 0
       path = existing_conv_path(id)
@@ -238,17 +238,17 @@ module Chatty
         'updated_at_hint' => File.mtime(path).iso8601, # a hint: the file's mtime, which copying, syncing or editing changes too
         'messages' => entries.count { |o| o['type'] == 'message' },
         'tags' => current_tags(entries),
-        # Ids of the rounds this conversation owns (user message ids; maps semantic search hits to conversations. LCTYSP-008)
+        # Ids of the rounds this conversation owns (user message ids; maps semantic search hits to conversations. LCTYSP-0008)
         'message_ids' => entries.select { |o| o['type'] == 'message' && o['role'] == 'user' && !o['inherited'] }.map { |o| o['id'] }
       }
     end
 
     # The meta of every conversation, newest first, from its head lines only (lines 1 to 4: the header, the title slot and
-    # <lcty-c>. LCTYSP-003): they hold what a list needs, so the rest of each file is not read (GET /v1/meta-all.json).
+    # <lcty-c>. LCTYSP-0003): they hold what a list needs, so the rest of each file is not read (GET /v1/meta-all.json).
     # setup_tags are the tags at creation; later changes are in tags.sqlite, which tags_hint reflects.
     # updated_at_hint is only a hint (the file's mtime, which copying, syncing or editing by hand changes too), and so is
     # tags_hint and messages_hint, the current tags and the number of messages as recorded in the search index (derived;
-    # LCTYSP-007).
+    # LCTYSP-0007).
     def meta_all
       tags = INDEX.tags_hint
       counts = INDEX.messages_hint
@@ -270,7 +270,7 @@ module Chatty
           warn "skip #{path}: #{e.class}: #{e.message}"
           nil
         end
-      end.compact.sort_by { |c| [c['updated_at_hint'].to_s, c['id'].to_s] }.reverse # the same order as the browser (LCTYSP-010)
+      end.compact.sort_by { |c| [c['updated_at_hint'].to_s, c['id'].to_s] }.reverse # the same order as the browser (LCTYSP-0010)
     end
 
     # Conversation files. Skip names that are not valid conversation ids (copies like "… copy.html")
@@ -309,7 +309,7 @@ module Chatty
       }
     end
 
-    # Tag definitions and memory live in TagStore (data/tags.sqlite. LCTYSP-009). Only validation happens here.
+    # Tag definitions and memory live in TagStore (data/tags.sqlite. LCTYSP-0009). Only validation happens here.
     def tags
       TAGS.all
     end

@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Types and documentation for lcty.v1.js (LCTYSP-005). The served script keeps no comments other than SPDX and
+ * Types and documentation for lcty.v1.js (LCTYSP-0005). The served script keeps no comments other than SPDX and
  * /*export*\/ to stay small, so its documentation lives here.
  *
  * - The source is the ES module public/c/lcty.v1.mjs (no imports; exported declarations start with `export`). The
  *   classic script public/c/lcty.v1.js is generated from it by the command in its head comment (each leading `export`
  *   becomes `/*export*\/`, and the last line `//?defineLctyV1CustomElements();` loses its `//?`) and committed. At
  *   startup chatty.rb copies it (with lcty.v1.css, nothing else) to data/c/, next to the conversation files: they
- *   belong to the user together (LCTYSP-010).
+ *   belong to the user together (LCTYSP-0010).
  * - Every page loads it synchronously inside <head> (a conversation file on line 2, as lcty.v1.js; other pages as
  *   /c/lcty.v1.js), followed by lcty.v1.lang-ja.js (the Japanese texts, generated from public/c/lcty.v1.lang-ja.mjs).
  *   There is no inline script: lcty.v1.js defines the elements at its end. The conversation page's module
@@ -22,8 +22,8 @@
  *   helper `$(el, attrs, ...children)` sets attributes (values are strings, as the DOM defines them; a boolean attribute is
  *   written as "" and an absent one is not written) and appends children. Inner elements are built as arguments of `$`;
  *   `append` is used only for the final shadow root.
- * - The conversation file's own elements stay in Light DOM and are shown through <slot> (dual recording, LCTYSP-003).
- * - Styling comes from lcty.v1.css through ::part(); the part names below are BEM. The rules: LCTYSP-005, Styling.
+ * - The conversation file's own elements stay in Light DOM and are shown through <slot> (dual recording, LCTYSP-0003).
+ * - Styling comes from lcty.v1.css through ::part(); the part names below are BEM. The rules: LCTYSP-0005, Styling.
  * - Only DOM structure is defined here. Inner elements are exposed as fields, and every feature is attached to those
  *   fields by the modules loaded from the page entries (js/ui/lcty-elements.js, js/ui/sidebar.js, js/pages/*.js).
  */
@@ -180,7 +180,7 @@ declare const LctyT: {
  * sidebar's and the composer's exported under their own names. The file's elements (lcty-setup, messages, lcty-cmd) are appended to Light DOM by the
  * parser and shown through the <slot> between the header and the composer; lcty-setup shows the system prompt itself.
  *
- * The frame's tree is decided here, and each piece follows one input (LCTYSP-005): the title (the document's <title>,
+ * The frame's tree is decided here, and each piece follows one input (LCTYSP-0005): the title (the document's <title>,
  * read once), the tag chips (data-setup-tags: the tags at creation, for
  * now), and which chips are unknown and the picker's choices (data-tag-defs, the tag definitions, space-separated).
  * What shows before the first message is lcty.v1.css's (:has). Modules only set values, attributes and handlers.
@@ -191,7 +191,7 @@ declare const LctyT: {
  * (file://) the import fails and the page stays a static view.
  *
  * Above the composer floats "to the bottom" (#to-end, shown while the end is out of view) and a running <lcty-cmd>
- * (slot="float"). Scrolling: LCTYSP-005, Layout of the conversation page.
+ * (slot="float"). Scrolling: LCTYSP-0005, Layout of the conversation page.
  */
 /**
  * <lcty-setup>: the system prompt, line 4 of a conversation file and the first child of <lcty-c>. Its Shadow DOM is a

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Vector binary (exchange format lctyvLE0) and the client of the semantic search worker (LCTYSP-008).
+// Vector binary (exchange format lctyvLE0) and the client of the semantic search worker (LCTYSP-0008).
 //
 //   0   8  magic "lctyvLE0"
 //   8   4  byte size of the following vector (uint32 LE; 3072 for registration)
@@ -57,7 +57,7 @@ function truncate(vec) {
 }
 
 /**
- * Semantic search in a worker (/fuzzy_search.worker.js): it fetches the distribution files, keeps them, and scores the query against every row with bdot264 (LCTYSP-008). The main thread only sends
+ * Semantic search in a worker (/fuzzy_search.worker.js): it fetches the distribution files, keeps them, and scores the query against every row with bdot264 (LCTYSP-0008). The main thread only sends
  * messages; the worker starts on first use.
  */
 export function createVectorStore() {

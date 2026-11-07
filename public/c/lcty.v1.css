@@ -5,7 +5,7 @@
  */
 
 /* lcty.v1.css: the stylesheet of every page and conversation file. Its rules (parts in BEM, no global reset,
-   box-sizing, the order of the sections): LCTYSP-005, Styling. */
+   box-sizing, the order of the sections): LCTYSP-0005, Styling. */
 
 /* ---- tokens ---- */
 :root {
@@ -177,7 +177,7 @@ lcty-c::part(lcty-c__tag--unknown) {
 
 /* ---- pages ---- */
 /* moving between pages: a cross-document view transition of the sidebar only (it has its own name); the rest of the
-   page is not captured, so it changes at once (LCTYSP-005) */
+   page is not captured, so it changes at once (LCTYSP-0005) */
 @view-transition {
 	navigation: auto;
 }
@@ -358,7 +358,7 @@ lcty-c::part(lcty-conv-list__meta) {
 	font-weight: normal;
 }
 
-/* ---- <lcty-c>: the conversation screen (layout: LCTYSP-005) ---- */
+/* ---- <lcty-c>: the conversation screen (layout: LCTYSP-0005) ---- */
 lcty-c {
 	display: flex;
 	flex-direction: column;

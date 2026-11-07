@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Tags and memory (LCTYSP-009).
+// Tags and memory (LCTYSP-0009).
 //  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
 //  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the sidebar
 //  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
@@ -35,7 +35,7 @@ export function sortTags(defs, names) {
 	);
 }
 
-/** Draft = for each chosen tag in definition order, its prompt followed by a "# Memory (name)" bullet list (LCTYSP-009). */
+/** Draft = for each chosen tag in definition order, its prompt followed by a "# Memory (name)" bullet list (LCTYSP-0009). */
 export function composeDraft(defs, selected) {
 	const set = new Set(selected);
 	const parts = [];
@@ -350,7 +350,7 @@ export function initTagsDialog(button, { onSaved, toast }) {
 	return open;
 }
 
-// ---- Memory proposals (LCTYSP-009) ----
+// ---- Memory proposals (LCTYSP-0009) ----
 
 function proposalSchema(tags) {
 	return {

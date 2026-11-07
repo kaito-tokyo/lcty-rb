@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The sidebar shared by every page (LCTYSP-005, LCTYSP-007): <lcty-sidebar> and its <lcty-conv-list> (structure in
+// The sidebar shared by every page (LCTYSP-0005, LCTYSP-0007): <lcty-sidebar> and its <lcty-conv-list> (structure in
 // /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box, the list's items and handlers, the tags dialog
-// (LCTYSP-009), the refresh button and the settings dialog (LCTYSP-010) here.
+// (LCTYSP-0009), the refresh button and the settings dialog (LCTYSP-0010) here.
 
 import { resetMetaDb } from "../api/meta-db.js";
 import { showToast } from "../common.js";

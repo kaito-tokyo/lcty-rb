@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Small helpers shared by every page (LCTYSP-005).
+// Small helpers shared by every page (LCTYSP-0005).
 
 import { getDefaults } from "./api/storage.js";
 import { tr } from "./i18n.js";
@@ -64,12 +64,12 @@ export function backendOf(settings, id) {
 	);
 }
 
-// msgId links to the message element itself (id="c-msg-<UUIDv7>". LCTYSP-003)
+// msgId links to the message element itself (id="c-msg-<UUIDv7>". LCTYSP-0003)
 export function convUrl(id, msgId) {
 	return `/c/${encodeURIComponent(id)}.html${msgId ? `#c-msg-${msgId}` : ""}`;
 }
 
-/** Index registration (LCTYSP-007). Every page calls kick() after saving and on open. */
+/** Index registration (LCTYSP-0007). Every page calls kick() after saving and on open. */
 export function appIndexer(getSettings) {
 	let shown = false;
 	return createIndexer({
@@ -87,7 +87,7 @@ export function appIndexer(getSettings) {
 	});
 }
 
-// ---- Settings (LCTYSP-010) ----
+// ---- Settings (LCTYSP-0010) ----
 // The server only provides defaults (/v1/defaults.json). Changes made on /settings are kept in localStorage, and only the
 // values that differ from the defaults are stored, so changed defaults still apply to everything left untouched.
 const SETTINGS_KEY = "lcty.settings.v1";

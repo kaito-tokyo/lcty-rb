@@ -16,7 +16,7 @@
 	},
 };
 
-/** <lcty-setup>: the system prompt (line 4 of a conversation file), shown by itself, collapsed (LCTYSP-005) */
+/** <lcty-setup>: the system prompt (line 4 of a conversation file), shown by itself, collapsed (LCTYSP-0005) */
 /*export*/ class LctySetupElement extends HTMLElement {
 	static observedAttributes = ["data-instructions", "data-instructions-base64"];
 
@@ -51,11 +51,11 @@
 }
 
 /*export*/ class LctyCElement extends HTMLElement {
-	// What each attribute decides (LCTYSP-005): data-setup-tags the chips (the tags at
+	// What each attribute decides (LCTYSP-0005): data-setup-tags the chips (the tags at
 	// creation; the current ones are not shown yet) and data-tag-defs which of them are unknown and the picker's choices
 	static observedAttributes = ["data-setup-tags", "data-tag-defs"];
 
-	// The frame of a conversation file. Styling, what shows before the first message, and scrolling: LCTYSP-005.
+	// The frame of a conversation file. Styling, what shows before the first message, and scrolling: LCTYSP-0005.
 
 	constructor() {
 		super();
@@ -162,7 +162,7 @@
 		// the end of the page, watched for "to the bottom"
 		this.end = $(document.createElement("div"), { part: "lcty-c__end" });
 
-		// Tuning (LCTYSP-005): the × of a tag chip is a bare button; the floating area lets clicks through between its buttons
+		// Tuning (LCTYSP-0005): the × of a tag chip is a bare button; the floating area lets clicks through between its buttons
 		const sheet = new CSSStyleSheet();
 		sheet.replaceSync(
 			'[part~="lcty-c__tag-remove"] { background: transparent; border: 0; padding: 0 0 0 2px; cursor: pointer; } [part~="lcty-c__float"] { pointer-events: none; } [part~="lcty-c__float"] > * { pointer-events: auto; }',
@@ -212,7 +212,7 @@
 
 	// The conversation page's features (lcty.v1.module.js, next to this file) are imported once the page has loaded, so
 	// they never block rendering. import() resolves against this script's URL. Opened directly (file://) the import fails
-	// and the page stays a static view (LCTYSP-005).
+	// and the page stays a static view (LCTYSP-0005).
 	static #featuresRequested = false;
 	static #importFeatures() {
 		if (LctyCElement.#featuresRequested) return;
@@ -279,7 +279,7 @@
 
 /**
  * <lcty-conv-list>: the sidebar's conversation list (also search results), in <lcty-sidebar>'s Shadow DOM; its parts
- * are styled through lcty-sidebar::part(…) (LCTYSP-005). A page gives it items and the current conversation, and listens for
+ * are styled through lcty-sidebar::part(…) (LCTYSP-0005). A page gives it items and the current conversation, and listens for
  * select {detail: {id, chunkId}} (search results carry chunkId, the user message id of the matching round; the items
  * are links, and a page cancels select to stay instead of following one) and
  * tag {detail: {name}} (a tag chip was clicked).
@@ -466,7 +466,7 @@
 			{ href: "/", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
-		// opens the tags dialog (the tag editor, LCTYSP-009), attached by js/ui/sidebar.js
+		// opens the tags dialog (the tag editor, LCTYSP-0009), attached by js/ui/sidebar.js
 		this.tagsButton = $(
 			document.createElement("button"),
 			"tags",
@@ -477,7 +477,7 @@
 			},
 			_("tags", "Tags"),
 		);
-		// fetches the list again, throwing the browser's copy away; attached by js/ui/sidebar.js (LCTYSP-010)
+		// fetches the list again, throwing the browser's copy away; attached by js/ui/sidebar.js (LCTYSP-0010)
 		this.refreshButton = $(
 			document.createElement("button"),
 			"refresh",
@@ -488,7 +488,7 @@
 			},
 			"↻",
 		);
-		// opens the settings dialog, attached by js/ui/sidebar.js (LCTYSP-010)
+		// opens the settings dialog, attached by js/ui/sidebar.js (LCTYSP-0010)
 		this.settingsButton = $(
 			document.createElement("button"),
 			"settings",
@@ -544,7 +544,7 @@
 	#filled = false;
 
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
-	// before any module has loaded (LCTYSP-010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
+	// before any module has loaded (LCTYSP-0010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
 	// there at the first paint, or else from IndexedDB ("lcty", store "c_meta"), asynchronously. The database is only
 	// read: when it does not exist it is not created (/js/sync_c_meta.worker.js owns the schema). A module that has already
 	// shown its own items wins.
@@ -556,7 +556,7 @@
 			items
 				.filter((c) => c && typeof c === "object" && typeof c.id === "string") // broken entries are skipped
 				.map((c) => ({ ...c, tags: c.tags_hint, messages: c.messages_hint }))
-				// newest first by updated_at_hint, then by id: the same order as the module's list (LCTYSP-010)
+				// newest first by updated_at_hint, then by id: the same order as the module's list (LCTYSP-0010)
 				.sort((a, b) =>
 					a.updated_at_hint !== b.updated_at_hint
 						? a.updated_at_hint < b.updated_at_hint
@@ -833,7 +833,7 @@
 			),
 		);
 
-		// Tuning (LCTYSP-005): the textarea is the bare field inside the form's frame
+		// Tuning (LCTYSP-0005): the textarea is the bare field inside the form's frame
 		const sheet = new CSSStyleSheet();
 		sheet.replaceSync(
 			"textarea { background: transparent; border: 0; outline: none; resize: none; padding: 4px 6px; max-height: 40vh; }",

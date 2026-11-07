@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Search box and conversation list of the sidebar, on every page (LCTYSP-007, LCTYSP-008).
+// Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0008).
 // With an empty box it lists newest first; otherwise it merges keyword search (server) and semantic search (browser) with RRF.
 // The list is the browser's copy of every conversation's meta (IndexedDB, api/meta-db.js): titles, dates, tags_hint as
 // the tags and messages_hint as the counts; it is read again whenever a sync has stored a new list. The rounds of each
@@ -66,7 +66,7 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		return state.rounds;
 	}
 
-	// The distribution files hold the vectors of the default embedding model only (LCTYSP-008)
+	// The distribution files hold the vectors of the default embedding model only (LCTYSP-0008)
 	let defaults = null;
 	async function checkModel(cfg) {
 		defaults ||= getDefaults().catch((e) => {

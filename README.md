@@ -108,8 +108,8 @@ Its data directory is emptied whenever the container restarts (`docker compose -
 
 ## Documentation
 
-The design is in [docs/specs](docs/specs/README.md) (LCTYSP-001 to LCTYSP-011). Start with
-[LCTYSP-001 Architecture](docs/specs/LCTYSP-001_architecture.md).
+The design is in [docs/specs](docs/specs/README.md) (LCTYSP-0001 to LCTYSP-0011). Start with
+[LCTYSP-0001 Architecture](docs/specs/LCTYSP-0001_architecture.md).
 
 ## License
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Read a text string from attributes (dual recording. LCTYSP-003).
+// Read a text string from attributes (dual recording. LCTYSP-0003).
 // The source of truth is the attribute name. Only when it has characters XML cannot represent, name-base64 holds base64 of its UTF-8 bytes.
 
 export function textAttr(el, name) {
