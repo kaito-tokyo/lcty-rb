@@ -125,28 +125,24 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
       | an id that needs escapes | "a b/c?d#e"            | undefined                              | c/a%20b%2Fc%3Fd%23e.html                                               |
 
   Scenario: storeSettings() stores only the values that differ from the defaults
-    Given a page on the server's origin
     Given the defaults { base_url: "http://d", model: "m", api_key: "k" }
     When storeSettings() is given { base_url: "http://d", model: "other", api_key: "k" }
     Then it returns { model: "other" }
     And localStorage "lcty.settings.v1" holds {"model":"other"}
 
   Scenario: storeSettings() ignores the keys the defaults do not have
-    Given a page on the server's origin
     Given the defaults { model: "m" }
     When storeSettings() is given { model: "other", unknown: "x" }
     Then it returns { model: "other" }
     And localStorage "lcty.settings.v1" holds {"model":"other"}
 
   Scenario: storeSettings() keeps the default of a key the values do not have
-    Given a page on the server's origin
     Given the defaults { model: "m", api_key: "k" }
     When storeSettings() is given { api_key: "" }
     Then it returns { api_key: "" }
     And localStorage "lcty.settings.v1" holds {"api_key":""}
 
   Scenario: storeSettings() removes the stored changes when nothing differs
-    Given a page on the server's origin
     Given localStorage "lcty.settings.v1" holds {"model":"other"}
     And the defaults { model: "m" }
     When storeSettings() is given { model: "m" }
@@ -154,7 +150,6 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
     And localStorage has no "lcty.settings.v1"
 
   Scenario: storeSettings() replaces the stored changes as a whole
-    Given a page on the server's origin
     Given localStorage "lcty.settings.v1" holds {"model":"other"}
     And the defaults { model: "m", api_key: "k" }
     When storeSettings() is given { model: "m", api_key: "mine" }
@@ -162,18 +157,15 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
     And localStorage "lcty.settings.v1" holds {"api_key":"mine"}
 
   Scenario: mergeSettings() overlays the defaults with the stored changes
-    Given a page on the server's origin
     Given localStorage "lcty.settings.v1" holds {"model":"other"}
     When mergeSettings() is given the defaults { base_url: "http://d", model: "m" }
     Then it returns { base_url: "http://d", model: "other" }
 
   Scenario: mergeSettings() ignores unknown keys and values of another type
-    Given a page on the server's origin
     When mergeSettings() is given the defaults { model: "m", count: 3 } and the changes { model: 5, count: 4, unknown: "x" }
     Then it returns { model: "m", count: 4 }
 
   Scenario Outline: mergeSettings() uses the defaults when the stored changes cannot be read
-    Given a page on the server's origin
     Given localStorage "lcty.settings.v1" holds <stored>
     When mergeSettings() is given the defaults { model: "m" }
     Then it returns { model: "m" }
@@ -187,7 +179,6 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
       | nothing   |
 
   Scenario: loadSettings() makes the backend of the pages from the defaults and the stored changes
-    Given a page on the server's origin
     Given GET /v1/defaults.json returns { base_url: "http://d", api_key: "k", model: "m", embedding_model: "e" }
     And localStorage "lcty.settings.v1" holds {"model":"other"}
     When loadSettings() is called
@@ -207,13 +198,11 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
       | ja   | 設定の読み込みに失敗しました: 500 boom              |
 
   Scenario: The indexer does nothing without settings
-    Given a page on the server's origin
     Given GET /v1/vectors/pending is answered by the test
     When the indexer of appIndexer() with no settings is kicked
     Then no request is sent to /v1/vectors/pending
 
   Scenario: The indexer does nothing without an embedding model
-    Given a page on the server's origin
     Given GET /v1/vectors/pending is answered by the test
     When the indexer of appIndexer() with settings whose embedding model is "" is kicked
     Then no request is sent to /v1/vectors/pending
@@ -226,7 +215,6 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
     And no toast is shown
 
   Scenario: The indexer reads the settings at every kick
-    Given a page on the server's origin
     Given GET /v1/vectors/pending returns no rounds
     And the indexer of appIndexer() has no settings
     When it is kicked, then given settings whose embedding model is "embed" and kicked again

@@ -42,7 +42,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `js/lcty_c.worker.js`: the meta in the browser           |       0 |      14 |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                      |      21 |       0 |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts            |      22 |      10 |
-| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings            |      18 |      26 |
+| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings            |      34 |      10 |
 | [LCTYSP-1005](LCTYSP-1005_text-attributes.feature)            | `js/ui/text-attr.js`: text attributes and base64         |      17 |       0 |
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                      |      23 |       0 |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API |      29 |       0 |
@@ -78,12 +78,16 @@ As in [LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md):
 ## Node.js or the browser
 
 A Scenario runs in Node.js unless it needs the browser: elements and the HTML parser (`document`, `innerHTML`,
-custom elements, Shadow DOM, dialogs), IndexedDB, `localStorage`, or the page's origin read by the module itself.
+custom elements, Shadow DOM, dialogs), IndexedDB, or the page's origin read by the module itself.
 Such a Scenario has "Given a page on the server's origin" among its lines: in the Background when every
 Scenario of the feature needs it, or else as the first line of each Scenario that does, so a feature can be split
 between the two (LCTYSP-1009, for example). Node.js gets no fake DOM (no jsdom or happy-dom): what is tested there is
 what the module does without one. Only a global the module merely reads on the way is stood in for, and the test file's
 head comment says which; for example `document.documentElement.lang`, the only part of the page `LctyT._()` reads.
+
+`localStorage` is not stood in for either: it is Node.js's own Web Storage, which the runner turns on with
+`--localstorage-file=:memory:`. It is kept in memory, so nothing is written to disk, and it is emptied before every
+Scenario, as each browser test starts with an empty one (LCTYSP-1004).
 
 Workers and wasm run in Node.js too: Node.js 26 has Web Workers (`--experimental-web-worker`) and WebAssembly, so a
 worker is the real script of `public/` running as a real worker (LCTYSP-1011, LCTYSP-1013). What the test stands in
@@ -162,14 +166,15 @@ test:node` uses) and Playwright's JSON reporter.
 
 ## The test environment
 
-- **Node.js.** 26 or later, run as `node --experimental-web-worker --require ./tests/unit/node-preload.cjs --test`
-  (`npm run test:node`; Node.js 24 has no Web Workers). Each test file runs in a process of its own, its tests one
-  after another; a test that replaces a global (`fetch`) puts it back when it ends.
+- **Node.js.** 26 or later, run as `node --experimental-web-worker --localstorage-file=:memory: --require
+  ./tests/unit/node-preload.cjs --test` (`npm run test:node`; Node.js 24 has no Web Workers). Each test file runs in a
+  process of its own, its tests one after another; a test that replaces a global (`fetch`) puts it back when it ends.
 - **Browsers.** Chromium and WebKit, as for the UI tests; every browser test runs in both.
 - **Server.** The browser tests share the server the UI tests start (`playwright.config.js`): port 45290 by default
   (`LCTY_TEST_PORT` to change it), with an empty data directory in the temporary folder. Unit tests use it only to
   serve `public/`.
-- **State.** Every browser test gets a new browser context, so `localStorage` and IndexedDB start empty.
+- **State.** Every browser test gets a new browser context, so `localStorage` and IndexedDB start empty. In Node.js,
+  `scenario()` empties `localStorage` before every Scenario.
 - **Parallel.** Because a unit test answers every request it makes and keeps its state in its own context, the browser
   unit tests run in parallel, every test on its own (`fullyParallel`, projects `unit-chromium` and `unit-webkit`, which
   run only the `*.spec.js`). The UI tests share the server's data directory, so they run one at a time (`ui-chromium`,
