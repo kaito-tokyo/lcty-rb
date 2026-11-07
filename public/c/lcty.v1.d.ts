@@ -76,6 +76,7 @@ type LctyTextKey =
 	| "memorySummary"
 	| "badTagName"
 	| "duplicateTagName"
+	| "invalidTagFile"
 	| "tagNumbersFull"
 	| "tagsChangedElsewhere"
 	| "tagsSaved"

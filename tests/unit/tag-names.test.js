@@ -404,6 +404,38 @@ scenario("A new tag that would need six digits is full", async ({ step }) => {
 	);
 });
 
+scenario("An invalid tag keeps its file name as it is", async ({ step }) => {
+	let tags;
+	await step(
+		'Given the invalid tag "00020-Broken~2A.html" named "Broken~2A", the tag "00030-a.html" named "a" and a new tag "b"',
+		() => {
+			// A file put in t/ by hand: its part is not one tagPart would make (upper case, an escape in upper case)
+			tags = [
+				tag("00020-Broken~2A.html", "Broken~2A", { invalid: true }),
+				tag("00030-a.html", "a"),
+				tag(null, "b"),
+			];
+		},
+	);
+	let assigned;
+	await step("When assignFileNames gives them file names", () => {
+		assigned = N.assignFileNames(tags);
+	});
+	await step(
+		'Then the files are "00020-Broken~2A.html", "00030-a.html" and "00040-b.html"',
+		() => {
+			expect(files(assigned)).toEqual([
+				"00020-Broken~2A.html",
+				"00030-a.html",
+				"00040-b.html",
+			]);
+		},
+	);
+	await step("And the invalid tag is the same object", () => {
+		expect(assigned[0]).toBe(tags[0]);
+	});
+});
+
 // ---- renumber ----
 
 scenario(

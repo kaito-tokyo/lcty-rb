@@ -239,13 +239,107 @@ class TagFilesTest < Lcty::Scenarios
     end
   end
 
-  scenario 'A tag file without <lcty-t> is ignored with a warning' do
+  scenario 'A tag file without <lcty-t> is listed as invalid, with a warning' do
+    got = nil
     step('Given a new tag directory with the tag file "00010-a.html"') { with_tags(tag('00010-a.html')) }
-    step('And the tag file "00020-broken.html" without <lcty-t>') { write('00020-broken.html', '<p>nothing</p>') }
-    step('Then get-all lists only "00010-a.html" and warns about "00020-broken.html"') do
-      _, err = capture_io { assert_equal %w[00010-a.html], tags.map { |t| t['file'] } }
-      assert_includes err, '00020-broken.html'
+    step('And the tag file "00020-c~23~2a.html" without <lcty-t>') { write('00020-c~23~2a.html', '<p>nothing</p>') }
+    step('Then get-all lists "00010-a.html" and then "00020-c~23~2a.html", and warns about "00020-c~23~2a.html"') do
+      _, err = capture_io { got = tags }
+      assert_equal %w[00010-a.html 00020-c~23~2a.html], got.map { |t| t['file'] }
+      assert_includes err, '00020-c~23~2a.html'
     end
+    step('And the second is named "c#*", with no ops, the prompt "", no memory and invalid true') do
+      assert_equal tag('00020-c~23~2a.html', 'c#*', 'invalid' => true), got[1]
+    end
+    step('And the first has no invalid') { refute got[0].key?('invalid') }
+  end
+
+  {
+    '"ruby"' => %w[ruby ruby],
+    '"c~23"' => ['c~23', 'c#'],
+    '"~21~23~24~25~26~28~29~2a~3c~3e~3f~5b~5d~5e~7b~7d"' => ['~21~23~24~25~26~28~29~2a~3c~3e~3f~5b~5d~5e~7b~7d',
+                                                             '!#$%&()*<>?[]^{}'],
+    '"a~7e~20"' => ['a~7e~20', 'a~7e~20'],
+    '"a~2A"' => ['a~2A', 'a~2A'],
+    '"日本語"' => %w[日本語 日本語]
+  }.each do |label, (part, name)|
+    scenario "The name of a tag file without <lcty-t> is its part with the escapes undone (#{label})" do
+      step("Then the part #{label} gives the name #{name.inspect}") { assert_equal name, TagFiles.name_of_part(part) }
+    end
+  end
+
+  # "Given a new tag directory with the tag file "00010-a.html" and the tag file "00020-broken.html" without <lcty-t>"
+  def with_a_and_broken
+    with_tags(tag('00010-a.html'))
+    write('00020-broken.html', '<p>by hand</p>')
+  end
+
+  # The tags of get-all, without the warning about the file without <lcty-t>
+  def quiet_tags
+    got = nil
+    capture_io { got = tags }
+    got
+  end
+
+  scenario 'Replace-all keeps a tag file sent back as invalid' do
+    step('Given a new tag directory with the tag file "00010-a.html" and the tag file "00020-broken.html" without <lcty-t>') do
+      with_a_and_broken
+    end
+    step('When replace-all sends "00010-a.html" with the prompt "new" and "00020-broken.html" as invalid, with another name and a prompt') do
+      capture_io do
+        replace([tag('00010-a.html', 'a', 'prompt' => 'new'),
+                 tag('00020-broken.html', 'other', 'prompt' => 'p', 'invalid' => true)])
+      end
+    end
+    step('Then "00020-broken.html" is unchanged') { assert_equal '<p>by hand</p>', read('00020-broken.html') }
+    step('And get-all lists "00010-a.html" with the prompt "new"') { assert_equal 'new', quiet_tags[0]['prompt'] }
+  end
+
+  scenario 'Replace-all deletes a tag file without <lcty-t> left out of the set' do
+    step('Given a new tag directory with the tag file "00010-a.html" and the tag file "00020-broken.html" without <lcty-t>') do
+      with_a_and_broken
+    end
+    step('When replace-all sends "00010-a.html" only') { capture_io { replace([tag('00010-a.html')]) } }
+    step('Then t/ has only the tag file "00010-a.html"') { assert_equal %w[00010-a.html], listed }
+  end
+
+  %w[00010-a.html 00030-c.html].each do |file|
+    scenario "Only a tag file without <lcty-t> is kept as invalid (\"#{file}\")" do
+      before = nil
+      step('Given a new tag directory with the tag file "00010-a.html" and the tag file "00020-broken.html" without <lcty-t>') do
+        with_a_and_broken
+        before = snapshot
+      end
+      step("When replace-all sends \"00020-broken.html\" as invalid and \"#{file}\" as invalid") {}
+      step("Then it fails with 400 \"only a tag file that cannot be read is kept as it is: \"#{file}\"\"") do
+        set = [{ 'file' => '00020-broken.html', 'invalid' => true }, { 'file' => file, 'invalid' => true }]
+        assert_http_error(400, "only a tag file that cannot be read is kept as it is: \"#{file}\"") do
+          capture_io { replace(set) }
+        end
+      end
+      step('And t/ is unchanged') { assert_equal before, snapshot }
+    end
+  end
+
+  scenario 'No tag is written over a tag file kept as invalid' do
+    before = nil
+    step('Given a new tag directory with the tag file "00020-broken.html" without <lcty-t>') do
+      new_files
+      write('00020-broken.html', '<p>by hand</p>')
+    end
+    step('And "00020-alias.html" in t/ that is the same file as "00020-broken.html"') do
+      # A symbolic link stands for a name the file system takes as the same file (a case-insensitive one, HFS+)
+      File.symlink('00020-broken.html', File.join(dir, '00020-alias.html'))
+      before = snapshot
+    end
+    step('When replace-all sends "00020-broken.html" as invalid and a tag in "00020-alias.html"') {}
+    step('Then it fails with 400 "the tag file "00020-alias.html" cannot be read, so it cannot be overwritten"') do
+      set = [{ 'file' => '00020-broken.html', 'invalid' => true }, tag('00020-alias.html', 'alias')]
+      assert_http_error(400, 'the tag file "00020-alias.html" cannot be read, so it cannot be overwritten') do
+        capture_io { replace(set) }
+      end
+    end
+    step('And t/ is unchanged') { assert_equal before, snapshot }
   end
 
   scenario 'Replace-all deletes the tag files left out of the set' do
@@ -471,5 +565,17 @@ class TagFilesTest < Lcty::Scenarios
       end
       step('And "00010-a.html" is unchanged') { assert_equal body, read('00010-a.html') }
     end
+  end
+
+  scenario 'Add-memory refuses a tag file without <lcty-t>' do
+    step('Given a new tag directory with the tag file "00020-broken.html" without <lcty-t>') do
+      new_files
+      write('00020-broken.html', '<p>by hand</p>')
+    end
+    step('When add-memory adds "x" to "00020-broken.html"') {}
+    step('Then it fails with 409 "the tag file cannot be read"') do
+      assert_http_error(409, 'the tag file cannot be read') { capture_io { @files.add_memory('00020-broken.html', 'x') } }
+    end
+    step('And "00020-broken.html" is unchanged') { assert_equal '<p>by hand</p>', read('00020-broken.html') }
   end
 end

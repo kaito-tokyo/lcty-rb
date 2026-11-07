@@ -471,6 +471,44 @@ scenario(
 	},
 );
 
+scenario(
+	"An invalid tag gets no proposal, like an undefined one",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		let defs;
+		let conv;
+		await step(
+			'Given the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
+			() => {
+				defs = [
+					...defsOf({ name: "ruby", prompt: "p" }),
+					{
+						file: "00020-broken.html",
+						name: "broken",
+						ops: [],
+						prompt: "",
+						memory: [],
+						invalid: true,
+					},
+				];
+			},
+		);
+		await step('And a conversation with the tags "broken"', () => {
+			conv = { meta: {}, tags: ["broken"], messages: [] };
+		});
+		let out;
+		await step("When proposeMemory asks for proposals", async () => {
+			out = await propose({ conv, defs });
+		});
+		await step('Then it throws "The conversation has no defined tags"', () => {
+			expect(out.error).toBe("The conversation has no defined tags");
+		});
+		await step("And nothing is sent to the model", () => {
+			expect(server.llm).toEqual([]);
+		});
+	},
+);
+
 async function givenRubyAndAConversation(step) {
 	const defs = defsOf({ name: "ruby", prompt: "p" });
 	const conv = {

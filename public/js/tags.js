@@ -62,8 +62,48 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 	const status = el("p", { class: "hint" });
 
 	const render = () => {
+		const deleteButton = (t, i) =>
+			el(
+				"button",
+				{
+					type: "button",
+					class: "danger",
+					onclick: () => {
+						const msg = tr(
+							"confirmDeleteTag",
+							'Delete the tag "{name}"? (Conversations keep the tag name.)',
+							{ name: t.name },
+						);
+						if (!confirm(msg)) return;
+						work.splice(i, 1);
+						render();
+					},
+				},
+				tr("delete", "Delete"),
+			);
 		list.replaceChildren(
 			...work.map((t, i) => {
+				// A file without <lcty-t>: shown with its name, not editable; saving sends it back and the server keeps it
+				if (t.invalid)
+					return el(
+						"section",
+						{ class: "tag-edit tag-invalid" },
+						el(
+							"div",
+							{ class: "tag-edit-head" },
+							el("span", { class: "tag-chip" }, t.name),
+							deleteButton(t, i),
+						),
+						el(
+							"p",
+							{ class: "hint" },
+							tr(
+								"invalidTagFile",
+								"The tag file {file} cannot be read (it has no <lcty-t>), so it cannot be edited here. Fix or delete the file in t/ of the data directory.",
+								{ file: t.file },
+							),
+						),
+					);
 				const memList = el(
 					"ul",
 					{ class: "mem-list" },
@@ -107,24 +147,7 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 							"aria-label": tr("tagName", "Tag name"),
 							oninput: (e) => (t.name = e.target.value.trim()),
 						}),
-						el(
-							"button",
-							{
-								type: "button",
-								class: "danger",
-								onclick: () => {
-									const msg = tr(
-										"confirmDeleteTag",
-										'Delete the tag "{name}"? (Conversations keep the tag name.)',
-										{ name: t.name },
-									);
-									if (!confirm(msg)) return;
-									work.splice(i, 1);
-									render();
-								},
-							},
-							tr("delete", "Delete"),
-						),
+						deleteButton(t, i),
 					),
 					el(
 						"label",
@@ -168,7 +191,7 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 	};
 
 	const save = async () => {
-		const bad = work.find((t) => tagNameError(t.name));
+		const bad = work.find((t) => !t.invalid && tagNameError(t.name));
 		if (bad !== undefined) {
 			status.textContent = tr(
 				"badTagName",
@@ -177,8 +200,9 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 			);
 			return;
 		}
-		// Names that differ only in case or in the escaped form are one tag (one file)
-		const parts = work.map((t) => tagPart(t.name));
+		// Names that differ only in case or in the escaped form are one tag (one file). An invalid tag's part is its
+		// file's
+		const parts = work.map((t) => (t.invalid ? tagRef(t) : tagPart(t.name)));
 		if (new Set(parts).size !== parts.length) {
 			status.textContent = tr("duplicateTagName", "Tag names must be unique");
 			return;
@@ -438,12 +462,13 @@ function proposalPrompt(defs, tags) {
  * As a continuation of the current conversation, append one temporary user message asking for proposals (not saved to the conversation).
  * The prefix is identical to the previous state, so the cache applies. The conversation's tags are references; the
  * model sees and answers with the display names of the defined ones, and each proposal carries the file of its tag.
+ * An invalid tag (a file without <lcty-t>) takes no memory, so it is left out like an undefined one.
  * Returns {proposals: [{tag, file, text}], tags: [{name, file}], timings}.
  */
 export async function proposeMemory({ conv, backend, defs, signal }) {
 	const chosen = conv.tags
 		.map((ref) => defs.find((d) => tagRef(d) === ref))
-		.filter(Boolean);
+		.filter((d) => d && !d.invalid);
 	const tags = chosen.map((d) => d.name);
 	if (!tags.length)
 		throw new Error(

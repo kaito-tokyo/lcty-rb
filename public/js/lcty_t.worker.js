@@ -26,8 +26,9 @@
 // what the caller asked about, and the next sync fixes the copy.
 //
 //   database "lcty_t" (version DB_VERSION)
-//     store "t_full" (key path "file"): one row per tag, {file, name, ops, prompt, memory} as GET /v1/tags gives it,
-//       the file name NFC-normalized; key order is file-name order, which is the order of the tags
+//     store "t_full" (key path "file"): one row per tag, {file, name, ops, prompt, memory, invalid?} as GET /v1/tags
+//       gives it, the file name (and the name of an invalid tag) NFC-normalized; key order is file-name order, which
+//       is the order of the tags
 //     store "t_set" (out-of-line keys): one record under the key "set", {etag}, the ETag of the set the rows are.
 //       Its presence marks a copy (an empty set has no rows but has the record)
 //   Both stores are written and read in one transaction, so the rows and the ETag are always one set.
@@ -104,8 +105,13 @@ async function forceSync() {
 	const r = await send("GET", "tags");
 	const json = await r.json();
 	if (!Array.isArray(json?.tags)) throw new Error("GET /v1/tags is invalid");
-	// A file system may list the names decomposed (HFS+); the server compares the files themselves
-	const tags = json.tags.map((t) => ({ ...t, file: t.file.normalize("NFC") }));
+	// A file system may list the names decomposed (HFS+); the server compares the files themselves. The name of an
+	// invalid tag (a file without <lcty-t>) comes from its file name, so it is normalized too
+	const tags = json.tags.map((t) => ({
+		...t,
+		file: t.file.normalize("NFC"),
+		...(t.invalid ? { name: t.name.normalize("NFC") } : {}),
+	}));
 	const etag = r.headers.get("ETag");
 	await withStores("readwrite", (rows, set) => {
 		rows.clear();

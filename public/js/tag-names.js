@@ -76,7 +76,7 @@ export function sortTags(defs, refs) {
 /**
  * The file names of tags edited in order: a tag keeps its number (the order is changed on the reorder page) and takes
  * the part of its name; a new tag gets the number after the largest (largest + 10). Throws "full" when that would need
- * more than five digits.
+ * more than five digits. An invalid tag (a file without <lcty-t>) keeps its file name as it is.
  */
 export function assignFileNames(tags) {
 	let last = Math.max(
@@ -84,6 +84,7 @@ export function assignFileNames(tags) {
 		...tags.filter((t) => t.file).map((t) => tagNumber(t.file)),
 	);
 	return tags.map((t) => {
+		if (t.invalid) return t;
 		let number = t.file ? tagNumber(t.file) : 0;
 		if (!t.file) {
 			last += 10;

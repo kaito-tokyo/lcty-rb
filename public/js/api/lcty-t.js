@@ -52,7 +52,7 @@ function run(message) {
 }
 
 /**
- * The tags from the browser's copy: {tags: [{file, name, ops, prompt, memory}], etag}, file names NFC-normalized,
+ * The tags from the browser's copy: {tags: [{file, name, ops, prompt, memory, invalid?}], etag}, file names NFC-normalized,
  * etag the ETag of the set they are. The first call in a browser fetches GET /v1/tags.
  */
 export function getTags() {
