@@ -175,6 +175,28 @@ export function invalidateMetaDb() {
 }
 
 /**
+ * Throw the copy (the database and the snapshot) away and fetch it again now, not when idle: the sidebar's refresh
+ * button, for a copy that is broken or out of date without having been invalidated. Resolves when the new list has
+ * been stored (listeners are notified); while another sync runs it waits for that one and tries again.
+ */
+export async function resetMetaDb() {
+	try {
+		localStorage.removeItem(SNAPSHOT_KEY);
+	} catch {}
+	for (;;) {
+		try {
+			const all = await call("reset");
+			saveSnapshot(all);
+			notify();
+			return;
+		} catch (e) {
+			if (!e.refused) throw e;
+			await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+		}
+	}
+}
+
+/**
  * The stored copy: {items, stale}. items are newest first by updated_at_hint (only a hint), [] before the first sync;
  * stale is true while the copy is out of date (a sync is pending or has not happened yet).
  */

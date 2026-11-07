@@ -3,10 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The sidebar shared by every page (LCTYSP-005, LCTYSP-007): <lcty-sidebar> and its <lcty-conv-list> (structure in
-// /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box, the list's items and handlers, and the settings
-// dialog (LCTYSP-010) here.
+// /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box, the list's items and handlers, the refresh button
+// and the settings dialog (LCTYSP-010) here.
 
-import { convUrl } from "../common.js";
+import { resetMetaDb } from "../api/meta-db.js";
+import { convUrl, showToast } from "../common.js";
+import { tr } from "../i18n.js";
 import { createSearchPanel } from "../search/search-panel.js";
 import { initSettingsDialog } from "./settings-dialog.js";
 
@@ -28,6 +30,23 @@ export function initSidebar(sidebar, { getSettings, onSelect }) {
 	sidebar.list.addEventListener("select", (e) => {
 		if (onSelect?.(e.detail)) return;
 		location.href = convUrl(e.detail.id, e.detail.chunkId);
+	});
+	// The browser's copy of the meta is thrown away and fetched again; the list is shown again when it has been stored
+	// (onMetaDbChange in the search panel)
+	const refresh = sidebar.refreshButton;
+	refresh.addEventListener("click", async () => {
+		refresh.disabled = true;
+		try {
+			await resetMetaDb();
+		} catch (e) {
+			showToast(
+				tr("listFailed", "Failed to load the list: {error}", {
+					error: e.message,
+				}),
+			);
+		} finally {
+			refresh.disabled = false;
+		}
 	});
 	initSettingsDialog(sidebar.settingsButton);
 	return panel;

@@ -11,6 +11,7 @@ LctyT.addLang("ja", {
 	newConversation: "＋ 新しい会話",
 	tags: "タグ",
 	settings: "設定",
+	refreshList: "一覧を読み込み直す",
 	searchPlaceholder: "会話を検索",
 	titleLabel: "会話のタイトル",
 	titlePlaceholder: "新しい会話",

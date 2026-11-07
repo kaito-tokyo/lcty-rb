@@ -25,6 +25,8 @@
 //   { id, op: "sync" }         → { id, accepted }, then { id, result: [meta, …] } (the list now stored)
 //   { id, op: "syncIfStale" }  → { id, accepted }, then { id, result: [meta, …], or null when the copy was up to date
 //                                (not invalidated and not empty) }
+//   { id, op: "reset" }        → { id, accepted }, then { id, result: [meta, …] } (the database is deleted, created
+//                                again and synced: the sidebar's refresh button)
 //   { id, op: "read" }         → { id, accepted: true }, then { id, result: { items: [meta, …], stale } } (items newest
 //                                first by updated_at_hint, which is only a hint; stale: the copy is out of date)
 //   on failure                 → { id, error: message } (an unknown op: { id, accepted: false, error })
@@ -139,6 +141,15 @@ async function sync() {
 // Stale also when the store is empty: a copy that lost its records (cleared by hand, a broken store) without being
 // invalidated would otherwise stay empty until the next change. A server with no conversations is refetched each time,
 // which is cheap.
+// Throw the copy away and fetch it again. Other connections close on versionchange, so the deletion is not blocked.
+async function reset() {
+	const db = await dbPromise?.catch(() => null);
+	db?.close();
+	dbPromise = null;
+	await deleteDb();
+	return sync();
+}
+
 async function syncIfStale() {
 	const db = await openDb();
 	const tx = db.transaction([META, SYNC]);
@@ -168,7 +179,7 @@ async function read() {
 	return { items, stale: token !== undefined };
 }
 
-const JOBS = { sync, syncIfStale }; // at most one runs at a time; others are refused
+const JOBS = { sync, syncIfStale, reset }; // at most one runs at a time; others are refused
 const ALWAYS = { invalidate, read }; // always accepted
 
 let running = false;

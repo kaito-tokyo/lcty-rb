@@ -75,7 +75,7 @@
 			part: "lcty-c__sidebar",
 			// its parts (and its list's) under their own names: lcty-c::part(lcty-sidebar__nav) and so on
 			exportparts:
-				"lcty-button, lcty-button--primary, lcty-sidebar__nav, lcty-sidebar__link, lcty-sidebar__new, lcty-sidebar__settings, lcty-sidebar__search-box, lcty-sidebar__search, lcty-sidebar__search-status, lcty-sidebar__list, lcty-conv-list__empty, lcty-conv-list__items, lcty-conv-list__entry, lcty-conv-list__item, lcty-conv-list__item--current, lcty-conv-list__title, lcty-conv-list__snippet, lcty-conv-list__tags, lcty-conv-list__tag, lcty-conv-list__tag-name, lcty-conv-list__meta",
+				"lcty-button, lcty-button--primary, lcty-sidebar__nav, lcty-sidebar__link, lcty-sidebar__new, lcty-sidebar__refresh, lcty-sidebar__settings, lcty-sidebar__search-box, lcty-sidebar__search, lcty-sidebar__search-status, lcty-sidebar__list, lcty-conv-list__empty, lcty-conv-list__items, lcty-conv-list__entry, lcty-conv-list__item, lcty-conv-list__item--current, lcty-conv-list__title, lcty-conv-list__snippet, lcty-conv-list__tags, lcty-conv-list__tag, lcty-conv-list__tag-name, lcty-conv-list__meta",
 		});
 		this.titleInput = $(document.createElement("input"), {
 			id: "conv-title",
@@ -451,6 +451,17 @@
 			{ href: "/", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
+		// fetches the list again, throwing the browser's copy away; attached by js/ui/sidebar.js (LCTYSP-010)
+		this.refreshButton = $(
+			document.createElement("button"),
+			"refresh",
+			{
+				type: "button",
+				title: _("refreshList", "Reload the list"),
+				"aria-label": _("refreshList", "Reload the list"),
+			},
+			"↻",
+		);
 		// opens the settings dialog, attached by js/ui/sidebar.js (LCTYSP-010)
 		this.settingsButton = $(
 			document.createElement("button"),
@@ -462,7 +473,7 @@
 			},
 			"⚙︎",
 		);
-		for (const a of [this.newLink, this.settingsButton])
+		for (const a of [this.newLink, this.refreshButton, this.settingsButton])
 			a.part.add("lcty-sidebar__link", "lcty-button");
 		this.newLink.part.add("lcty-button--primary");
 		this.nav = $(
@@ -470,6 +481,7 @@
 			"nav",
 			{},
 			this.newLink,
+			this.refreshButton,
 			this.settingsButton,
 		);
 
