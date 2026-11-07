@@ -24,7 +24,7 @@ import {
 	showToast,
 } from "../common.js";
 import { localize, tr } from "../i18n.js";
-import { composeDraft, renderTagsEditor, sortTags } from "../tags.js";
+import { composeDraft, sortTags } from "../tags.js";
 import {
 	focusComposer,
 	initComposer,
@@ -56,21 +56,21 @@ export function initNewPage() {
 		sending: false,
 	};
 
-	const panel = initSidebar(sidebar, { getSettings: () => state.settings });
+	const panel = initSidebar(sidebar, {
+		getSettings: () => state.settings,
+		onTagsSaved: tagsSaved,
+	});
 	const indexer = appIndexer(() => state.settings);
 
 	// ---- Tags and the system prompt draft (LCTYSP-009) ----
 
-	// The ⚙︎ at the end of the tag list opens the tag editor (js/tags.js) in a dialog
+	// The ⚙︎ at the end of the tag list opens the same tags dialog as the sidebar's tag button (js/tags.js)
 	const tagsButton = document.createElement("button");
 	tagsButton.type = "button";
 	tagsButton.title = tr("editTags", "Edit tags");
 	tagsButton.setAttribute("aria-label", tr("editTags", "Edit tags"));
 	tagsButton.textContent = "⚙︎";
-	tagsButton.addEventListener("click", openTagsDialog);
-	let tagsEditor = null; // { isDirty } of the editor in the dialog while it is open
-	const tagsDialog = createTagsDialog();
-	const tagsDialogBody = tagsDialog.querySelector(":scope > div:last-child");
+	tagsButton.addEventListener("click", () => sidebar.tagsButton.click());
 
 	function renderTags() {
 		const picker = form.tags;
@@ -109,69 +109,6 @@ export function initNewPage() {
 			state.tags.length &&
 			ta.value !== composeDraft(state.tagDefs, state.tags)
 		);
-	}
-
-	function createTagsDialog() {
-		const dialog = document.createElement("dialog");
-		dialog.id = "tags-dialog";
-		dialog.setAttribute("aria-label", tr("editTags", "Edit tags"));
-		const heading = document.createElement("h2");
-		heading.textContent = tr("tags", "Tags");
-		const close = document.createElement("button");
-		close.type = "button";
-		close.textContent = tr("close", "Close");
-		const spacer = document.createElement("span");
-		spacer.className = "spacer";
-		const head = document.createElement("div");
-		head.className = "dialog-buttons";
-		head.append(heading, spacer, close);
-		const body = document.createElement("div");
-		dialog.append(head, body);
-		document.body.append(dialog);
-		// Closing with unsaved edits asks first (the close button, Esc and a click on the backdrop)
-		const tryClose = () => {
-			if (
-				tagsEditor?.isDirty() &&
-				!confirm(
-					tr(
-						"confirmCloseTags",
-						"Close without saving? The unsaved changes are discarded.",
-					),
-				)
-			)
-				return;
-			dialog.close();
-		};
-		close.addEventListener("click", tryClose);
-		dialog.addEventListener("cancel", (e) => {
-			e.preventDefault();
-			tryClose();
-		});
-		dialog.addEventListener("click", (e) => {
-			if (e.target === dialog) tryClose();
-		});
-		return dialog;
-	}
-
-	// Opens the editor on the saved definitions (fetched again, in case another tab changed them meanwhile)
-	async function openTagsDialog() {
-		let defs;
-		try {
-			defs = (await getTags()).tags;
-		} catch (e) {
-			showToast(
-				tr("tagsLoadFailed", "Failed to load the tags: {error}", {
-					error: e.message,
-				}),
-			);
-			return;
-		}
-		tagsEditor = renderTagsEditor(tagsDialogBody, {
-			defs,
-			toast: showToast,
-			onSaved: tagsSaved,
-		});
-		tagsDialog.showModal();
 	}
 
 	// After saving: the chosen tags that no longer exist are dropped (tags never defined, e.g. from a fork, stay), and an

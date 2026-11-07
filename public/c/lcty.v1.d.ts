@@ -284,6 +284,8 @@ declare class LctySidebarElement extends HTMLElement {
 	static readonly _: typeof LctyT._;
 	/** "New conversation" link to /, opened in a new window (target="_blank" rel="noopener"; part lcty-sidebar__new) */
 	newLink: HTMLAnchorElement;
+	/** Opens the tags dialog (tag editor) attached by js/ui/sidebar.js (part lcty-sidebar__tags) */
+	tagsButton: HTMLButtonElement;
 	/**
 	 * Fetches the list again, throwing the browser's copy of the meta away; attached by js/ui/sidebar.js
 	 * (part lcty-sidebar__refresh)

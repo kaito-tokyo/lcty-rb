@@ -4,7 +4,7 @@
 
 // Tags and memory (LCTYSP-009).
 //  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
-//  - renderTagsEditor: editor for tag definitions and memory (the new page's tags dialog)
+//  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the sidebar
 //  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
 
 import { addMemory, getTags, putTags } from "./api/storage.js";
@@ -284,6 +284,70 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 		),
 	);
 	return { isDirty: () => JSON.stringify(work) !== JSON.stringify(saved) };
+}
+
+/**
+ * Builds the tags dialog (a modal <dialog id="tags-dialog"> in <body>, so lcty.v1.css styles it on every page) and wires
+ * button to open it; the sidebar's tag button opens it on every page. onSaved(new definitions) is called after each
+ * save. Returns open(), for other buttons that open the same dialog.
+ */
+export function initTagsDialog(button, { onSaved, toast }) {
+	let editor = null; // { isDirty } of the editor while the dialog is open
+	const close = el("button", { type: "button" }, tr("close", "Close"));
+	const body = el("div");
+	const dialog = el(
+		"dialog",
+		{ id: "tags-dialog", "aria-label": tr("editTags", "Edit tags") },
+		el(
+			"div",
+			{ class: "dialog-buttons" },
+			el("h2", {}, tr("tags", "Tags")),
+			el("span", { class: "spacer" }),
+			close,
+		),
+		body,
+	);
+	document.body.append(dialog);
+	// Closing with unsaved edits asks first (the close button, Esc and a click on the backdrop)
+	const tryClose = () => {
+		if (
+			editor?.isDirty() &&
+			!confirm(
+				tr(
+					"confirmCloseTags",
+					"Close without saving? The unsaved changes are discarded.",
+				),
+			)
+		)
+			return;
+		dialog.close();
+	};
+	close.addEventListener("click", tryClose);
+	dialog.addEventListener("cancel", (e) => {
+		e.preventDefault();
+		tryClose();
+	});
+	dialog.addEventListener("click", (e) => {
+		if (e.target === dialog) tryClose();
+	});
+	// Opens the editor on the saved definitions (fetched again, in case another tab changed them meanwhile)
+	const open = async () => {
+		let defs;
+		try {
+			defs = (await getTags()).tags;
+		} catch (e) {
+			toast(
+				tr("tagsLoadFailed", "Failed to load the tags: {error}", {
+					error: e.message,
+				}),
+			);
+			return;
+		}
+		editor = renderTagsEditor(body, { defs, toast, onSaved });
+		dialog.showModal();
+	};
+	button.addEventListener("click", open);
+	return open;
 }
 
 // ---- Memory proposals (LCTYSP-009) ----

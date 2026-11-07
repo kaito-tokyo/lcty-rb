@@ -11,6 +11,7 @@ import {
 	LLM_URL,
 	openConversation,
 	openNewPage,
+	putTags,
 	test,
 	uniqueWord,
 } from "./fixtures.js";
@@ -109,4 +110,45 @@ test("the settings dialog shows the browser settings and saves changes (LCTYSP-0
 
 	await dialog.getByRole("button", { name: "閉じる" }).click();
 	await expect(dialog).toBeHidden();
+});
+
+test("the tag button next to 新しい会話 opens the tags dialog, and a saved tag shows up in the picker (LCTYSP-009)", async ({
+	page,
+	request,
+}) => {
+	await putTags(request, []);
+	await openNewPage(page);
+	const nav = page.locator('[part~="lcty-sidebar__nav"] > *');
+	await expect(nav.nth(0)).toHaveAttribute("part", /lcty-sidebar__new/);
+	await expect(nav.nth(1)).toHaveAttribute("part", /lcty-sidebar__tags/);
+	await expect(nav.nth(1)).toHaveText("タグ");
+
+	await page.locator('[part~="lcty-sidebar__tags"]').click();
+	const dialog = page.locator("dialog#tags-dialog");
+	await expect(dialog).toBeVisible();
+
+	const name = uniqueWord("tag");
+	await dialog.getByRole("button", { name: "＋ 新しいタグ" }).click();
+	await dialog.getByRole("textbox", { name: "タグの名前" }).fill(name);
+	await dialog.getByRole("button", { name: "保存", exact: true }).click();
+	await expect(page.locator(`#setup-tags input[value="${name}"]`)).toBeAttached();
+
+	await dialog.getByRole("button", { name: "閉じる" }).click();
+	await expect(dialog).toBeHidden();
+});
+
+test("the tag button opens the tags dialog on a conversation page too (LCTYSP-009)", async ({
+	page,
+	request,
+}) => {
+	const conv = await createConversation(request, {
+		title: uniqueWord("tags"),
+		messages: [
+			["user", "質問"],
+			["assistant", "答え"],
+		],
+	});
+	await openConversation(page, conv.id);
+	await page.locator('[part~="lcty-sidebar__tags"]').click();
+	await expect(page.locator("dialog#tags-dialog")).toBeVisible();
 });

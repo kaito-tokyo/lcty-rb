@@ -466,6 +466,17 @@ export class LctySidebarElement extends HTMLElement {
 			{ href: "/", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
+		// opens the tags dialog (the tag editor, LCTYSP-009), attached by js/ui/sidebar.js
+		this.tagsButton = $(
+			document.createElement("button"),
+			"tags",
+			{
+				type: "button",
+				title: _("editTags", "Edit tags"),
+				"aria-label": _("editTags", "Edit tags"),
+			},
+			_("tags", "Tags"),
+		);
 		// fetches the list again, throwing the browser's copy away; attached by js/ui/sidebar.js (LCTYSP-010)
 		this.refreshButton = $(
 			document.createElement("button"),
@@ -488,7 +499,12 @@ export class LctySidebarElement extends HTMLElement {
 			},
 			"⚙︎",
 		);
-		for (const a of [this.newLink, this.refreshButton, this.settingsButton])
+		for (const a of [
+			this.newLink,
+			this.tagsButton,
+			this.refreshButton,
+			this.settingsButton,
+		])
 			a.part.add("lcty-sidebar__link", "lcty-button");
 		this.newLink.part.add("lcty-button--primary");
 		this.nav = $(
@@ -496,6 +512,7 @@ export class LctySidebarElement extends HTMLElement {
 			"nav",
 			{},
 			this.newLink,
+			this.tagsButton,
 			this.refreshButton,
 			this.settingsButton,
 		);

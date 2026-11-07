@@ -48,7 +48,7 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 - Changing tags before the start recomposes the draft and replaces the field. Once the user has edited the field by
   hand it is not replaced (so their text is not lost); a "Rebuild from tags" button appears instead.
 - More memory makes the first send of a new conversation heavier (prompt processing is about 450 tok/s, so 2,000 tokens
-  take about 4.5 s). The tag editor (the ⚙︎ at the end of the new conversation page's tag list) shows an estimate of the memory size.
+  take about 4.5 s). The tag editor (the sidebar's タグ button on every page, or the ⚙︎ at the end of the new conversation page's tag list) shows an estimate of the memory size.
 
 ### The tags of a conversation
 

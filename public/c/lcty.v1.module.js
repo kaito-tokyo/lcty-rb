@@ -76,6 +76,12 @@ const panel = initSidebar(log.sidebar, {
 		if (chunkId) focusMessage(chunkId);
 		return true;
 	},
+	// The tags dialog saved new definitions: the tag picker and the memory button follow them
+	onTagsSaved: (defs) => {
+		state.tagDefs = defs;
+		state.tagDefsLoaded = true;
+		if (state.conv) renderTags();
+	},
 });
 const indexer = appIndexer(() => state.settings);
 const lastIndex = (msgs, role) => {
