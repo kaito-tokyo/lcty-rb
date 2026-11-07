@@ -131,7 +131,9 @@ test("the tag button next to 新しい会話 opens the tags dialog, and a saved 
 	await dialog.getByRole("button", { name: "＋ 新しいタグ" }).click();
 	await dialog.getByRole("textbox", { name: "タグの名前" }).fill(name);
 	await dialog.getByRole("button", { name: "保存", exact: true }).click();
-	await expect(page.locator(`#setup-tags input[value="${name}"]`)).toBeAttached();
+	await expect(
+		page.locator(`#setup-tags input[value="${name}"]`),
+	).toBeAttached();
 
 	await dialog.getByRole("button", { name: "閉じる" }).click();
 	await expect(dialog).toBeHidden();
