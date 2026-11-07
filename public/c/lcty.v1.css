@@ -244,15 +244,23 @@ lcty-c::part(lcty-c__sidebar) {
 lcty-sidebar::part(lcty-sidebar__nav),
 lcty-c::part(lcty-sidebar__nav) {
 	display: flex;
-	gap: 6px;
+	gap: 4px;
 	padding: 10px;
-	flex-wrap: wrap;
 }
-/* the new link, the refresh button and the settings button are lcty-button (new: --primary) */
+/* the new link and the tags, refresh and settings buttons are lcty-button (new: --primary) */
 lcty-sidebar::part(lcty-sidebar__link),
 lcty-c::part(lcty-sidebar__link) {
 	display: inline-block;
 	text-decoration: none;
+	flex: none;
+}
+/* the buttons stay on one line: when they do not fit (a wide font, a long translation), the new link gives way */
+lcty-sidebar::part(lcty-sidebar__new),
+lcty-c::part(lcty-sidebar__new) {
+	flex: 0 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 lcty-sidebar::part(lcty-sidebar__search-box),
 lcty-c::part(lcty-sidebar__search-box) {
