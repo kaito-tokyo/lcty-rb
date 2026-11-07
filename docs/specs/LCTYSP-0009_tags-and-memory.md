@@ -346,13 +346,12 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   handler does not reliably reach the page as the `Worker`'s `error` event; that event is left for a worker that could
   not be loaded. The worker resolves `../v1/` against its own URL ([LCTYSP-1021](LCTYSP-1021_lcty-t.feature)).
 
-  | `op`        | What the worker does                                                                                  | `result`              |
-  | ----------- | ----------------------------------------------------------------------------------------------------- | --------------------- |
-  | `sync`      | `GET v1/tags`, then replaces the record in one transaction; a failure leaves the copy as it was        | none                  |
-  | `get`       | reads the record; when there is none yet, syncs first                                                  | `{tags, etag}`        |
-  | `put`       | `PUT v1/tags` with `{tags}` and the `If-Match` it is given, then syncs (also on failure)               | the new `ETag`        |
-  | `addMemory` | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                                  | the server's JSON     |
-
+  | `op`        | What the worker does                                                                            | `result`          |
+  | ----------- | ----------------------------------------------------------------------------------------------- | ----------------- |
+  | `sync`      | `GET v1/tags`, then replaces the record in one transaction; a failure leaves the copy as it was | none              |
+  | `get`       | reads the record; when there is none yet, syncs first                                           | `{tags, etag}`    |
+  | `put`       | `PUT v1/tags` with `{tags}` and the `If-Match` it is given, then syncs (also on failure)        | the new `ETag`    |
+  | `addMemory` | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                           | the server's JSON |
   - **`put` takes the ETag from the caller,** the one `get` returned with the tags the user edited, not the copy's:
     the copy may have been synced to a newer set meanwhile, and sending its ETag would let the save overwrite a change
     the user never saw.
