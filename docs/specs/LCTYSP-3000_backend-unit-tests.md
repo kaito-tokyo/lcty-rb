@@ -33,21 +33,23 @@ changed.
 
 ## The features
 
-| ID                                                      | Part of the server                                   |
-| ------------------------------------------------------- | ---------------------------------------------------- |
-| [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)              | `lib/uuid.rb`: message ids as UUIDv7                 |
-| [LCTYSP-3002](LCTYSP-3002_conversation-html.feature)    | `lib/conv_html.rb`: the conversation file format     |
-| [LCTYSP-3003](LCTYSP-3003_store.feature)                | `lib/store.rb`: conversations, tags and memory       |
-| [LCTYSP-3004](LCTYSP-3004_search-index.feature)         | `lib/search_index.rb`: the keyword search index      |
-| [LCTYSP-3005](LCTYSP-3005_tag-store.feature)            | `lib/tag_store.rb`: `tags.sqlite`                    |
-| [LCTYSP-3006](LCTYSP-3006_vector-records.feature)       | `lib/v1/vector_records.rb`: the vector binary format |
-| [LCTYSP-3007](LCTYSP-3007_vector-db.feature)            | `lib/v1/vector_db.rb`: the vector DB                 |
-| [LCTYSP-3008](LCTYSP-3008_server-settings.feature)      | `lib/config.rb`: the environment variables           |
-| [LCTYSP-3009](LCTYSP-3009_module-bundler.feature)       | `lib/c/bundle.rb`: the module bundler                |
-| [LCTYSP-3010](LCTYSP-3010_module-servlet.feature)       | `lib/module_servlet.rb`: `/c/index.js`               |
-| [LCTYSP-3011](LCTYSP-3011_conversation-servlet.feature) | `lib/c/servlet.rb`: `/c/`                            |
-| [LCTYSP-3012](LCTYSP-3012_http-api.feature)             | `lib/v1/servlet.rb`: the HTTP API `/v1/`             |
-| [LCTYSP-3013](LCTYSP-3013_gzip.feature)                 | `lcty.rb`: transparent gzip (`Chatty::GzipServer`)   |
+| ID                                                      | Part of the server                                    |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)              | `lib/uuid.rb`: message ids as UUIDv7                  |
+| [LCTYSP-3002](LCTYSP-3002_conversation-html.feature)    | `lib/conv_html.rb`: the conversation file format      |
+| [LCTYSP-3003](LCTYSP-3003_store.feature)                | `lib/store.rb`: conversations and their tags          |
+| [LCTYSP-3004](LCTYSP-3004_search-index.feature)         | `lib/search_index.rb`: the keyword search index       |
+| [LCTYSP-3005](LCTYSP-3005_tag-store.feature)            | `lib/tag_store.rb`: `tags.sqlite`                     |
+| [LCTYSP-3006](LCTYSP-3006_vector-records.feature)       | `lib/v1/vector_records.rb`: the vector binary format  |
+| [LCTYSP-3007](LCTYSP-3007_vector-db.feature)            | `lib/v1/vector_db.rb`: the vector DB                  |
+| [LCTYSP-3008](LCTYSP-3008_server-settings.feature)      | `lib/config.rb`: the environment variables            |
+| [LCTYSP-3009](LCTYSP-3009_module-bundler.feature)       | `lib/c/bundle.rb`: the module bundler                 |
+| [LCTYSP-3010](LCTYSP-3010_module-servlet.feature)       | `lib/module_servlet.rb`: `/c/index.js`, `/t/index.js` |
+| [LCTYSP-3011](LCTYSP-3011_conversation-servlet.feature) | `lib/c/servlet.rb`: `/c/`                             |
+| [LCTYSP-3012](LCTYSP-3012_http-api.feature)             | `lib/v1/servlet.rb`: the HTTP API `/v1/`              |
+| [LCTYSP-3013](LCTYSP-3013_gzip.feature)                 | `lcty.rb`: transparent gzip (`Chatty::GzipServer`)    |
+| [LCTYSP-3014](LCTYSP-3014_tag-files.feature)            | `lib/tag_files.rb`: the tag files in `t/`             |
+| [LCTYSP-3015](LCTYSP-3015_tag-order-servlet.feature)    | `lib/t/servlet.rb`: `/t/`                             |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.

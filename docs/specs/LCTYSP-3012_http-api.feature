@@ -9,8 +9,8 @@
 Feature: LCTYSP-3012 HTTP API
 
   Chatty::V1::Servlet, mounted at /v1, answers the JSON API on the same origin as the pages: the defaults of the
-  browser settings, conversations (create, read, append, pop, delete and the lists), keyword search and snippets, tag
-  definitions and their memory, and the vectors (the pending rounds, registration and the distribution files). Bodies
+  browser settings, conversations (create, read, append, pop, delete and the lists), keyword search and snippets, the
+  tag files (get-all and replace-all with an ETag, and adding memory), and the vectors (the pending rounds, registration and the distribution files). Bodies
   are JSON unless stated otherwise, and every error is {"error": "…"} with an HTTP status. Paths and query values are
   read as UTF-8, and request bodies are limited to 64 MiB.
 
@@ -42,7 +42,8 @@ Feature: LCTYSP-3012 HTTP API
       | no meta                               | "meta must be an object"                     |
       | a meta without an id                  | "invalid id"                                 |
       | an id with a space                    | "invalid id"                                 |
-      | tags that are not unique              | "tags must be an array of unique tag names"  |
+      | tags that are not unique              | "tags must be an array of unique tag references" |
+      | a tag reference with a slash          | "tags must be an array of unique tag references" |
       | a tags line                           | "line type not allowed: \"tags\""            |
       | a message id that is not a UUIDv7     | "message id must be a UUIDv7: \"abc\""       |
       | a command that is not a command name  | "invalid command: \"Send!\""                 |
@@ -96,7 +97,7 @@ Feature: LCTYSP-3012 HTTP API
       | a meta line                                                  | "line type not allowed: \"meta\""             |
       | a valid message and a message whose id is not a UUIDv7       | "message id must be a UUIDv7: \"nope\""       |
       | an assistant message whose content_html is a number          | "content_html must be a string"               |
-      | a tags line with a tag name with a space                     | "tags must be an array of unique tag names"   |
+      | a tags line with a tag reference with a space                | "tags must be an array of unique tag references" |
 
   Scenario: Popping the last turn deletes the messages from there
     Given a conversation with the messages user, assistant, user, assistant
@@ -182,58 +183,61 @@ Feature: LCTYSP-3012 HTTP API
     When POST /v1/snippets sends {"q": "x"}
     Then the status is 400 with the error "body must be {\"ids\": [...]}"
 
-  Scenario: The tag definitions are replaced as a whole
-    Given the tag definitions from GET /v1/tags
-    When PUT /v1/tags sends them with a new tag that has a prompt and a memory item
+  Scenario: The tags are read with an ETag for the whole set
+    When GET /v1/tags is requested
+    Then the status is 200 and the body is {"tags": [...]}, each with file, name, ops, prompt and memory
+    And the response has an ETag
+
+  Scenario: The tag files are replaced as a whole with If-Match
+    Given the tags and the ETag from GET /v1/tags
+    When PUT /v1/tags sends them and a new tag file with a policy, a prompt and a memory item, with the ETag in If-Match
     Then the status is 200 and the body is {"ok": true}
-    And GET /v1/tags has the new tag last, with its prompt and its memory item
+    And the response has a new ETag, the one GET /v1/tags gives next
+    And GET /v1/tags has the new tag with its policy, its prompt and its memory item
     And the tags that were there before are kept
 
-  Scenario: A renamed tag keeps its memory
-    Given a tag with a memory item
-    When PUT /v1/tags sends the same definitions with the tag under a new name and the same memory item
-    Then GET /v1/tags has the new name with the memory item
-    And the old name is gone
-
-  Scenario Outline: Tag definitions that are not valid are rejected with 400
-    When PUT /v1/tags sends <tags>
-    Then the status is 400 with the error <error>
-    And the tag definitions are unchanged
+  Scenario Outline: Replacing the tags without the current ETag
+    Given the tags and the ETag from GET /v1/tags, changed since by another PUT
+    When PUT /v1/tags sends a new set <if-match>
+    Then the status is <status> with the error <error>
+    And the tags are unchanged
 
     Examples:
-      | tags                                     | error                                       |
-      | an array                                 | "body must be {\"tags\": [...]}"            |
-      | a tag that is not an object              | "each tag must be an object"                |
-      | a tag name with a space                  | "invalid tag name: \"a b\""                 |
-      | a prompt that is a number                | "prompt must be a string"                   |
-      | a memory item with a blank text          | "memory must be an array of {id, text}"     |
-      | two tags with the same name              | "tag names must be unique"                  |
-      | two memory items with the same id        | "memory ids must be unique"                 |
+      | if-match                      | status | error                   |
+      | without If-Match              | 428    | "If-Match is required"  |
+      | with the old ETag in If-Match | 412    | "the tags have changed" |
 
-  Scenario: Memory items are added, edited and deleted
-    Given a tag with a name in Japanese
-    When POST /v1/tags/<name>/memory sends {"text": "  remember this  ", "source": {"conv_id": "c1"}}
-    Then the status is 201 and the item has an id starting with "mem-", the text "remember this", the time it was added and the source
-    When PATCH /v1/tags/<name>/memory/<item id> sends {"text": "edited"}
-    Then the status is 200 and the item has the text "edited"
-    When DELETE /v1/tags/<name>/memory/<item id> is requested
-    Then the status is 200 and the body is {"ok": true}
-    And GET /v1/tags has the tag without memory
+  Scenario Outline: Tag sets that are not valid are rejected with 400
+    When PUT /v1/tags sends <tags> with the current ETag
+    Then the status is 400 with the error <error>
+    And the tags are unchanged
+
+    Examples:
+      | tags                            | error                                                             |
+      | an array                        | "body must be {\"tags\": [...]}"                                  |
+      | a file name without its number  | "invalid tag file name \"ruby.html\": must be NNNNN-<name>.html"  |
+      | two files with the same part    | "tag file names must be unique"                                   |
+      | a memory item with a blank text | "memory must be an array of {id, text}"                           |
+
+  Scenario: A memory item is added to a tag file
+    Given a tag file with a display name in Japanese and the ETag from GET /v1/tags
+    When POST /v1/tags/<file>/memory sends {"text": "  remember this  ", "source": {"conv_id": "c1"}}
+    Then the status is 201 and the item has a UUIDv7 id, the text "remember this", the time it was added and the source
+    And GET /v1/tags has the item under the tag
+    And GET /v1/tags has another ETag
 
   Scenario Outline: Memory requests that cannot be done
-    Given a tag with a memory item
+    Given a tag file with a memory item
     When <request> is requested
     Then the status is <status> with the error <error>
+    And the tag file is unchanged
 
     Examples:
-      | request                                                    | status | error                  |
-      | POST /v1/tags/<unknown tag>/memory with a text             | 404    | "no such tag"          |
-      | POST /v1/tags/<name>/memory with a blank text              | 400    | "text is required"     |
-      | POST /v1/tags/<name>/memory with an array                  | 400    | "text is required"     |
-      | PATCH /v1/tags/<unknown tag>/memory/<item id> with a text  | 404    | "no such tag"          |
-      | PATCH /v1/tags/<name>/memory/<unknown id> with a text      | 404    | "no such memory item"  |
-      | DELETE /v1/tags/<unknown tag>/memory/<item id>             | 404    | "no such tag"          |
-      | DELETE /v1/tags/<name>/memory/<unknown id>                 | 404    | "no such memory item"  |
+      | request                                              | status | error                                               |
+      | POST /v1/tags/<unknown file>/memory with a text      | 404    | "no such tag file"                                  |
+      | POST /v1/tags/<name without number>/memory with a text | 400  | "invalid tag file name: must be NNNNN-<name>.html"  |
+      | POST /v1/tags/<file>/memory with a blank text        | 400    | "text is required"                                  |
+      | POST /v1/tags/<file>/memory with an array            | 400    | "body must be an object"                            |
 
   Scenario: The rounds waiting for embeddings
     Given a conversation with a round of the user text "question" and the assistant text "answer"
@@ -308,6 +312,8 @@ Feature: LCTYSP-3012 HTTP API
       | DELETE /v1/defaults.json        |
       | PATCH /v1/conversations         |
       | GET /v1/tags/a/memory           |
+      | PATCH /v1/tags/a/memory/b       |
+      | DELETE /v1/tags/a/memory/b      |
       | GET /v1/conversations/a/lines   |
 
   Scenario: A path that is not UTF-8 is rejected

@@ -54,7 +54,11 @@
 /*export*/ class LctyCElement extends HTMLElement {
 	// What each attribute decides (LCTYSP-0005): data-setup-tags the chips (the tags at
 	// creation; the current ones are not shown yet) and data-tag-defs which of them are unknown and the picker's choices
-	static observedAttributes = ["data-setup-tags", "data-tag-defs"];
+	static observedAttributes = [
+		"data-setup-tags",
+		"data-tag-defs",
+		"data-tag-names",
+	];
 
 	// The frame of a conversation file. Styling, what shows before the first message, and scrolling: LCTYSP-0005.
 
@@ -223,8 +227,9 @@
 		else addEventListener("load", run, { once: true });
 	}
 
-	// The chips (data-setup-tags) and the picker's choices (data-tag-defs: the defined tags; until it is set nothing is
-	// marked unknown and the picker has no choices)
+	// The chips (data-setup-tags) and the picker's choices (data-tag-defs: the references of the defined tags, their
+	// file-name parts; until it is set nothing is marked unknown and the picker has no choices). data-tag-names holds
+	// their display names in the same order; a reference without one shows as itself (LCTYSP-0009)
 	#tagsChanged() {
 		const _ = LctyT._;
 		const words = (name) =>
@@ -233,6 +238,8 @@
 		const defs = this.hasAttribute("data-tag-defs")
 			? words("data-tag-defs")
 			: null;
+		const names = words("data-tag-names");
+		const label = (ref) => names[(defs || []).indexOf(ref)] || ref;
 		const el = (tag, attrs, ...children) => {
 			const e = document.createElement(tag);
 			for (const kv of Object.entries(attrs)) e.setAttribute(...kv);
@@ -250,9 +257,16 @@
 						"data-tag": name,
 						title: unknown
 							? _("undefinedTag", "Undefined tag")
-							: _("searchTag", "Search tag:{name}").replace("{name}", name),
+							: _("searchTag", "Search tag:{name}").replace(
+									"{name}",
+									label(name),
+								),
 					},
-					el("span", { class: "tag-name", part: "lcty-c__tag-name" }, name),
+					el(
+						"span",
+						{ class: "tag-name", part: "lcty-c__tag-name" },
+						label(name),
+					),
 					el(
 						"button",
 						{
@@ -261,7 +275,7 @@
 							part: "lcty-c__tag-remove",
 							"aria-label": _("removeTag", "Remove {name}").replace(
 								"{name}",
-								name,
+								label(name),
 							),
 						},
 						"×",
@@ -272,7 +286,7 @@
 		const choices = (defs || []).filter((name) => !tags.includes(name));
 		this.tagPicker.replaceChildren(
 			el("option", { value: "" }, _("addTagOption", "+ Tag")),
-			...choices.map((name) => el("option", { value: name }, name)),
+			...choices.map((name) => el("option", { value: name }, label(name))),
 		);
 		this.tagPicker.disabled = defs !== null && choices.length === 0;
 	}
@@ -395,8 +409,8 @@
 				...this.#items.map((c) => {
 					const on = c.id === this.#current;
 					// a link, so it can be opened in a new tab (the same file as convUrl in js/common.js, relative to the page,
-					// which is in /c/ with the conversations)
-					const href = `${encodeURIComponent(c.id)}.html${c.chunk_id ? `#c-msg-${c.chunk_id}` : ""}`;
+					// which is one directory below the root: /c/ with the conversations, or /t/)
+					const href = `../c/${encodeURIComponent(c.id)}.html${c.chunk_id ? `#c-msg-${c.chunk_id}` : ""}`;
 					const b = $(
 						"a",
 						on ? "item item--current" : "item",
@@ -462,11 +476,11 @@
 		};
 
 		// a new chat opens in a new window (tab), so the current conversation stays where it is. The pages that show the
-		// sidebar are in /c/, next to this file (LCTYSP-0005), so "./" is the new conversation page
+		// sidebar are one directory below the root (/c/, /t/. LCTYSP-0005), so "../c/" is the new conversation page
 		this.newLink = $(
 			document.createElement("a"),
 			"new",
-			{ href: "./", target: "_blank", rel: "noopener" },
+			{ href: "../c/", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
 		// opens the tags dialog (the tag editor, LCTYSP-0009), attached by js/ui/sidebar.js

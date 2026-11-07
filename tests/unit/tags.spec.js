@@ -7,10 +7,10 @@
 // read side by side.
 //
 // The editor and the dialogs of js/tags.js (renderTagsEditor, initTagsDialog, openMemoryDialog) build DOM elements and
-// open <dialog>s: they run in a real browser on the test server's origin, on the empty unit page. sortTags,
-// composeDraft and proposeMemory run in Node.js, in tests/unit/tags.test.js. GET and PUT /v1/tags,
-// POST /v1/tags/:name/memory and the fake llama-server at http://llm.test are answered by routes the test sets
-// (server.*), which also record what was sent, so the server's data does not matter. What the module calls back
+// open <dialog>s: they run in a real browser on the test server's origin, on the empty unit page. composeDraft and
+// proposeMemory run in Node.js, in tests/unit/tags.test.js. GET and PUT /v1/tags, POST /v1/tags/:file/memory and the
+// fake llama-server at http://llm.test are answered by routes the test sets (server.*), which also record what was
+// sent (the body of each PUT and its If-Match), so the server's data does not matter. What the module calls back
 // (onSaved, toast, onDone) is pushed to window.seen.
 
 import { expect, test } from "@playwright/test";
@@ -52,30 +52,35 @@ function replyWith(text, timings = { prompt_n: 3, predicted_n: 9 }) {
 async function background(page, context) {
 	const server = {
 		tags: { tags: [] },
+		etag: "e0",
 		puts: [],
+		ifMatch: [],
 		memory: [],
 		llm: [],
-		get: (route) => route.fulfill({ json: server.tags }),
-		put: (route) => route.fulfill({ json: { ok: true } }),
+		get: (route) =>
+			route.fulfill({ json: server.tags, headers: { ETag: server.etag } }),
+		put: (route) =>
+			route.fulfill({ json: { ok: true }, headers: { ETag: "e9" } }),
 		addMemory: (route) =>
 			route.fulfill({ status: 201, json: { id: "m", text: "t", at: "now" } }),
 		answerLlm: replyWith('{"proposals":[]}'),
 	};
-	await test.step("Given /v1/tags, /v1/tags/:name/memory and the llama-server at http://llm.test are answered by the test", async () => {
-		await context.route("**/v1/tags", (route) => {
+	await test.step("Given /v1/tags, /v1/tags/:file/memory and the llama-server at http://llm.test are answered by the test", async () => {
+		await context.route("**/v1/tags", async (route) => {
 			const req = route.request();
 			if (req.method() === "PUT") {
 				server.puts.push(req.postDataJSON());
+				server.ifMatch.push(await req.headerValue("if-match"));
 				return server.put(route);
 			}
 			return server.get(route);
 		});
 		await context.route("**/v1/tags/*/memory", (route) => {
 			const req = route.request();
-			const name = decodeURIComponent(
+			const file = decodeURIComponent(
 				new URL(req.url()).pathname.split("/")[3],
 			);
-			server.memory.push([name, req.postDataJSON()]);
+			server.memory.push([file, req.postDataJSON()]);
 			return server.addMemory(route);
 		});
 		await context.route(`${LLM_URL}/**`, (route) => {
@@ -113,35 +118,52 @@ function answerNextQuestion(page, accept, questions) {
 
 // ---- Definitions ----
 
-const RUBY = {
-	name: "ruby",
-	prompt: "Ruby prompt",
-	memory: [{ text: "fact" }, { text: "rules" }],
-};
-const GO = { name: "go", prompt: "Go prompt", memory: [] };
+/** The definitions "a", "b", … of the feature: the tag files 00010-a.html, 00020-b.html, … named a, b, … */
+const defsOf = (...tags) =>
+	tags.map((t, i) => ({
+		file: `${String((i + 1) * 10).padStart(5, "0")}-${t.name}.html`,
+		ops: [],
+		prompt: "",
+		memory: [],
+		...t,
+	}));
+
+const [RUBY, GO] = defsOf(
+	{
+		name: "ruby",
+		prompt: "Ruby prompt",
+		memory: [{ text: "fact" }, { text: "rules" }],
+	},
+	{ name: "go", prompt: "Go prompt", memory: [] },
+);
 
 // ---- The editor ----
 
-/** renderTagsEditor(container, {defs, onSaved, toast}) into a new <div id="editor">, kept as window.editor. */
-function renderEditor(page, defs) {
-	return page.evaluate((defs) => {
-		const div = document.createElement("div");
-		div.id = "editor";
-		document.body.append(div);
-		window.editor = window.T.renderTagsEditor(div, {
-			defs,
-			onSaved: (d) => window.seen.push(["saved", d]),
-			toast: (m) => window.seen.push(["toast", m]),
-		});
-	}, defs);
+/** renderTagsEditor(container, {defs, etag, onSaved, toast}) into a new <div id="editor">, kept as window.editor. */
+function renderEditor(page, defs, etag) {
+	return page.evaluate(
+		({ defs, etag }) => {
+			const div = document.createElement("div");
+			div.id = "editor";
+			document.body.append(div);
+			window.editor = window.T.renderTagsEditor(div, {
+				defs,
+				etag,
+				onSaved: (d) => window.seen.push(["saved", d]),
+				toast: (m) => window.seen.push(["toast", m]),
+			});
+		},
+		{ defs, etag },
+	);
 }
 
 async function givenTheEditor(
 	page,
 	defs = [RUBY, GO],
 	line = 'Given the editor of the definitions "ruby" and "go"',
+	etag = "e0",
 ) {
-	await test.step(line, () => renderEditor(page, defs));
+	await test.step(line, () => renderEditor(page, defs, etag));
 }
 
 /** What the editor shows: one entry per tag section. */
@@ -149,18 +171,19 @@ function editorState(page, root = "#editor") {
 	return page.evaluate(
 		(root) =>
 			[...document.querySelectorAll(`${root} section.tag-edit`)].map((s) => {
-				const [up, down] = s.querySelectorAll(".tag-edit-head button");
+				const head = s.querySelector(".tag-edit-head");
 				const details = s.querySelector("details");
 				return {
-					name: s.querySelector(".tag-edit-head input").value,
+					name: head.querySelector("input").value,
+					head: [...head.children].map((e) =>
+						e.tagName === "INPUT" ? `input ${e.value}` : e.textContent,
+					),
 					prompt: s.querySelector("label.field textarea").value,
 					memory: [...s.querySelectorAll(".mem-list li textarea")].map(
 						(t) => t.value,
 					),
 					summary: details.querySelector("summary").textContent,
 					open: details.open,
-					up: !up.disabled,
-					down: !down.disabled,
 				};
 			}),
 		root,
@@ -178,7 +201,12 @@ const status = (page) =>
 	);
 const section = (page, i) => page.locator("section.tag-edit").nth(i);
 const nameInput = (page, i) => section(page, i).locator(".tag-edit-head input");
+const promptInput = (page, i) =>
+	section(page, i).locator("label.field textarea");
 const button = (page, name) => page.getByRole("button", { name, exact: true });
+/** The bodies of the PUTs as [file, name] of each tag. */
+const putFiles = (server) =>
+	server.puts.map((b) => b.tags.map((t) => [t.file, t.name]));
 
 async function thenIsDirty(page, value, line = `And isDirty() is ${value}`) {
 	await test.step(line, async () => {
@@ -186,14 +214,29 @@ async function thenIsDirty(page, value, line = `And isDirty() is ${value}`) {
 	});
 }
 
-/** Click Save and wait until the save has ended: saved (onSaved was called) or refused (the status says why). */
-async function clickSave(page) {
+/**
+ * Click Save and wait until the save has ended: saved (onSaved was called) or refused (the status changed). With
+ * until "put", wait only until the PUT has been sent (a save whose status stays the same).
+ */
+async function clickSave(page, server, { until } = {}) {
+	const before = await page.evaluate(() => ({
+		seen: window.seen.length,
+		status: document.querySelector(
+			"#editor .tags-form > p.hint:not(:first-child)",
+		).textContent,
+	}));
+	const puts = server.puts.length;
 	await button(page, "Save").click();
+	if (until === "put") {
+		await expect.poll(() => server.puts.length).toBe(puts + 1);
+		return;
+	}
 	await page.waitForFunction(
-		() =>
-			window.seen.length > 0 ||
+		(before) =>
+			window.seen.length !== before.seen ||
 			document.querySelector("#editor .tags-form > p.hint:not(:first-child)")
-				.textContent !== "",
+				.textContent !== before.status,
+		before,
 	);
 }
 
@@ -204,14 +247,17 @@ test("The editor shows every definition with its memory", async ({
 	context,
 }) => {
 	await background(page, context);
-	const big = {
-		name: "big",
-		prompt: "",
-		memory: Array.from({ length: 6 }, (_, i) => ({ text: `m${i}` })),
-	};
+	const [ruby, go, big] = defsOf(
+		RUBY,
+		{ name: "go" },
+		{
+			name: "big",
+			memory: Array.from({ length: 6 }, (_, i) => ({ text: `m${i}` })),
+		},
+	);
 	await givenTheEditor(
 		page,
-		[RUBY, { name: "go" }, big],
+		[ruby, go, big],
 		'Given the definitions "ruby" with a prompt and two memory items, "go" with none and "big" with six memory items',
 	);
 	let state;
@@ -244,26 +290,32 @@ test("The editor shows every definition with its memory", async ({
 			open: false,
 		});
 	});
-	await test.step("And ↑ is disabled for the first tag only and ↓ for the last tag only", () => {
-		expect(state.map((s) => [s.up, s.down])).toEqual([
-			[false, true],
-			[true, true],
-			[true, false],
-		]);
-	});
 	await thenIsDirty(page, false);
 });
 
-test("Moving a tag makes the editor dirty", async ({ page, context }) => {
+test("The order is changed on the reorder page, not in the editor", async ({
+	page,
+	context,
+}) => {
 	await background(page, context);
 	await givenTheEditor(page);
-	await test.step('When ↓ of "ruby" is clicked', async () => {
-		await section(page, 0).getByRole("button", { name: "↓" }).click();
+	await test.step('Then the head of each tag has its name and only the button "Delete"', async () => {
+		expect((await editorState(page)).map((s) => s.head)).toEqual([
+			["input ruby", "Delete"],
+			["input go", "Delete"],
+		]);
 	});
-	await test.step('Then the tags are in the order "go", "ruby"', async () => {
-		expect(await names(page)).toEqual(["go", "ruby"]);
+	await test.step('And the hint has the link "Change the order" to /t/ of the site', async () => {
+		const link = await page.evaluate(() => {
+			const links = document.querySelectorAll(
+				"#editor .tags-form > p.hint:first-child a",
+			);
+			return [...links].map((a) => [a.className, a.textContent, a.href]);
+		});
+		expect(link).toEqual([
+			["tags-reorder", "Change the order", new URL("/t/", page.url()).href],
+		]);
 	});
-	await thenIsDirty(page, true);
 });
 
 test("Saving puts the definitions and takes the saved ones back", async ({
@@ -274,35 +326,72 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 	await givenTheEditor(
 		page,
 		[{ ...RUBY, memory: [{ text: "fact" }, { text: "  " }] }, GO],
-		'Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go"',
+		'Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go", read with the ETag "e1"',
+		"e1",
 	);
 	const stored = {
 		tags: [
 			{
+				file: "00010-ruby.html",
 				name: "ruby",
+				ops: [],
 				prompt: "New prompt",
 				memory: [{ id: "1", text: "fact", at: "2026-11-01T00:00:00+09:00" }],
 			},
-			{ name: "go", prompt: "Go prompt", memory: [] },
-			{ name: "rust", prompt: "", memory: [] },
+			{
+				file: "00020-go.html",
+				name: "go",
+				ops: [],
+				prompt: "Go prompt",
+				memory: [],
+			},
+			{
+				file: "00030-rust.html",
+				name: "rust",
+				ops: [],
+				prompt: "",
+				memory: [],
+			},
 		],
 	};
-	await test.step("And GET /v1/tags will return the definitions with timestamps", () => {
+	await test.step('And GET /v1/tags will return the definitions with timestamps and the ETag "e2"', () => {
 		server.tags = stored;
+		server.etag = "e2";
 	});
 	await test.step('When the prompt of "ruby" is changed to "New prompt", a new tag "rust" is added and Save is clicked', async () => {
-		await section(page, 0).locator("label.field textarea").fill("New prompt");
+		await promptInput(page, 0).fill("New prompt");
 		await button(page, "+ New tag").click();
 		await nameInput(page, 2).fill("rust");
-		await clickSave(page);
+		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent "ruby" with the new prompt and only the memory item "fact", "go" and "rust" without memory', () => {
+	await test.step('Then PUT /v1/tags is sent with If-Match "e1"', () => {
+		expect(server.ifMatch).toEqual(["e1"]);
+	});
+	await test.step('And it is sent "00010-ruby.html" with the new prompt and only the memory item "fact", "00020-go.html" and "00030-rust.html" without memory', () => {
 		expect(server.puts).toEqual([
 			{
 				tags: [
-					{ name: "ruby", prompt: "New prompt", memory: [{ text: "fact" }] },
-					{ name: "go", prompt: "Go prompt", memory: [] },
-					{ name: "rust", prompt: "", memory: [] },
+					{
+						file: "00010-ruby.html",
+						name: "ruby",
+						ops: [],
+						prompt: "New prompt",
+						memory: [{ text: "fact" }],
+					},
+					{
+						file: "00020-go.html",
+						name: "go",
+						ops: [],
+						prompt: "Go prompt",
+						memory: [],
+					},
+					{
+						file: "00030-rust.html",
+						name: "rust",
+						ops: [],
+						prompt: "",
+						memory: [],
+					},
 				],
 			},
 		]);
@@ -319,36 +408,110 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 		expect(await status(page)).toBe("");
 		expect(await isDirty(page)).toBe(false);
 	});
+	await test.step('When the prompt of "go" is changed and Save is clicked', async () => {
+		await promptInput(page, 1).fill("Changed");
+		await clickSave(page, server);
+	});
+	await test.step('Then the second PUT /v1/tags is sent with If-Match "e2"', () => {
+		expect(server.ifMatch).toEqual(["e1", "e2"]);
+	});
+});
+
+test("Saving gives each tag its file name", async ({ page, context }) => {
+	const server = await background(page, context);
+	await givenTheEditor(page);
+	await test.step('When the name of "go" is changed to "Golang", the new tags "C#" and "Café" typed decomposed are added and Save is clicked', async () => {
+		await nameInput(page, 1).fill("Golang");
+		await button(page, "+ New tag").click();
+		await nameInput(page, 2).fill("C#");
+		await button(page, "+ New tag").click();
+		await nameInput(page, 3).fill("Café");
+		await clickSave(page, server);
+	});
+	await test.step('Then PUT /v1/tags is sent "00010-ruby.html" named "ruby", "00020-golang.html" named "Golang", "00030-c~23.html" named "C#" and "00040-café.html" named "Café", composed', () => {
+		expect(putFiles(server)).toEqual([
+			[
+				["00010-ruby.html", "ruby"],
+				["00020-golang.html", "Golang"],
+				["00030-c~23.html", "C#"],
+				["00040-café.html", "Café"],
+			],
+		]);
+	});
+});
+
+test("A new tag is numbered after the largest number", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditor(
+		page,
+		[RUBY, { ...GO, file: "00050-go.html" }],
+		'Given the editor of the tag files "00010-ruby.html" named "ruby" and "00050-go.html" named "go"',
+	);
+	await test.step('When a new tag "rust" is added and Save is clicked', async () => {
+		await button(page, "+ New tag").click();
+		await nameInput(page, 2).fill("rust");
+		await clickSave(page, server);
+	});
+	await test.step('Then PUT /v1/tags is sent the files "00010-ruby.html", "00050-go.html" and "00060-rust.html"', () => {
+		expect(server.puts.map((b) => b.tags.map((t) => t.file))).toEqual([
+			["00010-ruby.html", "00050-go.html", "00060-rust.html"],
+		]);
+	});
 });
 
 const BAD_NAME = (name) =>
-	`The tag name "${name}" cannot be used (no spaces or ":", up to 40 characters)`;
+	`The tag name "${name}" cannot be used (1 to 40 characters, no spaces, control characters or : ; / " ' \` ~ \\ |)`;
 
-for (const { caseName, name, shown, message } of [
+test("A tag name that breaks the rules is not saved, and the status says the rules", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditor(page);
+	await test.step('When the name of "go" is changed to "a b" and Save is clicked', async () => {
+		await nameInput(page, 1).fill("a b");
+		await clickSave(page, server);
+	});
+	await test.step("Then the status says 'The tag name \"a b\" cannot be used (1 to 40 characters, no spaces, control characters or : ; / \" ' ` ~ \\ |)'", async () => {
+		expect(await status(page)).toBe(BAD_NAME("a b"));
+	});
+	await test.step("And nothing is sent to PUT /v1/tags", () => {
+		expect(server.puts).toEqual([]);
+	});
+	await thenIsDirty(page, true);
+});
+
+for (const { caseName, name, shown } of [
+	{ caseName: "a colon", name: "a:b", shown: '"a:b"' },
+	{ caseName: "a semicolon", name: "a;b", shown: '"a;b"' },
+	{ caseName: "a slash", name: "a/b", shown: '"a/b"' },
+	{ caseName: "a tilde", name: "a~b", shown: '"a~b"' },
+	{ caseName: "a backslash", name: "a\\b", shown: '"a\\b"' },
+	{ caseName: "a vertical bar", name: "a|b", shown: '"a|b"' },
 	{
-		caseName: "a space",
-		name: "a b",
-		shown: '"a b"',
-		message: BAD_NAME("a b"),
+		caseName: "a no-break space",
+		name: "a b",
+		shown: '"a" U+00A0 "b"',
 	},
 	{
-		caseName: "a colon",
-		name: "a:b",
-		shown: '"a:b"',
-		message: BAD_NAME("a:b"),
-	},
-	{ caseName: "empty", name: "", shown: '""', message: BAD_NAME("") },
-	{
-		caseName: "41 letters",
-		name: "x".repeat(41),
-		shown: '41 times "x"',
-		message: BAD_NAME("x".repeat(41)),
+		caseName: "a zero width joiner",
+		name: "a‍b",
+		shown: '"a" U+200D "b"',
 	},
 	{
-		caseName: "a duplicate",
-		name: "ruby",
-		shown: '"ruby"',
-		message: "Tag names must be unique",
+		caseName: "a control character",
+		name: "a\u0007b",
+		shown: '"a" U+0007 "b"',
+	},
+	{ caseName: "empty", name: "", shown: '""' },
+	{ caseName: "41 code points", name: "x".repeat(41), shown: '41 times "x"' },
+	{
+		caseName: "41 astral characters",
+		name: "𝒳".repeat(41),
+		shown: '41 times "𝒳"',
 	},
 ]) {
 	test(`A tag name that cannot be used is not saved (${caseName})`, async ({
@@ -359,13 +522,10 @@ for (const { caseName, name, shown, message } of [
 		await givenTheEditor(page);
 		await test.step(`When the name of "go" is changed to ${shown} and Save is clicked`, async () => {
 			await nameInput(page, 1).fill(name);
-			await clickSave(page);
+			await clickSave(page, server);
 		});
-		const quoted = message.startsWith("The tag")
-			? `'${message}'`
-			: `"${message}"`;
-		await test.step(`Then the status says ${quoted}`, async () => {
-			expect(await status(page)).toBe(message);
+		await test.step(`Then the status says that the tag name ${shown} cannot be used`, async () => {
+			expect(await status(page)).toBe(BAD_NAME(name));
 		});
 		await test.step("And nothing is sent to PUT /v1/tags", () => {
 			expect(server.puts).toEqual([]);
@@ -374,20 +534,88 @@ for (const { caseName, name, shown, message } of [
 	});
 }
 
-test("A name is trimmed and may have 40 characters", async ({
+for (const { caseName, name } of [
+	{ caseName: "the same name", name: "ruby" },
+	{ caseName: "another case", name: "Ruby" },
+	{ caseName: "upper case", name: "RUBY" },
+]) {
+	test(`A tag name with the file-name part of another tag is not saved (${caseName})`, async ({
+		page,
+		context,
+	}) => {
+		const server = await background(page, context);
+		await givenTheEditor(page);
+		await test.step(`When the name of "go" is changed to "${name}" and Save is clicked`, async () => {
+			await nameInput(page, 1).fill(name);
+			await clickSave(page, server);
+		});
+		await test.step('Then the status says "Tag names must be unique"', async () => {
+			expect(await status(page)).toBe("Tag names must be unique");
+		});
+		await test.step("And nothing is sent to PUT /v1/tags", () => {
+			expect(server.puts).toEqual([]);
+		});
+	});
+}
+
+test("A name is trimmed and may have 40 code points", async ({
 	page,
 	context,
 }) => {
 	const server = await background(page, context);
 	await givenTheEditor(page);
-	await test.step('When the name of "go" is changed to " 40 times "y" " and Save is clicked', async () => {
-		await nameInput(page, 1).fill(` ${"y".repeat(40)} `);
-		await clickSave(page);
+	await test.step('When the name of "go" is changed to " 40 times "𝒳" " and Save is clicked', async () => {
+		await nameInput(page, 1).fill(` ${"𝒳".repeat(40)} `);
+		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent the tags "ruby" and 40 times "y"', () => {
+	await test.step('Then PUT /v1/tags is sent the tags "ruby" and 40 times "𝒳"', () => {
 		expect(server.puts.map((b) => b.tags.map((t) => t.name))).toEqual([
-			["ruby", "y".repeat(40)],
+			["ruby", "𝒳".repeat(40)],
 		]);
+	});
+});
+
+test("A save made stale elsewhere loads the tags again", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditor(
+		page,
+		[RUBY, GO],
+		'Given the editor of the definitions "ruby" and "go", read with the ETag "e1"',
+		"e1",
+	);
+	await test.step("And PUT /v1/tags answers with the status 412", () => {
+		server.put = (route) =>
+			route.fulfill({ status: 412, body: "the tags have changed" });
+	});
+	await test.step('And GET /v1/tags will return the definitions "ruby", "go" and "rust" with the ETag "e2"', () => {
+		server.tags = { tags: defsOf(RUBY, GO, { name: "rust" }) };
+		server.etag = "e2";
+	});
+	await test.step('When the name of "go" is changed to "golang" and Save is clicked', async () => {
+		await nameInput(page, 1).fill("golang");
+		await clickSave(page, server);
+	});
+	await test.step('Then the status says "The tags were changed elsewhere, so they were loaded again. Make the edit again."', async () => {
+		expect(await status(page)).toBe(
+			"The tags were changed elsewhere, so they were loaded again. Make the edit again.",
+		);
+	});
+	await test.step('And the tags are "ruby", "go" and "rust" and isDirty() is false', async () => {
+		expect(await names(page)).toEqual(["ruby", "go", "rust"]);
+		expect(await isDirty(page)).toBe(false);
+	});
+	await test.step("And onSaved is not called", async () => {
+		expect(await seen(page)).toEqual([]);
+	});
+	await test.step('When the prompt of "rust" is changed and Save is clicked', async () => {
+		await promptInput(page, 2).fill("Rust prompt");
+		await clickSave(page, server, { until: "put" });
+	});
+	await test.step('Then the second PUT /v1/tags is sent with If-Match "e2"', () => {
+		expect(server.ifMatch).toEqual(["e1", "e2"]);
 	});
 });
 
@@ -398,8 +626,8 @@ test("A failed save keeps the edits", async ({ page, context }) => {
 		server.put = (route) => route.fulfill({ status: 500, body: "boom" });
 	});
 	await test.step('When the prompt of "ruby" is changed and Save is clicked', async () => {
-		await section(page, 0).locator("label.field textarea").fill("Changed");
-		await clickSave(page);
+		await promptInput(page, 0).fill("Changed");
+		await clickSave(page, server);
 	});
 	await test.step('Then the status says "Could not save: 500 boom"', async () => {
 		expect(await status(page)).toBe("Could not save: 500 boom");
@@ -423,18 +651,24 @@ test("A failed save keeps the blank memory items", async ({
 	await test.step('And PUT /v1/tags answers with the status 500 and "boom"', () => {
 		server.put = (route) => route.fulfill({ status: 500, body: "boom" });
 	});
-	await test.step("When Save is clicked", () => clickSave(page));
-	await test.step('Then PUT /v1/tags was sent "ruby" with only the memory item "fact"', () => {
+	await test.step("When Save is clicked", () => clickSave(page, server));
+	await test.step('Then PUT /v1/tags was sent "00010-ruby.html" with only the memory item "fact"', () => {
 		expect(server.puts.map((b) => b.tags[0])).toEqual([
-			{ name: "ruby", prompt: "Ruby prompt", memory: [{ text: "fact" }] },
+			{
+				file: "00010-ruby.html",
+				name: "ruby",
+				ops: [],
+				prompt: "Ruby prompt",
+				memory: [{ text: "fact" }],
+			},
 		]);
 	});
 	await test.step('And the status says "Could not save: 500 boom"', async () => {
 		expect(await status(page)).toBe("Could not save: 500 boom");
 	});
 	await thenIsDirty(page, false);
-	await test.step('When ↓ of "ruby" is clicked', async () => {
-		await section(page, 0).getByRole("button", { name: "↓" }).click();
+	await test.step('When "+ New tag" is clicked', async () => {
+		await button(page, "+ New tag").click();
 	});
 	await test.step('Then "ruby" shows the memory items "fact" and "  "', async () => {
 		const ruby = (await editorState(page)).find((s) => s.name === "ruby");
@@ -569,11 +803,19 @@ test("The tags dialog opens on the saved definitions", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheTagsDialog(page);
-	await givenGetTagsReturns(server);
+	await test.step('And GET /v1/tags returns the definitions "ruby" and "go" with the ETag "e1"', () => {
+		server.tags = { tags: [RUBY, GO] };
+		server.etag = "e1";
+	});
 	await clickOpenTags(page, "When the button is clicked");
 	await test.step('Then the modal dialog "#tags-dialog" is open with the editor of "ruby" and "go"', async () => {
 		expect(await dialogOpen(page)).toBe(true);
 		expect(await names(page, "#tags-dialog")).toEqual(["ruby", "go"]);
+	});
+	await test.step('And Save in it sends PUT /v1/tags with If-Match "e1"', async () => {
+		await button(page, "Save").click();
+		await page.waitForFunction(() => window.seen.length > 0);
+		expect(server.ifMatch).toEqual(["e1"]);
 	});
 	await test.step("And the function it returned opens it as well after the dialog is closed", async () => {
 		await page.evaluate(() => document.getElementById("tags-dialog").close());
@@ -674,6 +916,16 @@ test("Closing the tags dialog with unsaved edits asks first", async ({
 // ---- openMemoryDialog ----
 
 const SOURCE = { conv_id: "c1", msg_id: "m1" };
+const TAGS = [
+	{ name: "Ruby", file: "00010-ruby.html" },
+	{ name: "Go", file: "00020-go.html" },
+];
+/** A proposal of the text for the tag of the display name, as proposeMemory returns it */
+const proposalFor = (tag, text) => ({
+	tag,
+	file: TAGS.find((t) => t.name === tag).file,
+	text,
+});
 
 async function givenAMemoryDialog(page) {
 	await test.step('Given a <dialog id="memory-dialog"> in the page', async () => {
@@ -686,7 +938,7 @@ async function givenAMemoryDialog(page) {
 }
 
 /** openMemoryDialog with the default dialog; onDone and toast push to window.seen. */
-function openMemory(page, proposals, tags = ["ruby", "go"]) {
+function openMemory(page, proposals, tags = TAGS) {
 	return page.evaluate(
 		({ proposals, tags, source }) =>
 			window.T.openMemoryDialog({
@@ -707,13 +959,17 @@ function memoryDialogState(page) {
 			open: d.open,
 			modal: d.matches(":modal"),
 			proposals: [...d.querySelectorAll('[part="lcty-memory__proposal"]')].map(
-				(p) => ({
-					adopt: p.querySelector("input[type=checkbox]").checked,
-					label: p.querySelector("label").textContent,
-					options: [...p.querySelectorAll("option")].map((o) => o.value),
-					tag: p.querySelector("select").value,
-					text: p.querySelector("textarea").value,
-				}),
+				(p) => {
+					const select = p.querySelector("select");
+					return {
+						adopt: p.querySelector("input[type=checkbox]").checked,
+						label: p.querySelector("label").textContent,
+						options: [...select.options].map((o) => o.textContent),
+						values: [...select.options].map((o) => o.value),
+						tag: select.selectedOptions[0].textContent,
+						text: p.querySelector("textarea").value,
+					};
+				},
 			),
 			hints: [...d.querySelectorAll('p[part="lcty-memory__hint"]')].map(
 				(p) => p.textContent,
@@ -743,32 +999,35 @@ test("The memory dialog shows every proposal, adopted", async ({
 }) => {
 	await background(page, context);
 	await givenAMemoryDialog(page);
-	await test.step('When openMemoryDialog shows the proposals "A" for "ruby" and "B" for "go" with the tags "ruby" and "go"', () =>
-		openMemory(page, [
-			{ tag: "ruby", text: "A" },
-			{ tag: "go", text: "B" },
-		]));
+	await test.step('When openMemoryDialog shows the proposals "A" for "Ruby" and "B" for "Go" with the tags "Ruby" of "00010-ruby.html" and "Go" of "00020-go.html"', () =>
+		openMemory(page, [proposalFor("Ruby", "A"), proposalFor("Go", "B")]));
 	let state;
 	await test.step('Then "#memory-dialog" is open as a modal dialog', async () => {
 		state = await memoryDialogState(page);
 		expect([state.open, state.modal]).toEqual([true, true]);
 	});
-	await test.step('And it shows two proposals, each with a checked "Adopt" box, a choice of "ruby" and "go" with its tag chosen, and its text', () => {
-		expect(state.proposals).toEqual([
+	await test.step('And it shows two proposals, each with a checked "Adopt" box, a choice of "Ruby" and "Go" with its tag chosen, and its text', () => {
+		expect(state.proposals.map(({ values, ...p }) => p)).toEqual([
 			{
 				adopt: true,
 				label: "Adopt",
-				options: ["ruby", "go"],
-				tag: "ruby",
+				options: ["Ruby", "Go"],
+				tag: "Ruby",
 				text: "A",
 			},
 			{
 				adopt: true,
 				label: "Adopt",
-				options: ["ruby", "go"],
-				tag: "go",
+				options: ["Ruby", "Go"],
+				tag: "Go",
 				text: "B",
 			},
+		]);
+	});
+	await test.step('And the choices are the files "00010-ruby.html" and "00020-go.html"', () => {
+		expect(state.proposals.map((p) => p.values)).toEqual([
+			["00010-ruby.html", "00020-go.html"],
+			["00010-ruby.html", "00020-go.html"],
 		]);
 	});
 	await test.step('And it has the buttons "Close" and "Add the adopted items"', () => {
@@ -779,22 +1038,22 @@ test("The memory dialog shows every proposal, adopted", async ({
 test("The adopted proposals are added as edited", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenAMemoryDialog(page);
-	await test.step('And openMemoryDialog shows the proposals "A" for "ruby", "B" for "go" and "C" for "ruby" with the source of the conversation', () =>
+	await test.step('And openMemoryDialog shows the proposals "A" for "Ruby", "B" for "Go" and "C" for "Ruby" with the source of the conversation', () =>
 		openMemory(page, [
-			{ tag: "ruby", text: "A" },
-			{ tag: "go", text: "B" },
-			{ tag: "ruby", text: "C" },
+			proposalFor("Ruby", "A"),
+			proposalFor("Go", "B"),
+			proposalFor("Ruby", "C"),
 		]));
-	await test.step('When the text of "A" is changed to "  A2  ", the tag of "B" to "ruby", "C" is not adopted and Add the adopted items is clicked', async () => {
+	await test.step('When the text of "A" is changed to "  A2  ", the tag of "B" to "Ruby", "C" is not adopted and Add the adopted items is clicked', async () => {
 		await proposal(page, 0).locator("textarea").fill("  A2  ");
-		await proposal(page, 1).locator("select").selectOption("ruby");
+		await proposal(page, 1).locator("select").selectOption({ label: "Ruby" });
 		await proposal(page, 2).getByRole("checkbox").uncheck();
 		await clickAdd(page);
 	});
-	await test.step('Then POST /v1/tags/ruby/memory is sent "A2" and then "B", each with the source', () => {
+	await test.step('Then POST /v1/tags/00010-ruby.html/memory is sent "A2" and then "B", each with the source', () => {
 		expect(server.memory).toEqual([
-			["ruby", { text: "A2", source: SOURCE }],
-			["ruby", { text: "B", source: SOURCE }],
+			["00010-ruby.html", { text: "A2", source: SOURCE }],
+			["00010-ruby.html", { text: "B", source: SOURCE }],
 		]);
 	});
 	await test.step('And the dialog is closed, onDone is called and the toast says "Added 2 items to memory"', async () => {
@@ -809,17 +1068,14 @@ test("The adopted proposals are added as edited", async ({ page, context }) => {
 test("Adding nothing adopted sends nothing", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenAMemoryDialog(page);
-	await test.step('And openMemoryDialog shows the proposals "A" for "ruby" and "B" for "go"', () =>
-		openMemory(page, [
-			{ tag: "ruby", text: "A" },
-			{ tag: "go", text: "B" },
-		]));
+	await test.step('And openMemoryDialog shows the proposals "A" for "Ruby" and "B" for "Go"', () =>
+		openMemory(page, [proposalFor("Ruby", "A"), proposalFor("Go", "B")]));
 	await test.step('When "A" is not adopted, the text of "B" is made blank and Add the adopted items is clicked', async () => {
 		await proposal(page, 0).getByRole("checkbox").uncheck();
 		await proposal(page, 1).locator("textarea").fill("  ");
 		await clickAdd(page);
 	});
-	await test.step("Then nothing is sent to POST /v1/tags/:name/memory", () => {
+	await test.step("Then nothing is sent to POST /v1/tags/:file/memory", () => {
 		expect(server.memory).toEqual([]);
 	});
 	await test.step('And the dialog is closed, onDone is called and the toast says "Nothing was added"', async () => {
@@ -834,18 +1090,19 @@ test("Adding nothing adopted sends nothing", async ({ page, context }) => {
 test("A failed addition keeps the dialog open", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenAMemoryDialog(page);
-	await test.step('And openMemoryDialog shows the proposal "A" for "ruby"', () =>
-		openMemory(page, [{ tag: "ruby", text: "A" }]));
-	await test.step('And POST /v1/tags/ruby/memory answers with the status 404 and "no such tag"', () => {
+	await test.step('And openMemoryDialog shows the proposal "A" for "Ruby"', () =>
+		openMemory(page, [proposalFor("Ruby", "A")]));
+	await test.step('And POST /v1/tags/00010-ruby.html/memory answers with the status 404 and "no such tag file"', () => {
 		server.addMemory = (route) =>
-			route.fulfill({ status: 404, body: "no such tag" });
+			route.fulfill({ status: 404, body: "no such tag file" });
 	});
 	await test.step("When Add the adopted items is clicked", () =>
 		clickAdd(page));
-	await test.step('Then the dialog says "Could not add: 404 no such tag"', async () => {
+	await test.step('Then the dialog says "Could not add: 404 no such tag file"', async () => {
 		expect((await memoryDialogState(page)).hints).toContain(
-			"Could not add: 404 no such tag",
+			"Could not add: 404 no such tag file",
 		);
+		expect(server.memory.map(([file]) => file)).toEqual(["00010-ruby.html"]);
 	});
 	await test.step("And the dialog is still open and onDone is not called", async () => {
 		expect((await memoryDialogState(page)).open).toBe(true);

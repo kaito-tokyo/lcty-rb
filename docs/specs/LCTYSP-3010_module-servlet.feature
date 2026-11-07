@@ -8,8 +8,9 @@
 Feature: LCTYSP-3010 Module servlet
 
   Chatty::ModuleServlet serves the module entries of the pages from memory. ModuleServlet.mount_all bundles each entry
-  of public/ (only c/index.js, the new conversation page's entry, one directory below the root of the site as the
-  pages are) once, when the server starts, and mounts it at /<entry>, over the /c/ servlet; a module that breaks the bundler's conventions stops the server from starting. A GET answers the bundle as
+  of public/ (c/index.js, the new conversation page's entry, and t/index.js, the tag reorder page's, each one
+  directory below the root of the site as the pages are) once, when the server starts, and mounts it at /<entry>, over
+  the /c/ and /t/ servlets; a module that breaks the bundler's conventions stops the server from starting. A GET answers the bundle as
   JavaScript in UTF-8 that the browser must revalidate (Cache-Control: no-cache), and any path below the entry is not
   found. Each scenario starts a WEBrick server on 127.0.0.1 with a free port and requests it over HTTP.
 
@@ -19,6 +20,13 @@ Feature: LCTYSP-3010 Module servlet
     Then the status is 200
     And the body is the bundle of "c/index.js" in public/
     And its last block is the entry, "// c/index.js"
+
+  Scenario: mount_all serves the bundle of public/t/index.js at /t/index.js
+    Given a server on which ModuleServlet.mount_all has mounted the entries
+    When GET /t/index.js is requested
+    Then the status is 200
+    And the body is the bundle of "t/index.js" in public/
+    And its last block is the entry, "// t/index.js"
 
   Scenario: The bundle is JavaScript that is revalidated on every load
     Given a server on which ModuleServlet.mount_all has mounted the entries
@@ -30,7 +38,7 @@ Feature: LCTYSP-3010 Module servlet
     Given a bundler that counts its calls
     When ModuleServlet.mount_all mounts the entries on a server
     And GET /c/index.js is requested twice
-    Then the bundler was called once, with public/ and "c/index.js"
+    Then the bundler was called once for each entry, with public/ and "c/index.js", then "t/index.js"
     And both answers are the body it returned
 
   Scenario: A module the bundler rejects stops mount_all

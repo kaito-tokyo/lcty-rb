@@ -93,13 +93,6 @@ async function givenTheServerAnswers(server, json) {
 	});
 }
 
-async function givenTheStatus(server, status, text) {
-	await test.step(`Given the server answers with the status ${status} and the text "${text}"`, () => {
-		server.answer = (route) =>
-			route.fulfill({ status, contentType: "text/plain", body: text });
-	});
-}
-
 async function thenTheSyncFetches(server) {
 	await test.step("And the meta sync worker then fetches GET /v1/meta-all.json", async () => {
 		await expect
@@ -117,7 +110,6 @@ for (const call of [
 	'appendLines("c1", [])',
 	'popMessages("c1", 2)',
 	'deleteConversation("c1")',
-	'putTags({"tags": []})',
 ]) {
 	test(`A change of conversations asks for a sync of the meta (${call})`, async ({
 		page,
@@ -159,26 +151,13 @@ for (const { answer, fulfill } of [
 	});
 }
 
-test("Replacing the tag definitions still asks for a sync when it fails", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	await givenTheStatus(server, 500, "boom");
-	const result = await whenCalled(page, 'putTags({"tags": []})');
-	await test.step('Then it rejects with the Error "500 boom"', () => {
-		expect(result).toEqual({ error: { name: "Error", message: "500 boom" } });
-	});
-	await thenTheSyncFetches(server);
-});
-
 test("Requests that do not change conversations do not ask for a sync", async ({
 	page,
 	context,
 }) => {
 	const server = await background(page, context);
 	await givenTheServerAnswers(server, { ok: true });
-	await test.step("When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations, fetchSnippets and getTags are called", async () => {
+	await test.step("When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations, fetchSnippets, putTags and addMemory are called", async () => {
 		const results = await page.evaluate(async () => {
 			const s = await import("/js/api/storage.js");
 			return Promise.all([
@@ -193,11 +172,12 @@ test("Requests that do not change conversations do not ask for a sync", async ({
 				}),
 				s.searchConversations({ q: "x" }),
 				s.fetchSnippets(["r1"], "x"),
-				s.getTags(),
+				s.putTags([], "e1"),
+				s.addMemory("00010-t.html", { text: "x" }),
 			]);
 		});
-		expect(results).toHaveLength(8);
-		expect(server.requests).toHaveLength(8);
+		expect(results).toHaveLength(9);
+		expect(server.requests).toHaveLength(9);
 	});
 	await test.step("Then no GET /v1/meta-all.json is fetched within 3 seconds", async () => {
 		await page.waitForTimeout(3000);

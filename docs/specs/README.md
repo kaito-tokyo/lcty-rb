@@ -65,6 +65,8 @@ backend features, `LCTYSP-3xxx`; see
 | [LCTYSP-3011](LCTYSP-3011_conversation-servlet.feature)       | Conversation servlet                               | `tests/backend/c_servlet_test.rb`                            |
 | [LCTYSP-3012](LCTYSP-3012_http-api.feature)                   | HTTP API                                           | `tests/backend/v1_servlet_test.rb`                           |
 | [LCTYSP-3013](LCTYSP-3013_gzip.feature)                       | Transparent gzip                                   | `tests/backend/gzip_test.rb`                                 |
+| [LCTYSP-3014](LCTYSP-3014_tag-files.feature)                  | Tag files                                          | `tests/backend/tag_files_test.rb`                            |
+| [LCTYSP-3015](LCTYSP-3015_tag-order-servlet.feature)          | Tag reorder servlet                                | `tests/backend/t_servlet_test.rb`                            |
 
 ## Number ranges
 

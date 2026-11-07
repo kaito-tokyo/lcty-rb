@@ -5,10 +5,11 @@
 # The behaviour of lib/store.rb (LCTYSP-0003, LCTYSP-0004, LCTYSP-0009, LCTYSP-0010). Each Scenario is a test of the
 # same title in tests/backend/store_test.rb, whose steps are the lines below.
 
-Feature: LCTYSP-3003 Storing conversations, tags and memory
+Feature: LCTYSP-3003 Storing conversations and their tags
 
-  Chatty::Store keeps every conversation as a file data/c/<id>.html and the tag definitions, memory and changed tags of
-  conversations in data/tags.sqlite. A conversation is created once with its meta, then only appended to; the title is
+  Chatty::Store keeps every conversation as a file data/c/<id>.html and the changed tags of conversations in
+  data/tags.sqlite (tag definitions and memory are tag files, LCTYSP-3014). Tags are references to tag files, checked
+  mechanically. A conversation is created once with its meta, then only appended to; the title is
   overwritten in its slot, and one call of pop may remove at most the last turn. Every line of a request is checked
   before anything is written, and a bad request is an HttpError with the status and message the API returns. Whole
   files are written through a temporary file and a rename, and files with an older head are rewritten at startup.
@@ -52,16 +53,16 @@ Feature: LCTYSP-3003 Storing conversations, tags and memory
       | a body that is not an object          | "body must be an object"                                                    |
       | a meta that is not an object          | "meta must be an object"                                                    |
       | the id "a b"                          | "invalid id"                                                                |
-      | the tags ["x", "x"]                   | "tags must be an array of unique tag names"                                 |
-      | the tag "a:b"                         | "tags must be an array of unique tag names"                                 |
+      | the tags ["x", "x"]                   | "tags must be an array of unique tag references"                                 |
+      | the tag "a:b"                         | "tags must be an array of unique tag references"                                 |
       | lines that are not an array           | "lines must be an array of objects"                                         |
       | a tags line                           | 'line type not allowed: "tags"'                                             |
       | a message id that is not a UUIDv7     | 'message id must be a UUIDv7: "1234"'                                       |
       | the command "Send"                    | 'invalid command: "Send"'                                                   |
       | a content_html that is not a string   | "content_html must be a string"                                             |
       | a role holding U+0001 in the 2nd line | "lines[1].role contains a character that XML cannot represent: U+0001 at 4" |
-      | a tag of the meta holding U+0001      | "tags must be an array of unique tag names"                                 |
-      | a tag of the meta holding U+3000      | "tags must be an array of unique tag names"                                 |
+      | a tag of the meta holding U+0001      | "tags must be an array of unique tag references"                                 |
+      | a tag of the meta holding U+3000      | "tags must be an array of unique tag references"                                 |
 
   Scenario: Appending adds the lines at the end of the file
     Given a conversation with one user message
@@ -114,7 +115,7 @@ Feature: LCTYSP-3003 Storing conversations, tags and memory
       | no lines for the id "../x"                   | 400    | "invalid id"                                                              |
       | a command line                               | 400    | 'line type not allowed: "cmd"'                                            |
       | a meta line                                  | 400    | 'line type not allowed: "meta"'                                           |
-      | a tags line whose tags are not a list        | 400    | "tags must be an array of unique tag names"                               |
+      | a tags line whose tags are not a list        | 400    | "tags must be an array of unique tag references"                               |
       | a good line and a line with U+0001 in its at | 400    | "lines[1].at contains a character that XML cannot represent: U+0001 at 0" |
 
   Scenario: Setting the title overwrites the slot in place
@@ -222,40 +223,3 @@ Feature: LCTYSP-3003 Storing conversations, tags and memory
     Then Store.document raises HttpError 500 "a conversation needs a meta" for lines without a meta
     And HttpError 400 for an id holding U+0001
     And Store.encode_lines raises HttpError 500 for an unknown line type
-
-  Scenario: Tag definitions are saved and read back in order
-    When Store.put_tags saves two new tags after the existing ones, the second with a memory item
-    Then Store.tags returns them in that order with their prompts and memory
-
-  Scenario Outline: Store.put_tags rejects a bad body with 400
-    When Store.put_tags is given <body>
-    Then it raises HttpError 400 <message>
-
-    Examples:
-      | body                              | message                                 |
-      | a list instead of {"tags": [...]} | 'body must be {"tags": [...]}'          |
-      | a tag that is not an object       | "each tag must be an object"            |
-      | the tag name "a b"                | 'invalid tag name: "a b"'               |
-      | a prompt that is a number         | "prompt must be a string"               |
-      | a memory item with a blank text   | "memory must be an array of {id, text}" |
-      | two tags of the same name         | "tag names must be unique"              |
-      | two memory items of the same id   | "memory ids must be unique"             |
-
-  Scenario: Memory items are added, edited and deleted
-    Given a tag
-    When Store.add_memory adds "  remember this  " with a source
-    Then it returns the item with a new id, the stripped text, a time and the source
-    And Store.edit_memory changes its text
-    And Store.delete_memory removes it from the tag
-
-  Scenario Outline: Memory needs a text and an existing tag and item
-    Given a tag
-    Then <call> raises HttpError <status> <message>
-
-    Examples:
-      | call                                      | status | message               |
-      | Store.add_memory with the text "   "      | 400    | "text is required"    |
-      | Store.add_memory without a body           | 400    | "text is required"    |
-      | Store.add_memory for an unknown tag       | 404    | "no such tag"         |
-      | Store.edit_memory of an unknown item      | 404    | "no such memory item" |
-      | Store.delete_memory for an unknown tag    | 404    | "no such tag"         |

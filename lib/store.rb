@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Storage (LCTYSP-0003, LCTYSP-0004, LCTYSP-0009): conversation files in data/c/ and tag definitions in data/tags.sqlite.
+# Storage (LCTYSP-0003, LCTYSP-0004, LCTYSP-0009): conversation files in data/c/, tag files in data/t/ (TagFiles) and
+# the current tags of conversations in data/tags.sqlite (TagStore).
 # open_data opens every store and brings the derived data (search index, vector DB) in line with the files.
 
 require 'json'
@@ -14,6 +15,7 @@ require_relative 'config'
 require_relative 'conv_html'
 require_relative 'uuid'
 require_relative 'tag_store'
+require_relative 'tag_files'
 require_relative 'search_index'
 require_relative 'v1/vector_db'
 
@@ -128,8 +130,8 @@ module Chatty
     end
 
     def validate_tag_list!(tags)
-      ok = tags.is_a?(Array) && tags.all? { |t| t.is_a?(String) && TAG_NAME_RE.match?(t) } && tags.uniq.size == tags.size
-      raise HttpError.new(400, 'tags must be an array of unique tag names') unless ok
+      ok = tags.is_a?(Array) && tags.all? { |t| Chatty.tag_ref?(t) } && tags.uniq.size == tags.size
+      raise HttpError.new(400, 'tags must be an array of unique tag references') unless ok
     end
 
     # Current tags: tags.sqlite when they were changed after creation, else the tags at creation (data-setup-tags.
@@ -312,55 +314,13 @@ module Chatty
       }
     end
 
-    # Tag definitions and memory live in TagStore (data/tags.sqlite. LCTYSP-0009). Only validation happens here.
-    def tags
-      TAGS.all
-    end
-
-    def validate_tags!(obj)
-      raise HttpError.new(400, 'body must be {"tags": [...]}') unless obj.is_a?(Hash) && obj['tags'].is_a?(Array)
-      names = []
-      obj['tags'].each do |t|
-        raise HttpError.new(400, 'each tag must be an object') unless t.is_a?(Hash)
-        raise HttpError.new(400, "invalid tag name: #{t['name'].inspect}") unless t['name'].is_a?(String) && TAG_NAME_RE.match?(t['name'])
-        raise HttpError.new(400, 'prompt must be a string') unless t['prompt'].nil? || t['prompt'].is_a?(String)
-        mem = t['memory'] ||= []
-        ok = mem.is_a?(Array) && mem.all? { |m| m.is_a?(Hash) && m['id'].is_a?(String) && m['text'].is_a?(String) && !m['text'].strip.empty? }
-        raise HttpError.new(400, 'memory must be an array of {id, text}') unless ok
-        names << t['name']
-      end
-      raise HttpError.new(400, 'tag names must be unique') unless names.uniq.size == names.size
-      ids = obj['tags'].flat_map { |t| t['memory'].map { |m| m['id'] } }
-      raise HttpError.new(400, 'memory ids must be unique') unless ids.uniq.size == ids.size
-    end
-
-    def put_tags(obj)
-      validate_tags!(obj)
-      TAGS.replace_all(obj)
-    end
-
-    def memory_text!(body)
-      text = body.is_a?(Hash) && body['text'].is_a?(String) ? body['text'].strip : ''
-      raise HttpError.new(400, 'text is required') if text.empty?
-      text
-    end
-
-    def add_memory(name, body)
-      TAGS.add_memory(name, memory_text!(body), body['source'])
-    end
-
-    def edit_memory(name, id, body)
-      TAGS.edit_memory(name, id, memory_text!(body))
-    end
-
-    def delete_memory(name, id)
-      TAGS.delete_memory(name, id)
-    end
   end
 
-  # At startup: open the stores (TAGS, INDEX, VECTORS), sync the index with the files and garbage-collect vectors.
+  # At startup: open the stores (TAG_FILES, TAGS, INDEX, VECTORS), sync the index with the files and garbage-collect
+  # vectors.
   def self.open_data
     FileUtils.mkdir_p(CONV_DIR)
+    const_set(:TAG_FILES, TagFiles.new(TAG_DIR, TAG_LOCK_PATH))
     const_set(:TAGS, TagStore.new(TAGS_DB_PATH))
     const_set(:INDEX, SearchIndex.new(INDEX_PATH))
     const_set(:VECTORS, V1::VectorDB.new(INDEX, DATA_DIR))

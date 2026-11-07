@@ -21,7 +21,8 @@ import {
 import { tr } from "../js/i18n.js";
 import { stream } from "../js/llm/client.js";
 import { buildRequest } from "../js/llm/history.js";
-import { openMemoryDialog, proposeMemory, sortTags } from "../js/tags.js";
+import { sortTags, tagRef } from "../js/tag-names.js";
+import { openMemoryDialog, proposeMemory } from "../js/tags.js";
 import { appendCommand, defineCommands } from "../js/ui/lcty-cmd.js";
 // Element features (the structure comes from the custom elements in /c/lcty.v1.js, which expose their inner elements as fields. LCTYSP-0005)
 import {
@@ -157,16 +158,20 @@ function showTitle(title) {
 	if (document.title !== title) document.title = title;
 }
 
-const knownTag = (name) => state.tagDefs.some((t) => t.name === name);
+const knownTag = (ref) => state.tagDefs.some((t) => tagRef(t) === ref);
 
 // Until the tag definitions have arrived the frame keeps its defaults: data-tag-defs is not set (an empty one would
-// mean "no tags are defined") and nothing is disabled for want of them, so nothing turns grey and back.
+// mean "no tags are defined") and nothing is disabled for want of them, so nothing turns grey and back. data-tag-defs
+// holds the references of the defined tags (file-name parts) and data-tag-names their display names, in the same
+// order; neither contains whitespace (LCTYSP-0009).
 function renderTags() {
-	if (state.tagDefsLoaded)
+	if (state.tagDefsLoaded) {
+		log.setAttribute("data-tag-defs", state.tagDefs.map(tagRef).join(" "));
 		log.setAttribute(
-			"data-tag-defs",
+			"data-tag-names",
 			state.tagDefs.map((t) => t.name).join(" "),
 		);
+	}
 	log.proposeMemoryButton.disabled =
 		state.busy || (state.tagDefsLoaded && !state.conv.tags.some(knownTag));
 }

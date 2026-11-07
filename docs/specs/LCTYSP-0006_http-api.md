@@ -62,35 +62,23 @@ chatty.rb answers `/v1/*` on the same origin as the pages. Bodies are JSON unles
 
 ## Tags and memory
 
-| Method | Path                        | Content                                                                                                                    |
-| ------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/v1/tags`                  | All tag definitions with their memory: `{tags: [{name, prompt, memory: [{id, text, at, source?}]}]}`, in definition order. |
-| PUT    | `/v1/tags`                  | Replace all tag definitions (the tag editor). Handles renames; memory follows its tag.                                     |
-| POST   | `/v1/tags/:name/memory`     | Add a memory item. Body `{text, source}`. Ruby assigns `id` and `at`. Returns 201 with the item.                           |
-| PATCH  | `/v1/tags/:name/memory/:id` | Edit the text of a memory item. Body `{text}`.                                                                             |
-| DELETE | `/v1/tags/:name/memory/:id` | Delete a memory item.                                                                                                      |
-
-See [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) for the meaning of tags and memory.
-
-### Revision draft: tag files (not implemented)
-
-With tag definitions and memory moved to one HTML file per tag
-([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), the tag
-endpoints shrink to three:
-
 | Method | Path                    | Content                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ------ | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/v1/tags`              | Get all: `{tags: [{file, name, ops: [{type, content}], prompt, memory: [{id, text, at, source?}]}]}` (the markup of LCTYSP-0009), one entry per tag file in `t/` in file-name order; `file` is the file name as listed by the file system (`NNNNN-<file-name part>.html`). The server parses the HTML. Under the shared lock on `t.lock`. Returns an `ETag` for the whole set.                                                |
 | PUT    | `/v1/tags`              | Replace all: the complete set in the same JSON form. Requires `If-Match` (428 without it, 412 when the set changed). Under the exclusive lock on `t.lock`, the file names are checked (mechanically only) and the whole request is rejected with 400, writing nothing, if one fails; then the server writes each file's HTML via a temporary file and a rename, and deletes tag files not in the set. Returns the new `ETag`. |
 | POST   | `/v1/tags/:file/memory` | Add a memory item to the tag in file `:file` (`00010-ruby.html`). Body `{text, source}`. Under the exclusive lock, the server rewrites that one file; Ruby assigns `id` and `at`. Returns 201 with the item. 404 when the file does not exist. Changes the set's `ETag`.                                                                                                                                                      |
 
+- Tag definitions and memory are one HTML file per tag in `t/`
+  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)).
 - Names are passed through untouched; the browser normalizes and validates them, and NFC-normalizes the names it
   receives before comparing them. The server writes and parses the HTML; the browser never sees it through this API.
-- `PATCH` and `DELETE` on memory items go away: the tag editor edits memory through replace-all.
+- There are no `PATCH` or `DELETE` on memory items (404): the tag editor edits memory through replace-all.
 - There is no reorder or rename endpoint; the reorder page and the tag editor send replace-all.
-- The `tags` line of `POST /v1/conversations/:id/lines` still sets `conversation_tags` in `tags.sqlite`, but its
-  tags, like `data-setup-tags` of a new conversation and `tag:` in `POST /v1/search`, are file-name parts (`c~23`),
-  checked mechanically only (LCTYSP-0009, revision draft).
+- The `tags` line of `POST /v1/conversations/:id/lines` sets `conversation_tags` in `tags.sqlite`. Its tags, like
+  `data-setup-tags` of a new conversation and `tag:` in `POST /v1/search`, are references (file-name parts, `c~23`),
+  checked mechanically only: valid UTF-8, no whitespace or control characters, no `/`, `\` or `:`, at most 244 bytes.
+
+See [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) for the meaning of tags and memory.
 
 ## Limits
 

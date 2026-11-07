@@ -33,19 +33,22 @@ a module imported once the page has loaded attaches every feature without blocki
   [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)) on every page; saving updates the page's tag choices. The ⚙︎ button opens the
   settings dialog (a modal `<dialog>`, `js/ui/settings-dialog.js`, appended to `<body>`): editing the browser settings and a connection test
   ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
-- **Revision draft (not implemented): a tag reorder page.** With tags stored as one HTML file per tag
+- **The tag reorder page (`js/pages/tag-order.js`, served by `lib/t/servlet.rb`).** With tags stored as one HTML file per tag
   ([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), reordering
   moves out of the tag editor, which loses its ↑↓ buttons. A separate page at `/t/` (`public/t/index.html`, also
   `/t/index.html`; one directory below the root like every page, see [Routing](#routing)) has the sidebar like every
   page, lists the tags in their current (file-name) order with their display names, lets the user move them, and on
   save renumbers them `00010`, `00020`, … and sends the whole set with `PUT /v1/tags`
   ([LCTYSP-0006](LCTYSP-0006_http-api.md)). The contents of the tags are not changed. The tags dialog links to it
-  (`../t/` from the pages in `/c/`).
-  - `/t/` mirrors `/c/`: the conversations are `data/c/` and `/c/`, the tags `data/t/` and `/t/`. Should tag files ever
-    be served under `/t/`, their names start with five digits (`00010-ruby.html`) and cannot collide with
-    `index.html`. Whether they are served is not settled.
-  - Its entry module would be a bundle `/t/index.js` like `/c/index.js` ([LCTYSP-0011](LCTYSP-0011_module-bundler.md)),
+  (`siteUrl("t/")`). On 412 it loads the tags again and asks the user to redo the move.
+  - `/t/` mirrors `/c/`: the conversations are `data/c/` and `/c/`, the tags `data/t/` and `/t/`. `/t/lcty.v1.*`
+    serves the files of `public/c/`, so the page loads them by name like the pages in `/c/`. Tag files are not served
+    under `/t/` (only through `/v1/tags`); should they ever be, their names start with five digits
+    (`00010-ruby.html`) and cannot collide with `index.html`.
+  - Its entry module is the bundle `/t/index.js` like `/c/index.js` ([LCTYSP-0011](LCTYSP-0011_module-bundler.md)),
     so `siteUrl()` finds the root from it. `/t` without the slash redirects to `t/` as `/c` does.
+  - The sidebar's links are relative to the page, one directory below the root: the new conversation page is
+    `../c/` and a conversation `../c/<id>.html`, from `/c/` and `/t/` alike.
 - Narrow screens (720px or less): the conversation page hides the sidebar; the new conversation page shows it above its content.
 - The history sent back to the model is read from the DOM: each `<lcty-message>` reads its text from attributes, which
   are exactly the saved strings ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). No JSON has to be fetched to open a

@@ -38,6 +38,7 @@ const NODE_TESTED = [
 	"js/i18n.js",
 	"js/api/storage.js",
 	"js/search/vectors.js",
+	"js/tag-names.js",
 	"js/tags.js",
 ];
 

@@ -6,12 +6,13 @@
 // the title of its Scenario (an Examples row is added in parentheses) and one step per line of it, so the two read side
 // by side.
 //
-// sortTags, composeDraft and proposeMemory of js/tags.js need no DOM: they run in Node.js (node-unit.js). The editor
-// and the dialogs (renderTagsEditor, initTagsDialog, openMemoryDialog) stay in the browser, in tests/unit/tags.spec.js.
+// composeDraft and proposeMemory of js/tags.js need no DOM: they run in Node.js (node-unit.js). The editor and the
+// dialogs (renderTagsEditor, initTagsDialog, openMemoryDialog) stay in the browser, in tests/unit/tags.spec.js. The
+// names, file names and references of js/tag-names.js are LCTYSP-1020 (tests/unit/tag-names.test.js).
 // Importing js/tags.js needs nothing absent in Node.js (its imports api/storage.js, api/meta-db.js and ui/markdown.js
 // only touch Worker, IndexedDB and localStorage when called). tr() needs the global LctyT and
 // document.documentElement.lang, made by useLctyT() (the stand-in of node-unit.js). GET and PUT /v1/tags,
-// POST /v1/tags/:name/memory and the fake llama-server at http://llm.test are answered by routeFetch(), which also
+// POST /v1/tags/:file/memory and the fake llama-server at http://llm.test are answered by routeFetch(), which also
 // records what was sent.
 
 import {
@@ -63,7 +64,7 @@ async function background(step, t) {
 		answerLlm: replyWith('{"proposals":[]}'),
 	};
 	await step(
-		"Given /v1/tags, /v1/tags/:name/memory and the llama-server at http://llm.test are answered by the test",
+		"Given /v1/tags, /v1/tags/:file/memory and the llama-server at http://llm.test are answered by the test",
 		() => {
 			routeFetch(t, async (req) => {
 				const url = new URL(req.url);
@@ -96,48 +97,43 @@ async function background(step, t) {
 
 // ---- Definitions ----
 
-const RUBY = {
-	name: "ruby",
-	prompt: "Ruby prompt",
-	memory: [{ text: "fact" }, { text: "rules" }],
-};
-const GO = { name: "go", prompt: "Go prompt", memory: [] };
+/** The definitions "a", "b", … of the feature: the tag files 00010-a.html, 00020-b.html, … named a, b, … */
+const defsOf = (...tags) =>
+	tags.map((t, i) => ({
+		file: `${String((i + 1) * 10).padStart(5, "0")}-${t.name}.html`,
+		ops: [],
+		...t,
+	}));
 
-// ---- sortTags and composeDraft ----
-
-scenario(
-	"Tag names are sorted in the order of the definitions",
-	async ({ step, t }) => {
-		await background(step, t);
-		let defs;
-		await step('Given the definitions "ruby", "go" and "rust"', () => {
-			defs = [{ name: "ruby" }, { name: "go" }, { name: "rust" }];
-		});
-		let sorted;
-		await step(
-			'When sortTags sorts "rust", "zig", "ruby", "ada" and "rust"',
-			() => {
-				sorted = T.sortTags(defs, ["rust", "zig", "ruby", "ada", "rust"]);
-			},
-		);
-		await step('Then it returns "ruby", "rust", "zig" and "ada"', () => {
-			expect(sorted).toEqual(["ruby", "rust", "zig", "ada"]);
-		});
-	},
-);
+// ---- composeDraft ----
 
 const compose = (defs, selected) =>
 	T.composeDraft(structuredClone(defs), selected);
 
 scenario(
-	"The draft follows the definitions, not the order of the choice",
+	"The draft follows the tag files, not the order of the choice",
 	async ({ step, t }) => {
 		await background(step, t);
 		let defs;
 		await step(
-			'Given the definitions "ruby" with a prompt and two memory items and "go" with a prompt and no memory',
+			'Given the tag files "00010-ruby.html" named "Ruby" with a prompt and two memory items and "00020-go.html" named "Go" with a prompt and no memory',
 			() => {
-				defs = [RUBY, GO];
+				defs = [
+					{
+						file: "00010-ruby.html",
+						name: "Ruby",
+						ops: [],
+						prompt: "Ruby prompt",
+						memory: [{ text: "fact" }, { text: "rules" }],
+					},
+					{
+						file: "00020-go.html",
+						name: "Go",
+						ops: [],
+						prompt: "Go prompt",
+						memory: [],
+					},
+				];
 			},
 		);
 		let draft;
@@ -148,11 +144,51 @@ scenario(
 			},
 		);
 		await step(
-			'Then it is the prompt of "ruby", its memory under "# Memory (ruby)" and the prompt of "go", joined by blank lines',
+			'Then it is the prompt of "Ruby", its memory under "# Memory (Ruby)" and the prompt of "Go", joined by blank lines',
 			() => {
 				expect(draft).toBe(
-					"Ruby prompt\n\n# Memory (ruby)\n- fact\n- rules\n\nGo prompt",
+					"Ruby prompt\n\n# Memory (Ruby)\n- fact\n- rules\n\nGo prompt",
 				);
+			},
+		);
+	},
+);
+
+scenario(
+	"The draft chooses tags by their reference, not by their display name",
+	async ({ step, t }) => {
+		await background(step, t);
+		let defs;
+		await step(
+			'Given the tag file "00010-c~23.html" named "C#" with the prompt "Sharp" and the memory item "x"',
+			() => {
+				defs = [
+					{
+						file: "00010-c~23.html",
+						name: "C#",
+						ops: [],
+						prompt: "Sharp",
+						memory: [{ text: "x" }],
+					},
+				];
+			},
+		);
+		let byName;
+		let byRef;
+		await step(
+			'When composeDraft composes the draft of "C#" and of "c~23"',
+			() => {
+				byName = compose(defs, ["C#"]);
+				byRef = compose(defs, ["c~23"]);
+			},
+		);
+		await step('Then the draft of "C#" is ""', () => {
+			expect(byName).toBe("");
+		});
+		await step(
+			'And the draft of "c~23" is "Sharp\\n\\n# Memory (C#)\\n- x"',
+			() => {
+				expect(byRef).toBe("Sharp\n\n# Memory (C#)\n- x");
 			},
 		);
 	},
@@ -166,7 +202,7 @@ scenario(
 		await step(
 			'Given the definitions "a" with a blank prompt and the memory items " x " and "  ", "b" with neither and "c" with the prompt " only "',
 			() => {
-				defs = [
+				defs = defsOf(
 					{
 						name: "a",
 						prompt: " \n ",
@@ -174,7 +210,7 @@ scenario(
 					},
 					{ name: "b" },
 					{ name: "c", prompt: " only " },
-				];
+				);
 			},
 		);
 		let draft;
@@ -206,7 +242,7 @@ scenario(
 			'When composeDraft composes the draft of a tag "ruby" with the memory item "x"',
 			() => {
 				draft = compose(
-					[{ name: "ruby", prompt: "", memory: [{ text: "x" }] }],
+					defsOf({ name: "ruby", prompt: "", memory: [{ text: "x" }] }),
 					["ruby"],
 				);
 			},
@@ -245,9 +281,9 @@ const PROMPT = [
 	"Do not propose what is already in memory or what matters only for this conversation. Write each item in one or two sentences that can be understood on their own.",
 	"If there is nothing to add, make proposals an empty array.",
 	"",
-	'- Current memory of the tag "ruby":',
+	'- Current memory of the tag "Ruby":',
 	"  - existing",
-	'- Current memory of the tag "go":',
+	'- Current memory of the tag "Go":',
 	"  (none yet)",
 ].join("\n");
 
@@ -257,12 +293,24 @@ scenario(
 		const server = await background(step, t);
 		let defs;
 		await step(
-			'Given the definitions "ruby" with the memory item "existing", "go" without memory and "python"',
+			'Given the tag files "00010-ruby.html" named "Ruby" with the memory item "existing", "00020-go.html" named "Go" without memory and "00030-python.html" named "Python"',
 			() => {
 				defs = [
-					{ name: "ruby", prompt: "p", memory: [{ text: "existing" }] },
-					{ name: "go", prompt: "p" },
-					{ name: "python", prompt: "p", memory: [] },
+					{
+						file: "00010-ruby.html",
+						name: "Ruby",
+						ops: [],
+						prompt: "p",
+						memory: [{ text: "existing" }],
+					},
+					{ file: "00020-go.html", name: "Go", ops: [], prompt: "p" },
+					{
+						file: "00030-python.html",
+						name: "Python",
+						ops: [],
+						prompt: "p",
+						memory: [],
+					},
 				];
 			},
 		);
@@ -283,15 +331,16 @@ scenario(
 			},
 		);
 		await step(
-			'And the model replies with proposals for "ruby", "python", "go" with blank text and "go"',
+			'And the model replies with proposals for "Ruby", "ruby", "Python", "Go" with blank text and "Go"',
 			() => {
 				server.answerLlm = replyWith(
 					JSON.stringify({
 						proposals: [
-							{ tag: "ruby", text: "  New fact  " },
-							{ tag: "python", text: "Py fact" },
-							{ tag: "go", text: "   " },
-							{ tag: "go", text: "Go fact" },
+							{ tag: "Ruby", text: "  New fact  " },
+							{ tag: "ruby", text: "By reference" },
+							{ tag: "Python", text: "Py fact" },
+							{ tag: "Go", text: "   " },
+							{ tag: "Go", text: "Go fact" },
 						],
 					}),
 					{ prompt_n: 12, predicted_n: 30 },
@@ -339,7 +388,7 @@ scenario(
 			},
 		);
 		await step(
-			'And its last input is the temporary user message listing the current memory of "ruby" and "go"',
+			'And its last input is the temporary user message listing the current memory of "Ruby" and "Go"',
 			() => {
 				expect(server.llm[0].body.input.at(-1)).toEqual({
 					role: "user",
@@ -348,7 +397,7 @@ scenario(
 			},
 		);
 		await step(
-			'And its response_format is the JSON schema "memory_proposals" with the tags "ruby" and "go"',
+			'And its response_format is the JSON schema "memory_proposals" with the tags "Ruby" and "Go"',
 			() => {
 				expect(server.llm[0].body.response_format).toEqual({
 					type: "json_schema",
@@ -362,7 +411,7 @@ scenario(
 									items: {
 										type: "object",
 										properties: {
-											tag: { type: "string", enum: ["ruby", "go"] },
+											tag: { type: "string", enum: ["Ruby", "Go"] },
 											text: { type: "string" },
 										},
 										required: ["tag", "text"],
@@ -376,14 +425,17 @@ scenario(
 			},
 		);
 		await step(
-			'And it returns the trimmed proposals for "ruby" and "go", the tags "ruby" and "go" and the timings of the reply',
+			'And it returns the trimmed proposals for "Ruby" and "Go" with their files, the tags "Ruby" and "Go" with their files and the timings of the reply',
 			() => {
 				expect(out.result).toEqual({
 					proposals: [
-						{ tag: "ruby", text: "New fact" },
-						{ tag: "go", text: "Go fact" },
+						{ tag: "Ruby", file: "00010-ruby.html", text: "New fact" },
+						{ tag: "Go", file: "00020-go.html", text: "Go fact" },
 					],
-					tags: ["ruby", "go"],
+					tags: [
+						{ name: "Ruby", file: "00010-ruby.html" },
+						{ name: "Go", file: "00020-go.html" },
+					],
 					timings: { prompt_n: 12, predicted_n: 30 },
 				});
 			},
@@ -401,7 +453,7 @@ scenario(
 		let defs;
 		let conv;
 		await step('Given the definitions "ruby"', () => {
-			defs = [{ name: "ruby", prompt: "p" }];
+			defs = defsOf({ name: "ruby", prompt: "p" });
 		});
 		await step('And a conversation with the tags "unknown"', () => {
 			conv = { meta: {}, tags: ["unknown"], messages: [] };
@@ -420,7 +472,7 @@ scenario(
 );
 
 async function givenRubyAndAConversation(step) {
-	const defs = [{ name: "ruby", prompt: "p" }];
+	const defs = defsOf({ name: "ruby", prompt: "p" });
 	const conv = {
 		meta: {},
 		tags: ["ruby"],
@@ -441,9 +493,15 @@ scenario("A reply without proposals proposes nothing", async ({ step, t }) => {
 	await step("When proposeMemory asks for proposals", async () => {
 		out = await propose({ conv, defs });
 	});
-	await step('Then it returns no proposals and the tags "ruby"', () => {
-		expect(out.result).toMatchObject({ proposals: [], tags: ["ruby"] });
-	});
+	await step(
+		'Then it returns no proposals and the tag "ruby" with the file "00010-ruby.html"',
+		() => {
+			expect(out.result).toMatchObject({
+				proposals: [],
+				tags: [{ name: "ruby", file: "00010-ruby.html" }],
+			});
+		},
+	);
 });
 
 scenario("Proposals that are not objects are skipped", async ({ step, t }) => {
@@ -465,7 +523,10 @@ scenario("Proposals that are not objects are skipped", async ({ step, t }) => {
 	});
 	await step('Then it returns only the proposal for "ruby"', () => {
 		expect(out).toMatchObject({
-			result: { proposals: [{ tag: "ruby", text: "ok" }], tags: ["ruby"] },
+			result: {
+				proposals: [{ tag: "ruby", file: "00010-ruby.html", text: "ok" }],
+				tags: [{ name: "ruby", file: "00010-ruby.html" }],
+			},
 		});
 	});
 });

@@ -1188,6 +1188,40 @@ test("Tag definitions mark the unknown chips and fill the picker", async ({
 	});
 });
 
+test("Defined tags show their display names from data-tag-names", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenBody(
+		page,
+		'<lcty-c id="c-conv" data-setup-tags="c~23 gone" data-tag-defs="c~23 ruby" data-tag-names="C# Ruby"></lcty-c>',
+	);
+	const t = await tagsOf(page);
+	await test.step('Then the chip "c~23" shows "C#", has the title "Search tag:C#" and a remove button labelled "Remove C#"', () => {
+		expect(t.chips[0]).toMatchObject({
+			name: "c~23",
+			text: "C#",
+			class: "tag-chip",
+			title: "Search tag:C#",
+		});
+		expect(t.chips[0].remove[1]).toBe("Remove C#");
+	});
+	await test.step('And the chip "gone" is marked unknown and shows "gone"', () => {
+		expect(t.chips[1]).toMatchObject({
+			name: "gone",
+			text: "gone",
+			class: "tag-chip unknown",
+		});
+	});
+	await test.step('And the picker has the options "+ Tag" and "Ruby", whose value is "ruby"', () => {
+		expect(t.options).toEqual([
+			["", "+ Tag"],
+			["ruby", "Ruby"],
+		]);
+	});
+});
+
 for (const [kase, defs] of [
 	["every definition is used", "ruby"],
 	["no tag is defined", ""],
@@ -1381,9 +1415,9 @@ test("The conversation list shows each conversation as a link", async ({
 			["li", "lcty-conv-list__entry"],
 		]);
 	});
-	await test.step('And the first is a link to "a.html" with data-id "a" holding the title "Alpha", the snippet, the tag chip "ruby" titled "Search tag:ruby" and the meta "2026-11-02 03:04 · 2 messages"', () => {
+	await test.step('And the first is a link to "../c/a.html" with data-id "a" holding the title "Alpha", the snippet, the tag chip "ruby" titled "Search tag:ruby" and the meta "2026-11-02 03:04 · 2 messages"', () => {
 		expect(list.links[0]).toEqual({
-			href: "a.html",
+			href: "../c/a.html",
 			id: "a",
 			chunk: null,
 			parts: [
@@ -1397,9 +1431,9 @@ test("The conversation list shows each conversation as a link", async ({
 			chipTitle: "Search tag:ruby",
 		});
 	});
-	await test.step('And the second is a link to "b.html#c-msg-0190abcd" with data-chunk "0190abcd" holding the title "(untitled)" and the meta "2026-11-02 03:04"', () => {
+	await test.step('And the second is a link to "../c/b.html#c-msg-0190abcd" with data-chunk "0190abcd" holding the title "(untitled)" and the meta "2026-11-02 03:04"', () => {
 		expect(list.links[1]).toEqual({
-			href: "b.html#c-msg-0190abcd",
+			href: "../c/b.html#c-msg-0190abcd",
 			id: "b",
 			chunk: "0190abcd",
 			parts: [
@@ -1664,9 +1698,9 @@ test("The sidebar holds its links, the search box and the list", async ({
 		expect(s.listPart).toBe("lcty-sidebar__list");
 		expect(s.navPart).toBe("lcty-sidebar__nav");
 	});
-	await test.step('And the nav holds the link "+ New chat" to "./" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"', () => {
+	await test.step('And the nav holds the link "+ New chat" to "../c/" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"', () => {
 		expect(s.fields).toEqual([true, true, true, true]);
-		expect(s.link).toEqual(["+ New chat", "./", "_blank", "noopener"]);
+		expect(s.link).toEqual(["+ New chat", "../c/", "_blank", "noopener"]);
 		expect(s.buttons).toEqual([
 			["Tags", "Edit tags", "Edit tags", "button"],
 			["↻", "Reload the list", "Reload the list", "button"],

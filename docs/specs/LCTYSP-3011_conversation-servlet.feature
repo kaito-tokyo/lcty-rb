@@ -89,6 +89,10 @@ Feature: LCTYSP-3011 Conversation servlet
     Then data/c/lcty.v1.js and data/c/lcty.v1.css have the bytes of those in public/c/
     And no other file of public/c/ is copied, such as lcty.v1.module.js
 
+  Scenario: C.publish_assets copies the same files into the root of data/ and into data/t/, for the tag files
+    When C.publish_assets runs
+    Then data/lcty.v1.js, data/lcty.v1.css, data/t/lcty.v1.js and data/t/lcty.v1.css have the bytes of those in public/c/
+
   Scenario: C.publish_assets leaves copies that are up to date alone
     Given C.publish_assets has run
     When C.publish_assets runs again
