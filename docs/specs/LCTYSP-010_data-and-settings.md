@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-001](LCTYSP-001_architecture.md), [LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-007](LCTYSP-007_search.md), [LCTYSP-008](LCTYSP-008_vector-binary.md), [LCTYSP-009](LCTYSP-009_tags-and-memory.md)
-- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/js/sync_meta.worker.js`
+- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/js/sync_c_meta.worker.js`
 
 ## Summary
 
@@ -49,8 +49,8 @@ source of truth at startup or by the browser. Everything else is source-of-truth
     tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
     messages, from the search index); the last three are only hints. It is the only store: upgrading from an older
     version (the stores `meta` and `sync` of the retired `meta_db.worker.js`) drops every other store.
-- **A sync is one worker:** `js/sync_meta.worker.js` (a classic worker with no imports, served at
-  `/js/sync_meta.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
+- **A sync is one worker:** `js/sync_c_meta.worker.js` (a classic worker with no imports, served at
+  `/js/sync_c_meta.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
   [LCTYSP-005](LCTYSP-005_page-and-elements.md)). Started by `new Worker`, it fetches `GET /v1/meta-all.json`, clears and
   fills `c_meta` in one transaction (so a conversation deleted on the server disappears from it too), and posts
   `undefined`, or an `Error` when any step failed (the copy is then left as it was). Then `js/api/meta-db.js` terminates

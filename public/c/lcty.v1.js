@@ -546,7 +546,7 @@
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
 	// before any module has loaded (LCTYSP-010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
 	// there at the first paint, or else from IndexedDB ("lcty", store "c_meta"), asynchronously. The database is only
-	// read: when it does not exist it is not created (/js/sync_meta.worker.js owns the schema). A module that has already
+	// read: when it does not exist it is not created (/js/sync_c_meta.worker.js owns the schema). A module that has already
 	// shown its own items wins.
 	connectedCallback() {
 		if (this.#filled) return;

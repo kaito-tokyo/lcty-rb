@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The browser's copy of every conversation's meta (IndexedDB "lcty", store "c_meta", LCTYSP-010). A sync starts a
-// worker, /js/sync_meta.worker.js, which fetches GET /v1/meta-all.json, replaces the whole store, posts undefined or an
+// worker, /js/sync_c_meta.worker.js, which fetches GET /v1/meta-all.json, replaces the whole store, posts undefined or an
 // Error and ends. This module reads the store itself (the worker owns the schema: the database is never created here)
 // and closes each connection right away, so the worker's upgrade is never blocked.
 //
@@ -19,7 +19,7 @@
 // written from the main thread (workers have no localStorage) after each sync. When it does not fit, it is removed and
 // the sidebar reads the database instead.
 
-const WORKER_URL = "/js/sync_meta.worker.js";
+const WORKER_URL = "/js/sync_c_meta.worker.js";
 const DB_NAME = "lcty";
 const STORE = "c_meta"; // the schema is the worker's
 const IDLE_TIMEOUT_MS = 10000; // run by then even if the browser never becomes idle
