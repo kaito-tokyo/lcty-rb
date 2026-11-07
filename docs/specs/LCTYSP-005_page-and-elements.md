@@ -354,6 +354,13 @@ Rendering must stay cheaper than generation:
 - Thinking is collapsed. While a reply streams in, its text is added to the body only while it is open.
 - Markdown to HTML always escapes text and only allows `http:`, `https:` and `mailto:` link URLs. LLM output is never put
   into the DOM as raw HTML.
+- **Suggested next messages are an autolink with their own scheme:** `<x-suggestion-for-user-turn:text>`. The system
+  prompt may ask the model to end a reply with a few of them. Unlike a CommonMark autolink, the text may contain spaces;
+  it runs to the first `>` on the same line (so it cannot contain `>`), and an empty text is left as it is. It is
+  rendered where it is written as `<button type="button" class="suggestion">text</button>` (no URL, so the link rule
+  above is unchanged; the file's allowlist already keeps it). Clicking one puts its text into the composer, to edit and
+  send. Inside a code span it stays text. The reply's content keeps the autolink as written, so the history sent back
+  is unchanged. While a reply streams in, an autolink whose `>` has not arrived yet shows as plain text.
 - Messages do not use `content-visibility: auto`. Off-screen messages would get estimated heights, so the page's
   height changes after the first paint and the browser restores the scroll position against an estimated layout
   (Safari landed at a different place on every reload).
