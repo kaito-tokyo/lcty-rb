@@ -74,16 +74,16 @@ Scenario is a `test.step()` with the line word for word, in order:
 
 ```js
 test("A new id is a canonical UUIDv7", async ({ page, context }) => {
-  await givenAPage(page, context);
-  let id;
-  await test.step("When uuidv7() makes an id", async () => {
-    id = await page.evaluate(async () =>
-      (await import("/js/uuid.js")).uuidv7(),
-    );
-  });
-  await test.step("Then it matches UUID_RE", async () => {
-    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
-  });
+	await givenAPage(page, context);
+	let id;
+	await test.step("When uuidv7() makes an id", async () => {
+		id = await page.evaluate(async () =>
+			(await import("/js/uuid.js")).uuidv7(),
+		);
+	});
+	await test.step("Then it matches UUID_RE", async () => {
+		expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
+	});
 });
 ```
 

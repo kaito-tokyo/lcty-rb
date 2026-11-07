@@ -71,10 +71,10 @@ The frontend tests run in Chromium and WebKit with [Playwright](https://playwrig
 only; the server itself still needs nothing installed. The backend tests run on the server's Ruby with Minitest, which
 Ruby 2.6 bundles.
 
-- **Frontend unit tests** (`tests/unit/`): one part on its own, such as a worker on an empty page. Their behaviour is
-  written as Gherkin features, `docs/specs/LCTYSP-1xxx_*.feature`, and each feature has a `.spec.js` here that has one
-  test per Scenario, with the Scenario's title and its lines as the test's steps
-  ([docs/specs/README.md](docs/specs/README.md)).
+- **Frontend unit tests** (`tests/unit/`): one module of `public/` on its own, such as a worker or a function, on an
+  empty page. Their behaviour is written as Gherkin features, `docs/specs/LCTYSP-1xxx_*.feature`, and each feature has
+  a `.spec.js` here that has one test per Scenario, with the Scenario's title and its lines as the test's steps
+  ([LCTYSP-1000](docs/specs/LCTYSP-1000_frontend-unit-tests.md) explains them).
 - **Frontend UI tests** (`tests/ui/`): drive the pages. Their Gherkin features will be
   `docs/specs/LCTYSP-2xxx_*.feature`.
 - **Backend unit tests** (`tests/backend/`): one part of the Ruby server (`lib/`) on its own. Like the frontend unit

@@ -88,7 +88,10 @@ for (const { label, text } of [
 	{ label: '"a\\u001bb" (ESC between letters)', text: "a\u001bb" },
 	{ label: '"\\u0000" (only NUL)', text: "\u0000" },
 	{ label: '"日本語\\u0007" (Japanese and BEL)', text: "日本語\u0007" },
-	{ label: '"x\\uffffy\\ufffez" (U+FFFF and U+FFFE)', text: "x￿y￾z" },
+	{
+		label: '"x\\u{ffff}y\\u{fffe}z" (U+FFFF and U+FFFE)',
+		text: "x\u{ffff}y\u{fffe}z",
+	},
 	{
 		label: '"🙂\\u0001\\t\\r\\n" (an emoji, SOH and spaces)',
 		text: "🙂\u0001\t\r\n",
@@ -108,6 +111,20 @@ for (const { label, text } of [
 		);
 	});
 }
+
+test("A leading byte order mark of the base64 form is kept", async ({
+	page,
+	context,
+}) => {
+	await givenAPage(page, context);
+	await readsDataContent(
+		page,
+		'Given an element with data-content-base64 holding the UTF-8 bytes of "\\u{feff}\\u0001x"',
+		{ "data-content-base64": { utf8: "\u{feff}\u0001x" } },
+		'Then it returns "\\u{feff}\\u0001x", byte-exact',
+		"\u{feff}\u0001x",
+	);
+});
 
 test("The base64 form wins over the plain one", async ({ page, context }) => {
 	await givenAPage(page, context);

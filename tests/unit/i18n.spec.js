@@ -417,7 +417,7 @@ test("localize() keeps the English written in the HTML for a key the language do
 });
 
 for (const attribute of ["placeholder", "title", "aria-label"]) {
-	test(`localize() replaces the attribute of data-lcty-t-<attribute> elements (${attribute})`, async ({
+	test(`localize() replaces the attribute an element names for localization (${attribute})`, async ({
 		page,
 		context,
 	}) => {

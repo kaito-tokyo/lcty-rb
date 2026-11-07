@@ -224,6 +224,17 @@ for (const [formatting, markdown, html] of [
 		"見てhttps://e.com/パス。",
 		`<p>見て${A("https://e.com/%E3%83%91%E3%82%B9", "https://e.com/パス")}。</p>`,
 	],
+	["bold and italic", "***x***", "<p><strong><em>x</em></strong></p>"],
+	[
+		"a bare URL in quotes",
+		'say \\"https://e.com\\" ok',
+		`<p>say &quot;${A("https://e.com/", "https://e.com")}&quot; ok</p>`,
+	],
+	[
+		"a bare URL in brackets",
+		"<https://e.com>",
+		`<p>&lt;${A("https://e.com/", "https://e.com")}&gt;</p>`,
+	],
 ]) {
 	test(`Inline formatting (${formatting})`, async ({ page, context }) => {
 		await background(page, context);

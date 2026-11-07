@@ -37,12 +37,17 @@ Feature: LCTYSP-1005 Reading text strings from attributes
     Then it returns <text>, byte-exact
 
     Examples:
-      | text                                        |
-      | "a\u001bb" (ESC between letters)            |
-      | "\u0000" (only NUL)                         |
-      | "日本語\u0007" (Japanese and BEL)           |
-      | "x￿y￾z" (U+FFFF and U+FFFE)       |
-      | "🙂\u0001\t\r\n" (an emoji, SOH and spaces) |
+      | text                                          |
+      | "a\u001bb" (ESC between letters)              |
+      | "\u0000" (only NUL)                           |
+      | "日本語\u0007" (Japanese and BEL)                |
+      | "x\u{ffff}y\u{fffe}z" (U+FFFF and U+FFFE)     |
+      | "🙂\u0001\t\r\n" (an emoji, SOH and spaces)    |
+
+  Scenario: A leading byte order mark of the base64 form is kept
+    Given an element with data-content-base64 holding the UTF-8 bytes of "\u{feff}\u0001x"
+    When textAttr() reads "data-content"
+    Then it returns "\u{feff}\u0001x", byte-exact
 
   Scenario: The base64 form wins over the plain one
     Given an element with data-content "plain" and data-content-base64 holding the UTF-8 bytes of "a\u001bb"

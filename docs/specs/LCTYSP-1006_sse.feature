@@ -35,7 +35,7 @@ Feature: LCTYSP-1006 Reading server-sent events
     Then it yields message "hello", message "world"
 
   Scenario: A body that arrives one byte at a time gives the same events
-    Given a body that arrives one byte at a time as "event: delta\ndata: one\ndata: two\n\n: note\ndata: three\n\n"
+    Given a body that arrives as one-byte chunks of "event: delta\ndata: one\ndata: two\n\n: note\ndata: three\n\n"
     When parseSSE reads it
     Then it yields delta "one\ntwo", message "three"
 

@@ -39,6 +39,5 @@ export async function openUnitPage(
 /** The usual Background of a unit feature: "Given a page on the server's origin". */
 export async function givenAPage(page, context, options) {
 	await test.step("Given a page on the server's origin", () =>
-		openUnitPage(page, context, options),
-	);
+		openUnitPage(page, context, options));
 }

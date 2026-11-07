@@ -114,11 +114,11 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
     Then it returns "<url>"
 
     Examples:
-      | id                     | msgId                                  | url                                                                     |
-      | "20261104-102300-a1b2" | undefined                              | /c/20261104-102300-a1b2.html                                            |
-      | "20261104-102300-a1b2" | ""                                     | /c/20261104-102300-a1b2.html                                            |
-      | "20261104-102300-a1b2" | "0190f3a1-7c2e-7abc-8def-0123456789ab" | /c/20261104-102300-a1b2.html#c-msg-0190f3a1-7c2e-7abc-8def-0123456789ab |
-      | "a b/c?d#e"            | undefined                              | /c/a%20b%2Fc%3Fd%23e.html                                               |
+      | case                     | id                     | msgId                                  | url                                                                     |
+      | a conversation           | "20261104-102300-a1b2" | undefined                              | /c/20261104-102300-a1b2.html                                            |
+      | an empty message id      | "20261104-102300-a1b2" | ""                                     | /c/20261104-102300-a1b2.html                                            |
+      | a message                | "20261104-102300-a1b2" | "0190f3a1-7c2e-7abc-8def-0123456789ab" | /c/20261104-102300-a1b2.html#c-msg-0190f3a1-7c2e-7abc-8def-0123456789ab |
+      | an id that needs escapes | "a b/c?d#e"            | undefined                              | /c/a%20b%2Fc%3Fd%23e.html                                               |
 
   Scenario: storeSettings() stores only the values that differ from the defaults
     Given the defaults { base_url: "http://d", model: "m", api_key: "k" }
@@ -190,7 +190,7 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
     Examples:
       | lang | toast                                 |
       | en   | Failed to load the settings: 500 boom |
-      | ja   | 設定の読み込みに失敗しました: 500 boom                 |
+      | ja   | 設定の読み込みに失敗しました: 500 boom              |
 
   Scenario: The indexer does nothing without settings
     Given GET /v1/vectors/pending is answered by the test

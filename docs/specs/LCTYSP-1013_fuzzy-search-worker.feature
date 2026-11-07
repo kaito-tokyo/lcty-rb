@@ -43,12 +43,12 @@ Feature: LCTYSP-1013 The semantic search worker
     Then it answers the ids <ids>
 
     Examples:
-      | k  | ids                          |
-      | 1  | "a"                          |
-      | 4  | "a", "c", "b" and "d"        |
-      | 10 | "a", "c", "b" and "d"        |
-      | 0  | none                         |
-      | -1 | none                         |
+      | k  | ids                   |
+      | 1  | "a"                   |
+      | 4  | "a", "c", "b" and "d" |
+      | 10 | "a", "c", "b" and "d" |
+      | 0  | none                  |
+      | -1 | none                  |
 
   Scenario: A search without k answers at most 50 ids
     Given the files hold one row for each of 60 ids, every one scoring differently
@@ -125,11 +125,11 @@ Feature: LCTYSP-1013 The semantic search worker
     And a search with k 3 answers the ids "b" and "a"
 
     Examples:
-      | change                                              | error                                           |
-      | /v1/vectors.eg2_264.dat answers with the status 500 | failed to fetch the vectors (HTTP 500)          |
-      | /v1/vectors.eg2_264.idx answers with the status 404 | failed to fetch the vectors (HTTP 404)          |
-      | the rows are one byte short                         | broken vectors (2111 bytes of rows for 2 ids)   |
-      | the ids have a third id                             | broken vectors (2112 bytes of rows for 3 ids)   |
+      | change                                              | error                                              |
+      | /v1/vectors.eg2_264.dat answers with the status 500 | failed to fetch the vectors (HTTP 500)             |
+      | /v1/vectors.eg2_264.idx answers with the status 404 | failed to fetch the vectors (HTTP 404)             |
+      | the rows are one byte short                         | broken vectors (2111 bytes of rows for 2 ids)      |
+      | the ids have a third id                             | broken vectors (2112 bytes of rows for 3 ids)      |
       | the ids are one byte short                          | broken vectors (2112 bytes of rows for 1.9375 ids) |
 
   Scenario: A file that fails without a response answers an error
@@ -152,13 +152,14 @@ Feature: LCTYSP-1013 The semantic search worker
     Then it answers with the message's id and the error "unknown op: drop"
 
   Scenario Outline: Scoring in JavaScript gives the results of bdot264.wasm
-    Given the files hold 300 rows of 100 ids, the rows and the query being random unit vectors
+    Given /bdot264.wasm can be instantiated in this browser with its memory of 256 MiB
+    And the files hold 300 rows of 100 ids, the rows and the query being random unit vectors
     When one worker loads them and searches with k 20
     And a second worker, for which /bdot264.wasm <wasm>, loads them and searches with k 20
     Then both answer the same 20 ids in the same order, with scores within 0.00001
 
     Examples:
-      | wasm                                      |
-      | answers with the status 404               |
-      | fails without a response                  |
+      | wasm                                        |
+      | answers with the status 404                 |
+      | fails without a response                    |
       | answers with bytes that are not WebAssembly |

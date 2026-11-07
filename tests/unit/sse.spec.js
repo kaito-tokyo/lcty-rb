@@ -115,7 +115,7 @@ scenario(
 
 scenario(
 	"A body that arrives one byte at a time gives the same events",
-	'one byte at a time as "event: delta\\ndata: one\\ndata: two\\n\\n: note\\ndata: three\\n\\n"',
+	'one-byte chunks of "event: delta\\ndata: one\\ndata: two\\n\\n: note\\ndata: three\\n\\n"',
 	cut("event: delta\ndata: one\ndata: two\n\n: note\ndata: three\n\n", 1),
 	['delta "one\\ntwo"', 'message "three"'],
 );

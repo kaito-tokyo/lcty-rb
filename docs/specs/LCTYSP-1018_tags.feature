@@ -48,17 +48,17 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And ↑ is disabled for the first tag only and ↓ for the last tag only
     And isDirty() is false
 
-  Scenario: Moving and editing tags makes the editor dirty
+  Scenario: Moving a tag makes the editor dirty
     Given the editor of the definitions "ruby" and "go"
     When ↓ of "ruby" is clicked
     Then the tags are in the order "go", "ruby"
     And isDirty() is true
 
   Scenario: Saving puts the definitions and takes the saved ones back
-    Given the editor of the definitions "ruby" and "go"
+    Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go"
     And GET /v1/tags will return the definitions with timestamps
-    When the prompt of "ruby" is changed, a new tag "rust" is added, the memory item "  " is added to it, and Save is clicked
-    Then PUT /v1/tags is sent the three tags with the new prompt, "rust" without memory
+    When the prompt of "ruby" is changed to "New prompt", a new tag "rust" is added and Save is clicked
+    Then PUT /v1/tags is sent "ruby" with the new prompt and only the memory item "fact", "go" and "rust" without memory
     And onSaved is called with the definitions GET /v1/tags returned
     And the toast says "Tags saved", the status is empty and isDirty() is false
 
@@ -70,12 +70,12 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And isDirty() is true
 
     Examples:
-      | case         | name          | message                                                                                      |
-      | a space      | "a b"         | 'The tag name "a b" cannot be used (no spaces or ":", up to 40 characters)'                  |
-      | a colon      | "a:b"         | 'The tag name "a:b" cannot be used (no spaces or ":", up to 40 characters)'                  |
-      | empty        | ""            | 'The tag name "" cannot be used (no spaces or ":", up to 40 characters)'                     |
-      | 41 letters   | 41 times "x"  | 'The tag name "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" cannot be used (no spaces or ":", up to 40 characters)' |
-      | a duplicate  | "ruby"        | "Tag names must be unique"                                                                   |
+      | case        | name         | message                                                                                                           |
+      | a space     | "a b"        | 'The tag name "a b" cannot be used (no spaces or ":", up to 40 characters)'                                       |
+      | a colon     | "a:b"        | 'The tag name "a:b" cannot be used (no spaces or ":", up to 40 characters)'                                       |
+      | empty       | ""           | 'The tag name "" cannot be used (no spaces or ":", up to 40 characters)'                                          |
+      | 41 letters  | 41 times "x" | 'The tag name "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" cannot be used (no spaces or ":", up to 40 characters)' |
+      | a duplicate | "ruby"       | "Tag names must be unique"                                                                                        |
 
   Scenario: A name is trimmed and may have 40 characters
     Given the editor of the definitions "ruby" and "go"
@@ -89,6 +89,16 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then the status says "Could not save: 500 boom"
     And onSaved is not called and isDirty() is true
 
+  Scenario: A failed save keeps the blank memory items
+    Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go"
+    And PUT /v1/tags answers with the status 500 and "boom"
+    When Save is clicked
+    Then PUT /v1/tags was sent "ruby" with only the memory item "fact"
+    And the status says "Could not save: 500 boom"
+    And isDirty() is false
+    When ↓ of "ruby" is clicked
+    Then "ruby" shows the memory items "fact" and "  "
+
   Scenario: Deleting a tag asks first
     Given the editor of the definitions "ruby" and "go"
     When Delete of "ruby" is clicked and the question is dismissed
@@ -100,7 +110,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
   Scenario: Deleting a memory item removes it at once
     Given the editor of the definitions "ruby" with a prompt and two memory items
     When Delete of the first memory item is clicked
-    Then "ruby" shows one memory item under "Memory (1 items, about 4 characters)"
+    Then "ruby" shows one memory item under "Memory (1 items, about 5 characters)"
     And isDirty() is true
 
   Scenario: Discarding the changes asks first and goes back to the saved state
@@ -134,10 +144,10 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then the dialog is closed and nothing was asked
 
     Examples:
-      | closing                          |
-      | Close is clicked                 |
-      | Escape is pressed                |
-      | the backdrop is clicked          |
+      | closing                 |
+      | Close is clicked        |
+      | Escape is pressed       |
+      | the backdrop is clicked |
 
   Scenario: Closing the tags dialog with unsaved edits asks first
     Given initTagsDialog has wired a button
@@ -184,10 +194,20 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then it throws "<message>"
 
     Examples:
-      | answer                                    | message                             |
-      | replies with text that is not JSON        | Could not read the proposal as JSON |
-      | sends the error event "overloaded"        | overloaded                          |
-      | answers with the status 500 and "boom"    | HTTP 500: boom                      |
+      | answer                                 | message                             |
+      | replies with text that is not JSON     | Could not read the proposal as JSON |
+      | replies with "null"                    | Could not read the proposal as JSON |
+      | replies with a list                    | Could not read the proposal as JSON |
+      | replies with proposals that is a text  | Could not read the proposal as JSON |
+      | sends the error event "overloaded"     | overloaded                          |
+      | answers with the status 500 and "boom" | HTTP 500: boom                      |
+
+  Scenario: Proposals that are not objects are skipped
+    Given the definitions "ruby"
+    And a conversation with the tags "ruby"
+    And the model replies with the proposals null, 5, "x", a list and one for "ruby"
+    When proposeMemory asks for proposals
+    Then it returns only the proposal for "ruby"
 
   Scenario: The memory dialog shows every proposal, adopted
     Given a <dialog id="memory-dialog"> in the page

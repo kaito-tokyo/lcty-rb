@@ -140,7 +140,7 @@ Feature: LCTYSP-1003 UI texts
     When localize() runs
     Then the button's text is "Written"
 
-  Scenario Outline: localize() replaces the attribute of data-lcty-t-<attribute> elements
+  Scenario Outline: localize() replaces the attribute an element names for localization
     Given the page's lang is "ja" and the Japanese table is loaded
     And the body has <input data-lcty-t-<attribute>="searchPlaceholder" <attribute>="Search conversations">
     When localize() runs

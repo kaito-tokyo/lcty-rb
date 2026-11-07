@@ -207,10 +207,13 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 			status.textContent = tr("duplicateTagName", "Tag names must be unique");
 			return;
 		}
-		for (const t of work)
-			t.memory = (t.memory || []).filter((m) => m.text.trim());
+		// Blank memory items are left out of what is sent; the editor keeps them until the save succeeds
+		const tags = work.map((t) => ({
+			...t,
+			memory: (t.memory || []).filter((m) => m.text.trim()),
+		}));
 		try {
-			await putTags({ tags: work });
+			await putTags({ tags });
 			saved = (await getTags()).tags; // Take timestamps etc. from the saved values
 			work = structuredClone(saved);
 			onSaved(structuredClone(saved));
@@ -427,18 +430,29 @@ export async function proposeMemory({ conv, backend, defs, signal }) {
 		else if (ev.type === "done") timings = ev.timings;
 		else if (ev.type === "error") throw new Error(ev.message);
 	}
+	// The reply must be an object whose proposals, when present, is a list; entries that are not proposals are skipped
+	const isObject = (v) =>
+		v !== null && typeof v === "object" && !Array.isArray(v);
 	let parsed;
 	try {
 		parsed = JSON.parse(text);
 	} catch {
+		parsed = undefined;
+	}
+	if (
+		!isObject(parsed) ||
+		(parsed.proposals != null && !Array.isArray(parsed.proposals))
+	)
 		throw new Error(
 			tr("proposalNotJson", "Could not read the proposal as JSON"),
 		);
-	}
 	const proposals = (parsed.proposals || [])
 		.filter(
 			(p) =>
-				tags.includes(p.tag) && typeof p.text === "string" && p.text.trim(),
+				isObject(p) &&
+				tags.includes(p.tag) &&
+				typeof p.text === "string" &&
+				p.text.trim(),
 		)
 		.map((p) => ({ tag: p.tag, text: p.text.trim() }));
 	return { proposals, tags, timings };
