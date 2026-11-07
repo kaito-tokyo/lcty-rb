@@ -65,10 +65,15 @@ Back up everything that does not start with `_`:
 rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/" backup/
 ```
 
-## UI tests
+## Tests
 
-The UI tests in `tests/ui/` drive the pages in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js
-is needed for the tests only; the server itself still needs nothing installed.
+The tests run in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js is needed for the tests only;
+the server itself still needs nothing installed.
+
+- **Unit tests** (`tests/unit/`): one part on its own, such as a worker on an empty page. Their behaviour is written as
+  Gherkin features, `LCTYSP-1xxx_*.feature`, next to a `.spec.js` of the same name that has one test per Scenario, with
+  the Scenario's title and its lines as the test's steps ([docs/specs/README.md](docs/specs/README.md)).
+- **UI tests** (`tests/ui/`): drive the pages. Their Gherkin features will be `LCTYSP-2xxx`.
 
 ```bash
 npm install
@@ -79,13 +84,13 @@ npm run test:ui:install
 ```
 
 ```bash
-npm run test:ui
+npm test
 ```
 
-The tests start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the
+`npm run test:unit` and `npm run test:ui` run one of the two. The tests start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the
 temporary folder, removed afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's
 requests to it are answered by a fake in `tests/ui/fixtures.js`, so your conversations and models are never touched.
-Run one browser with `npm run test:ui -- --project=chromium`, or watch the tests with `npm run test:ui -- --ui`.
+Run one browser with `npm test -- --project=chromium`, or watch the tests with `npm test -- --ui`.
 
 CI runs on Linux: `.devcontainer/ruby-2.6.10/compose.yml` runs the server on its own in the image of that dev container
 (`ruby:2.6.10` with the libraries of the `Gemfile`, the versions macOS's `/usr/bin/ruby` has; on a Mac the server needs
@@ -97,7 +102,7 @@ docker compose -f .devcontainer/ruby-2.6.10/compose.yml up --build --detach --wa
 ```
 
 ```bash
-LCTY_TEST_SERVER_URL=http://127.0.0.1:45290 npm run test:ui
+LCTY_TEST_SERVER_URL=http://127.0.0.1:45290 npm test
 ```
 
 ```bash

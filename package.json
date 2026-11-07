@@ -3,7 +3,9 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"test:ui": "playwright test",
+		"test": "playwright test",
+		"test:unit": "playwright test tests/unit",
+		"test:ui": "playwright test tests/ui",
 		"test:ui:install": "playwright install chromium webkit"
 	},
 	"devDependencies": {
