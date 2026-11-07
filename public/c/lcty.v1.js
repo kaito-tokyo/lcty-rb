@@ -39,9 +39,10 @@
 		let text = this.getAttribute("data-instructions") || "";
 		if (base64 != null) {
 			try {
-				text = new TextDecoder("utf-8", { fatal: true }).decode(
-					Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
-				);
+				text = new TextDecoder("utf-8", {
+					fatal: true,
+					ignoreBOM: true,
+				}).decode(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)));
 			} catch {
 				text = "";
 			}
@@ -642,9 +643,10 @@
 		let text = this.getAttribute("data-thinking") || "";
 		if (base64 != null) {
 			try {
-				text = new TextDecoder("utf-8", { fatal: true }).decode(
-					Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
-				);
+				text = new TextDecoder("utf-8", {
+					fatal: true,
+					ignoreBOM: true,
+				}).decode(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)));
 			} catch {
 				text = "";
 			}

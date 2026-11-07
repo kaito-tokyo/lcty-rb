@@ -373,6 +373,7 @@ function inline(src) {
 
 function emphasis(s) {
 	return s
+		.replace(/\*\*\*(?!\s)([\s\S]*?\S)\*\*\*/g, "<strong><em>$1</em></strong>") // before ** and *, so the tags nest
 		.replace(/\*\*(?!\s)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>")
 		.replace(
 			/(^|[^*\w])\*(?![\s*])([^*\n]*?[^\s*])\*(?![*\w])/g,
@@ -402,9 +403,12 @@ function inlineText(raw) {
 		const href = safeUrl(unesc(u));
 		return href ? hold(anchor(href, emphasis(text))) : all;
 	});
-	// Bare URL (NUL marks a held piece of HTML, so a URL stops there)
-	// biome-ignore lint/suspicious/noControlCharactersInRegex: NUL is the placeholder marker
-	s = s.replace(/https?:\/\/[^\s<>"\u0000　、。「」『』（）]+/g, (u) => {
+	// Bare URL (NUL marks a held piece of HTML, so a URL stops there). The text is already escaped, so the URL also
+	// stops before an escaped ", < or > (&quot; &lt; &gt;)
+	const RE_BARE_URL =
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: NUL is the placeholder marker
+		/https?:\/\/(?:(?!&(?:quot|lt|gt);)[^\s<>"\u0000　、。「」『』（）])+/g;
+	s = s.replace(RE_BARE_URL, (u) => {
 		const trail = /[.,;:!?)\]'*]+$/.exec(u);
 		const body = trail ? u.slice(0, -trail[0].length) : u;
 		const href = safeUrl(unesc(body));

@@ -78,7 +78,15 @@ export function createVectorStore() {
 			if (data.error) p.reject(new Error(data.error));
 			else p.resolve(data);
 		};
+		// The worker failed (its script could not be loaded, or it threw): end it and drop it with what it had loaded, so
+		// the next call starts a new one instead of posting to a dead worker that never answers. The calls waiting for it
+		// reject (a refresh in progress clears its shared state.loading when it rejects).
 		w.onerror = (e) => {
+			w.terminate();
+			if (state.worker === w) {
+				state.worker = null;
+				state.rows = 0;
+			}
 			for (const p of state.pending.values())
 				p.reject(new Error(e.message || "the vector search worker failed"));
 			state.pending.clear();

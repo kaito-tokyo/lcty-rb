@@ -105,6 +105,7 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 	async function run() {
 		const q = state.query.trim();
 		if (!q) {
+			seq++; // a search still in flight is for a query that is gone: its result is dropped
 			status.textContent = "";
 			// Before the first sync the copy is empty: wait for it instead of saying there are no conversations
 			const empty =

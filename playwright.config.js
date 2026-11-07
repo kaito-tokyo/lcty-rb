@@ -20,11 +20,15 @@ const PORT = Number(process.env.LCTY_TEST_PORT || 45290);
 if (!external)
 	process.env.LCTY_TEST_DATA_DIR ??= mkdtempSync(join(tmpdir(), "lcty-ui-"));
 
+// The unit tests answer every request they make themselves (LCTYSP-1000), so they run in parallel. The UI tests share
+// one server and one data directory (the sidebar lists every conversation the tests make), so they run one at a time:
+// one worker per browser, and WebKit's after Chromium's.
+const unit = { testDir: "tests/unit", fullyParallel: true };
+const ui = { testDir: "tests/ui", workers: 1 };
+
 export default defineConfig({
-	testDir: "tests", // tests/unit and tests/ui
 	globalTeardown: "./tests/ui/global-teardown.js", // LCTY_TEST_KEEP_DATA=1 keeps the data directory to look at
-	fullyParallel: false,
-	workers: 1, // one server and one data directory: the sidebar lists every conversation the tests make
+	workers: process.env.CI ? 4 : undefined, // CI runners have 4 CPUs; elsewhere half of the CPUs
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 1 : 0,
 	reporter: process.env.CI ? "github" : "list",
@@ -34,8 +38,15 @@ export default defineConfig({
 		trace: "retain-on-failure",
 	},
 	projects: [
-		{ name: "chromium", use: { ...devices["Desktop Chrome"] } },
-		{ name: "webkit", use: { ...devices["Desktop Safari"] } },
+		{ name: "unit-chromium", ...unit, use: { ...devices["Desktop Chrome"] } },
+		{ name: "unit-webkit", ...unit, use: { ...devices["Desktop Safari"] } },
+		{ name: "ui-chromium", ...ui, use: { ...devices["Desktop Chrome"] } },
+		{
+			name: "ui-webkit",
+			...ui,
+			use: { ...devices["Desktop Safari"] },
+			dependencies: ["ui-chromium"],
+		},
 	],
 	webServer: external
 		? undefined

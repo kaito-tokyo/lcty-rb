@@ -67,6 +67,7 @@ function cmdElementClass() {
 
 		/** Run the operation (once). Resolves when it has finished, been aborted or failed. */
 		async run() {
+			if (this.#ran) return; // running, or already run: a command runs once
 			const op = ops[this.dataset.op];
 			if (!op) {
 				this.setAttribute("state", "unknown");
