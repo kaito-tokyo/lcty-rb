@@ -106,7 +106,9 @@ npm test
 `npm test` runs the frontend unit and UI tests; `npm run test:unit` and `npm run test:ui` run one of the two. The tests start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the
 temporary folder, removed afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's
 requests to it are answered by a fake in `tests/ui/fixtures.js`, so your conversations and models are never touched.
-Run one browser with `npm test -- --project=chromium`, or watch the tests with `npm test -- --ui`.
+Run one browser with `npm test -- --project='*-chromium'`, or watch the tests with `npm test -- --ui`. The unit tests
+run in parallel; the UI tests share the server's data directory, so they run one at a time, WebKit's after
+Chromium's.
 
 CI runs on Linux. The backend unit tests run inside the dev container `.devcontainer/ruby-2.6.10`, started from its
 `devcontainer.json` with the Dev Container CLI (`.github/workflows/backend.yml`; the commands are in LCTYSP-3000). For

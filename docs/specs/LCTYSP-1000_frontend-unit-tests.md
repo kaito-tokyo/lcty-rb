@@ -102,6 +102,10 @@ test("A new id is a canonical UUIDv7", async ({ page, context }) => {
   (`LCTY_TEST_PORT` to change it), with an empty data directory in the temporary folder. Unit tests use it only to
   serve `public/`.
 - **State.** Every test gets a new browser context, so `localStorage` and IndexedDB start empty.
+- **Parallel.** Because a unit test answers every request it makes and keeps its state in its own context, the unit
+  tests run in parallel, every test on its own (`fullyParallel`, projects `unit-chromium` and `unit-webkit`). The UI
+  tests share the server's data directory, so they run one at a time (`ui-chromium`, then `ui-webkit`). A unit test
+  must therefore never depend on another test or on the server's data.
 
 ## Running the tests
 
@@ -109,5 +113,5 @@ test("A new id is a canonical UUIDv7", async ({ page, context }) => {
 npm run test:unit
 ```
 
-`npm run test:unit -- --project=chromium` runs one browser, and `npm run test:unit -- -g "UUIDv7"` the tests whose
+`npm run test:unit -- --project=unit-chromium` runs one browser, and `npm run test:unit -- -g "UUIDv7"` the tests whose
 titles match. CI runs them with the UI tests (`npm test` in `.github/workflows/browser.yml`).
