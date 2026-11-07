@@ -9,9 +9,17 @@
 module Chatty
   ROOT = File.expand_path('..', __dir__)
   PUBLIC_DIR = File.join(ROOT, 'public')
-  # Default: the macOS per-user application data folder, outside the repository. A relative LCTY_DATA_DIR is resolved
-  # against the repository root.
-  DEFAULT_DATA_DIR = File.join(Dir.home, 'Library', 'Application Support', 'tokyo.kaito.lcty-rb', 'Data')
+  # Default: the per-user application data folder, outside the repository (LCTYSP-010). On macOS (and, for now, Windows)
+  # ~/Library/Application Support; elsewhere $XDG_DATA_HOME, or ~/.local/share when it is unset or not absolute (the XDG
+  # Base Directory spec). A relative LCTY_DATA_DIR is resolved against the repository root.
+  APP_ID = 'tokyo.kaito.lcty-rb'
+  XDG_DATA_HOME = ENV['XDG_DATA_HOME'].to_s.start_with?('/') ? ENV['XDG_DATA_HOME'] : File.join(Dir.home, '.local', 'share')
+  DEFAULT_DATA_DIR =
+    if RUBY_PLATFORM =~ /darwin|mswin|mingw|cygwin/
+      File.join(Dir.home, 'Library', 'Application Support', APP_ID, 'Data')
+    else
+      File.join(XDG_DATA_HOME, APP_ID, 'Data')
+    end
   DATA_DIR = File.expand_path(ENV['LCTY_DATA_DIR'].to_s.empty? ? DEFAULT_DATA_DIR : ENV['LCTY_DATA_DIR'], ROOT)
   CONV_DIR = File.join(DATA_DIR, 'c') # Same layout as the URL /c/<id>.html (LCTYSP-003)
   TAGS_DB_PATH = File.join(DATA_DIR, 'tags.sqlite') # Source of truth (tag definitions and memory)

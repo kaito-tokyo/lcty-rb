@@ -4,7 +4,7 @@
 
 # The libraries the server uses, at the versions macOS's /usr/bin/ruby (2.6.10) has. On a Mac nothing has to be
 # installed and the server runs without Bundler (README); this file is for running it on another Ruby 2.6, such as the
-# ruby:2.6.10 container of the UI tests in CI (.github/workflows/browser.yml).
+# dev container .devcontainer/ruby-2.6.10, whose image the UI tests also use (its compose.yml).
 
 source "https://rubygems.org"
 

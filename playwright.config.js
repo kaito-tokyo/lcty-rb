@@ -11,8 +11,7 @@ import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 // The server: by default the tests start one on macOS's /usr/bin/ruby. LCTY_TEST_SERVER_URL points them at a server
-// that is already running instead, with an empty data directory of its own (in CI, the service container of
-// .github/workflows/browser.yml).
+// that is already running instead, with an empty data directory of its own (in CI, the container of .devcontainer/ruby-2.6.10/compose.yml).
 const external = process.env.LCTY_TEST_SERVER_URL;
 const PORT = Number(process.env.LCTY_TEST_PORT || 45290);
 // The config is loaded again by every worker: the directory is made once and passed down in the environment

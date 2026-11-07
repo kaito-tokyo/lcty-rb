@@ -1,0 +1,12 @@
+version = 1
+
+[[annotations]]
+path = [
+	".devcontainer/ruby-2.6.10/devcontainer.json",
+	"biome.json",
+	"Gemfile.lock",
+	"package-lock.json",
+	"package.json",
+]
+SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
+SPDX-License-Identifier = "Apache-2.0"
