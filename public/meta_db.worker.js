@@ -23,7 +23,8 @@
 //
 //   { id, op: "invalidate" }   → { id, accepted: true }, then { id, result: undefined }
 //   { id, op: "sync" }         → { id, accepted }, then { id, result: [meta, …] } (the list now stored)
-//   { id, op: "syncIfStale" }  → { id, accepted }, then { id, result: [meta, …], or null when the copy was up to date }
+//   { id, op: "syncIfStale" }  → { id, accepted }, then { id, result: [meta, …], or null when the copy was up to date
+//                                (not invalidated and not empty) }
 //   { id, op: "read" }         → { id, accepted: true }, then { id, result: { items: [meta, …], stale } } (items newest
 //                                first by updated_at_hint, which is only a hint; stale: the copy is out of date)
 //   on failure                 → { id, error: message } (an unknown op: { id, accepted: false, error })
@@ -40,8 +41,8 @@ const STALE = "stale";
 
 let dbPromise = null;
 
-function openDb() {
-	dbPromise ??= new Promise((resolve, reject) => {
+function open() {
+	return new Promise((resolve, reject) => {
 		const req = indexedDB.open(DB_NAME, DB_VERSION);
 		req.onupgradeneeded = () => {
 			const db = req.result;
@@ -50,12 +51,39 @@ function openDb() {
 			if (!db.objectStoreNames.contains(SYNC)) db.createObjectStore(SYNC);
 			req.transaction.objectStore(SYNC).put(newToken(), STALE); // a new or upgraded database starts out stale
 		};
-		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => {
-			dbPromise = null; // try again next time
-			reject(req.error);
+		req.onsuccess = () => {
+			const db = req.result;
+			// another connection wants to upgrade or delete the database: let it, and open it again next time
+			db.onversionchange = () => {
+				db.close();
+				dbPromise = null;
+			};
+			resolve(db);
 		};
+		req.onerror = () => reject(req.error);
 	});
+}
+
+function deleteDb() {
+	return new Promise((resolve, reject) => {
+		const req = indexedDB.deleteDatabase(DB_NAME);
+		req.onsuccess = () => resolve();
+		req.onerror = () => reject(req.error);
+	});
+}
+
+// The database is only a copy: when it cannot be opened (a newer version left by other code, a broken store), it is
+// deleted and created again, and the new one starts out stale
+function openDb() {
+	dbPromise ??= open()
+		.catch((e) => {
+			console.warn("the meta database could not be opened; recreating it", e);
+			return deleteDb().then(open);
+		})
+		.catch((e) => {
+			dbPromise = null; // try again next time
+			throw e;
+		});
 	return dbPromise;
 }
 
@@ -108,8 +136,17 @@ async function sync() {
 	return all;
 }
 
+// Stale also when the store is empty: a copy that lost its records (cleared by hand, a broken store) without being
+// invalidated would otherwise stay empty until the next change. A server with no conversations is refetched each time,
+// which is cheap.
 async function syncIfStale() {
-	return (await staleToken()) === undefined ? null : sync();
+	const db = await openDb();
+	const tx = db.transaction([META, SYNC]);
+	const [token, count] = await Promise.all([
+		done(tx.objectStore(SYNC).get(STALE)),
+		done(tx.objectStore(META).count()),
+	]);
+	return token === undefined && count > 0 ? null : sync();
 }
 
 // Newest first by updated_at_hint, then by id (it starts with the creation time), so the order is the same wherever

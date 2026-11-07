@@ -56,6 +56,9 @@ function call(op) {
 			for (const p of state.pending.values())
 				p.reject(new Error(e.message || "the meta worker failed"));
 			state.pending.clear();
+			// a worker that failed (to load, or with an uncaught error) is not reused: the next call starts a new one
+			state.worker.terminate();
+			state.worker = null;
 		};
 	}
 	const id = ++state.seq;
@@ -123,11 +126,18 @@ export function onMetaDbChange(fn) {
 	state.listeners.push(fn);
 }
 
+// A snapshot that is not a list (broken, or written by other code) counts as missing, so it is written again
 function hasSnapshot() {
+	let v;
 	try {
-		return localStorage.getItem(SNAPSHOT_KEY) !== null;
+		v = localStorage.getItem(SNAPSHOT_KEY);
 	} catch {
 		return true; // no storage: nothing to write
+	}
+	try {
+		return v !== null && Array.isArray(JSON.parse(v));
+	} catch {
+		return false;
 	}
 }
 

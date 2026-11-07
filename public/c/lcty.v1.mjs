@@ -389,7 +389,7 @@ export class LctyConvListElement extends HTMLElement {
 					if (c.chunk_id) b.dataset.chunk = c.chunk_id;
 					if (on) b.setAttribute("aria-current", "true");
 					if (c.snippet) b.append($("span", "snippet", {}, c.snippet));
-					if (c.tags?.length) {
+					if (Array.isArray(c.tags) && c.tags.length) {
 						b.append(
 							$(
 								"span",
@@ -413,7 +413,7 @@ export class LctyConvListElement extends HTMLElement {
 							),
 						);
 					}
-					const date = (c.updated_at_hint || "").slice(0, 16).replace("T", " ");
+					const date = String(c.updated_at_hint || "").slice(0, 16).replace("T", " ");
 					const count =
 						c.messages == null
 							? ""
@@ -508,6 +508,7 @@ export class LctySidebarElement extends HTMLElement {
 		// The cached tags and count are tags_hint and messages_hint (as the server's index recorded them)
 		const newestFirst = (items) =>
 			items
+				.filter((c) => c && typeof c === "object" && typeof c.id === "string") // broken entries are skipped
 				.map((c) => ({ ...c, tags: c.tags_hint, messages: c.messages_hint }))
 				// newest first by updated_at_hint, then by id: the same order as the module's list (LCTYSP-010)
 				.sort((a, b) =>
@@ -525,9 +526,13 @@ export class LctySidebarElement extends HTMLElement {
 		try {
 			snapshot = JSON.parse(localStorage.getItem("lcty.meta.v1"));
 		} catch {}
-		if (Array.isArray(snapshot)) {
-			this.list.showCached(newestFirst(snapshot));
-			return;
+		// An empty or unusable snapshot (broken, or written by other code) is not trusted: the database is read instead
+		const fromSnapshot = Array.isArray(snapshot) ? newestFirst(snapshot) : [];
+		if (fromSnapshot.length) {
+			try {
+				this.list.showCached(fromSnapshot);
+				return;
+			} catch {}
 		}
 		let req;
 		try {
@@ -546,7 +551,9 @@ export class LctySidebarElement extends HTMLElement {
 			const get = db.transaction("meta").objectStore("meta").getAll();
 			get.onsuccess = () => {
 				db.close();
-				this.list.showCached(newestFirst(get.result));
+				try {
+					this.list.showCached(newestFirst(get.result));
+				} catch {} // the module shows the list when it has loaded
 			};
 			get.onerror = () => db.close();
 		};
