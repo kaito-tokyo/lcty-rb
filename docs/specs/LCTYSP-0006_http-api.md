@@ -72,6 +72,26 @@ chatty.rb answers `/v1/*` on the same origin as the pages. Bodies are JSON unles
 
 See [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) for the meaning of tags and memory.
 
+### Revision draft: tag files (not implemented)
+
+With tag definitions and memory moved to one HTML file per tag
+([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), the tag
+endpoints shrink to two:
+
+| Method | Path       | Content                                                                                                                                                                                                                                                                                                                       |
+| ------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/v1/tags` | Get all: every tag file in `t/`, in file-name order, each with its file name (`NNNNN-<file-name part>.html`, as listed by the file system) and its content. Under the shared lock on `t.lock`.                                                                                                                                |
+| PUT    | `/v1/tags` | Replace all: the complete set of tag files, each with its file name. Under the exclusive lock on `t.lock`, the names are checked (mechanically only) and the whole request is rejected with 400, writing nothing, if one fails; then each file is written via a temporary file and a rename, and tag files not in the set are deleted. |
+
+- Names are passed through untouched; the browser normalizes and validates them, and NFC-normalizes the names it
+  receives before comparing them.
+- The form of the content (HTML written by the browser, or JSON that the server turns into HTML) is open
+  (LCTYSP-0009, question 3), as is an `ETag` / `If-Match` pair on these endpoints (question 4).
+- `PATCH` and `DELETE` on memory items go away: the tag editor edits memory through replace-all.
+  `POST /v1/tags/:name/memory` goes away too, unless question 1 keeps an add-memory endpoint.
+- There is no reorder or rename endpoint; the reorder page and the tag editor send replace-all.
+- The `tags` line of `POST /v1/conversations/:id/lines` is unchanged until question 5 (the reference form) is settled.
+
 ## Limits
 
 - Request bodies are limited to 64 MiB (413 otherwise).
