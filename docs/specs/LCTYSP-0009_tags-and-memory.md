@@ -154,7 +154,7 @@ of `tags.sqlite` into one HTML file per tag, and lists what is still open. Where
 this section is the intended design; the sections above describe the code as it is today.
 
 Scope: tag definitions (name, prompt, order) and memory. The current tags of conversations (`conversation_tags` in
-`tags.sqlite`) are not covered here; how conversations refer to tags is open ([question 5](#open-questions)).
+`tags.sqlite`) are not covered here; how conversations refer to tags is open ([open questions](#open-questions)).
 
 ### Tag files
 
@@ -167,7 +167,7 @@ Scope: tag definitions (name, prompt, order) and memory. The current tags of con
   - **The browser always sends tags in this file-name form** (`00010-ruby.html`), never as a bare display name.
 - **The display name is stored inside the HTML.** It keeps its case as the user typed it (after NFC), which the file
   name cannot give back (it is lowercased and escaped). The prompt and the memory items are stored in the same file.
-  The exact markup depends on [questions 2 and 3](#open-questions).
+  The server writes the markup ([below](#the-server-writes-the-html)); its exact form is not settled yet.
 - Files in `t/` that do not match the tag file pattern (for example the temporary files below) are ignored.
 
 ### Character handling is the browser's
@@ -238,9 +238,11 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
      mechanically, for example with `File.identical?` against the files it wrote.
 - **Locking:** `flock` on `$LCTY_DATA_DIR/t.lock`, exclusive for replace-all, shared for get-all. The lock is global
   (one for all tags).
-- **The server has no reorder, rename or per-tag feature.** Reordering, renaming and editing all send a new complete
-  set computed by the browser. Whether adding memory also goes through replace-all is open
-  ([question 1](#open-questions)).
+- **The server has no reorder or rename feature.** Reordering, renaming and editing all send a new complete set
+  computed by the browser. The one per-tag operation is adding a memory item
+  ([below](#adding-memory-has-its-own-endpoint)).
+- Get-all returns an `ETag` and replace-all requires `If-Match`
+  ([below](#concurrent-tabs-etag-and-if-match-crashes-are-accepted)).
 
 ### Reordering has its own page
 
@@ -250,39 +252,60 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
   in steps of 10 from `00010` and sends replace-all with the new file names and unchanged contents.
 - Draft composition ([above](#composing-the-draft)) uses file-name order instead of the `position` column.
 
+### The server writes the HTML
+
+- The browser sends and receives JSON; the server builds each tag file's HTML from it and parses the files back into
+  JSON for get-all, as it does for conversation files ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). The markup
+  and its escaping live in one place (Ruby), and the server can vouch for what is in `t/`.
+- The server still does no Unicode processing: the display name, prompt and memory text are stored exactly as sent
+  (HTML-escaped), and the file name is the one the browser sent.
+- Memory items keep their `id` and `at` through replace-all; an item without `at` gets the current time, as
+  `PUT /v1/tags` does today.
+- Not adopted: the browser writes the HTML and the server stores the bytes. The markup would live in JavaScript and the
+  server could not vouch for the content.
+
+### Adding memory has its own endpoint
+
+- Accepting a proposal uses a small add-memory endpoint ([LCTYSP-0006](LCTYSP-0006_http-api.md)) that names the tag by
+  its file name (`00010-ruby.html`, as get-all returned it). Under the exclusive lock on `t.lock`, the server reads that
+  one file, appends the item (assigning `id` and `at`), and writes the file back via a temporary file and a rename.
+  A file that does not exist (for example renamed or renumbered by another tab) is 404, and the browser gets all again.
+- It changes the set, so it changes the set's `ETag` (below): a tab that loaded the tags before the addition cannot
+  replace-all over it without getting all again.
+- Not adopted: adding memory through replace-all. Every addition would rewrite every file and could undo another tab's
+  edits to other tags.
+- Editing and deleting memory items stay in the tag editor and go through replace-all.
+
+### Renaming is not a rename
+
+- A rename changes the file-name part, so the tag becomes a different file: the browser sends the new file (carrying
+  over the prompt and memory) and leaves out the old one, which replace-all deletes. The server has no notion of a
+  rename.
+- Conversations that refer to the old name show it as an undefined tag, as they do today after a rename.
+- Not adopted: a stable id (for example a UUIDv7) inside each tag file that conversations refer to. It would need the
+  id in conversation files or `conversation_tags` and a mapping for `tag:name` in search.
+
+### Concurrent tabs: ETag and If-Match; crashes are accepted
+
+- Get-all returns an `ETag` for the whole set of tag files, computed by the server under the lock from the listed file
+  names and their contents (so a change made outside the server also changes it).
+- Replace-all requires `If-Match` with that `ETag`. When another tab (or an add-memory request) has changed the set in
+  between, it fails with 412 and writes nothing; the browser gets all again and the user redoes the edit on the new
+  state. A request without `If-Match` is rejected with 428. A successful replace-all returns the new `ETag`.
+- **A crash during replace-all is accepted:** it can leave a mix of old and new files. Each file itself is whole, thanks
+  to the temporary file and rename.
+- Not adopted for now: writing the whole set to `t.new/` and swapping directories with recovery at startup. It can be
+  added later without changing the API.
+
 ### Open questions
 
-To be settled before implementation. Options are listed without a decision.
+To be settled before implementation.
 
-1. **Adding memory.** Today an accepted proposal is added with `POST /v1/tags/:name/memory`.
-   - (a) It also goes through replace-all: the browser gets all, appends the item to that tag's file and sends the
-     whole set. One write path, but every addition rewrites every file, and two tabs can overwrite each other
-     (question 4).
-   - (b) Keep a small add-memory endpoint that rewrites one tag file under the same exclusive lock. Cheaper, and it does
-     not undo another tab's edits to other tags, but it is a second write path (and, if the server writes the HTML, a
-     second place that builds it).
-2. **Renaming a tag.** A rename changes the file-name part, so the tag becomes a different file.
-   - (a) Not treated as a rename: the browser writes the new file (carrying over prompt and memory) and the old one is
-     deleted. Conversations that refer to the old name show it as undefined, as they do today after a rename.
-   - (b) A stable id (for example a UUIDv7) inside each tag file; conversations refer to the id, so a rename shows
-     everywhere. Needs the id in conversation files or `conversation_tags`, and a mapping for `tag:name` in search.
-3. **Who writes the HTML.**
-   - (a) The server, from JSON, as it does for conversation files ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)).
-     The server owns the markup and its escaping; get-all parses the HTML back into JSON.
-   - (b) The browser. The server stores the bytes it receives (after the file-name checks), in keeping with "character
-     handling is the browser's", but it cannot vouch for the content, and the markup lives in JavaScript.
-4. **Crashes and concurrent tabs.**
-   - (a) Accept them: a crash during replace-all can leave a mix of old and new files (each file itself is whole,
-     thanks to rename), and two tabs that each get-all and then replace-all overwrite each other (last writer wins).
-   - (b) Write the whole set to `t.new/` and swap directories (`t/` → `t.old/`, `t.new/` → `t/`, remove `t.old/`),
-     with recovery at startup when a crash leaves only `t.new/` or `t.old/`; and/or return an `ETag` for the set from
-     get-all and require `If-Match` on replace-all (412 when another tab wrote in between). The two parts can be
-     adopted separately.
-5. **Conversation references and migration.**
+1. **Conversation references and migration.**
    - References: conversations (`data-setup-tags`, `conversation_tags`, `tag:name` in search) would use the file-name
      part without the number (`c~23`), which does not change when tags are reordered. Existing references hold
      display names; since the derivation is deterministic, the browser can map them when reading, without rewriting
-     conversation files. (With question 2 (b), references would be ids instead.)
+     conversation files.
    - Migration from `tags.sqlite`: (a) the server converts at startup (but then Ruby needs the lowercase and escape
      rules, against "character handling is the browser's"); (b) the browser converts: the server exposes the old tags
      once, the browser derives the file names and sends replace-all, and the server then moves `tags.sqlite` out of
