@@ -57,7 +57,14 @@ source of truth at startup or by the browser. Everything else is source-of-truth
   A sync fetches the list, replaces the `meta` store as a whole (so a conversation deleted on the server disappears
   from it too) and removes the token only if it is still the one read before fetching, so an invalidation made
   meanwhile, in this tab or another, is not lost. Changes not made through this browser (a file edited by hand,
-  another browser) are not seen until the next invalidation.
+  another browser) are not seen until the next invalidation, or until the sidebar's refresh button is pressed.
+- **A broken copy repairs itself.** An empty `meta` store counts as stale even without a token (a copy that lost its
+  records would otherwise stay empty until the next change). A database that cannot be opened (a newer version left by
+  other code, a broken store) is deleted and created again. A snapshot that is not a list is written again, and the
+  sidebar skips entries of it that have no `id`, reading `meta` instead when none is left.
+- **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) throws the copy away and fetches it
+  again at once: the snapshot is removed and the worker deletes the database, creates it again and syncs (a job like a
+  sync; a refused one is retried until it runs). The list is shown again through `onMetaDbChange`.
 - **Readers:** `lcty.v1.js` (`<lcty-sidebar>`, when it is in the document) reads the snapshot below, or `meta` when there
   is none, to fill the sidebar before any module has loaded; it never creates the database. Once the module has
   loaded, the sidebar's list and its `tag:` filters come from `meta` (through the worker's `read`, which also tells

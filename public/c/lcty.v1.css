@@ -248,7 +248,7 @@ lcty-c::part(lcty-sidebar__nav) {
 	padding: 10px;
 	flex-wrap: wrap;
 }
-/* the new link and the settings button are lcty-button (new: --primary) */
+/* the new link, the refresh button and the settings button are lcty-button (new: --primary) */
 lcty-sidebar::part(lcty-sidebar__link),
 lcty-c::part(lcty-sidebar__link) {
 	display: inline-block;

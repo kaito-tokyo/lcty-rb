@@ -33,6 +33,7 @@ type LctyTextKey =
 	| "newConversation"
 	| "tags"
 	| "settings"
+	| "refreshList"
 	| "searchPlaceholder"
 	| "titleLabel"
 	| "titlePlaceholder"
@@ -267,10 +268,10 @@ declare class LctyConvListElement extends HTMLElement {
 
 /**
  * <lcty-sidebar>: the sidebar shared by every page (the conversation page has it inside lcty-c's Shadow DOM, the
- * other pages put it in <body>). Its Shadow DOM holds the nav (new conversation, tags, settings), the search box and the
+ * other pages put it in <body>). Its Shadow DOM holds the nav (new conversation, refresh, settings), the search box and the
  * conversation list. Search and selection are attached by js/ui/sidebar.js.
  *
- * Parts: lcty-sidebar__nav / __link (each link) / __new / __tags / __settings / __search-box / __search /
+ * Parts: lcty-sidebar__nav / __link (each link) / __new / __refresh / __settings / __search-box / __search /
  * __search-status / __list, and lcty-button (--primary) on the links.
  *
  * When it is in the document it fills its list from the browser's copy of every conversation's meta,
@@ -282,9 +283,14 @@ declare class LctySidebarElement extends HTMLElement {
 	static readonly _: typeof LctyT._;
 	/** "New conversation" link to /, opened in a new window (target="_blank" rel="noopener"; part lcty-sidebar__new) */
 	newLink: HTMLAnchorElement;
+	/**
+	 * Fetches the list again, throwing the browser's copy of the meta away; attached by js/ui/sidebar.js
+	 * (part lcty-sidebar__refresh)
+	 */
+	refreshButton: HTMLButtonElement;
 	/** Opens the settings dialog attached by js/ui/sidebar.js (part lcty-sidebar__settings) */
 	settingsButton: HTMLButtonElement;
-	/** The three links (part lcty-sidebar__nav) */
+	/** The links and buttons above the search box (part lcty-sidebar__nav) */
 	nav: HTMLElement;
 	/** Search box (part lcty-sidebar__search) */
 	search: HTMLInputElement;
