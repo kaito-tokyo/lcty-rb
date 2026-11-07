@@ -10,6 +10,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.0'
     '.github/workflows/check.yml':
         - 'actions/checkout@v7.0.1'
+        - 'actions/setup-node@v7.1.0'
     '.github/workflows/docs.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/configure-pages@v6.0.0'

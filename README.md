@@ -115,6 +115,10 @@ start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty
 `npm test -- --project='*-chromium'`, or watch the browser tests with `npm test -- --ui`. The unit tests run in
 parallel; the UI tests share the server's data directory, so they run one at a time, WebKit's after Chromium's.
 
+`npm run check:biome` lints and checks the formatting (JavaScript, JSON and Markdown) with the Biome version pinned in
+`package.json`, as CI does; `npx biome check --write` fixes the formatting. A bare `npx biome` without `npm install`
+runs an unrelated npm package named `biome`.
+
 CI runs on Linux. The unit tests in Node.js run on their own, without the server or the browsers
 (`.github/workflows/node.yml`). The backend unit tests run inside the dev container `.devcontainer/ruby-2.6.10`, started
 from its `devcontainer.json` with the Dev Container CLI (`.github/workflows/backend.yml`; the commands are in LCTYSP-3000). For
