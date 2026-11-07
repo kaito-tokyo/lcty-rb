@@ -59,6 +59,28 @@ Back up everything that does not start with `_`:
 rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/" backup/
 ```
 
+## UI tests
+
+The UI tests in `tests/ui/` drive the pages in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js
+is needed for the tests only; the server itself still needs nothing installed.
+
+```bash
+npm install
+```
+
+```bash
+npm run test:ui:install
+```
+
+```bash
+npm run test:ui
+```
+
+The tests start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the
+temporary folder, removed afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's
+requests to it are answered by a fake in `tests/ui/fixtures.js`, so your conversations and models are never touched.
+Run one browser with `npm run test:ui -- --project=chromium`, or watch the tests with `npm run test:ui -- --ui`.
+
 ## Documentation
 
 The design is in [docs/specs](docs/specs/README.md) (LCTYSP-001 to LCTYSP-011). Start with

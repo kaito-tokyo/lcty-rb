@@ -8,3 +8,8 @@ data*/
 
 .DS_Store
 dist/
+
+# UI tests (Playwright)
+node_modules/
+test-results/
+playwright-report/
