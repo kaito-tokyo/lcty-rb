@@ -88,7 +88,9 @@ endpoints shrink to three:
   receives before comparing them. The server writes and parses the HTML; the browser never sees it through this API.
 - `PATCH` and `DELETE` on memory items go away: the tag editor edits memory through replace-all.
 - There is no reorder or rename endpoint; the reorder page and the tag editor send replace-all.
-- The `tags` line of `POST /v1/conversations/:id/lines` is unchanged until the reference form (LCTYSP-0009, open questions) is settled.
+- The `tags` line of `POST /v1/conversations/:id/lines` still sets `conversation_tags` in `tags.sqlite`, but its
+  tags, like `data-setup-tags` of a new conversation and `tag:` in `POST /v1/search`, are file-name parts (`c~23`),
+  checked mechanically only (LCTYSP-0009, revision draft).
 
 ## Limits
 

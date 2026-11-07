@@ -153,8 +153,9 @@ Status: draft, not implemented. This section records what has been decided for m
 of `tags.sqlite` into one HTML file per tag, and lists what is still open. Where it disagrees with the sections above,
 this section is the intended design; the sections above describe the code as it is today.
 
-Scope: tag definitions (name, prompt, order) and memory. The current tags of conversations (`conversation_tags` in
-`tags.sqlite`) are not covered here; how conversations refer to tags is open ([open questions](#open-questions)).
+Scope: tag definitions (name, prompt, order) and memory, and how conversations refer to tags
+([below](#conversations-refer-to-tags-by-the-file-name-part)). The current tags of conversations stay in
+`conversation_tags` in `tags.sqlite` ([below](#tagssqlite-only-conversation_tags-remains-no-conversion)).
 
 ### Tag files
 
@@ -358,20 +359,32 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
 - Not adopted for now: writing the whole set to `t.new/` and swapping directories with recovery at startup. It can be
   added later without changing the API.
 
-### Open questions
+### Conversations refer to tags by the file-name part
 
-To be settled before implementation.
+- **Every reference from a conversation is the file-name part without the number** (`C#` → `c~23`, `Ruby` → `ruby`):
+  `data-setup-tags` of new conversations, the rows of `conversation_tags`, the search index (`conv_tags`) and
+  `tag:` in search. It does not change when tags are reordered.
+- **The browser converts, Ruby compares bytes.** The browser derives the part from what the user chose or typed
+  (`tag:C#` is sent as `tag:c~23`), so `C#` and `c#` are one tag in search without Ruby lowercasing or normalizing
+  anything. `convs_with_tags` stays a byte comparison.
+- **Display:** the browser shows a reference with the display name of the tag file whose part it is. A reference with
+  no tag file (a deleted or renamed tag) is an undefined tag and shows as the part itself.
+- **Ruby checks references mechanically** (in `tags` lines and `data-setup-tags`): valid UTF-8, no whitespace or
+  control characters (`data-setup-tags` is space separated), no `/`, `\` or `:`, and at most 244 bytes (255 minus
+  `NNNNN-` and `.html`). Like file names, it does not rewrite them.
 
-1. **Conversation references and migration.**
-   - References: conversations (`data-setup-tags`, `conversation_tags`, `tag:name` in search) would use the file-name
-     part without the number (`c~23`), which does not change when tags are reordered. Existing references hold
-     display names; since the derivation is deterministic, the browser can map them when reading, without rewriting
-     conversation files.
-   - Migration from `tags.sqlite`: (a) the server converts at startup (but then Ruby needs the lowercase and escape
-     rules, against "character handling is the browser's"); (b) the browser converts: the server exposes the old tags
-     once, the browser derives the file names and sends replace-all, and the server then moves `tags.sqlite` out of
-     the way; (c) a separate one-off script. What happens to `conversation_tags` is decided together with the
-     reference form.
+### tags.sqlite: only conversation_tags remains; no conversion
+
+- **The `tags` and `memory` tables of `tags.sqlite` are abolished at once, without conversion.** The server no longer
+  reads or writes them; a migration (`PRAGMA user_version`) drops them. Existing tag definitions and memory are not
+  carried over to `t/`: tags start empty and are defined again in the tag editor.
+- **`conversation_tags` stays in `tags.sqlite`,** which then holds only that table: the current tags of each
+  conversation after a change, as before.
+- **Existing references are not converted** either. `data-setup-tags` in existing conversation files and existing rows
+  of `conversation_tags` keep the display names they were written with. Where such a name equals the part of a new
+  tag (lowercase names without the escaped symbols, such as `ruby`), it refers to that tag; otherwise it shows as an
+  undefined tag, until the conversation's tags are changed.
+- Not adopted: converting the old tags in the browser or with a one-off script.
 
 Not yet discussed: whether tag files are served at a URL (for example `/t/NNNNN-<name>.html`, beside the reorder
 page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later); the updates to
