@@ -244,7 +244,7 @@ test("A sync stores every conversation of the list", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversations "a" and "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersNoResult(seen);
 	await thenOnlyCMetaAtVersion1(page);
 	await thenCMetaHoldsExactly(
@@ -265,7 +265,7 @@ test("A sync replaces the copy as a whole", async ({ page, context }) => {
 	await test.step('And GET /v1/meta-all.json returns the conversation "b" with a new title and the conversation "c"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersNoResult(seen);
 	await thenCMetaHoldsExactly(
 		page,
@@ -284,7 +284,7 @@ test("An empty list empties the copy", async ({ page, context }) => {
 	await test.step("And GET /v1/meta-all.json returns no conversations", () => {
 		server.answer = (route) => route.fulfill({ json: [] });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersNoResult(seen);
 	await test.step('And "c_meta" is empty', async () => {
 		expect((await readDb(page)).items).toEqual([]);
@@ -306,7 +306,7 @@ test("A sync deletes the old database lcty", async ({ page, context }) => {
 	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersNoResult(seen);
 	await test.step('And there is no database "lcty"', async () => {
 		expect((await readDb(page, "lcty")).exists).toBe(false);
@@ -342,7 +342,7 @@ test("A connection to the old database does not hold up the sync", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersNoResult(seen);
 	await thenCMetaHoldsExactly(page, list, 'the conversation "b", as returned');
 	await page.evaluate(() => window.oldDb.close());
@@ -357,7 +357,7 @@ test("The worker closes its connection after the sync", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversation "a"', () => {
 		server.answer = (route) => route.fulfill({ json: [conv("a")] });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersNoResult(seen);
 	await test.step('And the database "lcty_c" can be opened at version 2 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
@@ -404,7 +404,7 @@ for (const { answer, message, status, fulfill } of [
 		await test.step(`And GET /v1/meta-all.json ${answer}`, () => {
 			server.answer = fulfill;
 		});
-		const seen = await whenPosted(page, "sync");
+		const seen = await whenPosted(page, "force_sync");
 		await thenAnswersError(seen, message, status);
 		await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 	});
@@ -421,7 +421,7 @@ test("A response that is not JSON leaves the copy as it was", async ({
 		server.answer = (route) =>
 			route.fulfill({ contentType: "application/json", body: "not json" });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersAnError(seen);
 	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 });
@@ -436,7 +436,7 @@ test("A failed request leaves the copy as it was", async ({
 	await test.step("And GET /v1/meta-all.json fails without a response", () => {
 		server.answer = (route) => route.abort("failed");
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersAnError(seen);
 	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 });
@@ -452,7 +452,7 @@ test("A newer database is left alone", async ({ page, context }) => {
 	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: [conv("b")] });
 	});
-	const seen = await whenPosted(page, "sync");
+	const seen = await whenPosted(page, "force_sync");
 	await thenAnswersAnError(seen);
 	await test.step('And the database "lcty_c" is still at version 2', async () => {
 		expect((await readDb(page)).version).toBe(2);

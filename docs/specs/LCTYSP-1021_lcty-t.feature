@@ -10,10 +10,10 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
   Every asynchronous operation on the tags runs in a worker started with new Worker("/js/lcty_t.worker.js",
   { type: "module" }): the page posts it one message {op, ...} and gets one message back, {result} or {error, status}.
   The worker keeps the browser's copy of GET /v1/tags, one record "set" {tags, etag} in the store "t_full" of the
-  IndexedDB database "lcty_t", which no other code opens. "sync" replaces the copy, "get" reads it (syncing first when
+  IndexedDB database "lcty_t", which no other code opens. "force_sync" replaces the copy, "get" reads it (syncing first when
   there is none), "put" sends PUT /v1/tags with the If-Match it is given and "addMemory" sends
   POST /v1/tags/:file/memory; both sync afterwards, also when they fail. js/api/lcty-t.js starts one worker per call
-  (getTags, putTags, addMemory, syncTags) and runs the calls of a tab one at a time, in the order they were made.
+  (getTags, putTags, addMemory, forceSyncTags) and runs the calls of a tab one at a time, in the order they were made.
 
   In the steps a record of the copy is written as its tags' file names and its ETag.
 
@@ -24,7 +24,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
   Scenario: A sync stores the set with NFC file names and the ETag
     Given there is no database "lcty_t"
     And GET /v1/tags returns the tag "00010-café.html" with the name decomposed and the ETag "e1"
-    When the worker is posted {"op": "sync"}
+    When the worker is posted {"op": "force_sync"}
     Then it answers with no result
     And the database "lcty_t" is at version 1 with only the store "t_full"
     And "t_full" holds the tags ["00010-café.html"] composed and the ETag "e1"
@@ -32,7 +32,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
   Scenario: A sync replaces the set as a whole
     Given "t_full" holds the tags ["00010-a.html", "00020-b.html"] and the ETag "e1"
     And GET /v1/tags returns the tags ["00010-c.html"] with the ETag "e2"
-    When the worker is posted {"op": "sync"}
+    When the worker is posted {"op": "force_sync"}
     Then it answers with no result
     And "t_full" holds the tags ["00010-c.html"] and the ETag "e2"
 
@@ -82,7 +82,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
   Scenario: A failed sync leaves the copy as it was
     Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1"
     And GET /v1/tags answers with the status 500 and "boom"
-    When the worker is posted {"op": "sync"}
+    When the worker is posted {"op": "force_sync"}
     Then it answers the error "500 boom" with the status 500
     And "t_full" holds the tags ["00010-a.html"] and the ETag "e1"
 

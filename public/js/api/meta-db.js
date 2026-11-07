@@ -5,10 +5,12 @@
 // The browser's copy of every conversation's meta (IndexedDB "lcty_c", store "c_meta", LCTYSP-0010). Every operation on
 // it starts one worker, js/lcty_c.worker.js of the site, posts it one message ({op: "sync"} or {op: "get"}) and gets
 // its answer, {result} or {error, status}; the worker is the only code that opens the database (LCTYSP-0009). A sync
-// fetches GET v1/meta-all.json and replaces the whole store; a read returns the copy without ever creating it.
+// (force_sync) fetches GET v1/meta-all.json and replaces the whole store; a read returns the copy without ever
+// creating it.
 //
-// Pages request a sync when they load the list and after sending a change of conversations to the server
-// (requestMetaDbSync(), called by api/storage.js), when the browser is idle (requestIdleCallback is not available in
+// Every page syncs whenever it is shown (forceSyncMetaDb(), called by js/ui/sidebar.js, at once). Pages also request a
+// sync when they load the list and after sending a change of conversations to the server (requestMetaDbSync(), called
+// by api/storage.js), when the browser is idle (requestIdleCallback is not available in
 // workers). In a tab at most one worker runs: a sync requested while one runs is run once after it, so an older
 // response never overwrites a newer one in this tab and a change made meanwhile is still fetched. Changes not made
 // through this browser (a file edited by hand, another browser) are seen at the next sync.
@@ -93,7 +95,7 @@ function notify() {
 // A sync now; while one runs, one more after it (requests made meanwhile share it)
 function sync() {
 	if (!state.running) {
-		state.running = runWorker({ op: "sync" })
+		state.running = runWorker({ op: "force_sync" })
 			.then(readMetaDb)
 			.then(({ items }) => {
 				saveSnapshot(items);
@@ -140,6 +142,14 @@ export function requestMetaDbSync() {
 	if (typeof requestIdleCallback === "function")
 		requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
 	else setTimeout(run, FALLBACK_DELAY_MS);
+}
+
+/**
+ * Sync now, not when idle (force_sync): every page whenever it is shown. Resolves when the new list has been stored
+ * (listeners are notified), rejects with the worker's error.
+ */
+export function forceSyncMetaDb() {
+	return sync();
 }
 
 /**

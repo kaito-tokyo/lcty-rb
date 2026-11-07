@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The sidebar shared by every page: the conversation list, search and the settings dialog (LCTYSP-0005, LCTYSP-0007,
-// LCTYSP-0010).
+// LCTYSP-0009, LCTYSP-0010).
 
 import {
 	createConversation,
@@ -39,6 +39,31 @@ test("conversations are listed as links to their pages", async ({
 	await expect(link).toContainText(title);
 	await link.click();
 	await page.waitForURL(`/c/${conv.id}.html`);
+});
+
+test("every page takes the server's tags as soon as it is shown (force_sync, LCTYSP-0009)", async ({
+	page,
+	request,
+}) => {
+	// Two display names of one tag file: they differ only in case, so the file-name part (the reference) is the same
+	const part = uniqueWord("force");
+	const before = part.toUpperCase();
+	const after = `${part[0].toUpperCase()}${part.slice(1)}`;
+	await putTags(request, [{ file: `00010-${part}.html`, name: before }]);
+	const conv = await createConversation(request, {
+		title: uniqueWord("同期"),
+		messages: [["user", "質問"]],
+		tags: [part],
+	});
+	const chip = page.locator(`a[data-id="${conv.id}"] .tag-name`);
+	await openNewPage(page);
+	await expect(chip).toHaveText(before);
+
+	// Changed on the server, not through this browser: the next page shown has the new name without any wait for idle
+	// time or a save
+	await putTags(request, [{ file: `00010-${part}.html`, name: after }]);
+	await openNewPage(page);
+	await expect(chip).toHaveText(after);
 });
 
 test("the open conversation is marked as current", async ({

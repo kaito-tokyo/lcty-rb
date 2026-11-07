@@ -219,7 +219,9 @@ test("A sync stores the set with NFC file names and the ETag", async ({
 				headers: { ETag: "e1" },
 			});
 	});
-	const answer = await whenPosted(page, '{"op": "sync"}', { op: "sync" });
+	const answer = await whenPosted(page, '{"op": "force_sync"}', {
+		op: "force_sync",
+	});
 	await test.step("Then it answers with no result", () => {
 		expect(answer.hasResult).toBe(true);
 		expect(answer.message).toEqual({ result: undefined });
@@ -236,7 +238,9 @@ test("A sync replaces the set as a whole", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenTFullHolds(page, ["00010-a.html", "00020-b.html"], "e1");
 	await givenGetReturns(server, ["00010-c.html"], "e2");
-	const answer = await whenPosted(page, '{"op": "sync"}', { op: "sync" });
+	const answer = await whenPosted(page, '{"op": "force_sync"}', {
+		op: "force_sync",
+	});
 	await test.step("Then it answers with no result", () => {
 		expect(answer.message).toEqual({ result: undefined });
 	});
@@ -355,7 +359,9 @@ test("A failed sync leaves the copy as it was", async ({ page, context }) => {
 	await test.step('And GET /v1/tags answers with the status 500 and "boom"', () => {
 		server.get = (route) => route.fulfill({ status: 500, body: "boom" });
 	});
-	const answer = await whenPosted(page, '{"op": "sync"}', { op: "sync" });
+	const answer = await whenPosted(page, '{"op": "force_sync"}', {
+		op: "force_sync",
+	});
 	await thenAnswersError(answer, "500 boom", 500);
 	await thenTFullHolds(page, ["00010-a.html"], "e1");
 });

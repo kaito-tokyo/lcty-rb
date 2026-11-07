@@ -74,15 +74,18 @@ In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned 
   it is posted one message `{op}` and posts one back, `{result}` or `{error, status}` (`status` the HTTP status, or
   `null`); then the page terminates it. It is the only code that opens the database, so the schema is defined there
   alone ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature)).
-  - `sync` fetches `GET /v1/meta-all.json`, clears and fills `c_meta` in one transaction (so a conversation deleted
+  - `force_sync` fetches `GET /v1/meta-all.json`, clears and fills `c_meta` in one transaction (so a conversation deleted
     on the server disappears from it too), deletes the old database `lcty`, and answers no result. When a step fails
     the copy is left as it was; when it cannot open the database (a newer version left by other code, a broken
     database), the sync fails with that error.
   - `get` answers `{items, stale}`: the copy newest first by `updated_at_hint`, then by id, or no items and `stale`
     true when there is no copy yet. It opens the database without a version and never creates it (an upgrade that
     would create it is aborted).
-- **When a sync runs:** opening a page and sending a change of conversations to the server (creating, appending lines,
-  popping, deleting: `js/api/storage.js`) request one, run when the browser is idle (`requestIdleCallback`, at most 10 s
+- **When a sync runs:** every page runs one at once whenever it is shown (`forceSyncMetaDb()`, called by
+  `js/ui/sidebar.js` when the page loads and on `pageshow` from the back/forward cache, together with the tags'
+  `force_sync`, [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Loading the list and sending a change of conversations
+  to the server (creating, appending lines, popping, deleting: `js/api/storage.js`) also request one, run when the
+  browser is idle (`requestIdleCallback`, at most 10 s
   later; 1 s later where it is missing); requests made before it starts share it. In a tab at most one worker runs: a
   sync requested while one runs is run once after it, so an older response never overwrites a newer one in this tab
   and a change made meanwhile is still fetched. Tabs do not coordinate: the transaction that commits last wins.

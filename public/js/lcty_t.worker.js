@@ -13,7 +13,8 @@
 // posted, not thrown, because a rejection inside an async handler does not reliably reach the page as the Worker's
 // error event; that event is left for a worker that could not be loaded.
 //
-//   {op: "sync"}                 GET v1/tags → t_full replaced in one transaction → result undefined
+//   {op: "force_sync"}           GET v1/tags → t_full replaced in one transaction → result undefined; every page
+//                                runs it whenever it is shown (js/ui/sidebar.js)
 //   {op: "get"}                  t_full → result {tags, etag}; when there is no copy yet, a sync first
 //   {op: "put", tags, etag}      PUT v1/tags with If-Match etag (the one the caller read the tags with, never the
 //                                copy's: the copy may be newer than what the caller edited) → result the new ETag
@@ -90,7 +91,7 @@ async function withStore(mode, fn) {
 	}
 }
 
-async function sync() {
+async function forceSync() {
 	const r = await send("GET", "tags");
 	const json = await r.json();
 	if (!Array.isArray(json?.tags)) throw new Error("GET /v1/tags is invalid");
@@ -103,7 +104,7 @@ async function sync() {
 async function get() {
 	let set = await withStore("readonly", (store) => store.get(KEY));
 	if (!set) {
-		await sync();
+		await forceSync();
 		set = await withStore("readonly", (store) => store.get(KEY));
 	}
 	return { tags: set.tags, etag: set.etag };
@@ -114,12 +115,12 @@ async function thenSync(fn) {
 	try {
 		return await fn();
 	} finally {
-		await sync().catch(() => {});
+		await forceSync().catch(() => {});
 	}
 }
 
 const OPS = {
-	sync,
+	force_sync: forceSync,
 	get,
 	put: ({ tags, etag }) =>
 		thenSync(async () => {

@@ -13,12 +13,13 @@
 // An error is posted, not thrown, because a rejection inside an async handler does not reliably reach the page as the
 // Worker's error event; that event is left for a worker that could not be loaded.
 //
-//   {op: "sync"}  GET v1/meta-all.json → c_meta cleared and filled in one transaction (so conversations deleted on the
-//                 server disappear from it too) → the old database "lcty" deleted → result undefined. On failure the
-//                 copy is left as it was.
-//   {op: "get"}   c_meta → result {items, stale}: items newest first by updated_at_hint, then by id (the order of the
-//                 server and the sidebar); stale true, with no items, when there is no copy yet (the first sync has not
-//                 finished). It never creates the database: only a sync does.
+//   {op: "force_sync"}  GET v1/meta-all.json → c_meta cleared and filled in one transaction (so conversations
+//                       deleted on the server disappear from it too) → the old database "lcty" deleted → result
+//                       undefined. On failure the copy is left as it was. Every page runs it whenever it is shown
+//                       (js/ui/sidebar.js), and after a change of conversations (js/api/meta-db.js).
+//   {op: "get"}         c_meta → result {items, stale}: items newest first by updated_at_hint, then by id (the order
+//                       of the server and the sidebar); stale true, with no items, when there is no copy yet (the
+//                       first force_sync has not finished). It never creates the database: only force_sync does.
 //
 //   database "lcty_c" (version DB_VERSION)
 //     store "c_meta" (key: id): {id, title, created_at, updated_at_hint, setup_tags, tags_hint, messages_hint}, as
@@ -92,7 +93,7 @@ function deleteOldDb() {
 	});
 }
 
-async function sync() {
+async function forceSync() {
 	const response = await fetch(META_ALL);
 	if (!response.ok)
 		throw httpError(
@@ -146,7 +147,7 @@ async function get() {
 	}
 }
 
-const OPS = { sync, get };
+const OPS = { force_sync: forceSync, get };
 
 self.onmessage = async ({ data }) => {
 	self.onmessage = null; // one operation per worker
