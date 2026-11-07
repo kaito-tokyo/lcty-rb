@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# The build context of Dockerfile is the repository root: it needs only the Gemfile and its lock
+*
+!Gemfile
+!Gemfile.lock

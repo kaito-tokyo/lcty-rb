@@ -1,0 +1,63 @@
+# This workflow is managed by gh actions-lock.
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Browser CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  test-ui:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    env:
+      COMPOSE_FILE: .devcontainer/ruby-2.6.10/compose.yml
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the server
+        id: server
+        background: true
+        run: docker compose up --build
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Wait for the server
+        run: |
+          for i in {1..120}; do
+            sleep 1
+            [[ "$(docker compose ps --format '{{.Health}}' lcty)" == healthy ]] && exit 0
+          done
+
+      - name: Run UI tests
+        env:
+          LCTY_TEST_SERVER_URL: http://127.0.0.1:45290
+        run: npm run test:ui
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: playwright-test-results
+          path: test-results/
+
+      - name: Stop the server
+        cancel: server

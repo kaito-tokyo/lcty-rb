@@ -37,17 +37,23 @@ Start the server and open http://127.0.0.1:45280/:
 The browser talks to `llama-server` directly; the Ruby server serves the pages and keeps the conversations, the tags
 and the search index.
 
+Outside macOS, the dev container `.devcontainer/ruby-2.6.10` gives the same Ruby and libraries (`ruby:2.6.10` with the
+`Gemfile`, installed into its image; rebuild it after changing the `Gemfile`). Run `ruby lcty.rb` in it; port 45280 is
+forwarded. Its data
+directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-data`, so it outlives a rebuild.
+
 ## Settings
 
 - Server: only the environment variables `PORT` (default 45280), `LCTY_HOST` (the address to listen on, default
-  `127.0.0.1`) and `LCTY_DATA_DIR` (default `~/Library/Application Support/tokyo.kaito.lcty-rb/Data`).
+  `127.0.0.1`) and `LCTY_DATA_DIR` (default `~/Library/Application Support/tokyo.kaito.lcty-rb/Data` on macOS,
+  `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data`, that is `~/.local/share/…` by default, on Linux).
 - Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 
 ## Data
 
-Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.lcty-rb/Data/` by default
-(`LCTY_DATA_DIR`):
+Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.lcty-rb/Data/` by default on macOS
+(`LCTY_DATA_DIR`; see Settings for Linux):
 
 - `c/<id>.html`: one file per conversation. Opened through the server (`/c/<id>.html`) it shows as the conversation.
 - `tags.sqlite`: tag definitions, memory and tag changes.
@@ -58,6 +64,47 @@ Back up everything that does not start with `_`:
 ```bash
 rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/" backup/
 ```
+
+## UI tests
+
+The UI tests in `tests/ui/` drive the pages in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js
+is needed for the tests only; the server itself still needs nothing installed.
+
+```bash
+npm install
+```
+
+```bash
+npm run test:ui:install
+```
+
+```bash
+npm run test:ui
+```
+
+The tests start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the
+temporary folder, removed afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's
+requests to it are answered by a fake in `tests/ui/fixtures.js`, so your conversations and models are never touched.
+Run one browser with `npm run test:ui -- --project=chromium`, or watch the tests with `npm run test:ui -- --ui`.
+
+CI runs on Linux: `.devcontainer/ruby-2.6.10/compose.yml` runs the server on its own in the image of that dev container
+(`ruby:2.6.10` with the libraries of the `Gemfile`, the versions macOS's `/usr/bin/ruby` has; on a Mac the server needs
+neither the `Gemfile` nor Bundler), and the tests are pointed at it with `LCTY_TEST_SERVER_URL`. To do the same by
+hand (`--build` rebuilds the image when the `Gemfile` has changed):
+
+```bash
+docker compose -f .devcontainer/ruby-2.6.10/compose.yml up --build --detach --wait
+```
+
+```bash
+LCTY_TEST_SERVER_URL=http://127.0.0.1:45290 npm run test:ui
+```
+
+```bash
+docker compose -f .devcontainer/ruby-2.6.10/compose.yml down
+```
+
+Its data directory is emptied whenever the container restarts (`docker compose -f .devcontainer/ruby-2.6.10/compose.yml restart`).
 
 ## Documentation
 

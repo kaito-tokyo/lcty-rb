@@ -1,0 +1,22 @@
+{
+	"$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+	"name": "Ruby 2.6.10 (macOS /usr/bin/ruby)",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": "../.."
+	},
+	"mounts": [
+		{
+			"type": "volume",
+			"source": "lcty-rb-data",
+			"target": "/root/.local/share/tokyo.kaito.lcty-rb"
+		}
+	],
+	"forwardPorts": [45280],
+	"portsAttributes": {
+		"45280": {
+			"label": "lcty-rb",
+			"onAutoForward": "openBrowser"
+		}
+	}
+}

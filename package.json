@@ -1,0 +1,12 @@
+{
+	"name": "lcty-rb",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test:ui": "playwright test",
+		"test:ui:install": "playwright install chromium webkit"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.65.0"
+	}
+}
