@@ -707,7 +707,10 @@ lcty-message > article button.suggestion {
 	border-radius: var(--radius-pill);
 	padding: 2px 12px;
 	margin: 2px 0;
+	max-width: 100%;
 	text-align: left;
+	/* the shared button rule says nowrap; a suggestion is a sentence and wraps like the text around it */
+	white-space: normal;
 	cursor: pointer;
 }
 lcty-message > article button.suggestion:hover {
