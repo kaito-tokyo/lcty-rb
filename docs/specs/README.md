@@ -52,6 +52,7 @@ backend features, `LCTYSP-3xxx`; see
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | Messages and the composer of a conversation        | `tests/unit/lcty-elements.spec.js`                           |
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | Tags, drafts and memory                            | `tests/unit/tags.test.js`, `tests/unit/tags.spec.js`         |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | The search panel of the sidebar                    | `tests/unit/search-panel.spec.js`                            |
+| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | The tags in the browser: lcty_t.worker.js          | `tests/unit/lcty-t.spec.js`                                  |
 | [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)                    | Message ids as UUIDv7                              | `tests/backend/uuid_test.rb`                                 |
 | [LCTYSP-3002](LCTYSP-3002_conversation-html.feature)          | Conversation files as HTML                         | `tests/backend/conv_html_test.rb`                            |
 | [LCTYSP-3003](LCTYSP-3003_store.feature)                      | Storing conversations, tags and memory             | `tests/backend/store_test.rb`                                |

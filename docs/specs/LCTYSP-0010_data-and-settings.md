@@ -51,10 +51,11 @@ directory changes as follows. The rule on `_` is unchanged.
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out             |
 | `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
 
-In the browser, IndexedDB is to be split by resource (not implemented yet): `lcty` renamed `lcty_c` (store `c_meta`,
-filled by `js/sync_c_meta.worker.js`), and `lcty_t` (store `t_full`, filled by `js/sync_t_full.worker.js`) holding a
-full copy of the tags with the set's `ETag`. Both are derived; the old `lcty` will be deleted and refilled by the next
-sync. Until then the pages read the tags with `GET /v1/tags`. The section below describes `lcty` as it is today.
+In the browser, IndexedDB is split by resource. `lcty_t` (store `t_full`, owned by `js/lcty_t.worker.js`) holds a
+full copy of the tags with the set's `ETag` ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)).
+`lcty` is to be renamed `lcty_c` (store `c_meta`, filled by `js/sync_c_meta.worker.js`; not implemented yet): both are
+derived, so the old `lcty` will be deleted and refilled by the next sync. The section below describes `lcty` as it is
+today.
 
 - SQLite files use WAL mode. To back up `tags.sqlite`, copy `tags.sqlite-wal` with it or run `PRAGMA wal_checkpoint`
   first.

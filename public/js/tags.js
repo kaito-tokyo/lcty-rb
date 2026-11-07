@@ -10,7 +10,7 @@
 //  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the sidebar
 //  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
 
-import { addMemory, getTags, putTags } from "./api/storage.js";
+import { addMemory, getTags, putTags } from "./api/lcty-t.js";
 import { tr } from "./i18n.js";
 import { stream } from "./llm/client.js";
 import { buildRequest } from "./llm/history.js";
@@ -360,7 +360,8 @@ export function initTagsDialog(button, { onSaved, toast }) {
 	dialog.addEventListener("click", (e) => {
 		if (e.target === dialog) tryClose();
 	});
-	// Opens the editor on the saved definitions (fetched again, in case another tab changed them meanwhile)
+	// Opens the editor on the saved definitions, read again from the browser's copy (another tab of this browser may
+	// have changed them meanwhile; a change made elsewhere makes the save fail with 412, which loads the new set)
 	const open = async () => {
 		let defs;
 		let etag;

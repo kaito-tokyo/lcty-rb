@@ -12,9 +12,8 @@ Feature: LCTYSP-1009 The client of the HTTP API
   request to the page's origin and resolving to the parsed JSON of the answer. A body is sent as JSON with the
   Content-Type application/json, ids and names in a path are percent-encoded, and putVectors sends a registration
   vector binary as application/octet-stream. An answer that is not OK becomes an Error "<status> <body>", the body
-  cut to 200 characters, with the status as its status. getTags resolves to the tag files with their file names
-  NFC-normalized and the ETag of the set, and putTags sends the set with that ETag as If-Match and resolves to the new
-  one. The requests that change conversations (create, append, pop, delete) then ask for a sync of the browser's copy
+  cut to 200 characters, with the status as its status. The tags are not here: js/api/lcty-t.js and its worker
+  (LCTYSP-1021) send their requests. The requests that change conversations (create, append, pop, delete) then ask for a sync of the browser's copy
   of the meta (requestMetaDbSync of js/api/meta-db.js), also when they fail, and the meta sync worker fetches GET
   /v1/meta-all.json when the browser is idle; changing the tags changes no conversation. toLine turns a message into a line to append: a
   reply also carries its content rendered by js/ui/markdown.js, as the screen shows it.
@@ -70,26 +69,11 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | vectorsPending("eg", 4)                                                  | GET    | /v1/vectors/pending?model=eg&limit=4      | none                                                          | none             |
       | searchConversations({"q": "x", "tags": ["t"], "limit": 5})               | POST   | /v1/search                                | {"q":"x","tags":["t"],"limit":5}                              | application/json |
       | fetchSnippets(["r1", "r2"], "x")                                         | POST   | /v1/snippets                              | {"ids":["r1","r2"],"q":"x"}                                   | application/json |
-      | addMemory("00010-a/b.html", {"text": "t", "source": "s"})                | POST   | /v1/tags/00010-a%2Fb.html/memory          | {"text":"t","source":"s"}                                     | application/json |
-
-  Scenario: getTags resolves to the tag files with NFC file names and the ETag
-    Given the server answers {"tags": [{"file": "00010-café.html", "name": "Café"}]} with the ETag "e1"
-    When getTags() is called
-    Then one request GET /v1/tags is sent
-    And it resolves to the tag with the file "00010-café.html" composed, the name "Café" as it was, and the etag "e1"
-
-  Scenario: putTags sends the set with If-Match and resolves to the new ETag
-    Given the server answers {"ok": true} with the ETag "e2"
-    When putTags([{"file": "00010-t.html", "name": "t"}], "e1") is called
-    Then one request PUT /v1/tags is sent
-    And its body is {"tags":[{"file":"00010-t.html","name":"t"}]}
-    And its If-Match is "e1"
-    And it resolves to "e2"
 
   Scenario: An Error of a request that is not OK carries the status
-    Given the server answers with the status 412 and the text "the tags have changed"
-    When putTags([], "e0") is called
-    Then it rejects with the Error "412 the tags have changed" whose status is 412
+    Given the server answers with the status 404 and the text "not found"
+    When getConversation("nope") is called
+    Then it rejects with the Error "404 not found" whose status is 404
 
   Scenario: putVectors sends the vector binary with its query
     Given the server answers {"accepted": 2, "stale": []}
@@ -110,7 +94,6 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | createConversation({}, [])   | 409    | already exists | 409 already exists       |
       | popMessages("c1", 0)         | 409    | too far back   | 409 too far back         |
       | putVectors("eg", [], {})     | 400    | bad magic      | 400 bad magic            |
-      | addMemory("00010-t.html", {}) | 404   | no such tag file | 404 no such tag file   |
 
   Scenario: A long error body is cut to 200 characters
     Given the server answers with the status 500 and a text of 300 characters
@@ -156,5 +139,5 @@ Feature: LCTYSP-1009 The client of the HTTP API
   Scenario: Requests that do not change conversations do not ask for a sync
     Given a page on the server's origin
     Given the server answers {"ok": true}
-    When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations, fetchSnippets, putTags and addMemory are called
+    When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations and fetchSnippets are called
     Then no GET /v1/meta-all.json is fetched within 3 seconds

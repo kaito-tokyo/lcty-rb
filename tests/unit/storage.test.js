@@ -330,13 +330,6 @@ for (const [call, method, url, body, type] of [
 		'{"ids":["r1","r2"],"q":"x"}',
 		"application/json",
 	],
-	[
-		'addMemory("00010-a/b.html", {"text": "t", "source": "s"})',
-		"POST",
-		"/v1/tags/00010-a%2Fb.html/memory",
-		'{"text":"t","source":"s"}',
-		"application/json",
-	],
 ]) {
 	scenario(
 		`Each function sends its request and resolves to the answer (${call})`,
@@ -364,102 +357,21 @@ for (const [call, method, url, body, type] of [
 	);
 }
 
-/** The server answers json with the ETag "etag" (quoted, as the server sends it). */
-async function givenTheServerAnswersWithETag(step, server, json, etag, line) {
-	await step(line, () => {
-		server.answer = () => Response.json(json, { headers: { ETag: etag } });
-	});
-}
-
-scenario(
-	"getTags resolves to the tag files with NFC file names and the ETag",
-	async ({ step, t }) => {
-		const server = await background(step, t);
-		await givenTheServerAnswersWithETag(
-			step,
-			server,
-			{ tags: [{ file: "00010-café.html", name: "Café" }] },
-			'"e1"',
-			'Given the server answers {"tags": [{"file": "00010-café.html", "name": "Café"}]} with the ETag "e1"',
-		);
-		const result = await whenCalled(step, "getTags()");
-		await step("Then one request GET /v1/tags is sent", () => {
-			expect(server.requests.map((r) => `${r.method} ${r.url}`)).toEqual([
-				"GET /v1/tags",
-			]);
-		});
-		await step(
-			'And it resolves to the tag with the file "00010-café.html" composed, the name "Café" as it was, and the etag "e1"',
-			() => {
-				expect(result).toEqual({
-					value: {
-						tags: [{ file: "00010-café.html", name: "Café" }],
-						etag: '"e1"',
-					},
-				});
-			},
-		);
-	},
-);
-
-scenario(
-	"putTags sends the set with If-Match and resolves to the new ETag",
-	async ({ step, t }) => {
-		const server = await background(step, t);
-		let ifMatch;
-		await givenTheServerAnswersWithETag(
-			step,
-			server,
-			{ ok: true },
-			'"e2"',
-			'Given the server answers {"ok": true} with the ETag "e2"',
-		);
-		const answer = server.answer;
-		server.answer = (request) => {
-			ifMatch = request.headers.get("if-match");
-			return answer(request);
-		};
-		const result = await whenCalled(
-			step,
-			'putTags([{"file": "00010-t.html", "name": "t"}], "e1")',
-		);
-		await step("Then one request PUT /v1/tags is sent", () => {
-			expect(server.requests.map((r) => `${r.method} ${r.url}`)).toEqual([
-				"PUT /v1/tags",
-			]);
-		});
-		await step(
-			'And its body is {"tags":[{"file":"00010-t.html","name":"t"}]}',
-			() => {
-				expect(server.requests[0].body).toBe(
-					'{"tags":[{"file":"00010-t.html","name":"t"}]}',
-				);
-			},
-		);
-		await step('And its If-Match is "e1"', () => {
-			expect(ifMatch).toBe("e1");
-		});
-		await step('And it resolves to "e2"', () => {
-			expect(result).toEqual({ value: '"e2"' });
-		});
-	},
-);
-
 scenario(
 	"An Error of a request that is not OK carries the status",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheStatus(step, server, 412, "the tags have changed");
+		await givenTheStatus(step, server, 404, "not found");
 		let error;
-		await step('When putTags([], "e0") is called', async () => {
-			error = await storage.putTags([], "e0").catch((e) => e);
+		await step('When getConversation("nope") is called', async () => {
+			error = await storage.getConversation("nope").catch((e) => e);
 		});
 		await step(
-			'Then it rejects with the Error "412 the tags have changed" whose status is 412',
+			'Then it rejects with the Error "404 not found" whose status is 404',
 			() => {
 				expect(error).toBeInstanceOf(Error);
-				expect(error.message).toBe("412 the tags have changed");
-				expect(error.status).toBe(412);
+				expect(error.message).toBe("404 not found");
+				expect(error.status).toBe(404);
 			},
 		);
 	},
@@ -514,12 +426,6 @@ for (const [call, status, text, message] of [
 	["createConversation({}, [])", 409, "already exists", "409 already exists"],
 	['popMessages("c1", 0)', 409, "too far back", "409 too far back"],
 	['putVectors("eg", [], {})', 400, "bad magic", "400 bad magic"],
-	[
-		'addMemory("00010-t.html", {})',
-		404,
-		"no such tag file",
-		"404 no such tag file",
-	],
 ]) {
 	scenario(
 		`An answer that is not OK becomes an Error with the status and the body (${call})`,

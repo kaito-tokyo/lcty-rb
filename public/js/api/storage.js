@@ -116,29 +116,3 @@ export function searchConversations(body) {
 export function fetchSnippets(ids, q) {
 	return request("POST", "v1/snippets", { ids, q });
 }
-
-// ---- Tag files and memory (LCTYSP-0009) ----
-/**
- * Every tag file, in file-name order: {tags: [{file, name, ops, prompt, memory}], etag}. File names are NFC-normalized
- * here, since a file system may list them decomposed (HFS+); the server compares the files themselves.
- */
-export async function getTags() {
-	const r = await send("GET", "v1/tags");
-	const { tags } = await r.json();
-	return {
-		tags: tags.map((t) => ({ ...t, file: t.file.normalize("NFC") })),
-		etag: r.headers.get("ETag"),
-	};
-}
-/**
- * Replace all tag files with tags, the set read with etag (sent as If-Match). A change made elsewhere in between fails
- * with HttpError 412. Returns the new ETag.
- */
-export async function putTags(tags, etag) {
-	const r = await send("PUT", "v1/tags", { tags }, { "If-Match": etag ?? "" });
-	return r.headers.get("ETag");
-}
-/** Add a memory item ({text, source}) to the tag in file (00010-ruby.html); 404 when the file is gone. */
-export function addMemory(file, body) {
-	return request("POST", `v1/tags/${encodeURIComponent(file)}/memory`, body);
-}
