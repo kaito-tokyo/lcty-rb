@@ -161,12 +161,12 @@ const meta = (id, day, extra = {}) => ({
 	...extra,
 });
 
-/** Create the database "lcty" at version 5 with c_meta holding items, as the meta sync worker leaves it. */
+/** Create the database "lcty_c" at version 1 with c_meta holding items, as lcty_c.worker.js leaves it. */
 function seedCMeta(page, items) {
 	return page.evaluate(
 		(items) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty", 5);
+				const req = indexedDB.open("lcty_c", 1);
 				req.onupgradeneeded = () => {
 					const store = req.result.createObjectStore("c_meta", {
 						keyPath: "id",
@@ -187,7 +187,7 @@ function databaseExists(page) {
 	return page.evaluate(
 		() =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty");
+				const req = indexedDB.open("lcty_c");
 				req.onupgradeneeded = () => req.transaction.abort();
 				req.onerror = () =>
 					req.error?.name === "AbortError" ? resolve(false) : reject(req.error);
@@ -1746,7 +1746,7 @@ test("The sidebar's list is filled from the snapshot in localStorage", async ({
 				meta("c", "03"),
 			],
 		));
-	await test.step('And the database "lcty" holds "z" in "c_meta"', () =>
+	await test.step('And the database "lcty_c" holds "z" in "c_meta"', () =>
 		seedCMeta(page, [meta("z", "05")]));
 	await whenSidebarPut(page);
 	await test.step('Then its list shows "c", "b" and "a", in that order', async () => {
@@ -1782,7 +1782,7 @@ for (const [snapshot, value] of [
 			page.evaluate((value) => {
 				if (value !== null) localStorage.setItem("lcty.meta.v1", value);
 			}, value));
-		await test.step('And the database "lcty" holds "a" updated on 2026-11-01 and "b" updated on 2026-11-03 in "c_meta"', () =>
+		await test.step('And the database "lcty_c" holds "a" updated on 2026-11-01 and "b" updated on 2026-11-03 in "c_meta"', () =>
 			seedCMeta(page, [meta("a", "01"), meta("b", "03")]));
 		await whenSidebarPut(page);
 		await test.step('Then its list shows "b" and "a", in that order', async () => {
@@ -1793,7 +1793,7 @@ for (const [snapshot, value] of [
 
 test("The sidebar never creates the database", async ({ page, context }) => {
 	await background(page, context);
-	await test.step('Given there is no database "lcty"', async () => {
+	await test.step('Given there is no database "lcty_c"', async () => {
 		expect(await databaseExists(page)).toBe(false);
 	});
 	await whenSidebarPut(page);
@@ -1806,7 +1806,7 @@ test("The sidebar never creates the database", async ({ page, context }) => {
 			),
 		).toBe(0);
 	});
-	await test.step('And there is still no database "lcty"', async () => {
+	await test.step('And there is still no database "lcty_c"', async () => {
 		expect(await databaseExists(page)).toBe(false);
 	});
 });

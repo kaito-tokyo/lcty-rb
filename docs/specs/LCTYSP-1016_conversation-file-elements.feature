@@ -307,14 +307,14 @@ Feature: LCTYSP-1016 The elements of a conversation file
 
   Scenario: The sidebar's list is filled from the snapshot in localStorage
     Given localStorage "lcty.meta.v1" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03, "c" updated on 2026-11-03 and a broken entry
-    And the database "lcty" holds "z" in "c_meta"
+    And the database "lcty_c" holds "z" in "c_meta"
     When a <lcty-sidebar> is put into the body
     Then its list shows "c", "b" and "a", in that order
     And the item "a" shows its tags_hint as tags and its messages_hint as the count
 
   Scenario Outline: The sidebar's list is filled from IndexedDB when there is no usable snapshot
     Given localStorage "lcty.meta.v1" <snapshot>
-    And the database "lcty" holds "a" updated on 2026-11-01 and "b" updated on 2026-11-03 in "c_meta"
+    And the database "lcty_c" holds "a" updated on 2026-11-01 and "b" updated on 2026-11-03 in "c_meta"
     When a <lcty-sidebar> is put into the body
     Then its list shows "b" and "a", in that order
 
@@ -326,10 +326,10 @@ Feature: LCTYSP-1016 The elements of a conversation file
       | holds {"a": 1}   |
 
   Scenario: The sidebar never creates the database
-    Given there is no database "lcty"
+    Given there is no database "lcty_c"
     When a <lcty-sidebar> is put into the body
     Then its list is empty
-    And there is still no database "lcty"
+    And there is still no database "lcty_c"
 
   # ---- Languages ----
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// LCTYSP-1001: the scenarios of docs/specs/LCTYSP-1001_sync-c-meta.feature, written by hand. Each test has the title of its
+// LCTYSP-1001: the scenarios of docs/specs/LCTYSP-1001_lcty-c.feature, written by hand. Each test has the title of its
 // Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
 //
 // The worker runs in a real browser on the test server's origin: the page is an empty document served by a route, so
@@ -13,7 +13,7 @@
 import { expect, test } from "@playwright/test";
 
 const PAGE = "/__lcty_unit.html";
-const WORKER_URL = "/js/sync_c_meta.worker.js";
+const WORKER_URL = "/js/lcty_c.worker.js";
 
 /** A conversation's meta as GET /v1/meta-all.json returns it (LCTYSP-0006). */
 function conv(id, title = `Conversation ${id}`) {
@@ -52,12 +52,12 @@ async function background(page, context) {
 
 // ---- The database, from the page ----
 
-/** The database "lcty" as it is: {exists, version, stores, items (of c_meta)}. Never creates it. */
-function readDb(page) {
+/** The database name ("lcty_c" by default) as it is: {exists, version, stores, items (of c_meta)}. Never creates it. */
+function readDb(page, name = "lcty_c") {
 	return page.evaluate(
-		() =>
+		(name) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty");
+				const req = indexedDB.open(name);
 				req.onupgradeneeded = () => req.transaction.abort(); // no database: do not create one
 				req.onerror = () =>
 					req.error?.name === "AbortError"
@@ -86,24 +86,27 @@ function readDb(page) {
 					};
 				};
 			}),
+		name,
 	);
 }
 
-/** Create the database "lcty" at version with stores ({name: {keyPath?, records: [[key?, value]]}}). */
-function seedDb(page, version, stores) {
+/**
+ * Create the database name ("lcty_c" by default) at version with stores ({store: {keyPath?, records: [[key?, value]]}}).
+ */
+function seedDb(page, version, stores, name = "lcty_c") {
 	return page.evaluate(
-		({ version, stores }) =>
+		({ version, stores, name }) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty", version);
+				const req = indexedDB.open(name, version);
 				req.onupgradeneeded = () => {
 					const db = req.result;
-					for (const [name, { keyPath, records }] of Object.entries(stores)) {
-						const store = db.createObjectStore(
-							name,
+					for (const [store, { keyPath, records }] of Object.entries(stores)) {
+						const os = db.createObjectStore(
+							store,
 							keyPath ? { keyPath } : undefined,
 						);
 						for (const [key, value] of records)
-							key === null ? store.put(value) : store.put(value, key);
+							key === null ? os.put(value) : os.put(value, key);
 					}
 				};
 				req.onsuccess = () => {
@@ -112,13 +115,13 @@ function seedDb(page, version, stores) {
 				};
 				req.onerror = () => reject(req.error);
 			}),
-		{ version, stores },
+		{ version, stores, name },
 	);
 }
 
-/** c_meta at version 5, as the worker leaves it, holding items. */
+/** c_meta at version 1, as the worker leaves it, holding items. */
 function seedCMeta(page, items) {
-	return seedDb(page, 5, {
+	return seedDb(page, 1, {
 		c_meta: { keyPath: "id", records: items.map((m) => [null, m]) },
 	});
 }
@@ -126,12 +129,12 @@ function seedCMeta(page, items) {
 // ---- The worker ----
 
 /**
- * Start the worker and collect what it sends until it has posted or failed, and for a little while after (so a
- * message after an error would be seen). The worker stays alive (window.lctyWorker) until stopWorker().
+ * Start the worker, post it message and collect what it sends until it has answered or failed, and for a little while
+ * after (so a second message would be seen). The worker stays alive (window.lctyWorker) until stopWorker().
  */
-function runWorker(page) {
+function runWorker(page, message) {
 	return page.evaluate(
-		(url) =>
+		({ url, message }) =>
 			new Promise((resolve) => {
 				const seen = { messages: [], errors: [] };
 				const worker = new Worker(url, { type: "module" });
@@ -142,9 +145,7 @@ function runWorker(page) {
 					timer = setTimeout(() => resolve(seen), 300);
 				};
 				worker.onmessage = (e) => {
-					seen.messages.push(
-						e.data === undefined ? "undefined" : JSON.stringify(e.data),
-					);
+					seen.messages.push(e.data);
 					settle();
 				};
 				worker.onerror = (e) => {
@@ -152,8 +153,9 @@ function runWorker(page) {
 					seen.errors.push(e.message || "(no message)");
 					settle();
 				};
+				worker.postMessage(message);
 			}),
-		WORKER_URL,
+		{ url: WORKER_URL, message },
 	);
 }
 
@@ -168,7 +170,7 @@ test.afterEach(async ({ page }) => {
 // ---- Steps shared by the scenarios ----
 
 async function givenNoDatabase(page) {
-	await test.step('Given there is no database "lcty"', async () => {
+	await test.step('Given there is no database "lcty_c"', async () => {
 		expect((await readDb(page)).exists).toBe(false);
 	});
 }
@@ -179,39 +181,47 @@ async function givenCMetaHolds(page, items, text) {
 	});
 }
 
-async function whenTheWorkerRuns(page) {
+async function whenPosted(page, op) {
 	let seen;
-	await test.step("When the worker runs", async () => {
-		seen = await runWorker(page);
+	await test.step(`When the worker is posted {"op": "${op}"}`, async () => {
+		seen = await runWorker(page, { op });
 	});
 	return seen;
 }
 
-async function thenItPostsUndefined(seen) {
-	await test.step("Then it posts undefined", async () => {
-		expect(seen.errors).toEqual([]);
-		expect(seen.messages).toEqual(["undefined"]);
+/** The one answer the worker posted, and no error event. */
+function answerOf(seen) {
+	expect(seen.errors).toEqual([]);
+	expect(seen.messages).toHaveLength(1);
+	return seen.messages[0];
+}
+
+async function thenAnswersNoResult(seen) {
+	await test.step("Then it answers with no result", () => {
+		const answer = answerOf(seen);
+		expect("result" in answer).toBe(true);
+		expect(answer.result).toBeUndefined();
 	});
 }
 
-async function thenTheErrorEventFires(seen, message) {
-	const line = message
-		? `Then the Worker's error event says "${message}"`
-		: "Then the Worker's error event fires";
-	await test.step(line, async () => {
-		expect(seen.errors).toHaveLength(1);
-		// Chromium prefixes the message with "Uncaught Error: ", WebKit with "Error: "
-		if (message) expect(seen.errors[0]).toContain(message);
-	});
-	await test.step("And it posts nothing", async () => {
-		expect(seen.messages).toEqual([]);
+async function thenAnswersError(seen, message, status) {
+	await test.step(`Then it answers the error "${message}" with the status ${status}`, () => {
+		expect(answerOf(seen)).toEqual({ error: message, status });
 	});
 }
 
-async function thenOnlyCMetaAtVersion5(page) {
-	await test.step('And the database "lcty" is at version 5 with only the store "c_meta"', async () => {
+async function thenAnswersAnError(seen) {
+	await test.step("Then it answers an error with the status null", () => {
+		const answer = answerOf(seen);
+		expect(typeof answer.error).toBe("string");
+		expect(answer.status).toBeNull();
+	});
+}
+
+async function thenOnlyCMetaAtVersion1(page) {
+	await test.step('And the database "lcty_c" is at version 1 with only the store "c_meta"', async () => {
 		const db = await readDb(page);
-		expect(db.version).toBe(5);
+		expect(db.version).toBe(1);
 		expect(db.stores).toEqual(["c_meta"]);
 	});
 }
@@ -234,9 +244,9 @@ test("A sync stores every conversation of the list", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversations "a" and "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenItPostsUndefined(seen);
-	await thenOnlyCMetaAtVersion5(page);
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersNoResult(seen);
+	await thenOnlyCMetaAtVersion1(page);
 	await thenCMetaHoldsExactly(
 		page,
 		list,
@@ -255,8 +265,8 @@ test("A sync replaces the copy as a whole", async ({ page, context }) => {
 	await test.step('And GET /v1/meta-all.json returns the conversation "b" with a new title and the conversation "c"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenItPostsUndefined(seen);
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersNoResult(seen);
 	await thenCMetaHoldsExactly(
 		page,
 		list,
@@ -274,35 +284,68 @@ test("An empty list empties the copy", async ({ page, context }) => {
 	await test.step("And GET /v1/meta-all.json returns no conversations", () => {
 		server.answer = (route) => route.fulfill({ json: [] });
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenItPostsUndefined(seen);
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersNoResult(seen);
 	await test.step('And "c_meta" is empty', async () => {
 		expect((await readDb(page)).items).toEqual([]);
 	});
 });
 
-test("Upgrading a version 4 database drops the stores of the old worker", async ({
+test("A sync deletes the old database lcty", async ({ page, context }) => {
+	const server = await background(page, context);
+	const list = [conv("b")];
+	await test.step('Given the database "lcty" is at version 5 with the store "c_meta" holding the conversation "a"', async () => {
+		await seedDb(
+			page,
+			5,
+			{ c_meta: { keyPath: "id", records: [[null, conv("a")]] } },
+			"lcty",
+		);
+		expect((await readDb(page, "lcty")).version).toBe(5);
+	});
+	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
+		server.answer = (route) => route.fulfill({ json: list });
+	});
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersNoResult(seen);
+	await test.step('And there is no database "lcty"', async () => {
+		expect((await readDb(page, "lcty")).exists).toBe(false);
+	});
+	await thenCMetaHoldsExactly(page, list, 'the conversation "b", as returned');
+});
+
+test("A connection to the old database does not hold up the sync", async ({
 	page,
 	context,
 }) => {
 	const server = await background(page, context);
-	const list = [conv("a")];
-	await test.step('Given the database "lcty" is at version 4 with the stores "meta" and "sync", each holding a record', async () => {
-		await seedDb(page, 4, {
-			meta: { keyPath: "id", records: [[null, conv("old")]] },
-			sync: { records: [["stale", "token"]] },
-		});
-		const db = await readDb(page);
-		expect(db.version).toBe(4);
-		expect(db.stores).toEqual(["meta", "sync"]);
+	const list = [conv("b")];
+	await test.step('Given the page holds a connection to the database "lcty" that it never closes', async () => {
+		await seedDb(
+			page,
+			5,
+			{ c_meta: { keyPath: "id", records: [[null, conv("a")]] } },
+			"lcty",
+		);
+		await page.evaluate(
+			() =>
+				new Promise((resolve, reject) => {
+					const req = indexedDB.open("lcty");
+					req.onsuccess = () => {
+						window.oldDb = req.result; // no onversionchange: it stays open
+						resolve();
+					};
+					req.onerror = () => reject(req.error);
+				}),
+		);
 	});
-	await test.step('And GET /v1/meta-all.json returns the conversation "a"', () => {
+	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenItPostsUndefined(seen);
-	await thenOnlyCMetaAtVersion5(page);
-	await thenCMetaHoldsExactly(page, list, 'the conversation "a", as returned');
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersNoResult(seen);
+	await thenCMetaHoldsExactly(page, list, 'the conversation "b", as returned');
+	await page.evaluate(() => window.oldDb.close());
 });
 
 test("The worker closes its connection after the sync", async ({
@@ -314,14 +357,14 @@ test("The worker closes its connection after the sync", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversation "a"', () => {
 		server.answer = (route) => route.fulfill({ json: [conv("a")] });
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenItPostsUndefined(seen);
-	await test.step('And the database "lcty" can be opened at version 6 without being blocked, while the worker is still alive', async () => {
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersNoResult(seen);
+	await test.step('And the database "lcty_c" can be opened at version 2 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
 			() =>
 				new Promise((resolve) => {
 					let blocked = false;
-					const req = indexedDB.open("lcty", 6);
+					const req = indexedDB.open("lcty_c", 2);
 					req.onblocked = () => {
 						blocked = true;
 					};
@@ -337,15 +380,17 @@ test("The worker closes its connection after the sync", async ({
 	});
 });
 
-for (const { answer, message, fulfill } of [
+for (const { answer, message, status, fulfill } of [
 	{
 		answer: "answers with the status 500",
 		message: "Failed to fetch /v1/meta-all.json: 500",
+		status: 500,
 		fulfill: (route) => route.fulfill({ status: 500, body: "boom" }),
 	},
 	{
 		answer: "returns an object, not a list",
 		message: "meta-all.json is invalid",
+		status: null,
 		fulfill: (route) => route.fulfill({ json: { a: conv("a") } }),
 	},
 ]) {
@@ -359,8 +404,8 @@ for (const { answer, message, fulfill } of [
 		await test.step(`And GET /v1/meta-all.json ${answer}`, () => {
 			server.answer = fulfill;
 		});
-		const seen = await whenTheWorkerRuns(page);
-		await thenTheErrorEventFires(seen, message);
+		const seen = await whenPosted(page, "sync");
+		await thenAnswersError(seen, message, status);
 		await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 	});
 }
@@ -376,8 +421,8 @@ test("A response that is not JSON leaves the copy as it was", async ({
 		server.answer = (route) =>
 			route.fulfill({ contentType: "application/json", body: "not json" });
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenTheErrorEventFires(seen);
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersAnError(seen);
 	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 });
 
@@ -391,26 +436,82 @@ test("A failed request leaves the copy as it was", async ({
 	await test.step("And GET /v1/meta-all.json fails without a response", () => {
 		server.answer = (route) => route.abort("failed");
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenTheErrorEventFires(seen);
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersAnError(seen);
 	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 });
 
 test("A newer database is left alone", async ({ page, context }) => {
 	const server = await background(page, context);
 	const kept = [conv("a")];
-	await test.step('Given the database "lcty" is at version 6 with the store "c_meta" holding the conversation "a"', async () => {
-		await seedDb(page, 6, {
+	await test.step('Given the database "lcty_c" is at version 2 with the store "c_meta" holding the conversation "a"', async () => {
+		await seedDb(page, 2, {
 			c_meta: { keyPath: "id", records: kept.map((m) => [null, m]) },
 		});
 	});
 	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: [conv("b")] });
 	});
-	const seen = await whenTheWorkerRuns(page);
-	await thenTheErrorEventFires(seen);
-	await test.step('And the database "lcty" is still at version 6', async () => {
-		expect((await readDb(page)).version).toBe(6);
+	const seen = await whenPosted(page, "sync");
+	await thenAnswersAnError(seen);
+	await test.step('And the database "lcty_c" is still at version 2', async () => {
+		expect((await readDb(page)).version).toBe(2);
 	});
 	await thenCMetaHoldsExactly(page, kept, 'the conversation "a"');
+});
+
+// ---- Scenarios: reading ----
+
+test("Getting before any sync finds no copy", async ({ page, context }) => {
+	await background(page, context);
+	await givenNoDatabase(page);
+	const seen = await whenPosted(page, "get");
+	await test.step("Then it answers no items and stale true", () => {
+		expect(answerOf(seen)).toEqual({ result: { items: [], stale: true } });
+	});
+	await test.step('And there is still no database "lcty_c"', async () => {
+		expect((await readDb(page)).exists).toBe(false);
+	});
+});
+
+test("Getting returns the copy newest first", async ({ page, context }) => {
+	await background(page, context);
+	const at = (id, time) => ({
+		...conv(id),
+		updated_at_hint: `2026-11-02T${time}:00.000Z`,
+	});
+	const stored = {
+		a: at("a", "10:00"),
+		b: at("b", "12:00"),
+		c: at("c", "11:00"),
+		d: at("d", "12:00"),
+	};
+	await givenCMetaHolds(
+		page,
+		Object.values(stored),
+		'the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00',
+	);
+	const seen = await whenPosted(page, "get");
+	await test.step('Then it answers "d", "b", "c" and "a" in that order, as stored, and stale false', () => {
+		expect(answerOf(seen)).toEqual({
+			result: {
+				items: [stored.d, stored.b, stored.c, stored.a],
+				stale: false,
+			},
+		});
+	});
+});
+
+test("An unknown operation is an error", async ({ page, context }) => {
+	const server = await background(page, context);
+	let requested = false;
+	server.answer = (route) => {
+		requested = true;
+		return route.fulfill({ json: [] });
+	};
+	const seen = await whenPosted(page, "nope");
+	await thenAnswersError(seen, "unknown operation: nope", null);
+	await test.step("And GET /v1/meta-all.json is not fetched", () => {
+		expect(requested).toBe(false);
+	});
 });

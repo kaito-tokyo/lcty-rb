@@ -8,28 +8,29 @@
 Feature: LCTYSP-1010 The browser's copy of the meta
 
   The module keeps the browser's copy of every conversation's meta, the store "c_meta" of the IndexedDB database
-  "lcty". A sync starts the worker /js/sync_c_meta.worker.js (LCTYSP-1001), which replaces the store with
+  "lcty_c". A sync posts {"op": "sync"} to the worker /js/lcty_c.worker.js (LCTYSP-1001), which replaces the store with
   GET /v1/meta-all.json; then the module writes a snapshot of the newest 20 conversations to localStorage
   "lcty.meta.v1" for the first paint and calls the listeners of onMetaDbChange. requestMetaDbSync() syncs when the
   browser is idle (the pages call it on loading the list and after sending a change), resetMetaDb() removes the
-  snapshot and syncs at once (the sidebar's refresh button), and readMetaDb() reads the copy newest first without ever
-  creating the database. In a tab at most one sync runs: syncs requested while one runs share one more sync after it.
+  snapshot and syncs at once (the sidebar's refresh button), and readMetaDb() reads the copy newest first through the worker
+  ({"op": "get"}), which never creates the database. In a tab at most one sync runs: syncs requested while one runs share one more sync after it.
 
   Background:
     Given a page on the server's origin
     And GET /v1/meta-all.json is answered by the test
 
   Scenario: Reading before any sync finds no copy
-    Given there is no database "lcty"
+    Given there is no database "lcty_c"
     When readMetaDb() reads the copy
     Then it returns no items and stale true
-    And there is still no database "lcty"
+    And there is still no database "lcty_c"
 
-  Scenario: Reading a database the worker has not upgraded finds no copy
-    Given the database "lcty" is at version 4 with the stores "meta" and "sync"
+  Scenario: Reading does not read the old database lcty
+    Given the database "lcty" is at version 5 with the store "c_meta" holding the conversation "a"
+    And there is no database "lcty_c"
     When readMetaDb() reads the copy
     Then it returns no items and stale true
-    And the database "lcty" is still at version 4
+    And there is still no database "lcty_c"
 
   Scenario: Reading returns the copy newest first
     Given "c_meta" holds the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00
@@ -39,10 +40,10 @@ Feature: LCTYSP-1010 The browser's copy of the meta
   Scenario: Reading leaves no connection open
     Given "c_meta" holds the conversation "a"
     When readMetaDb() reads the copy
-    Then the database "lcty" can be opened at version 6 without being blocked
+    Then the database "lcty_c" can be opened at version 2 without being blocked
 
   Scenario: A reset syncs at once
-    Given there is no database "lcty"
+    Given there is no database "lcty_c"
     And GET /v1/meta-all.json returns the conversations "a" and "b"
     And a listener is registered with onMetaDbChange
     When resetMetaDb() is called
