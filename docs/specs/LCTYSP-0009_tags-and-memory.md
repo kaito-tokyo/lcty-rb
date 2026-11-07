@@ -203,11 +203,13 @@ Scope: tag definitions (name, prompt, order) and memory. The current tags of con
 - **Every child repeats `data-tag`,** with the same value, so each element says which tag it belongs to on its own (for
   example when elements of several tags are shown together). The server writes the same name everywhere; a reader uses
   `<lcty-t>`'s.
-- **`<lcty-tagop>`: a policy for an operation on the tag.** `data-type` names the operation and `data-content` is the
-  instruction for it. `add-memory` is the memory proposal policy: what conversations with this tag should remember and
-  how to write it. It is used by the [proposal flow](#proposal-flow) (below), no longer by the tag's prompt. At most one
-  `<lcty-tagop>` per `data-type`; it is omitted when there is no policy. `data-type` is lowercase letters, digits and
-  `-`; unknown types are ignored (and not kept when the server rewrites the file).
+- **`<lcty-tagop>`: a policy for an operation on the tag.** The decision is that a tag file can carry these elements.
+  `data-type` names the operation and `data-content` is the instruction for it; `add-memory` is the memory proposal
+  policy (what conversations with this tag should remember and how to write it). At most one `<lcty-tagop>` per
+  `data-type`; it is omitted when there is no policy. `data-type` is lowercase letters, digits and `-`; unknown types
+  are ignored (and not kept when the server rewrites the file).
+  - How the existing [proposal flow](#proposal-flow) uses the `add-memory` policy (instead of, or together with, the
+    tag's prompt) is adjusted later.
 - **`<lcty-system>`: the tag's prompt,** the part it contributes to the system prompt draft. At most one; omitted when
   the prompt is empty.
 - **`<lcty-memory>`: one memory item,** in the order added. `data-content` is the text. `id` is `t-mem-` followed by the
@@ -228,13 +230,6 @@ Scope: tag definitions (name, prompt, order) and memory. The current tags of con
 - Every directory that holds HTML has its own copy of `lcty.v1.*`, so a page or file refers to them by name alone
   (`lcty.v1.js`). In the data directory: `$LCTY_DATA_DIR/` (the root), `c/` and `t/`, published at startup as `c/` is
   today ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). On the site: `/`, `/c/` and `/t/`.
-
-### Proposal policy
-
-With the revision, what to remember is no longer instructed by the tag's prompt but by its `add-memory` policy
-(`<lcty-tagop data-type="add-memory">`). The temporary message of the [proposal flow](#proposal-flow) lists, for each
-target tag, its policy and its current memory. The tag's prompt only shapes conversations. What happens to a tag
-without a policy is not settled.
 
 ### Character handling is the browser's
 
@@ -379,6 +374,5 @@ To be settled before implementation.
      reference form.
 
 Not yet discussed: whether tag files are served at a URL (for example `/t/NNNNN-<name>.html`, beside the reorder
-page) or only through the API; whether a tag without an `add-memory` policy gets no proposals or falls back to a
-default; the updates to
+page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later); the updates to
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (`t/`, `t.lock`) and to the tests (LCTYSP-3005).
