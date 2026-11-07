@@ -5,7 +5,7 @@
 // Client for the chatty.rb storage API (LCTYSP-006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-003).
 
 import { renderMarkdown } from "../ui/markdown.js";
-import { invalidateMetaDb } from "./meta-db.js";
+import { requestMetaDbSync } from "./meta-db.js";
 
 async function request(method, url, body, { raw = false } = {}) {
 	const init = { method };
@@ -19,14 +19,14 @@ async function request(method, url, body, { raw = false } = {}) {
 }
 
 /**
- * A request that changes conversations. The browser's copy of their meta is out of date afterwards (api/meta-db.js),
- * also when the request failed (the server may have written part of it).
+ * A request that changes conversations. The browser's copy of their meta is synced afterwards (api/meta-db.js), also
+ * when the request failed (the server may have written part of it).
  */
 async function write(method, url, body) {
 	try {
 		return await request(method, url, body);
 	} finally {
-		invalidateMetaDb();
+		requestMetaDbSync();
 	}
 }
 

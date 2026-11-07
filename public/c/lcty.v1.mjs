@@ -545,8 +545,8 @@ export class LctySidebarElement extends HTMLElement {
 
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
 	// before any module has loaded (LCTYSP-010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
-	// there at the first paint, or else from IndexedDB ("lcty", store "meta"), asynchronously. The database is only
-	// read: when it does not exist it is not created (/meta_db.worker.js owns the schema). A module that has already
+	// there at the first paint, or else from IndexedDB ("lcty", store "c_meta"), asynchronously. The database is only
+	// read: when it does not exist it is not created (/js/sync_meta.worker.js owns the schema). A module that has already
 	// shown its own items wins.
 	connectedCallback() {
 		if (this.#filled) return;
@@ -590,11 +590,11 @@ export class LctySidebarElement extends HTMLElement {
 		req.onsuccess = () => {
 			const db = req.result;
 			db.onversionchange = () => db.close();
-			if (!db.objectStoreNames.contains("meta")) {
+			if (!db.objectStoreNames.contains("c_meta")) {
 				db.close();
 				return;
 			}
-			const get = db.transaction("meta").objectStore("meta").getAll();
+			const get = db.transaction("c_meta").objectStore("c_meta").getAll();
 			get.onsuccess = () => {
 				db.close();
 				try {

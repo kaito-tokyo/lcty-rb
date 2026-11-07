@@ -14,7 +14,7 @@
 # conversation files in data/c/ at startup, so a backup of data/ keeps conversations together with what renders them
 # (LCTYSP-010). Opened directly, a file shows with the English x-default texts and without features.
 # Path rule: c/lcty.v1.* holds exactly what a conversation file needs where it is (opened directly, offline); a file it
-# does not need on its own (the sidebar's meta database worker, …) lives directly under public/ instead (LCTYSP-005).
+# does not need on its own (the sidebar's meta sync worker, …) lives under public/ outside public/c/ instead (LCTYSP-005).
 
 require 'fileutils'
 require 'securerandom'

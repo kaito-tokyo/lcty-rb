@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-001](LCTYSP-001_architecture.md), [LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-007](LCTYSP-007_search.md), [LCTYSP-008](LCTYSP-008_vector-binary.md), [LCTYSP-009](LCTYSP-009_tags-and-memory.md)
-- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`
+- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/js/sync_meta.worker.js`
 
 ## Summary
 
@@ -44,50 +44,44 @@ source of truth at startup or by the browser. Everything else is source-of-truth
 ### In the browser
 
 - **IndexedDB `lcty`** (derived; it can be dropped at any time):
-  - store `meta` (key `id`): a copy of `GET /v1/meta-all.json`, the meta of every conversation read from its head lines
+  - store `c_meta` (key `id`): a copy of `GET /v1/meta-all.json`, the meta of every conversation read from its head lines
     ([LCTYSP-003](LCTYSP-003_conversation-file.md), [LCTYSP-006](LCTYSP-006_http-api.md)). It holds `setup_tags` (the
     tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
-    messages, from the search index); the last three are only hints.
-  - store `sync`: `stale` → a token, present while the copy is out of date. A new database starts out stale, and so
-    does an upgraded one: the version is raised whenever what is stored changes, so the copy is refetched.
-- **The copy is never refetched while it is up to date.** Sending a change of conversations to the server (creating,
-  appending lines, popping, deleting: `js/api/storage.js`) invalidates it: a new token is written and a sync is
-  requested. Opening a page only requests a sync if the copy is stale. Sync requests are sent to the worker when the
-  browser is idle (`requestIdleCallback`, at most 10 s later; 1 s later where it is missing).
-  A sync fetches the list, replaces the `meta` store as a whole (so a conversation deleted on the server disappears
-  from it too) and removes the token only if it is still the one read before fetching, so an invalidation made
-  meanwhile, in this tab or another, is not lost. Changes not made through this browser (a file edited by hand,
-  another browser) are not seen until the next invalidation, or until the sidebar's refresh button is pressed.
-- **A broken copy repairs itself.** An empty `meta` store counts as stale even without a token (a copy that lost its
-  records would otherwise stay empty until the next change). A database that cannot be opened (a newer version left by
-  other code, a broken store) is deleted and created again. A snapshot that is not a list is written again, and the
-  sidebar skips entries of it that have no `id`, reading `meta` instead when none is left.
-- **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) throws the copy away and fetches it
-  again at once: the snapshot is removed and the worker deletes the database, creates it again and syncs (a job like a
-  sync; a refused one is retried until it runs). The list is shown again through `onMetaDbChange`.
-- **Readers:** `lcty.v1.js` (`<lcty-sidebar>`, when it is in the document) reads the snapshot below, or `meta` when there
-  is none, to fill the sidebar before any module has loaded; it never creates the database. Once the module has
-  loaded, the sidebar's list and its `tag:` filters come from `meta` (through the worker's `read`, which also tells
-  whether the copy is stale), read again whenever a sync has stored a new list (`onMetaDbChange`: in this tab when its
-  sync finishes, in other tabs through the snapshot's `storage` event) ([LCTYSP-005](LCTYSP-005_page-and-elements.md)).
-- **A worker owns the database:** `meta_db.worker.js` (a classic worker served from `public/` at `/meta_db.worker.js`,
-  not a `/c/` file: a conversation file opened on its own does not need it, [LCTYSP-005](LCTYSP-005_page-and-elements.md); started on first use by
-  `js/api/meta-db.js`, which only sends it messages) opens it, defines its schema, fetches the list and writes the
-  stores, so none of this runs on the main thread. It answers every message at once with whether it accepted it, and
-  has no queue: a sync is a job, and while one runs another is refused (two syncs running together could let an older
-  response overwrite a newer one). Invalidating and reading are short and always accepted; an invalidation must never
-  be lost, and one made while a sync runs is kept by the token. A refused sync is requested again 0.5 s later (when
-  idle), so the copy catches up with an invalidation made while a sync was running.
+    messages, from the search index); the last three are only hints. It is the only store: upgrading from an older
+    version (the stores `meta` and `sync` of the retired `meta_db.worker.js`) drops every other store.
+- **A sync is one worker:** `js/sync_meta.worker.js` (a classic worker with no imports, served at
+  `/js/sync_meta.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
+  [LCTYSP-005](LCTYSP-005_page-and-elements.md)). Started by `new Worker`, it fetches `GET /v1/meta-all.json`, clears and
+  fills `c_meta` in one transaction (so a conversation deleted on the server disappears from it too), and posts
+  `undefined`, or an `Error` when any step failed (the copy is then left as it was). Then `js/api/meta-db.js` terminates
+  it. It is the only code that opens the database with a version, so the schema is defined there alone; a database it
+  cannot open (a newer version left by other code, a broken database) is deleted and created again.
+- **When a sync runs:** opening a page and sending a change of conversations to the server (creating, appending lines,
+  popping, deleting: `js/api/storage.js`) request one, run when the browser is idle (`requestIdleCallback`, at most 10 s
+  later; 1 s later where it is missing); requests made before it starts share it. In a tab at most one worker runs: a
+  sync requested while one runs is run once after it, so an older response never overwrites a newer one in this tab
+  and a change made meanwhile is still fetched. Tabs do not coordinate: the transaction that commits last wins.
+  Changes not made through this browser (a file edited by hand, another browser) are seen at the next sync.
+- **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) removes the snapshot and syncs at once,
+  not when idle. The list is shown again through `onMetaDbChange`; a failure is shown as a toast.
+- **Readers:** `lcty.v1.js` (`<lcty-sidebar>`, when it is in the document) reads the snapshot below, or `c_meta` when
+  there is none, to fill the sidebar before any module has loaded. Once the module has loaded, the sidebar's list and
+  its `tag:` filters come from `c_meta`, read on the main thread by `readMetaDb()` (`js/api/meta-db.js`), which tells
+  whether there is a copy yet (`stale` until the first sync has finished), read again whenever a sync has stored a new
+  list (`onMetaDbChange`: in this tab when its sync finishes, in other tabs through the snapshot's `storage` event)
+  ([LCTYSP-005](LCTYSP-005_page-and-elements.md)). Readers open the database without a version, never create it (an
+  upgrade that would create it is aborted) and close each connection as soon as they have read, so the worker's
+  upgrade is not blocked.
 - **`localStorage` key `lcty.meta.v1`**: a snapshot for the first view only: the newest 20 conversations by
   `updated_at_hint`, with only what the sidebar shows before a module has loaded (`[{id, title, updated_at_hint,
   tags_hint, messages_hint}]`). Unlike
   IndexedDB, it can be read synchronously: the sidebar is filled from it before the first paint. Derived from the database:
-  `js/api/meta-db.js` writes it on the main thread (workers have no `localStorage`) whenever a sync has stored a new
-  list, and from the database when it is missing; when it does not fit, it is removed and the sidebar reads the
-  database instead.
+  `js/api/meta-db.js` writes it on the main thread (workers have no `localStorage`) after each sync; when it does not
+  fit, it is removed and the sidebar reads the database instead. A snapshot that is not a list is ignored, and the
+  sidebar skips entries of it that have no `id`, reading `c_meta` instead when none is left.
 - **One order everywhere:** lists of conversations are newest first by `updated_at_hint`, then by id (which starts with
-  the creation time), on the server (`meta-all.json`, `/v1/conversations`), in the worker, in the snapshot and in the
-  sidebar. With the date alone, conversations with the same `updated_at_hint` came out in a different order from the
+  the creation time), on the server (`meta-all.json`, `/v1/conversations`), in `readMetaDb()`, in the snapshot and in
+  the sidebar. With the date alone, conversations with the same `updated_at_hint` came out in a different order from the
   snapshot and from the database, and swapped places when the module redrew the list.
 - `localStorage` key `lcty.settings.v1`: the changed settings (below).
 

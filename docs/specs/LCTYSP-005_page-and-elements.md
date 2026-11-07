@@ -72,8 +72,8 @@ as they are.
 **Rule (path design): `c/lcty.v1.*` holds what a conversation file loads.** The header lines load them by relative
 paths, so over HTTP they are `/c/lcty.v1.*` (in `public/c/`), and opened directly the two in `data/c/` are found next
 to the file. A file a conversation file does not need on its own (one that only serves the
-other pages, or a copy of server data such as the sidebar's meta database) is not a `/c/` file: it lives directly
-under `public/` and is served from the server's root, like the operation pages (`/meta_db.worker.js`,
+other pages, or a copy of server data such as the sidebar's meta database) is not a `/c/` file: it lives under
+`public/` outside `public/c/` and is served from the server's root, like the operation pages (`/js/sync_meta.worker.js`,
 [LCTYSP-010](LCTYSP-010_data-and-settings.md); `/fuzzy_search.worker.js` and `/bdot264.wasm`,
 [LCTYSP-008](LCTYSP-008_vector-binary.md)). The `lcty.v1.` prefix is for `/c/` files only.
 
@@ -96,8 +96,8 @@ Types and documentation of `lcty.v1.js` are in `public/c/lcty.v1.d.ts`. `public/
 The new conversation page has its own module entry, which is not part of `data/c/`: `public/index.js` (`/`,
 `js/pages/new.js`). It is bundled at startup and served from memory at `/index.js`
 (`lib/module_servlet.rb`). The entry only imports the page's init function (`initNewPage` in `js/pages/new.js`) and calls it.
-The workers are not `/c/` files either: `public/meta_db.worker.js` (`/meta_db.worker.js`, the sidebar's meta
-database, a copy of server data) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
+The workers are not `/c/` files either: `public/js/sync_meta.worker.js` (`/js/sync_meta.worker.js`, which fills the
+sidebar's meta database, a copy of server data; a classic worker, never bundled) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
 with its kernel `public/bdot264.wasm`, built from `public/bdot264.wat`) work on server data, which a conversation file
 opened on its own does not need.
 
@@ -313,8 +313,8 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   - from the `localStorage` snapshot `lcty.meta.v1` (the newest 20 conversations: id, title, `updated_at_hint`,
     `tags_hint` and `messages_hint`),
     synchronously, so the first view is there at the first paint;
-  - when there is no snapshot, from IndexedDB `lcty` (store `meta`), asynchronously. The database is only read: when
-    it does not exist yet it is not created (the meta worker owns the schema), and the list stays empty.
+  - when there is no snapshot, from IndexedDB `lcty` (store `c_meta`), asynchronously. The database is only read: when
+    it does not exist yet it is not created (the meta sync worker owns the schema), and the list stays empty.
 
   These items have titles, dates, `tags_hint` as their tags and `messages_hint` as their counts (`showCached`), so
   they look the same as the module's items when the hints are up to date. `<lcty-c>`

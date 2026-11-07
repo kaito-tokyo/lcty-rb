@@ -12,7 +12,7 @@
 import {
 	onMetaDbChange,
 	readMetaDb,
-	syncMetaDbIfStale,
+	requestMetaDbSync,
 } from "../api/meta-db.js";
 import {
 	fetchSnippets,
@@ -240,11 +240,11 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 	onMetaDbChange(load);
 
 	/**
-	 * Reload the list (on opening a page, after saving or renaming). The copy is refetched only when it was invalidated
-	 * (a change sent to the server), when idle; the new list then arrives through onMetaDbChange.
+	 * Reload the list (on opening a page, after saving or renaming) from the copy, and sync the copy when idle; the new
+	 * list then arrives through onMetaDbChange.
 	 */
 	async function refresh() {
-		syncMetaDbIfStale();
+		requestMetaDbSync();
 		await load();
 	}
 
