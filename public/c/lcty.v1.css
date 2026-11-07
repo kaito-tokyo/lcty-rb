@@ -920,6 +920,21 @@ lcty-c::part(lcty-memory__proposal) {
 	gap: 6px;
 	align-items: flex-start;
 }
+/* the tag reorder page (/t/) */
+.tag-order-list {
+	margin: 0;
+	padding-left: 2em;
+	display: grid;
+	gap: 6px;
+}
+/* the name, then ↑ and ↓ at the end of the line */
+.tag-order-item {
+	display: grid;
+	grid-template-columns: 1fr auto auto;
+	gap: 6px;
+	align-items: center;
+	justify-items: start;
+}
 
 /* ---- narrow screens: the conversation page hides the sidebar; the other pages put it above their content ---- */
 @media (max-width: 720px) {

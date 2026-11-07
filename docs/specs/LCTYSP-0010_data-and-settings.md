@@ -33,12 +33,12 @@ source of truth at startup or by the browser. Everything else is source-of-truth
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `c/*.html`                                     | Source (conversations; same layout as the URL `/c/<id>.html`)                                                          | —                                                                                             |
 | `c/lcty.v1.js`, `c/lcty.v1.css`                | Source (what reading a conversation offline needs: published at startup, rewritten only when changed; LCTYSP-0005)     | —                                                                                             |
-| `tags.sqlite`                                  | Source (tag definitions, memory and the tags of conversations changed after creation)                                  | —                                                                                             |
+| `tags.sqlite`                                  | Source (the tags of conversations changed after creation; tag definitions and memory are `t/`, below)                  | —                                                                                             |
 | `_index.sqlite` (+ `-wal`, `-shm`)             | Derived (rounds and FTS)                                                                                               | Rebuilt from the conversation files at startup ([LCTYSP-0007](LCTYSP-0007_search.md))         |
 | `_vectors.<model>.sqlite` (+ `-wal`, `-shm`)   | Derived (vector DB)                                                                                                    | Re-embedded by the browser while a page is open ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) |
 | `_vectors.eg2_264.dat`, `_vectors.eg2_264.idx` | Derived (distribution files of the default embedding model: the rows and their ids, served as `/v1/vectors.eg2_264.*`) | Rebuilt from the vector DB on the next request                                                |
 
-### Revision draft: tag files (not implemented)
+### Revision: tag files (implemented, except the IndexedDB split)
 
 With tag definitions and memory moved to one HTML file per tag
 ([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), the data
@@ -51,10 +51,10 @@ directory changes as follows. The rule on `_` is unchanged.
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out             |
 | `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
 
-In the browser, IndexedDB is split by resource: `lcty` is renamed `lcty_c` (store `c_meta`, filled by
-`js/sync_c_meta.worker.js`), and `lcty_t` (store `t_full`, filled by `js/sync_t_full.worker.js`) holds a full copy of
-the tags with the set's `ETag`. Both are derived; the old `lcty` is deleted and refilled by the next sync. The section
-below describes `lcty` as it is today.
+In the browser, IndexedDB is to be split by resource (not implemented yet): `lcty` renamed `lcty_c` (store `c_meta`,
+filled by `js/sync_c_meta.worker.js`), and `lcty_t` (store `t_full`, filled by `js/sync_t_full.worker.js`) holding a
+full copy of the tags with the set's `ETag`. Both are derived; the old `lcty` will be deleted and refilled by the next
+sync. Until then the pages read the tags with `GET /v1/tags`. The section below describes `lcty` as it is today.
 
 - SQLite files use WAL mode. To back up `tags.sqlite`, copy `tags.sqlite-wal` with it or run `PRAGMA wal_checkpoint`
   first.

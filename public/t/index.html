@@ -1,0 +1,33 @@
+<!--
+SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lcty</title>
+<link rel="stylesheet" href="lcty.v1.css">
+<script src="lcty.v1.js"></script>
+<script src="lcty.v1.lang-ja.js"></script>
+<script type="module" src="index.js"></script>
+</head>
+<body class="page tag-order">
+<lcty-sidebar></lcty-sidebar>
+<main class="new-card">
+  <h2 data-lcty-t="tagOrderHeading">Order of the tags</h2>
+  <p class="hint" data-lcty-t="tagOrderHint">The system prompt draft joins the chosen tags in this order. Saving numbers the tags again; their prompts and memory do not change.</p>
+  <ol id="tag-order" class="tag-order-list"></ol>
+  <p id="tag-order-status" class="hint" role="status"></p>
+  <div class="dialog-buttons">
+    <span class="spacer"></span>
+    <button id="tag-order-reset" type="button" data-lcty-t="discardChanges">Discard changes</button>
+    <button id="tag-order-save" type="button" class="primary" data-lcty-t="save">Save</button>
+  </div>
+</main>
+<div id="toast" role="status" hidden></div>
+</body>
+</html>

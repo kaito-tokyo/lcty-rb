@@ -56,8 +56,9 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                        |       0 |      17 |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/c/lcty.v1.mjs`: the elements of a conversation file    |       0 |      66 |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer      |       0 |      27 |
-| [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                    |      14 |      25 |
+| [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                    |      14 |      39 |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel            |       0 |      21 |
+| [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references  |      55 |       0 |
 
 ## How a feature is written
 

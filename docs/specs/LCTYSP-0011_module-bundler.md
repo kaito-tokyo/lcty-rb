@@ -8,7 +8,8 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
-- Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/module_servlet.rb` (`/c/index.js`)
+- Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/module_servlet.rb` (`/c/index.js`,
+  `/t/index.js`)
 
 ## Summary
 

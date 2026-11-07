@@ -56,7 +56,9 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 (`LCTY_DATA_DIR`; see Settings for Linux):
 
 - `c/<id>.html`: one file per conversation. Opened through the server (`/c/<id>.html`) it shows as the conversation.
-- `tags.sqlite`: tag definitions, memory and tag changes.
+- `t/NNNNN-<name>.html`: one file per tag (its name, prompt and memory); `NNNNN` is the order, changed on `/t/`.
+- `tags.sqlite`: the tags of conversations changed after they were created. Tag definitions and memory kept there by
+  an older version are dropped when it starts (they are not converted; define the tags again).
 - Files starting with `_` are derived (the search index, the vectors) and are rebuilt when deleted.
 
 Back up everything that does not start with `_`:

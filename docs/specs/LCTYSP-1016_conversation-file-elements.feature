@@ -214,6 +214,12 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And the chip "ruby" is not marked unknown
     And the picker has the options "+ Tag", "go" and "python" and is enabled
 
+  Scenario: Defined tags show their display names from data-tag-names
+    Given the body holds <lcty-c id="c-conv" data-setup-tags="c~23 gone" data-tag-defs="c~23 ruby" data-tag-names="C# Ruby"></lcty-c>
+    Then the chip "c~23" shows "C#", has the title "Search tag:C#" and a remove button labelled "Remove C#"
+    And the chip "gone" is marked unknown and shows "gone"
+    And the picker has the options "+ Tag" and "Ruby", whose value is "ruby"
+
   Scenario Outline: The picker is disabled when there is no tag to add
     Given the body holds <lcty-c id="c-conv" data-setup-tags="ruby" data-tag-defs="<defs>"></lcty-c>
     Then the picker has only the option "+ Tag" and is disabled
@@ -253,8 +259,8 @@ Feature: LCTYSP-1016 The elements of a conversation file
     Given the body holds <lcty-conv-list></lcty-conv-list>
     When show() is given "a" titled "Alpha" with 2 messages, the tag "ruby" and a snippet, and "b" without a title for the chunk "0190abcd"
     Then the list is a <ul> (part lcty-conv-list__items) of two <li> (part lcty-conv-list__entry)
-    And the first is a link to "a.html" with data-id "a" holding the title "Alpha", the snippet, the tag chip "ruby" titled "Search tag:ruby" and the meta "2026-11-02 03:04 · 2 messages"
-    And the second is a link to "b.html#c-msg-0190abcd" with data-chunk "0190abcd" holding the title "(untitled)" and the meta "2026-11-02 03:04"
+    And the first is a link to "../c/a.html" with data-id "a" holding the title "Alpha", the snippet, the tag chip "ruby" titled "Search tag:ruby" and the meta "2026-11-02 03:04 · 2 messages"
+    And the second is a link to "../c/b.html#c-msg-0190abcd" with data-chunk "0190abcd" holding the title "(untitled)" and the meta "2026-11-02 03:04"
 
   Scenario: An empty list shows its empty text when it is given one
     Given the body holds <lcty-conv-list></lcty-conv-list>
@@ -295,7 +301,7 @@ Feature: LCTYSP-1016 The elements of a conversation file
   Scenario: The sidebar holds its links, the search box and the list
     Given the body holds <lcty-sidebar></lcty-sidebar>
     Then its Shadow DOM is its field nav, the search box and its field list (part lcty-sidebar__list)
-    And the nav holds the link "+ New chat" to "./" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"
+    And the nav holds the link "+ New chat" to "../c/" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"
     And they have the parts "lcty-sidebar__new lcty-sidebar__link lcty-button lcty-button--primary", "lcty-sidebar__tags lcty-sidebar__link lcty-button", "lcty-sidebar__refresh lcty-sidebar__link lcty-button" and "lcty-sidebar__settings lcty-sidebar__link lcty-button"
     And the search box holds its field search, a search field with the placeholder "Search chats", and its field searchStatus
 

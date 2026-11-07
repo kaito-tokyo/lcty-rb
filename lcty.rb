@@ -23,6 +23,7 @@ require_relative 'lib/config'
 require_relative 'lib/store'
 require_relative 'lib/module_servlet'
 require_relative 'lib/c/servlet'
+require_relative 'lib/t/servlet'
 require_relative 'lib/v1/servlet'
 
 module Chatty
@@ -87,6 +88,7 @@ module Chatty
     )
     server.mount('/v1', V1::Servlet)
     server.mount('/c', C::Servlet)
+    server.mount('/t', T::Servlet)
     ModuleServlet.mount_all(server)
     server.mount('/', WEBrick::HTTPServlet::FileHandler, PUBLIC_DIR, FancyIndexing: false)
     %w[INT TERM].each { |sig| trap(sig) { server.shutdown } }

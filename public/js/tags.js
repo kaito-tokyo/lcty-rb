@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Tags and memory (LCTYSP-0009).
+// Tags and memory (LCTYSP-0009). A tag is a file t/NNNNN-<part>.html on the server: {file, name, ops, prompt,
+// memory}. NNNNN is the draft order, <part> is derived from the display name here (all Unicode handling is the
+// browser's; the server only checks file names mechanically), and conversations refer to a tag by its part.
+//  - (the name rules, file names and references are in tag-names.js)
 //  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
 //  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the sidebar
 //  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
@@ -11,6 +14,8 @@ import { addMemory, getTags, putTags } from "./api/storage.js";
 import { tr } from "./i18n.js";
 import { stream } from "./llm/client.js";
 import { buildRequest } from "./llm/history.js";
+import { siteUrl } from "./site.js";
+import { assignFileNames, tagNameError, tagPart, tagRef } from "./tag-names.js";
 
 function el(tag, props = {}, ...children) {
 	const e = document.createElement(tag);
@@ -25,22 +30,12 @@ function el(tag, props = {}, ...children) {
 	return e;
 }
 
-const TAG_NAME_RE = /^[^\s:]{1,40}$/;
-
-/** Sort by the order of the tag definitions (tags without a definition go last, in the given order). */
-export function sortTags(defs, names) {
-	const order = new Map(defs.map((t, i) => [t.name, i]));
-	return [...new Set(names)].sort(
-		(a, b) => (order.get(a) ?? 1e9) - (order.get(b) ?? 1e9),
-	);
-}
-
-/** Draft = for each chosen tag in definition order, its prompt followed by a "# Memory (name)" bullet list (LCTYSP-0009). */
+/** Draft = for each chosen tag in file order, its prompt followed by a "# Memory (name)" bullet list (LCTYSP-0009). */
 export function composeDraft(defs, selected) {
 	const set = new Set(selected);
 	const parts = [];
 	for (const t of defs) {
-		if (!set.has(t.name)) continue;
+		if (!set.has(tagRef(t))) continue;
 		const p = (t.prompt || "").trim();
 		if (p) parts.push(p);
 		const mem = (t.memory || []).map((m) => m.text.trim()).filter(Boolean);
@@ -55,19 +50,17 @@ export function composeDraft(defs, selected) {
 // ---- Tag editor ----
 
 /**
- * Draws the editor for tag definitions (name, prompt, memory) into container. Calls onSaved(new definitions) after
- * saving. Returns { isDirty }: whether there are unsaved edits.
+ * Draws the editor for tag definitions (name, prompt, memory) into container: defs and etag are what GET /v1/tags
+ * returned. The order is changed on the reorder page (/t/), not here. Calls onSaved(new definitions) after saving.
+ * Returns { isDirty }: whether there are unsaved edits.
  */
-export function renderTagsEditor(container, { defs, onSaved, toast }) {
+export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 	let saved = structuredClone(defs);
 	let work = structuredClone(saved);
+	let version = etag;
 	const list = el("div", { class: "tags-edit" });
 	const status = el("p", { class: "hint" });
 
-	const swap = (a, b) => {
-		[work[a], work[b]] = [work[b], work[a]];
-		render();
-	};
 	const render = () => {
 		list.replaceChildren(
 			...work.map((t, i) => {
@@ -114,24 +107,6 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 							"aria-label": tr("tagName", "Tag name"),
 							oninput: (e) => (t.name = e.target.value.trim()),
 						}),
-						el(
-							"button",
-							{
-								type: "button",
-								disabled: i === 0,
-								onclick: () => swap(i - 1, i),
-							},
-							"↑",
-						),
-						el(
-							"button",
-							{
-								type: "button",
-								disabled: i === work.length - 1,
-								onclick: () => swap(i, i + 1),
-							},
-							"↓",
-						),
 						el(
 							"button",
 							{
@@ -193,38 +168,78 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 	};
 
 	const save = async () => {
-		const names = work.map((t) => t.name);
-		const bad = names.find((n) => !TAG_NAME_RE.test(n));
+		const bad = work.find((t) => tagNameError(t.name));
 		if (bad !== undefined) {
 			status.textContent = tr(
 				"badTagName",
-				'The tag name "{name}" cannot be used (no spaces or ":", up to 40 characters)',
-				{ name: bad },
+				'The tag name "{name}" cannot be used (1 to 40 characters, no spaces, control characters or : ; / " \' ` ~ \\ |)',
+				{ name: bad.name },
 			);
 			return;
 		}
-		if (new Set(names).size !== names.length) {
+		// Names that differ only in case or in the escaped form are one tag (one file)
+		const parts = work.map((t) => tagPart(t.name));
+		if (new Set(parts).size !== parts.length) {
 			status.textContent = tr("duplicateTagName", "Tag names must be unique");
 			return;
 		}
 		// Blank memory items are left out of what is sent; the editor keeps them until the save succeeds
-		const tags = work.map((t) => ({
-			...t,
-			memory: (t.memory || []).filter((m) => m.text.trim()),
-		}));
+		let tags;
 		try {
-			await putTags({ tags });
-			saved = (await getTags()).tags; // Take timestamps etc. from the saved values
-			work = structuredClone(saved);
-			onSaved(structuredClone(saved));
-			status.textContent = "";
-			render();
-			toast(tr("tagsSaved", "Tags saved"));
+			tags = assignFileNames(
+				work.map((t) => ({
+					...t,
+					name: t.name.normalize("NFC"),
+					memory: (t.memory || []).filter((m) => m.text.trim()),
+				})),
+			);
+		} catch {
+			status.textContent = tr(
+				"tagNumbersFull",
+				"There is no number left for a new tag. Renumber the tags on the reorder page first.",
+			);
+			return;
+		}
+		try {
+			version = await putTags(tags, version);
 		} catch (e) {
+			if (e.status === 412) {
+				// Changed in another tab meanwhile: take the new state; the user redoes the edit on it
+				try {
+					({ tags: saved, etag: version } = await getTags());
+				} catch (err) {
+					// The edits are kept; saving again gets 412 until the tags can be loaded
+					status.textContent = tr(
+						"tagsLoadFailed",
+						"Failed to load the tags: {error}",
+						{ error: err.message },
+					);
+					return;
+				}
+				work = structuredClone(saved);
+				render();
+				status.textContent = tr(
+					"tagsChangedElsewhere",
+					"The tags were changed elsewhere, so they were loaded again. Make the edit again.",
+				);
+				return;
+			}
 			status.textContent = tr("saveFailedShort", "Could not save: {error}", {
 				error: e.message,
 			});
+			return;
 		}
+		try {
+			// Take timestamps etc. from the saved values; the ETag is the one this GET read them with
+			({ tags: saved, etag: version } = await getTags());
+		} catch {
+			saved = tags; // Saved: keep what was sent, with the ETag PUT returned
+		}
+		work = structuredClone(saved);
+		onSaved(structuredClone(saved));
+		status.textContent = "";
+		render();
+		toast(tr("tagsSaved", "Tags saved"));
 	};
 
 	render();
@@ -239,6 +254,12 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 					"tagsHint",
 					"The order is the order in which the system prompt draft joins them. Changing prompts or memory does not affect conversations already started.",
 				),
+				" ",
+				el(
+					"a",
+					{ class: "tags-reorder", href: siteUrl("t/") },
+					tr("reorderTags", "Change the order"),
+				),
 			),
 			list,
 			el(
@@ -246,7 +267,13 @@ export function renderTagsEditor(container, { defs, onSaved, toast }) {
 				{
 					type: "button",
 					onclick: () => {
-						work.push({ name: "", prompt: "", memory: [] });
+						work.push({
+							file: null,
+							name: "",
+							ops: [],
+							prompt: "",
+							memory: [],
+						});
 						render();
 					},
 				},
@@ -336,8 +363,9 @@ export function initTagsDialog(button, { onSaved, toast }) {
 	// Opens the editor on the saved definitions (fetched again, in case another tab changed them meanwhile)
 	const open = async () => {
 		let defs;
+		let etag;
 		try {
-			defs = (await getTags()).tags;
+			({ tags: defs, etag } = await getTags());
 		} catch (e) {
 			toast(
 				tr("tagsLoadFailed", "Failed to load the tags: {error}", {
@@ -346,7 +374,7 @@ export function initTagsDialog(button, { onSaved, toast }) {
 			);
 			return;
 		}
-		editor = renderTagsEditor(body, { defs, toast, onSaved });
+		editor = renderTagsEditor(body, { defs, etag, toast, onSaved });
 		dialog.showModal();
 	};
 	button.addEventListener("click", open);
@@ -407,10 +435,15 @@ function proposalPrompt(defs, tags) {
 
 /**
  * As a continuation of the current conversation, append one temporary user message asking for proposals (not saved to the conversation).
- * The prefix is identical to the previous state, so the cache applies.
+ * The prefix is identical to the previous state, so the cache applies. The conversation's tags are references; the
+ * model sees and answers with the display names of the defined ones, and each proposal carries the file of its tag.
+ * Returns {proposals: [{tag, file, text}], tags: [{name, file}], timings}.
  */
 export async function proposeMemory({ conv, backend, defs, signal }) {
-	const tags = conv.tags.filter((n) => defs.some((d) => d.name === n));
+	const chosen = conv.tags
+		.map((ref) => defs.find((d) => tagRef(d) === ref))
+		.filter(Boolean);
+	const tags = chosen.map((d) => d.name);
 	if (!tags.length)
 		throw new Error(
 			tr("noDefinedTags", "The conversation has no defined tags"),
@@ -454,8 +487,16 @@ export async function proposeMemory({ conv, backend, defs, signal }) {
 				typeof p.text === "string" &&
 				p.text.trim(),
 		)
-		.map((p) => ({ tag: p.tag, text: p.text.trim() }));
-	return { proposals, tags, timings };
+		.map((p) => ({
+			tag: p.tag,
+			file: chosen.find((d) => d.name === p.tag).file,
+			text: p.text.trim(),
+		}));
+	return {
+		proposals,
+		tags: chosen.map(({ name, file }) => ({ name, file })),
+		timings,
+	};
 }
 
 /** A dialog to accept / edit and accept / discard each proposal. Adds the approved ones. */
@@ -493,10 +534,14 @@ export function openMemoryDialog({
 							"select",
 							{
 								part: "lcty-memory__tag",
-								onchange: (e) => (it.tag = e.target.value),
+								onchange: (e) => (it.file = e.target.value),
 							},
 							tags.map((t) =>
-								el("option", { value: t, selected: t === it.tag }, t),
+								el(
+									"option",
+									{ value: t.file, selected: t.file === it.file },
+									t.name,
+								),
 							),
 						),
 						el(
@@ -520,7 +565,7 @@ export function openMemoryDialog({
 		const chosen = items.filter((it) => it.keep && it.text.trim());
 		try {
 			for (const it of chosen)
-				await addMemory(it.tag, { text: it.text.trim(), source });
+				await addMemory(it.file, { text: it.text.trim(), source });
 			dialog.close();
 			onDone();
 			toast(

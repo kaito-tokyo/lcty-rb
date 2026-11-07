@@ -34,8 +34,8 @@ test("conversations are listed as links to their pages", async ({
 	await openNewPage(page);
 
 	const link = item(page, conv.id);
-	// relative to the page, which is in /c/ with the conversations
-	await expect(link).toHaveAttribute("href", `${conv.id}.html`);
+	// relative to the page, which is one directory below the root (/c/ with the conversations, or /t/)
+	await expect(link).toHaveAttribute("href", `../c/${conv.id}.html`);
 	await expect(link).toContainText(title);
 	await link.click();
 	await page.waitForURL(`/c/${conv.id}.html`);
@@ -81,7 +81,7 @@ test("keyword search finds a conversation by a word in its messages (LCTYSP-0007
 	// A search result links to the matching round
 	await expect(item(page, hit.id)).toHaveAttribute(
 		"href",
-		new RegExp(`^${hit.id}\\.html#c-msg-`),
+		new RegExp(`^\\.\\./c/${hit.id}\\.html#c-msg-`),
 	);
 });
 

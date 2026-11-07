@@ -1,0 +1,139 @@
+// SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+//
+// SPDX-License-Identifier: Apache-2.0
+
+// The tag reorder page (/t/. LCTYSP-0005, LCTYSP-0009). Lists the tag files in their order (file-name order) with
+// their display names, lets the user move them, and on save renumbers them 00010, 00020, … and sends the whole set
+// with PUT /v1/tags; the contents of the tags are not changed. The tag editor has no order buttons: the order is
+// changed only here.
+
+import { getTags, putTags } from "../api/storage.js";
+import { loadSettings, showToast } from "../common.js";
+import { localize, tr } from "../i18n.js";
+import { renumber } from "../tag-names.js";
+import { initSidebar } from "../ui/sidebar.js";
+
+/** Starts /t/: called once by the page's entry (public/t/index.js). */
+export function initTagOrderPage() {
+	localize();
+	const $ = (s) => document.querySelector(s);
+	const list = $("#tag-order");
+	const status = $("#tag-order-status");
+	const saveButton = $("#tag-order-save");
+	const resetButton = $("#tag-order-reset");
+	const sidebar = document.querySelector("lcty-sidebar");
+
+	const state = { settings: null, saved: [], work: [], etag: null };
+	const panel = initSidebar(sidebar, {
+		getSettings: () => state.settings,
+		// The tags dialog saved: show its set (it may have added, renamed or deleted tags)
+		onTagsSaved: () => load(),
+	});
+
+	const dirty = () =>
+		JSON.stringify(state.work.map((t) => t.file)) !==
+		JSON.stringify(state.saved.map((t) => t.file));
+
+	const move = (i, j) => {
+		[state.work[i], state.work[j]] = [state.work[j], state.work[i]];
+		render();
+	};
+
+	function render() {
+		const button = (label, aria, disabled, onclick) => {
+			const b = document.createElement("button");
+			b.type = "button";
+			b.textContent = label;
+			b.setAttribute("aria-label", aria);
+			b.disabled = disabled;
+			b.addEventListener("click", onclick);
+			return b;
+		};
+		list.replaceChildren(
+			...state.work.map((t, i) => {
+				const li = document.createElement("li");
+				li.className = "tag-order-item";
+				li.dataset.file = t.file;
+				const name = document.createElement("span");
+				name.className = "tag-chip";
+				name.textContent = t.name;
+				li.append(
+					name,
+					button(
+						"↑",
+						tr("moveTagUp", "Move {name} up", { name: t.name }),
+						i === 0,
+						() => move(i - 1, i),
+					),
+					button(
+						"↓",
+						tr("moveTagDown", "Move {name} down", { name: t.name }),
+						i === state.work.length - 1,
+						() => move(i, i + 1),
+					),
+				);
+				return li;
+			}),
+		);
+		if (!state.work.length)
+			list.replaceChildren(tr("noTagsYet", "(No tags yet)"));
+		saveButton.disabled = !dirty();
+		resetButton.disabled = !dirty();
+	}
+
+	async function load() {
+		try {
+			({ tags: state.saved, etag: state.etag } = await getTags());
+		} catch (e) {
+			status.textContent = tr(
+				"tagsLoadFailed",
+				"Failed to load the tags: {error}",
+				{ error: e.message },
+			);
+			return;
+		}
+		state.work = [...state.saved];
+		render();
+	}
+
+	saveButton.addEventListener("click", async () => {
+		const tags = renumber(state.work);
+		saveButton.disabled = true;
+		try {
+			state.etag = await putTags(tags, state.etag);
+		} catch (e) {
+			if (e.status === 412) {
+				await load();
+				status.textContent = tr(
+					"tagsChangedElsewhere",
+					"The tags were changed elsewhere, so they were loaded again. Make the edit again.",
+				);
+			} else {
+				status.textContent = tr("saveFailedShort", "Could not save: {error}", {
+					error: e.message,
+				});
+				saveButton.disabled = false;
+			}
+			return;
+		}
+		status.textContent = "";
+		await load();
+		showToast(tr("tagsSaved", "Tags saved"));
+	});
+
+	resetButton.addEventListener("click", () => {
+		state.work = [...state.saved];
+		status.textContent = "";
+		render();
+	});
+
+	addEventListener("beforeunload", (e) => {
+		if (dirty()) e.preventDefault();
+	});
+
+	(async () => {
+		state.settings = await loadSettings();
+		await load();
+		panel.refresh();
+	})();
+}

@@ -56,12 +56,23 @@ LctyT.addLang("ja", {
 		"タグ「{name}」を削除しますか？（会話に付いたタグの名前は残ります）",
 	tagPromptLabel: "システムプロンプト（何を覚えるかの方針もここに書く）",
 	memorySummary: "メモリ（{count} 件・約 {chars} 文字）",
-	badTagName: "タグの名前「{name}」は使えません（空白と : は不可、40文字まで）",
+	badTagName:
+		"タグの名前「{name}」は使えません（1〜40文字。空白、制御文字、: ; / \" ' ` ~ \\ | は不可）",
 	duplicateTagName: "タグの名前が重複しています",
+	tagNumbersFull:
+		"新しいタグに付ける番号がありません。先に並べ替えのページで番号を振り直してください。",
+	tagsChangedElsewhere:
+		"ほかの場所でタグが変更されたので、読み込み直しました。もう一度編集してください。",
 	tagsSaved: "タグを保存しました",
 	saveFailedShort: "保存できませんでした: {error}",
 	tagsHint:
 		"並び順は、システムプロンプトの下書きをつなぐ順番になります。プロンプトやメモリを変えても、すでに始めた会話には影響しません。",
+	reorderTags: "並び順を変える",
+	tagOrderHeading: "タグの並び順",
+	tagOrderHint:
+		"選んだタグは、この順番でシステムプロンプトの下書きにつながります。保存すると番号を振り直します。プロンプトとメモリは変わりません。",
+	moveTagUp: "{name} を上へ",
+	moveTagDown: "{name} を下へ",
 	newTag: "＋ 新しいタグ",
 	confirmDiscard: "変更を捨てて、保存した状態に戻しますか？",
 	discardChanges: "変更を捨てる",

@@ -22,6 +22,7 @@ import {
 } from "../api/storage.js";
 import { backendOf, showToast } from "../common.js";
 import { tr } from "../i18n.js";
+import { tagPart } from "../tag-names.js";
 import { embeddingConfig, embedQuery } from "./embed.js";
 import { createVectorStore } from "./vectors.js";
 
@@ -116,10 +117,12 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		}
 		const mySeq = ++seq;
 		const terms = q.split(/\s+/);
+		// tag:C# and tag:c~23 are one tag: conversations refer to tags by the file-name part (LCTYSP-0009)
 		const tags = terms
 			.filter((t) => t.startsWith("tag:"))
 			.map((t) => t.slice(4))
-			.filter(Boolean);
+			.filter(Boolean)
+			.map(tagPart);
 		const text = terms.filter((t) => !t.startsWith("tag:")).join(" "); // tag:name is a filter
 		const convs = new Map(state.all.map((c) => [c.id, c]));
 		const hasTags = (id) =>

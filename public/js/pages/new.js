@@ -24,7 +24,8 @@ import {
 	showToast,
 } from "../common.js";
 import { localize, tr } from "../i18n.js";
-import { composeDraft, sortTags } from "../tags.js";
+import { sortTags, tagRef } from "../tag-names.js";
+import { composeDraft } from "../tags.js";
 import {
 	focusComposer,
 	initComposer,
@@ -76,15 +77,16 @@ export function initNewPage() {
 		const picker = form.tags;
 		// One checkbox per tag definition, then ⚙︎, laid out as inline content separated by spaces (no CSS of its own).
 		// Rebuilt only when the definitions change, so focus stays on the box
-		const names = JSON.stringify(state.tagDefs.map((t) => t.name));
+		const names = JSON.stringify(state.tagDefs.map((t) => [t.file, t.name]));
 		if (picker.dataset.names !== names) {
 			picker.dataset.names = names;
 			const items = state.tagDefs.length
 				? state.tagDefs.map((t) => {
+						// the value is the reference a conversation keeps: the file-name part
 						const box = document.createElement("input");
 						box.type = "checkbox";
-						box.value = t.name;
-						box.addEventListener("change", () => toggleTag(t.name));
+						box.value = tagRef(t);
+						box.addEventListener("change", () => toggleTag(tagRef(t)));
 						const label = document.createElement("label");
 						if (t.prompt) label.title = t.prompt;
 						// the name as a chip, the same look as the sidebar's tags
@@ -114,8 +116,8 @@ export function initNewPage() {
 	// After saving: the chosen tags that no longer exist are dropped (tags never defined, e.g. from a fork, stay), and an
 	// untouched draft is composed again from the new prompts and memory
 	function tagsSaved(defs) {
-		const before = new Set(state.tagDefs.map((t) => t.name));
-		const after = new Set(defs.map((t) => t.name));
+		const before = new Set(state.tagDefs.map(tagRef));
+		const after = new Set(defs.map(tagRef));
 		state.tagDefs = defs;
 		state.tags = sortTags(
 			defs,

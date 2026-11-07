@@ -9,14 +9,26 @@ import { siteUrl } from "../site.js";
 import { renderMarkdown } from "../ui/markdown.js";
 import { requestMetaDbSync } from "./meta-db.js";
 
-async function request(method, path, body, { raw = false } = {}) {
-	const init = { method };
+/** The error of a failed request: the message is "<status> <body>", and status is the HTTP status. */
+function httpError(status, body) {
+	const e = new Error(`${status} ${body.slice(0, 200)}`);
+	e.status = status;
+	return e;
+}
+
+async function send(method, path, body, headers = {}) {
+	const init = { method, headers: { ...headers } };
 	if (body !== undefined) {
-		init.headers = { "Content-Type": "application/json" };
+		init.headers["Content-Type"] = "application/json";
 		init.body = JSON.stringify(body);
 	}
 	const r = await fetch(siteUrl(path), init);
-	if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+	if (!r.ok) throw httpError(r.status, await r.text());
+	return r;
+}
+
+async function request(method, path, body, { raw = false } = {}) {
+	const r = await send(method, path, body);
 	return raw ? r.text() : r.json();
 }
 
@@ -93,7 +105,7 @@ export async function putVectors(model, revs, { body, size, count }) {
 		headers: { "Content-Type": "application/octet-stream" },
 		body,
 	});
-	if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+	if (!r.ok) throw httpError(r.status, await r.text());
 	return r.json();
 }
 /** Keyword search: {q, tags, limit} → {results: [{id, conv_id, snippet}]} (in rank order) */
@@ -105,14 +117,28 @@ export function fetchSnippets(ids, q) {
 	return request("POST", "v1/snippets", { ids, q });
 }
 
-// ---- Tags and memory (LCTYSP-0009) ----
-export function getTags() {
-	return request("GET", "v1/tags");
+// ---- Tag files and memory (LCTYSP-0009) ----
+/**
+ * Every tag file, in file-name order: {tags: [{file, name, ops, prompt, memory}], etag}. File names are NFC-normalized
+ * here, since a file system may list them decomposed (HFS+); the server compares the files themselves.
+ */
+export async function getTags() {
+	const r = await send("GET", "v1/tags");
+	const { tags } = await r.json();
+	return {
+		tags: tags.map((t) => ({ ...t, file: t.file.normalize("NFC") })),
+		etag: r.headers.get("ETag"),
+	};
 }
-/** Replace all tag definitions. Renames change the current tags of conversations (their tags_hint), so it syncs too. */
-export function putTags(obj) {
-	return write("PUT", "v1/tags", obj);
+/**
+ * Replace all tag files with tags, the set read with etag (sent as If-Match). A change made elsewhere in between fails
+ * with HttpError 412. Returns the new ETag.
+ */
+export async function putTags(tags, etag) {
+	const r = await send("PUT", "v1/tags", { tags }, { "If-Match": etag ?? "" });
+	return r.headers.get("ETag");
 }
-export function addMemory(name, body) {
-	return request("POST", `v1/tags/${encodeURIComponent(name)}/memory`, body);
+/** Add a memory item ({text, source}) to the tag in file (00010-ruby.html); 404 when the file is gone. */
+export function addMemory(file, body) {
+	return request("POST", `v1/tags/${encodeURIComponent(file)}/memory`, body);
 }

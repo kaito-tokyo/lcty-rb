@@ -39,16 +39,18 @@ class ModuleServletTest < Lcty::Scenarios
     ModuleServlet.mount_all(@server)
   end
 
-  scenario 'mount_all serves the bundle of public/c/index.js at /c/index.js' do
-    res = nil
-    step('Given a server on which ModuleServlet.mount_all has mounted the entries') { mount_all }
-    step('When GET /c/index.js is requested') { res = request('GET', '/c/index.js') }
-    step('Then the status is 200') { assert_equal '200', res.code }
-    step('And the body is the bundle of "c/index.js" in public/') do
-      assert_equal Bundle.bundle(Chatty::PUBLIC_DIR, 'c/index.js'), res.body.force_encoding('UTF-8')
-    end
-    step('And its last block is the entry, "// c/index.js"') do
-      assert_equal '// c/index.js', res.body.scan(%r{^// \S+\.js$}).last
+  %w[c t].each do |dir|
+    scenario "mount_all serves the bundle of public/#{dir}/index.js at /#{dir}/index.js" do
+      res = nil
+      step('Given a server on which ModuleServlet.mount_all has mounted the entries') { mount_all }
+      step("When GET /#{dir}/index.js is requested") { res = request('GET', "/#{dir}/index.js") }
+      step('Then the status is 200') { assert_equal '200', res.code }
+      step("And the body is the bundle of \"#{dir}/index.js\" in public/") do
+        assert_equal Bundle.bundle(Chatty::PUBLIC_DIR, "#{dir}/index.js"), res.body.force_encoding('UTF-8')
+      end
+      step("And its last block is the entry, \"// #{dir}/index.js\"") do
+        assert_equal "// #{dir}/index.js", res.body.scan(%r{^// \S+\.js$}).last
+      end
     end
   end
 
@@ -71,8 +73,8 @@ class ModuleServletTest < Lcty::Scenarios
       step('When ModuleServlet.mount_all mounts the entries on a server') { mount_all }
     end
     step('And GET /c/index.js is requested twice') { answers = Array.new(2) { request('GET', '/c/index.js').body } }
-    step('Then the bundler was called once, with public/ and "c/index.js"') do
-      assert_equal [[Chatty::PUBLIC_DIR, 'c/index.js']], calls
+    step('Then the bundler was called once for each entry, with public/ and "c/index.js", then "t/index.js"') do
+      assert_equal [[Chatty::PUBLIC_DIR, 'c/index.js'], [Chatty::PUBLIC_DIR, 't/index.js']], calls
     end
     step('And both answers are the body it returned') do
       assert_equal ["// c/index.js\n{\nrun();\n}\n"] * 2, answers

@@ -6,10 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0009: Tags and memory
 
-- Status: Accepted; revision drafted ([Revision draft: one HTML file per tag](#revision-draft-one-html-file-per-tag),
-  not implemented)
+- Status: Accepted; revised ([Revision draft: one HTML file per tag](#revision-draft-one-html-file-per-tag), implemented
+  except the browser copy `t_full`, see there)
 - Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
-- Implementation: `lib/tag_store.rb`, `public/js/tags.js`
+- Implementation: `lib/tag_files.rb`, `lib/tag_store.rb`, `lib/t/servlet.rb`, `public/js/tag-names.js`,
+  `public/js/tags.js`, `public/js/pages/tag-order.js`
 
 ## Summary
 
@@ -100,9 +101,10 @@ UI → storage:  POST /v1/tags/:name/memory for each accepted one
 
 ## Storage
 
-> This section describes the current implementation. The
-> [revision draft](#revision-draft-one-html-file-per-tag) below moves tag definitions and memory to one HTML file per
-> tag; until it is implemented, `tags.sqlite` stays as described here.
+> Superseded: this section describes the storage before the
+> [revision](#revision-draft-one-html-file-per-tag) below, which moved tag definitions and memory to one HTML file per
+> tag. `tags.sqlite` now holds only `conversation_tags` (format 3 dropped `tags` and `memory`), and the API is that of
+> [LCTYSP-0006](LCTYSP-0006_http-api.md). Kept for the history of the design.
 
 Tags and memory are source-of-truth data in `data/tags.sqlite`
 ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
@@ -149,9 +151,11 @@ API shape:
 
 ## Revision draft: one HTML file per tag
 
-Status: draft, not implemented. This section records what has been decided for moving tag definitions and memory out
-of `tags.sqlite` into one HTML file per tag, and lists what is still open. Where it disagrees with the sections above,
-this section is the intended design; the sections above describe the code as it is today.
+Status: implemented (2026-11-08), except [the browser copy `t_full`](#in-the-browser-t_full-like-c_meta): there is no
+`lcty_t` database or `js/sync_t_full.worker.js` yet, so its readers fetch `GET /v1/tags` themselves; the database
+`lcty` is not yet renamed `lcty_c`; and the sidebar's list, which reads `c_meta` before any module has loaded, shows
+references (file-name parts) instead of display names. Where this section disagrees with the sections above, this
+section is the design; the sections above (the old `Storage`) record the design before it.
 
 Scope: tag definitions (name, prompt, order) and memory, and how conversations refer to tags
 ([below](#conversations-refer-to-tags-by-the-file-name-part)). The current tags of conversations stay in

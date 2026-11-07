@@ -312,7 +312,7 @@ test("Opening the panel waits for the first sync, then lists the copy", async ({
 		expect(await listItems(page)).toEqual([
 			{
 				id: "a",
-				href: "a.html",
+				href: "../c/a.html",
 				title: "Conversation a",
 				snippet: null,
 				tags: ["x", "y"],
@@ -321,7 +321,7 @@ test("Opening the panel waits for the first sync, then lists the copy", async ({
 			},
 			{
 				id: "b",
-				href: "b.html",
+				href: "../c/b.html",
 				title: "Conversation b",
 				snippet: null,
 				tags: ["x"],
@@ -330,7 +330,7 @@ test("Opening the panel waits for the first sync, then lists the copy", async ({
 			},
 			{
 				id: "c",
-				href: "c.html",
+				href: "../c/c.html",
 				title: "Conversation c",
 				snippet: null,
 				tags: [],
@@ -473,12 +473,12 @@ test("A keyword search shows the rounds the server found, in rank order", async 
 		).toEqual([
 			{
 				id: "b",
-				href: `b.html#c-msg-${R["r-b"]}`,
+				href: `../c/b.html#c-msg-${R["r-b"]}`,
 				snippet: "snippet of r-b",
 			},
 			{
 				id: "a",
-				href: `a.html#c-msg-${R["r-a"]}`,
+				href: `../c/a.html#c-msg-${R["r-a"]}`,
 				snippet: "snippet of r-a",
 			},
 		]);

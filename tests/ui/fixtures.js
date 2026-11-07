@@ -181,10 +181,28 @@ export async function waitForSaved(request, id, n) {
 		.toBe(n);
 }
 
-/** Replace every tag definition (PUT /v1/tags, LCTYSP-0009). */
+/**
+ * Replace every tag file (PUT /v1/tags with the current ETag, LCTYSP-0009). A tag without a file gets
+ * NNNNN-<name>.html in the order given (00010, 00020, …), so its name must already be a file-name part (lowercase).
+ */
 export async function putTags(request, tags) {
-	const res = await request.put("/v1/tags", { data: { tags } });
+	const etag = (await request.get("/v1/tags")).headers().etag;
+	const files = tags.map((t, i) => ({
+		file: `${String((i + 1) * 10).padStart(5, "0")}-${t.name}.html`,
+		...t,
+	}));
+	const res = await request.put("/v1/tags", {
+		data: { tags: files },
+		headers: { "If-Match": etag },
+	});
 	expect(res.ok(), await res.text()).toBeTruthy();
+}
+
+/** The tag files as GET /v1/tags returns them. */
+export async function getTags(request) {
+	const res = await request.get("/v1/tags");
+	expect(res.ok(), await res.text()).toBeTruthy();
+	return (await res.json()).tags;
 }
 
 // ---- Pages ----
