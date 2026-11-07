@@ -562,9 +562,10 @@
 
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
 	// before any module has loaded (LCTYSP-0010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
-	// there at the first paint, or else from IndexedDB ("lcty", store "c_meta"), asynchronously. The database is only
-	// read: when it does not exist it is not created (js/sync_c_meta.worker.js owns the schema). A module that has already
-	// shown its own items wins.
+	// there at the first paint, or else from IndexedDB ("lcty_c", store "c_meta"), asynchronously, through the worker that
+	// alone opens it (js/lcty_c.worker.js, operation "get", which never creates the database; LCTYSP-0009). The worker is
+	// found from the page's URL: every page is one directory below the root of the site (LCTYSP-0005). Opened directly
+	// (file://) no worker can start, and the list stays empty. A module that has already shown its own items wins.
 	connectedCallback() {
 		if (this.#filled) return;
 		this.#filled = true;
@@ -597,29 +598,26 @@
 				return;
 			} catch {}
 		}
-		let req;
+		let worker;
 		try {
-			req = indexedDB.open("lcty");
+			worker = new Worker(new URL("../js/lcty_c.worker.js", document.baseURI), {
+				type: "module",
+			});
 		} catch {
 			return;
 		}
-		req.onupgradeneeded = () => req.transaction.abort(); // no database yet: do not create one
-		req.onsuccess = () => {
-			const db = req.result;
-			db.onversionchange = () => db.close();
-			if (!db.objectStoreNames.contains("c_meta")) {
-				db.close();
-				return;
-			}
-			const get = db.transaction("c_meta").objectStore("c_meta").getAll();
-			get.onsuccess = () => {
-				db.close();
-				try {
-					this.list.showCached(newestFirst(get.result));
-				} catch {} // the module shows the list when it has loaded
-			};
-			get.onerror = () => db.close();
+		worker.onmessage = ({ data }) => {
+			worker.terminate();
+			if (!data?.result || data.result.stale) return;
+			try {
+				this.list.showCached(newestFirst(data.result.items));
+			} catch {} // the module shows the list when it has loaded
 		};
+		worker.onerror = (e) => {
+			e.preventDefault();
+			worker.terminate();
+		};
+		worker.postMessage({ op: "get" });
 	}
 }
 

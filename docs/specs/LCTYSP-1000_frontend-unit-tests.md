@@ -39,7 +39,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 
 | ID                                                            | Module                                                   | Node.js | Browser |
 | ------------------------------------------------------------- | -------------------------------------------------------- | ------: | ------: |
-| [LCTYSP-1001](LCTYSP-1001_sync-c-meta.feature)                | `js/sync_c_meta.worker.js`: syncing the meta into c_meta |       0 |      10 |
+| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `js/lcty_c.worker.js`: the meta in the browser           |       0 |      14 |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                      |      21 |       0 |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts            |      22 |      10 |
 | [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings            |      18 |      26 |

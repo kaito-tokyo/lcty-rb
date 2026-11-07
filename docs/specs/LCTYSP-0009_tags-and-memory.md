@@ -151,7 +151,7 @@ API shape:
 
 ## Revision draft: one HTML file per tag
 
-Status: implemented (2026-11-08), except: the database `lcty` is not yet renamed `lcty_c`; and the sidebar's list,
+Status: implemented (2026-11-08), except: the sidebar's list,
 which reads `c_meta` before any module has loaded, shows references (file-name parts) instead of display names (the
 header and `tag:` in search do not read `t_full` yet either). [The browser copy `t_full`](#in-the-browser-t_full-like-c_meta)
 and its worker `js/lcty_t.worker.js` are implemented; the tag editor, the tag choice on the new conversation page, the
@@ -330,17 +330,20 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   so one record keeps the tags and their ETag in step.
 - **One database per resource:** `lcty_c` for what is derived from `c/` (store `c_meta`) and `lcty_t` for what is
   derived from `t/` (store `t_full`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the data
-  directory. The current database `lcty` is to be renamed `lcty_c`; since it is derived, the old `lcty` is simply
-  deleted (`indexedDB.deleteDatabase`) and `lcty_c` is filled by the next sync (not implemented yet).
+  directory. The database before the split, `lcty`, became `lcty_c`; since it is derived, it was not converted:
+  `lcty_c.worker.js` fills `lcty_c` at the next sync and then deletes the old `lcty` (`indexedDB.deleteDatabase`; a
+  deletion blocked by a connection of a page still running older code is not waited for, and the next sync tries
+  again).
   - Each database has exactly one piece of code that opens it with a version and defines its schema
-    (`sync_c_meta.worker.js` for `lcty_c`, `lcty_t.worker.js` for `lcty_t`). The workers have no imports, so a
+    (`lcty_c.worker.js` for `lcty_c`, `lcty_t.worker.js` for `lcty_t`). The workers have no imports, so a
     shared database would mean the same version and schema written in two places, and one worker's upgrade could be
     blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never need
     to be read in one transaction.
-  - The readers of `c_meta` (`lcty.v1.js`, `js/api/meta-db.js`) are to open `lcty_c` instead of `lcty`
-    ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md) is updated with the implementation).
+  - **The same pattern for both:** each worker is also the only code that opens its database, readers included.
+    `lcty_c.worker.js` has the operations `sync` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
+    [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)); `js/api/meta-db.js` and `lcty.v1.js` read `c_meta` through it.
 - **Every asynchronous operation on the tags is one worker:** `js/lcty_t.worker.js`, a module worker with no imports
-  like `js/sync_c_meta.worker.js`, and the only code that opens `lcty_t` (readers included). `js/api/lcty-t.js` starts
+  like `js/lcty_c.worker.js`, and the only code that opens `lcty_t` (readers included). `js/api/lcty-t.js` starts
   one per call, posts it one message `{op, ...}` and gets one message back: `{result}`, or `{error, status}` with the
   HTTP status (`null` when there is none). Errors are posted, not thrown, since a rejection inside an async message
   handler does not reliably reach the page as the `Worker`'s `error` event; that event is left for a worker that could
@@ -451,6 +454,6 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 - Not adopted: converting the old tags in the browser or with a one-off script.
 
 Not yet discussed: whether tag files are served at a URL (for example `/t/NNNNN-<name>.html`, beside the reorder
-page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later); which code deletes the old IndexedDB `lcty`.
+page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later).
 The data directory is drafted in [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), and the changes to the backend tests
 are noted at the top of [LCTYSP-3005](LCTYSP-3005_tag-store.feature).

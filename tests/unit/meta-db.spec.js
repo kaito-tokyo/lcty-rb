@@ -67,12 +67,12 @@ function collectWarnings(page) {
 
 // ---- The database, from the page ----
 
-/** The database "lcty" as it is: {exists, version, stores}. Never creates it. */
-function dbInfo(page) {
+/** The database name ("lcty_c" by default) as it is: {exists, version, stores}. Never creates it. */
+function dbInfo(page, name = "lcty_c") {
 	return page.evaluate(
-		() =>
+		(name) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty");
+				const req = indexedDB.open(name);
 				req.onupgradeneeded = () => req.transaction.abort();
 				req.onerror = () =>
 					req.error?.name === "AbortError"
@@ -89,22 +89,23 @@ function dbInfo(page) {
 					resolve(info);
 				};
 			}),
+		name,
 	);
 }
 
-/** Create the database "lcty" at version with stores ({name: {keyPath?, records: [value]}}). */
-function seedDb(page, version, stores) {
+/** Create the database name ("lcty_c" by default) at version with stores ({store: {keyPath?, records: [value]}}). */
+function seedDb(page, version, stores, name = "lcty_c") {
 	return page.evaluate(
-		({ version, stores }) =>
+		({ version, stores, name }) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty", version);
+				const req = indexedDB.open(name, version);
 				req.onupgradeneeded = () => {
-					for (const [name, { keyPath, records }] of Object.entries(stores)) {
-						const store = req.result.createObjectStore(
-							name,
+					for (const [store, { keyPath, records }] of Object.entries(stores)) {
+						const os = req.result.createObjectStore(
+							store,
 							keyPath ? { keyPath } : { autoIncrement: true },
 						);
-						for (const value of records) store.put(value);
+						for (const value of records) os.put(value);
 					}
 				};
 				req.onsuccess = () => {
@@ -113,13 +114,13 @@ function seedDb(page, version, stores) {
 				};
 				req.onerror = () => reject(req.error);
 			}),
-		{ version, stores },
+		{ version, stores, name },
 	);
 }
 
-/** c_meta at version 5, as the worker leaves it, holding items. */
+/** c_meta at version 1, as the worker leaves it, holding items. */
 function seedCMeta(page, items) {
-	return seedDb(page, 5, { c_meta: { keyPath: "id", records: items } });
+	return seedDb(page, 1, { c_meta: { keyPath: "id", records: items } });
 }
 
 function readMetaDb(page) {
@@ -166,7 +167,7 @@ async function resetResults(page, n) {
 // ---- Steps shared by the scenarios ----
 
 async function givenNoDatabase(page) {
-	await test.step('Given there is no database "lcty"', async () => {
+	await test.step('Given there is no database "lcty_c"', async () => {
 		expect((await dbInfo(page)).exists).toBe(false);
 	});
 }
@@ -275,30 +276,31 @@ test("Reading before any sync finds no copy", async ({ page, context }) => {
 	await givenNoDatabase(page);
 	const result = await whenReadMetaDb(page);
 	await thenNoItemsAndStale(result);
-	await test.step('And there is still no database "lcty"', async () => {
+	await test.step('And there is still no database "lcty_c"', async () => {
 		expect((await dbInfo(page)).exists).toBe(false);
 	});
 });
 
-test("Reading a database the worker has not upgraded finds no copy", async ({
+test("Reading does not read the old database lcty", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given the database "lcty" is at version 4 with the stores "meta" and "sync"', async () => {
-		await seedDb(page, 4, {
-			meta: { keyPath: "id", records: [conv("old")] },
-			sync: { records: ["token"] },
-		});
+	await test.step('Given the database "lcty" is at version 5 with the store "c_meta" holding the conversation "a"', async () => {
+		await seedDb(
+			page,
+			5,
+			{ c_meta: { keyPath: "id", records: [conv("a")] } },
+			"lcty",
+		);
+	});
+	await test.step('And there is no database "lcty_c"', async () => {
+		expect((await dbInfo(page)).exists).toBe(false);
 	});
 	const result = await whenReadMetaDb(page);
 	await thenNoItemsAndStale(result);
-	await test.step('And the database "lcty" is still at version 4', async () => {
-		expect(await dbInfo(page)).toEqual({
-			exists: true,
-			version: 4,
-			stores: ["meta", "sync"],
-		});
+	await test.step('And there is still no database "lcty_c"', async () => {
+		expect((await dbInfo(page)).exists).toBe(false);
 	});
 });
 
@@ -328,12 +330,12 @@ test("Reading leaves no connection open", async ({ page, context }) => {
 	await background(page, context);
 	await givenCMetaHolds(page, [conv("a")], 'the conversation "a"');
 	await whenReadMetaDb(page);
-	await test.step('Then the database "lcty" can be opened at version 6 without being blocked', async () => {
+	await test.step('Then the database "lcty_c" can be opened at version 2 without being blocked', async () => {
 		const result = await page.evaluate(
 			() =>
 				new Promise((resolve) => {
 					let blocked = false;
-					const req = indexedDB.open("lcty", 6);
+					const req = indexedDB.open("lcty_c", 2);
 					req.onblocked = () => {
 						blocked = true;
 					};

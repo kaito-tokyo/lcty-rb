@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The browser's copy of every conversation's meta (IndexedDB "lcty", store "c_meta", LCTYSP-0010). A sync starts a
-// worker, js/sync_c_meta.worker.js of the site, which fetches GET v1/meta-all.json, replaces the whole store, posts undefined and
-// ends; a failure is thrown in the worker and arrives here as its error event. This module reads the store itself (the worker owns the schema: the database is never created here)
-// and closes each connection right away, so the worker's upgrade is never blocked.
+// The browser's copy of every conversation's meta (IndexedDB "lcty_c", store "c_meta", LCTYSP-0010). Every operation on
+// it starts one worker, js/lcty_c.worker.js of the site, posts it one message ({op: "sync"} or {op: "get"}) and gets
+// its answer, {result} or {error, status}; the worker is the only code that opens the database (LCTYSP-0009). A sync
+// fetches GET v1/meta-all.json and replaces the whole store; a read returns the copy without ever creating it.
 //
 // Pages request a sync when they load the list and after sending a change of conversations to the server
 // (requestMetaDbSync(), called by api/storage.js), when the browser is idle (requestIdleCallback is not available in
@@ -21,9 +21,7 @@
 
 import { siteUrl } from "../site.js";
 
-const WORKER_PATH = "js/sync_c_meta.worker.js"; // relative to the root of the site (LCTYSP-0005)
-const DB_NAME = "lcty";
-const STORE = "c_meta"; // the schema is the worker's
+const WORKER_PATH = "js/lcty_c.worker.js"; // relative to the root of the site (LCTYSP-0005)
 const IDLE_TIMEOUT_MS = 10000; // run by then even if the browser never becomes idle
 const FALLBACK_DELAY_MS = 1000; // where requestIdleCallback is missing
 const SNAPSHOT_KEY = "lcty.meta.v1"; // localStorage, read by lcty.v1.js
@@ -38,31 +36,27 @@ const state = {
 	listeners: null,
 };
 
-// One worker, one sync: resolves when the store has been replaced
-function runWorker() {
+// One worker, one operation: resolves to its result, rejects with its error (with the HTTP status as status)
+function runWorker(message) {
 	return new Promise((resolve, reject) => {
 		const worker = new Worker(siteUrl(WORKER_PATH), { type: "module" });
-		// The worker posts only on success
-		worker.onmessage = () => {
+		worker.onmessage = ({ data }) => {
 			worker.terminate();
-			resolve();
+			if (data && "error" in data) {
+				const e = new Error(data.error);
+				e.status = data.status;
+				reject(e);
+			} else resolve(data?.result);
 		};
-		// What the worker threw (or a failure to load it). Chromium prefixes the message with "Uncaught "
+		// A worker that could not be loaded (or threw outside an operation). Chromium prefixes "Uncaught "
 		worker.onerror = (e) => {
 			e.preventDefault();
 			worker.terminate();
-			const message = (e.message || "").replace(/^Uncaught /, "");
-			reject(new Error(message || "the meta sync worker failed"));
+			const text = (e.message || "").replace(/^Uncaught /, "");
+			reject(new Error(text || "the meta sync worker failed"));
 		};
+		worker.postMessage(message);
 	});
-}
-
-// Newest first by updated_at_hint, then by id (it starts with the creation time): the same order as the server and
-// the sidebar (LCTYSP-0010)
-function newestFirst(a, b) {
-	if (a.updated_at_hint !== b.updated_at_hint)
-		return a.updated_at_hint < b.updated_at_hint ? 1 : -1;
-	return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 }
 
 // Keep only what the sidebar shows before a module has loaded: the newest SNAPSHOT_SIZE, and only their id, title,
@@ -99,7 +93,7 @@ function notify() {
 // A sync now; while one runs, one more after it (requests made meanwhile share it)
 function sync() {
 	if (!state.running) {
-		state.running = runWorker()
+		state.running = runWorker({ op: "sync" })
 			.then(readMetaDb)
 			.then(({ items }) => {
 				saveSnapshot(items);
@@ -164,30 +158,5 @@ export function resetMetaDb() {
  * no copy yet (the first sync has not finished), and items is then [].
  */
 export function readMetaDb() {
-	return new Promise((resolve, reject) => {
-		const req = indexedDB.open(DB_NAME);
-		req.onupgradeneeded = () => req.transaction.abort(); // no database yet: do not create one
-		req.onerror = () => {
-			if (req.error?.name === "AbortError") resolve({ items: [], stale: true });
-			else reject(req.error);
-		};
-		req.onsuccess = () => {
-			const db = req.result;
-			db.onversionchange = () => db.close();
-			if (!db.objectStoreNames.contains(STORE)) {
-				db.close();
-				resolve({ items: [], stale: true }); // an old database the worker has not upgraded yet
-				return;
-			}
-			const get = db.transaction(STORE).objectStore(STORE).getAll();
-			get.onsuccess = () => {
-				db.close();
-				resolve({ items: get.result.sort(newestFirst), stale: false });
-			};
-			get.onerror = () => {
-				db.close();
-				reject(get.error);
-			};
-		};
-	});
+	return runWorker({ op: "get" });
 }
