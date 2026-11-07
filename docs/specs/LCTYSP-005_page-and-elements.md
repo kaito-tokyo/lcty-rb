@@ -270,6 +270,10 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
 - `<lcty-conv-list>` (the sidebar's conversation list) is defined in `lcty.v1.js` like the other elements: it builds
   the items (title, tag chips, date and, when known, the message count) as parts of `<lcty-sidebar>`'s Shadow DOM
   and fires `select` and `tag`. Pages give it items (`show(items, empty)`) and the current conversation (`current`).
+  Each item is a link (`<a href="/c/<id>.html">`, with `#c-msg-<chunk id>` for a search result), so it can be opened
+  in a new tab from the context menu or with a modified or middle click; those are left to the browser. A plain click
+  fires `select` (cancelable) first: a page that handles it (scrolling within the open conversation) cancels it,
+  otherwise the link is followed.
 - Ids in the frame are styling hooks for CSS. Code reaches elements through the fields.
 
 ### Structure in `lcty.v1.js`, features in modules

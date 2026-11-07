@@ -280,7 +280,8 @@ export class LctyCElement extends HTMLElement {
 /**
  * <lcty-conv-list>: the sidebar's conversation list (also search results), in <lcty-sidebar>'s Shadow DOM; its parts
  * are styled through lcty-sidebar::part(…) (LCTYSP-005). A page gives it items and the current conversation, and listens for
- * select {detail: {id, chunkId}} (search results carry chunkId, the user message id of the matching round) and
+ * select {detail: {id, chunkId}} (search results carry chunkId, the user message id of the matching round; the items
+ * are links, and a page cancels select to stay instead of following one) and
  * tag {detail: {name}} (a tag chip was clicked).
  */
 export class LctyConvListElement extends HTMLElement {
@@ -298,19 +299,31 @@ export class LctyConvListElement extends HTMLElement {
 			const tag = e.target.closest?.(".tag-name");
 			if (tag) {
 				e.stopPropagation();
+				e.preventDefault(); // the chip is inside the item's link
 				this.dispatchEvent(
 					new CustomEvent("tag", { detail: { name: tag.textContent } }),
 				);
 				return;
 			}
-			const b = e.target.closest?.("button[data-id]");
-			if (b) {
-				this.dispatchEvent(
-					new CustomEvent("select", {
-						detail: { id: b.dataset.id, chunkId: b.dataset.chunk || null },
-					}),
-				);
-			}
+			const a = e.target.closest?.("a[data-id]");
+			// a modified or non-primary click is the browser's (a new tab or window); a plain one is offered to the page
+			// first, which cancels select when it handled it (otherwise the link is followed)
+			if (
+				!a ||
+				e.button !== 0 ||
+				e.metaKey ||
+				e.ctrlKey ||
+				e.shiftKey ||
+				e.altKey
+			)
+				return;
+			const handled = !this.dispatchEvent(
+				new CustomEvent("select", {
+					cancelable: true,
+					detail: { id: a.dataset.id, chunkId: a.dataset.chunk || null },
+				}),
+			);
+			if (handled) e.preventDefault();
 		});
 	}
 
@@ -338,7 +351,7 @@ export class LctyConvListElement extends HTMLElement {
 
 	set current(id) {
 		this.#current = id;
-		for (const b of this.querySelectorAll("button[data-id]")) {
+		for (const b of this.querySelectorAll("a[data-id]")) {
 			const on = b.dataset.id === id;
 			b.setAttribute(
 				"part",
@@ -380,10 +393,12 @@ export class LctyConvListElement extends HTMLElement {
 				{},
 				...this.#items.map((c) => {
 					const on = c.id === this.#current;
+					// a link, so it can be opened in a new tab (the same URL as convUrl in js/common.js)
+					const href = `/c/${encodeURIComponent(c.id)}.html${c.chunk_id ? `#c-msg-${c.chunk_id}` : ""}`;
 					const b = $(
-						"button",
+						"a",
 						on ? "item item--current" : "item",
-						{ type: "button", "data-id": c.id },
+						{ href, "data-id": c.id },
 						$("span", "title", {}, c.title || _("untitled", "(untitled)")),
 					);
 					if (c.chunk_id) b.dataset.chunk = c.chunk_id;
