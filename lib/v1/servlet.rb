@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# /v1/: the JSON API and the vector binaries (LCTYSP-0006). Mounted at /v1 by chatty.rb.
+# /v1/: the JSON API and the vector binaries (LCTYSP-0006). Mounted at /v1 by lcty.rb.
 
 require 'webrick'
 require 'json'

@@ -46,6 +46,8 @@ changed.
 | [LCTYSP-3012](LCTYSP-3012_http-api.feature)          | `lib/v1/servlet.rb`: the HTTP API `/v1/`             |
 | [LCTYSP-3014](LCTYSP-3014_tag-files.feature)         | `lib/tag_files.rb`: the tag files in `t/`            |
 | [LCTYSP-3016](LCTYSP-3016_file-types.feature)        | `lcty.rb`: the types of the files served             |
+| [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)     | `lib/servlets.rb`: the servlets of the site          |
+| [LCTYSP-3019](LCTYSP-3019_entry-point.feature)       | `lcty.rb`: the entry point                           |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.
@@ -91,7 +93,7 @@ end
 - **Data.** `helper.rb` points `LCTY_DATA_DIR` at a new, empty folder in the temporary folder before `lib/config.rb` is
   loaded, whatever it was, and removes it afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). Every test of a run shares it:
   `Lcty.open_data` opens it as the server does, once, and each test makes conversations, tags and words with ids of its
-  own. Tests of a module that takes a path (the search index, the tag store, the vector DB, the bundler) give it a
+  own. Tests of a module that takes a path (the search index, the tag store, the vector DB, the servlets) give it a
   folder of their own instead.
 - **Settings.** `lib/config.rb` reads the environment once, so LCTYSP-3008 checks it in child processes.
 - **HTTP.** The servlet tests start a WEBrick server on `127.0.0.1` on a free port, mount the servlets as `Chatty.run`

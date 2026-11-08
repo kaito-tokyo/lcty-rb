@@ -9,7 +9,7 @@
  * - public/lcty.v1/lcty.v1.cjs is a classic script with no imports, served as it is at /lcty.v1/lcty.v1.cjs. Its
  *   declarations that a module could export are marked `/*export*\/`, and the call that defines the elements at its
  *   end `/*mjs-ignore*\/`, so an ES module can be made from it by replacing the marks; none is made today. At startup
- *   chatty.rb copies it (with lcty.v1.css, nothing else) to data/c/ as lcty.v1.cjs, next to the conversation files: they
+ *   lcty.rb copies it (with lcty.v1.css, nothing else) to data/c/ as lcty.v1.js, next to the conversation files: they
  *   belong to the user together (LCTYSP-0010).
  * - Every page loads it synchronously inside <head>: a conversation file or a tag file on line 2 by the version 1 name
  *   lcty.v1.cjs, which /c/ and /t/ redirect to /lcty.v1/lcty.v1.cjs; other pages as ../lcty.v1/lcty.v1.cjs. It is

@@ -25,7 +25,7 @@ requests inside the browser (`llm` in `tests/ui/fixtures.js`), and neither the r
 
 A page as a whole: what it shows when it is opened, what the user does on it and what happens then, on the screen, in
 what the server saves and in where the browser goes. The page's own modules are the real ones (`js/pages/*.js`,
-`js/ui/sidebar.js`, `/lcty.v1/lcty.v1.async.mjs`, the bundles), and so are the server's answers. The parts that can be
+`js/ui/sidebar.js`, `/lcty.v1/lcty.v1.async.mjs`, the page entries), and so are the server's answers. The parts that can be
 checked on their own are the unit tests' ([LCTYSP-1000](LCTYSP-1000_frontend-unit-tests.md) for the browser's code,
 [LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md) for the server's): a Scenario here says what a user can see, not how a
 module does it.

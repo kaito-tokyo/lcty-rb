@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Client for the chatty.rb storage API (LCTYSP-0006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-0003).
+// Client for the lcty.rb storage API (LCTYSP-0006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-0003).
 // The paths are relative to the root of the site (v1/…), which siteUrl() turns into URLs (LCTYSP-0005).
 
 import { siteUrl } from "../site.js";

@@ -6,10 +6,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0011: Module bundler
 
-- Status: Accepted
+- Status: Withdrawn. A file opened directly (`file://`) runs no module, so nothing needs to be bundled: the page
+  entries are served as they are and the browser imports their modules over HTTP
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The bundler and its servlet were removed; this document is kept
+  as the record of what they did.
 - Related: [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
-- Implementation: `lib/c/bundle.rb` (`Chatty::C::Bundle`), used by `lib/module_servlet.rb` (`/c/index.js`,
-  `/t/index.js`, `/t/tag-file.js`)
+- Implementation: none (formerly `lib/c/bundle.rb` and `lib/module_servlet.rb`)
 
 ## Summary
 

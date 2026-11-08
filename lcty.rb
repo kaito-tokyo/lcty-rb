@@ -73,6 +73,18 @@ module Lcty
     end
   end
 
+  # Mount every servlet of the site on server, under base (LCTY_BASE_URL)
+  def self.mount_all(server, base = BASE_URL)
+    server.mount "#{base}v1", Chatty::V1::Servlet
+    server.mount "#{base}c", Servlets::C, Chatty::CONV_DIR
+    server.mount "#{base}t", Servlets::T, Chatty::TAG_DIR
+    LCTY_V1_FILES.each { |name, path| server.mount "#{base}lcty.v1/#{name}", Servlets::StaticFileServlet, path }
+    server.mount_proc("#{base}lcty.v1") { raise WEBrick::HTTPStatus::NotFound } # nothing else is under /lcty.v1/
+    ENTRIES.each { |entry| server.mount "#{base}#{entry}", Servlets::StaticFileServlet, "public/#{entry}" }
+    server.mount base, Servlets::PublicDirectoryServlet, 'public'
+    server
+  end
+
   def self.run
     Chatty.open_data
     publish_offline
@@ -84,13 +96,7 @@ module Lcty
       AccessLog: [],
       DoNotReverseLookup: true
     )
-    s.mount "#{BASE_URL}v1", Chatty::V1::Servlet
-    s.mount "#{BASE_URL}c", Servlets::C, Chatty::CONV_DIR
-    s.mount "#{BASE_URL}t", Servlets::T, Chatty::TAG_DIR
-    LCTY_V1_FILES.each { |name, path| s.mount "#{BASE_URL}lcty.v1/#{name}", Servlets::StaticFileServlet, path }
-    s.mount_proc("#{BASE_URL}lcty.v1") { raise WEBrick::HTTPStatus::NotFound } # nothing else is under /lcty.v1/
-    ENTRIES.each { |entry| s.mount "#{BASE_URL}#{entry}", Servlets::StaticFileServlet, "public/#{entry}" }
-    s.mount BASE_URL, Servlets::PublicDirectoryServlet, 'public'
+    mount_all(s)
     %w[INT TERM].each { |sig| trap(sig) { s.shutdown } }
     $stderr.puts "lcty-rb: http://#{Chatty::BIND_URL_HOST}:#{Chatty::PORT}#{BASE_URL}  (data: #{Chatty::DATA_DIR})"
     s.start
