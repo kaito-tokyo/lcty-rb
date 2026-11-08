@@ -50,6 +50,8 @@ changed.
 | [LCTYSP-3013](LCTYSP-3013_gzip.feature)                 | `lcty.rb`: transparent gzip (`Chatty::GzipServer`)   |
 | [LCTYSP-3014](LCTYSP-3014_tag-files.feature)            | `lib/tag_files.rb`: the tag files in `t/`            |
 | [LCTYSP-3015](LCTYSP-3015_tag-order-servlet.feature)    | `lib/t/servlet.rb`: `/t/` and the tag files          |
+| [LCTYSP-3016](LCTYSP-3016_file-types.feature)           | `lcty.rb`: the types of the files served             |
+| [LCTYSP-3017](LCTYSP-3017_lcty-v1-servlet.feature)      | `lib/lcty_v1.rb`: `/lcty.v1/`                        |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.

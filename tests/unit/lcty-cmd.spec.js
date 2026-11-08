@@ -5,10 +5,11 @@
 // LCTYSP-1015: the scenarios of docs/specs/LCTYSP-1015_commands.feature, written by hand. Each test has the title of its
 // Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
 //
-// public/js/ui/lcty-cmd.js is imported into the empty unit page (tests/unit/unit-page.js), whose /c/lcty.v1.js defines
-// <lcty-c>. <lcty-c> imports /c/lcty.v1.module.js when it is connected, so that is answered with an empty module: the
-// conversation page's features never run. The operations are made inside the page (window.makeOp): each records its
-// call and waits until the test releases it or its signal is aborted.
+// public/js/ui/lcty-cmd.js is imported into the empty unit page (tests/unit/unit-page.js), whose /c/lcty.v1.js
+// (redirected to /lcty.v1/lcty.v1.cjs) defines <lcty-c>. <lcty-c> imports /lcty.v1/lcty.v1.async.mjs when it is
+// connected, so that is answered with an empty module: the conversation page's features never run. The operations are
+// made inside the page (window.makeOp): each records its call and waits until the test releases it or its signal is
+// aborted.
 
 import { expect, test } from "@playwright/test";
 import { givenAPage } from "./unit-page.js";
@@ -17,8 +18,8 @@ import { givenAPage } from "./unit-page.js";
 
 async function background(page, context) {
 	await givenAPage(page, context);
-	await test.step("And /c/lcty.v1.module.js is an empty module", async () => {
-		await context.route("**/c/lcty.v1.module.js", (route) =>
+	await test.step("And /lcty.v1/lcty.v1.async.mjs is an empty module", async () => {
+		await context.route("**/lcty.v1/lcty.v1.async.mjs", (route) =>
 			route.fulfill({ contentType: "text/javascript", body: "export {};" }),
 		);
 	});

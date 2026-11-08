@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The browser's copy of every conversation's meta (IndexedDB "lcty_c", store "c_meta", LCTYSP-0010). Every operation on
-// it starts one worker, lcty_c.worker.js of the site, posts it one message ({id, op: "sync_meta"} or {id, op: "get"},
-// with the site's v1/ as the endpoint) and gets its answer, {id, result} or {id, errorType, ...}; the worker is the only
-// code that opens the database (LCTYSP-0009). A sync (sync_meta) fetches GET v1/meta-all.json and replaces the whole
-// store; a read returns the copy without ever creating it.
+// it starts one worker, lcty.v1/lcty.v1.c.worker.cjs of the site, posts it one message ({id, op: "sync_meta"} or {id,
+// op: "get"}, with the site's v1/ as the endpoint) and gets its answer, {id, result} or {id, errorType, ...}; the
+// worker is the only code that opens the database (LCTYSP-0009). A sync (sync_meta) fetches GET v1/meta-all.json and
+// replaces the whole store; a read returns the copy without ever creating it.
 //
 // Every page syncs whenever it is shown (forceSyncMetaDb(), called by js/ui/sidebar.js, at once). Pages also request a
 // sync when they load the list and after sending a change of conversations to the server (requestMetaDbSync(), called
@@ -17,16 +17,16 @@
 //
 // A snapshot for the first paint (the newest SNAPSHOT_SIZE conversations by updated_at_hint, only what the sidebar
 // shows before a module has loaded: id, title, updated_at_hint, tags_hint, messages_hint) is also kept in localStorage
-// (lcty.meta.v1), which can be read synchronously: lcty.v1.js fills the sidebar from it before the first paint. It is
+// (lcty.meta.v1), which can be read synchronously: lcty.v1.cjs fills the sidebar from it before the first paint. It is
 // written from the main thread (workers have no localStorage) after each sync. When it does not fit, it is removed and
 // the sidebar reads the database instead.
 
 import { siteUrl } from "../site.js";
 
-const WORKER_PATH = "lcty_c.worker.js"; // relative to the root of the site (LCTYSP-0005)
+const WORKER_PATH = "lcty.v1/lcty.v1.c.worker.cjs"; // relative to the root of the site (LCTYSP-0005)
 const IDLE_TIMEOUT_MS = 10000; // run by then even if the browser never becomes idle
 const FALLBACK_DELAY_MS = 1000; // where requestIdleCallback is missing
-const SNAPSHOT_KEY = "lcty.meta.v1"; // localStorage, read by lcty.v1.js
+const SNAPSHOT_KEY = "lcty.meta.v1"; // localStorage, read by lcty.v1.cjs
 const SNAPSHOT_SIZE = 20; // the newest conversations only: it is the first view, not the list
 
 // lastId: the id of the last message posted to a worker; running: the sync in progress; queued: the one that runs

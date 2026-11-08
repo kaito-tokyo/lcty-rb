@@ -9,17 +9,17 @@
 Feature: LCTYSP-1015 Command tags
 
   A command tag <lcty-cmd data-op="…" data-at="…"> is a command object. defineCommands(table) registers the operations
-  (name → async (cmd, controller)) and defines <lcty-cmd>, so the commands already in the document are upgraded then.
-  A command that is the last element of <lcty-c> runs its operation once: while it runs its state attribute is
-  "running" and it sets slot="float" on itself (it floats above the composer with its spinner and stop button); when
-  the operation ends its state is "done", "aborted" or "failed" and the slot is removed. A command followed by other
-  elements has already run and is "done"; an unknown operation is "unknown" and does nothing. appendCommand(container,
-  op) adds a command in memory only, which runs at once. In these steps, an operation waits until the test releases it
-  or until its AbortSignal is aborted, and /c/lcty.v1.module.js (imported by <lcty-c>) is an empty module.
+  (name → async (cmd, controller)) and defines <lcty-cmd>, so the commands already in the document are upgraded then. A
+  command that is the last element of <lcty-c> runs its operation once: while it runs its state attribute is "running"
+  and it sets slot="float" on itself (it floats above the composer with its spinner and stop button); when the operation
+  ends its state is "done", "aborted" or "failed" and the slot is removed. A command followed by other elements has
+  already run and is "done"; an unknown operation is "unknown" and does nothing. appendCommand(container, op) adds a
+  command in memory only, which runs at once. In these steps, an operation waits until the test releases it or until its
+  AbortSignal is aborted, and /lcty.v1/lcty.v1.async.mjs (imported by <lcty-c>) is an empty module.
 
   Background:
     Given a page on the server's origin
-    And /c/lcty.v1.module.js is an empty module
+    And /lcty.v1/lcty.v1.async.mjs is an empty module
     And the module /js/ui/lcty-cmd.js is imported
 
   Scenario: Importing the module defines nothing

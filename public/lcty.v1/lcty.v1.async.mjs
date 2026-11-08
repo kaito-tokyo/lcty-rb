@@ -24,7 +24,7 @@ import { buildRequest } from "../js/llm/history.js";
 import { sortTags, tagRef } from "../js/tag-names.js";
 import { openMemoryDialog, proposeMemory } from "../js/tags.js";
 import { appendCommand, defineCommands } from "../js/ui/lcty-cmd.js";
-// Element features (the structure comes from the custom elements in /c/lcty.v1.js, which expose their inner elements as fields. LCTYSP-0005)
+// Element features (the structure comes from the custom elements in /lcty.v1/lcty.v1.cjs, which expose their inner elements as fields. LCTYSP-0005)
 import {
 	appendMessage,
 	appendText,
@@ -38,10 +38,10 @@ import {
 	setComposerBusy,
 	setComposerValue,
 } from "../js/ui/lcty-elements.js";
-// lcty.v1.module.js: the entry of the conversation page /c/<id>.html (LCTYSP-0005). Line 2 of a conversation file loads
-// lcty.v1.js (the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese texts) and links lcty.v1.css.
-// <lcty-c> imports this module once the page has loaded, so it never blocks rendering; it then attaches the event
-// listeners and features the page needs. Served as it is from public/c/, not bundled: the browser imports the modules
+// lcty.v1.async.mjs: the entry of the conversation page /c/<id>.html (LCTYSP-0005). Line 2 of a conversation file loads
+// lcty.v1.js (redirected to lcty.v1.cjs: the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese
+// texts) and links lcty.v1.css. <lcty-c> imports this module once the page has loaded, so it never blocks rendering; it
+// then attaches the event listeners and features the page needs. Served as it is from public/lcty.v1/, not bundled: the browser imports the modules
 // in public/js/ through the paths below (../js/…, js/ of the site), so the features work over HTTP only.
 //
 // The conversation file itself (data/c/<id>.html); the conversation is rebuilt from the elements in <lcty-c>. New
@@ -51,7 +51,7 @@ import { initSidebar } from "../js/ui/sidebar.js";
 import { textAttr } from "../js/ui/text-attr.js";
 import { UUID_RE } from "../js/uuid.js";
 
-// The frame and the message list are <lcty-c> (built by lcty.v1.js during parsing. LCTYSP-0005). Its inner elements are taken from fields
+// The frame and the message list are <lcty-c> (built by lcty.v1.cjs during parsing. LCTYSP-0005). Its inner elements are taken from fields
 const log = document.querySelector("lcty-c");
 const { composer } = log;
 
@@ -144,7 +144,7 @@ function pop(from) {
 
 // ---- Rendering ----
 
-// The header's tree is lcty.v1.js's (LctyCElement builds it from the conversation file's elements); this only sets
+// The header's tree is lcty.v1.cjs's (LctyCElement builds it from the conversation file's elements); this only sets
 // values and attributes: the tag definitions (data-tag-defs) and what depends on the page's state.
 function renderHeader() {
 	log.titleInput.value = state.conv.title || "";
@@ -455,7 +455,7 @@ window.addEventListener("beforeunload", (e) => {
 // ---- Startup ----
 
 (async () => {
-	// The layout is settled by lcty.v1.js and the scroll position is the browser's; the module only wires the elements
+	// The layout is settled by lcty.v1.cjs and the scroll position is the browser's; the module only wires the elements
 	// up. The messages (feet, thinking summaries) and the header are
 	// prepared synchronously, before the settings and the tags are waited for.
 	state.conv = convFromDom();

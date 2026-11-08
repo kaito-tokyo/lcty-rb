@@ -4,26 +4,24 @@
 
 # -*- encoding: utf-8 -*-
 # /c/: conversation files, the files their header lines load, and the new conversation page (LCTYSP-0005). Mounted at
-# /c by chatty.rb. /c/ URLs are permanent, so the entry files carry their version in the name (lcty.v1.*), never in the
-# path.
+# /c by chatty.rb. /c/ URLs are permanent, so the files a conversation file loads carry their version in the name
+# (lcty.v1.*), never in the path.
 #
-# The files under public/c/ (lcty.v1.*, and index.html, the new conversation page served at /c/ itself) are served as
-# they are from public/c/ itself, so an edit there shows at the next load without a restart; data/c/ serves only
-# conversation files. The page's entry /c/index.js is the bundle that ModuleServlet mounts over it. lcty.v1.js and
-# lcty.v1.lang-<lang>.js are classic scripts generated from the ES modules next to them (.mjs; the command is in each
-# one's head) and committed, and lcty.v1.module.js imports the modules in public/js/ itself (../js/, js/ of the site).
+# The files under public/c/ (index.html, the new conversation page served at /c/ itself) are served as they are from
+# public/c/ itself, so an edit there shows at the next load without a restart; data/c/ serves only conversation files.
+# The page's entry /c/index.js is the bundle that ModuleServlet mounts over it. The lcty.v1.* names a conversation file
+# loads are redirected to /lcty.v1/ (LctyV1). What reading a conversation offline needs, lcty.v1.js (the frame) and
+# lcty.v1.css, is copied from there next to the conversation files in data/c/ at startup, under those names, so a backup
+# of data/ keeps conversations together with what renders them (LCTYSP-0010). Opened directly, a file shows with the
+# English x-default texts and without features.
 # The pages here link to each other with paths relative to /c/ ("./", "<id>.html"), so the site may be served under any
 # path; /c without its slash is redirected to c/ so that they resolve.
-# What reading a conversation offline needs, lcty.v1.js (the frame) and lcty.v1.css, is also published next to the
-# conversation files in data/c/ at startup, so a backup of data/ keeps conversations together with what renders them
-# (LCTYSP-0010). Opened directly, a file shows with the English x-default texts and without features.
-# Path rule: c/lcty.v1.* holds exactly what a conversation file needs where it is (opened directly, offline); a file it
-# does not need on its own (the sidebar's meta sync worker, …) lives under public/ outside public/c/ instead (LCTYSP-0005).
 
 require 'fileutils'
 require 'securerandom'
 require 'webrick'
 require_relative '../store'
+require_relative '../lcty_v1'
 
 module Chatty
   module C
@@ -40,15 +38,16 @@ module Chatty
       attr_reader :published
     end
 
-    # At startup: list what /c/ serves, and copy OFFLINE into each of OFFLINE_DIRS (atomic replace per file, only when
-    # the content changed). /c/ never serves these copies. Other files there (copies an older server made, …) are left
-    # as they are: they belong to the user.
+    # At startup: list what /c/ serves from public/c/, and copy OFFLINE (the files of public/lcty.v1/ they stand for,
+    # LctyV1.file_for) into each of OFFLINE_DIRS (atomic replace per file, only when the content changed). The site never
+    # serves these copies. Other files there (copies an older server made, …) are left as they are: they belong to the
+    # user.
     def self.publish_assets
       @published = Dir.glob('**/*', base: SRC_DIR).sort.reject do |rel|
         File.directory?(File.join(SRC_DIR, rel)) || SKIP_RE.match?(rel)
       end.freeze
       OFFLINE.each do |name|
-        body = File.binread(File.join(SRC_DIR, name))
+        body = File.binread(File.join(LctyV1::SRC_DIR, LctyV1.file_for(name)))
         OFFLINE_DIRS.each { |dir| write_if_changed(File.join(dir, name), body) }
       end
     end
@@ -62,8 +61,9 @@ module Chatty
     end
 
     # Under /c/: <id>.html returns data/c/<id>.html (the conversation file) untouched, the only thing served from data/c/;
-    # the published files (C.published) are static files in public/c/; and /c/ itself is the new conversation page,
-    # public/c/index.html (its query, e.g. ?fork=<id>&at=<n>, is read by the page). /c is redirected to c/ with its query.
+    # the published files (C.published) are static files in public/c/; the lcty.v1.* names are redirected to /lcty.v1/;
+    # and /c/ itself is the new conversation page, public/c/index.html (its query, e.g. ?fork=<id>&at=<n>, is read by
+    # the page). /c is redirected to c/ with its query.
     class Servlet < WEBrick::HTTPServlet::AbstractServlet
       def initialize(server, *options)
         super
@@ -79,6 +79,7 @@ module Chatty
           return @files.do_GET(req, res) # /c/: public/c/index.html
         end
         return @files.do_GET(req, res) if C.published.include?(name)
+        LctyV1.redirect(name, res)
         id = name[/\A(.+)\.html\z/, 1].to_s
         raise WEBrick::HTTPStatus::NotFound unless ID_RE.match?(id) && File.exist?(Store.conv_path(id))
         res['Content-Type'] = 'text/html; charset=utf-8'

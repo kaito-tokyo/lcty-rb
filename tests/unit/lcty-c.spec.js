@@ -13,7 +13,7 @@
 import { expect, test } from "@playwright/test";
 
 const PAGE = "/__lcty_unit.html";
-const WORKER_URL = "/lcty_c.worker.js";
+const WORKER_URL = "/lcty.v1/lcty.v1.c.worker.cjs";
 
 /** A conversation's meta as GET /v1/meta-all.json returns it (LCTYSP-0006). */
 function conv(id, title = `Conversation ${id}`) {
@@ -550,7 +550,7 @@ test("A SharedWorker answers on the port the message came from", async ({
 	await background(page, context);
 	await givenCMetaHolds(page, [conv("a")], 'the conversation "a"');
 	let answers;
-	await test.step('When two ports of new SharedWorker("/lcty_c.worker.js") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
+	await test.step('When two ports of new SharedWorker("/lcty.v1/lcty.v1.c.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
 		answers = await page.evaluate(async (url) => {
 			const ask = (message) =>
 				new Promise((resolve) => {

@@ -3,18 +3,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Types and documentation for lcty.v1.js (LCTYSP-0005). The served script keeps no comments other than SPDX and
- * /*export*\/ to stay small, so its documentation lives here.
+ * Types and documentation for lcty.v1.cjs (LCTYSP-0005). The served script keeps few comments to stay small, so its
+ * documentation lives here.
  *
- * - The source is the ES module public/c/lcty.v1.mjs (no imports; exported declarations start with `export`). The
- *   classic script public/c/lcty.v1.js is generated from it by the command in its head comment (each leading `export`
- *   becomes `/*export*\/`, and the last line `//?defineLctyV1CustomElements();` loses its `//?`) and committed. At
- *   startup chatty.rb copies it (with lcty.v1.css, nothing else) to data/c/, next to the conversation files: they
+ * - public/lcty.v1/lcty.v1.cjs is a classic script with no imports, served as it is at /lcty.v1/lcty.v1.cjs. Its
+ *   declarations that a module could export are marked `/*export*\/`, and the call that defines the elements at its
+ *   end `/*mjs-ignore*\/`, so an ES module can be made from it by replacing the marks; none is made today. At startup
+ *   chatty.rb copies it (with lcty.v1.css, nothing else) to data/c/ as lcty.v1.cjs, next to the conversation files: they
  *   belong to the user together (LCTYSP-0010).
- * - Every page loads it synchronously inside <head> (a conversation file on line 2, as lcty.v1.js; other pages as
- *   /c/lcty.v1.js), followed by lcty.v1.lang-ja.js (the Japanese texts, generated from public/c/lcty.v1.lang-ja.mjs).
- *   There is no inline script: lcty.v1.js defines the elements at its end. The conversation page's module
- *   lcty.v1.module.js is imported by <lcty-c> once the page has loaded; the rendering (the scroll position included)
+ * - Every page loads it synchronously inside <head>: a conversation file or a tag file on line 2 by the version 1 name
+ *   lcty.v1.cjs, which /c/ and /t/ redirect to /lcty.v1/lcty.v1.cjs; other pages as ../lcty.v1/lcty.v1.cjs. It is
+ *   followed by lcty.v1.lang-ja.cjs (the Japanese texts; lcty.v1.lang-ja.js in a file). There is no inline script:
+ *   lcty.v1.cjs defines the elements at its end. The conversation page's module lcty.v1.async.mjs (lcty.v1.module.js in
+ *   older files' terms) is imported by <lcty-c> once the page has loaded; the rendering (the scroll position included)
  *   does not wait for it. The custom elements are defined before the body is parsed, so every
  *   element is created by the parser and the DOM structure is settled in a single pass.
  * - Each element builds its internal structure in Shadow DOM with DOM APIs in its constructor (a parser-created element may
@@ -161,8 +162,7 @@ type LctyDict = Readonly<Partial<Record<LctyTextKey, string>>>;
 /**
  * UI texts. The language is <html lang>, matched exactly against the registered tags (write lang as registered).
  * x-default (English) is not a table: every caller passes it with the key, `LctyT._("send", "Send")`. Languages are
- * separate scripts that call addLang: lcty.v1.lang-<lang>.js is built from the JSON table
- * public/c/lcty.v1.lang-<lang>.json as `LctyT.addLang("<lang>", <the JSON>);`.
+ * separate scripts that call addLang: public/lcty.v1/lcty.v1.lang-<lang>.cjs, `LctyT.addLang("<lang>", {…});`.
  */
 declare const LctyT: {
 	/** Registered tables by language tag (a null-prototype object). */
@@ -195,7 +195,7 @@ declare const LctyT: {
  * What shows before the first message is lcty.v1.css's (:has). Modules only set values, attributes and handlers.
  *
  * When it is connected it marks its own conversation as current in the sidebar's list (which <lcty-sidebar> fills
- * itself), and the first one imports the page's features, ./lcty.v1.module.js (resolved against lcty.v1.js), on the
+ * itself), and the first one imports the page's features, ./lcty.v1.async.mjs (resolved against lcty.v1.cjs), on the
  * window's load event (at once when the page has already loaded), so they never block rendering. Opened directly
  * (file://) the import fails and the page stays a static view.
  *
@@ -288,11 +288,11 @@ declare class LctyConvListElement extends HTMLElement {
  * Parts: lcty-sidebar__nav / __link (each link) / __new / __refresh / __settings / __search-box / __search /
  * __search-status / __list, and lcty-button (--primary) on the links.
  *
- * When it is in the document it fills its list from the browser's copy of every conversation's meta,
- * before any module has loaded: the localStorage snapshot lcty.meta.v1 synchronously (so it is there at the first paint),
- * or IndexedDB "lcty_c" (store "c_meta"; only read, never created) when there is none. It also sets its list's
- * data-tag-defs and data-tag-names from IndexedDB "lcty_t" (store "t_full", through lcty_t.worker.js at the root of the site). Named lcty-sidebar for
- * cross-document view transitions (lcty.v1.css).
+ * When it is in the document it fills its list from the browser's copy of every conversation's meta, before any module
+ * has loaded: the localStorage snapshot lcty.meta.v1 synchronously (so it is there at the first paint), or IndexedDB
+ * "lcty_c" (store "c_meta"; only read, never created) when there is none. It also sets its list's data-tag-defs and
+ * data-tag-names from IndexedDB "lcty_t" (store "t_full", through /lcty.v1/lcty.v1.t.worker.cjs). Named lcty-sidebar
+ * for cross-document view transitions (lcty.v1.css).
  */
 declare class LctySidebarElement extends HTMLElement {
 	static readonly _: typeof LctyT._;
@@ -398,8 +398,8 @@ declare class LctyTElement extends HTMLElement {
 }
 
 /**
- * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message, lcty-composer and lcty-t in registry. lcty.v1.js
- * calls it at its end; importing lcty.v1.mjs defines nothing. The elements are created while the body is parsed, after
+ * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message, lcty-composer and lcty-t in registry.
+ * lcty.v1.cjs calls it at its end (marked /*mjs-ignore*\/, so a module made from it would define nothing). The elements are created while the body is parsed, after
  * the language scripts in <head> have registered their texts.
  */
 declare function defineLctyV1CustomElements(

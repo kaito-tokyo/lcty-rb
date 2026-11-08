@@ -43,8 +43,9 @@ class CServletTest < Lcty::Scenarios
     id
   end
 
-  def public_c(name)
-    File.binread(File.join(C::SRC_DIR, name))
+  # The bytes of the file of public/lcty.v1/ that the version 1 name stands for (lcty.v1.js: lcty.v1.cjs)
+  def public_lcty_v1(name)
+    File.binread(File.join(Chatty::LctyV1::SRC_DIR, Chatty::LctyV1.file_for(name)))
   end
 
   def data_c(name)
@@ -93,6 +94,8 @@ class CServletTest < Lcty::Scenarios
     ['/c/<id>%20copy.html', ->(id) { "/c/#{id}%20copy.html" }],
     ['/c/notes.txt', ->(_) { '/c/notes.txt' }],
     ['/c/lcty.v1.d.ts', ->(_) { '/c/lcty.v1.d.ts' }],
+    ['/c/lcty.v1.cjs', ->(_) { '/c/lcty.v1.cjs' }],
+    ['/c/lcty.v1.mjs', ->(_) { '/c/lcty.v1.mjs' }],
     ['/c/..%2Fsecret.html', ->(_) { '/c/..%2Fsecret.html' }]
   ].each do |label, path|
     scenario "What is not a conversation file or a published file is 404 (#{label})" do
@@ -139,31 +142,29 @@ class CServletTest < Lcty::Scenarios
   end
 
   [
-    ['lcty.v1.css', '"text/css; charset=utf-8"'],
-    ['lcty.v1.js', '"text/javascript; charset=utf-8"'],
-    ['lcty.v1.mjs', '"text/javascript; charset=utf-8"'],
-    ['lcty.v1.lang-ja.js', '"text/javascript; charset=utf-8"'],
-    ['lcty.v1.module.js', '"text/javascript; charset=utf-8"']
-  ].each do |name, type|
-    scenario "The published files are served from public/c/ (#{name})" do
+    %w[lcty.v1.css lcty.v1.css],
+    %w[lcty.v1.js lcty.v1.cjs],
+    %w[lcty.v1.lang-ja.js lcty.v1.lang-ja.cjs],
+    %w[lcty.v1.module.js lcty.v1.async.mjs]
+  ].each do |name, file|
+    scenario "The lcty.v1 names redirect to their files in /lcty.v1/ (#{name})" do
       res = nil
       step("When GET /c/#{name} is requested") { res = get("/c/#{name}") }
-      step("Then the status is 200 with the type #{type}") do
-        assert_equal '200', res.code
-        assert_equal type.delete('"'), res['content-type']
+      step(%(Then the status is 302 with the Location "../lcty.v1/#{file}", relative to the request)) do
+        assert_equal '302', res.code
+        assert_equal "http://127.0.0.1:#{self.class.port}/lcty.v1/#{file}", res['location']
       end
-      step("And the body is the bytes of public/c/#{name}") { assert_equal public_c(name), res.body.b }
     end
   end
 
   scenario 'A published file answers 304 when it has not changed' do
     etag = res = nil
-    step('Given the ETag of GET /c/lcty.v1.css') do
-      etag = get('/c/lcty.v1.css')['etag']
+    step('Given the ETag of GET /c/index.html') do
+      etag = get('/c/index.html')['etag']
       refute_nil etag
     end
-    step('When GET /c/lcty.v1.css is requested with If-None-Match of that ETag') do
-      res = get('/c/lcty.v1.css', 'If-None-Match' => etag)
+    step('When GET /c/index.html is requested with If-None-Match of that ETag') do
+      res = get('/c/index.html', 'If-None-Match' => etag)
     end
     step('Then the status is 304') { assert_equal '304', res.code }
   end
@@ -171,12 +172,15 @@ class CServletTest < Lcty::Scenarios
   scenario 'The copy in data/c/ is never what /c/ serves' do
     res = nil
     begin
-      step('Given the copy of lcty.v1.css in data/c/ differs from public/c/lcty.v1.css') do
+      step('Given the copy of lcty.v1.css in data/c/ differs from public/lcty.v1/lcty.v1.css') do
         self.class.port
         File.write(data_c('lcty.v1.css'), '/* an older copy */')
       end
       step('When GET /c/lcty.v1.css is requested') { res = get('/c/lcty.v1.css') }
-      step('Then the body is the bytes of public/c/lcty.v1.css') { assert_equal public_c('lcty.v1.css'), res.body.b }
+      step('Then it is redirected to /lcty.v1/lcty.v1.css, not answered with the copy') do
+        assert_equal '302', res.code
+        assert_equal "http://127.0.0.1:#{self.class.port}/lcty.v1/lcty.v1.css", res['location']
+      end
     ensure
       C.publish_assets
     end
@@ -188,11 +192,7 @@ class CServletTest < Lcty::Scenarios
       files = Dir.glob('**/*', base: C::SRC_DIR).reject { |f| File.directory?(File.join(C::SRC_DIR, f)) }
       assert_equal files.reject { |f| f.end_with?('.d.ts', '.license') }.sort, C.published
     end
-    step('And it has lcty.v1.css and lcty.v1.js but not lcty.v1.d.ts') do
-      assert_includes C.published, 'lcty.v1.css'
-      assert_includes C.published, 'lcty.v1.js'
-      refute_includes C.published, 'lcty.v1.d.ts'
-    end
+    step('And it has index.html') { assert_includes C.published, 'index.html' }
     step('And it is frozen') { assert C.published.frozen? }
   end
 
@@ -201,20 +201,21 @@ class CServletTest < Lcty::Scenarios
       File.delete(data_c('lcty.v1.js')) if File.exist?(data_c('lcty.v1.js'))
       C.publish_assets
     end
-    step('Then data/c/lcty.v1.js and data/c/lcty.v1.css have the bytes of those in public/c/') do
-      %w[lcty.v1.js lcty.v1.css].each { |name| assert_equal public_c(name), File.binread(data_c(name)) }
+    step('Then data/c/lcty.v1.js and data/c/lcty.v1.css have the bytes of public/lcty.v1/lcty.v1.cjs and lcty.v1.css') do
+      %w[lcty.v1.js lcty.v1.css].each { |name| assert_equal public_lcty_v1(name), File.binread(data_c(name)) }
     end
-    step('And no other file of public/c/ is copied, such as lcty.v1.module.js') do
+    step('And no other file of public/lcty.v1/ is copied, such as lcty.v1.module.js (lcty.v1.async.mjs)') do
       refute File.exist?(data_c('lcty.v1.module.js'))
+      refute File.exist?(data_c('lcty.v1.async.mjs'))
       assert_equal %w[lcty.v1.css lcty.v1.js], C::OFFLINE.sort
     end
   end
 
   scenario 'C.publish_assets copies the same files into the root of data/ and into data/t/, for the tag files' do
     step('When C.publish_assets runs') { C.publish_assets }
-    step('Then data/lcty.v1.js, data/lcty.v1.css, data/t/lcty.v1.js and data/t/lcty.v1.css have the bytes of those in public/c/') do
+    step('Then data/lcty.v1.js, data/lcty.v1.css, data/t/lcty.v1.js and data/t/lcty.v1.css have the same bytes as those of data/c/') do
       [Chatty::DATA_DIR, Chatty::TAG_DIR].product(%w[lcty.v1.js lcty.v1.css]).each do |dir, name|
-        assert_equal public_c(name), File.binread(File.join(dir, name))
+        assert_equal public_lcty_v1(name), File.binread(File.join(dir, name))
       end
     end
   end
@@ -234,8 +235,8 @@ class CServletTest < Lcty::Scenarios
   scenario 'C.publish_assets puts back a copy that was changed' do
     step('Given data/c/lcty.v1.css was changed') { File.write(data_c('lcty.v1.css'), '/* edited */') }
     step('When C.publish_assets runs') { C.publish_assets }
-    step('Then data/c/lcty.v1.css has the bytes of public/c/lcty.v1.css again') do
-      assert_equal public_c('lcty.v1.css'), File.binread(data_c('lcty.v1.css'))
+    step('Then data/c/lcty.v1.css has the bytes of public/lcty.v1/lcty.v1.css again') do
+      assert_equal public_lcty_v1('lcty.v1.css'), File.binread(data_c('lcty.v1.css'))
     end
   end
 

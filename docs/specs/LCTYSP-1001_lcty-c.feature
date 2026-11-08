@@ -2,13 +2,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/lcty_c.worker.js (LCTYSP-0010, LCTYSP-0009). Each Scenario is a test of the same title in
+# The behaviour of public/lcty.v1.c.worker.cjs (LCTYSP-0010, LCTYSP-0009). Each Scenario is a test of the same title in
 # tests/unit/lcty-c.spec.js, whose steps are the lines below.
 
-Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty_c.worker.js
+Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty.v1.c.worker.cjs
 
   Every asynchronous operation on the browser's copy of the meta runs in a worker, a classic script started with new
-  Worker("/lcty_c.worker.js") or new SharedWorker("/lcty_c.worker.js"): the page posts it a message {id, op, endpoint,
+  Worker("/lcty.v1.c.worker.cjs") or new SharedWorker("/lcty.v1/lcty.v1.c.worker.cjs"): the page posts it a message {id, op, endpoint,
   payload} and gets back, on the same port, {id, result}, or {id, errorType} on a failure: "unknownOperation", "error"
   with the error and the status (the HTTP status or null), or "errorMessage" when the error cannot be posted. endpoint
   is the URL of the site's v1/: an absolute URL on the worker's origin ending with "/", or the message is an error
@@ -120,7 +120,7 @@ Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty_c.worke
   # Playwright's routes do not catch the requests of a SharedWorker, so this scenario uses no request
   Scenario: A SharedWorker answers on the port the message came from
     Given "c_meta" holds the conversation "a"
-    When two ports of new SharedWorker("/lcty_c.worker.js") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other
+    When two ports of new SharedWorker("/lcty.v1/lcty.v1.c.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other
     Then the first port is answered with the id 1 and the conversation "a"
     And the second port is answered with the id 2 and the error type "unknownOperation"
 

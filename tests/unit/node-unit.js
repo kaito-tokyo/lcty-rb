@@ -13,9 +13,12 @@
 // localStorage is Node.js's own Web Storage (--localstorage-file=:memory:, npm run test:node): kept in memory, so each
 // test file's process starts with an empty one, and emptied before every Scenario, as a new browser context is.
 
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { createContext, runInContext, runInThisContext } from "node:vm";
 
 export { expect } from "@playwright/test";
 
@@ -49,16 +52,42 @@ export function scenario(title, fn) {
 	});
 }
 
+/** Run the file of public/ at path as a classic script in this global scope (node:vm), as <script src> does. */
+export function runScript(path) {
+	runInThisContext(readFileSync(fileURLToPath(publicUrl(path)), "utf8"), {
+		filename: path,
+	});
+}
+
 /**
- * Make the global LctyT that js/i18n.js needs, as /c/lcty.v1.js does in a page, with the languages langs (such as
- * ["ja"] for /c/lcty.v1.lang-ja.mjs), and set the page's language (<html lang>, which LctyT._() reads) to lang.
- * HTMLElement is a stand-in so lcty.v1.mjs can define its element classes; they are never made here. The modules are
- * cached by the process, so LctyT is made once per test file and languages are only added.
+ * A new LctyT, as a page that has loaded /lcty.v1/lcty.v1.cjs alone has: the classic script is run in a context of its
+ * own (node:vm), so each call makes a new one, with stand-ins for what it needs of a page: HTMLElement, so it can
+ * declare its element classes (they are never made here), customElements, whose define() its last line calls and
+ * which does nothing, and document, which is this global scope's (setLang), the only part of it LctyT._() reads.
  */
-export async function useLctyT({ lang = "en", langs = [] } = {}) {
-	globalThis.HTMLElement ??= class HTMLElement {};
-	globalThis.LctyT ??= (await import(publicUrl("c/lcty.v1.mjs"))).LctyT;
-	for (const l of langs) await import(publicUrl(`c/lcty.v1.lang-${l}.mjs`));
+export function newLctyT() {
+	const page = {
+		HTMLElement: class HTMLElement {},
+		customElements: { define() {}, get() {} },
+	};
+	Object.defineProperty(page, "document", { get: () => globalThis.document });
+	const context = createContext(page);
+	runInContext(
+		readFileSync(fileURLToPath(publicUrl("lcty.v1/lcty.v1.cjs")), "utf8"),
+		context,
+		{ filename: "lcty.v1/lcty.v1.cjs" },
+	);
+	return runInContext("LctyT", context);
+}
+
+/**
+ * Make the global LctyT that js/i18n.js needs, as /lcty.v1/lcty.v1.cjs does in a page, with the languages langs (such
+ * as ["ja"] for /lcty.v1/lcty.v1.lang-ja.cjs, run as classic scripts), and set the page's language (<html lang>, which
+ * LctyT._() reads) to lang. LctyT is made once per test file; languages are added again, which replaces their tables.
+ */
+export function useLctyT({ lang = "en", langs = [] } = {}) {
+	globalThis.LctyT ??= newLctyT();
+	for (const l of langs) runScript(`lcty.v1/lcty.v1.lang-${l}.cjs`);
 	setLang(lang);
 	return globalThis.LctyT;
 }

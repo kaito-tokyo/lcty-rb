@@ -66,20 +66,17 @@ class TServletTest < Lcty::Scenarios
   end
 
   [
-    ['lcty.v1.css', '"text/css; charset=utf-8"'],
-    ['lcty.v1.js', '"text/javascript; charset=utf-8"'],
-    ['lcty.v1.lang-ja.js', '"text/javascript; charset=utf-8"'],
-    ['lcty.v1.module.js', '"text/javascript; charset=utf-8"']
-  ].each do |name, type|
-    scenario "The lcty.v1 files are served from public/c/ (#{name})" do
+    %w[lcty.v1.css lcty.v1.css],
+    %w[lcty.v1.js lcty.v1.cjs],
+    %w[lcty.v1.lang-ja.js lcty.v1.lang-ja.cjs],
+    %w[lcty.v1.module.js lcty.v1.async.mjs]
+  ].each do |name, file|
+    scenario "The lcty.v1 names redirect to their files in /lcty.v1/ (#{name})" do
       res = nil
       step("When GET /t/#{name} is requested") { res = get("/t/#{name}") }
-      step("Then the status is 200 with the type #{type}") do
-        assert_equal '200', res.code
-        assert_equal type.delete('"'), res['content-type']
-      end
-      step("And the body is the bytes of public/c/#{name}") do
-        assert_equal File.binread(File.join(Chatty::C::SRC_DIR, name)), res.body.b
+      step(%(Then the status is 302 with the Location "../lcty.v1/#{file}", relative to the request)) do
+        assert_equal '302', res.code
+        assert_equal "http://127.0.0.1:#{self.class.port}/lcty.v1/#{file}", res['location']
       end
     end
   end

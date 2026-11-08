@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The tags in the browser (LCTYSP-0009): every call starts one worker, lcty_t.worker.js of the site, posts it one
-// operation and resolves to its answer. The worker keeps the browser's copy of GET /v1/tags (IndexedDB "lcty_t",
-// store "t_full") and sends the requests that change the tags, syncing the copy after them; this module never opens
-// the database itself.
+// The tags in the browser (LCTYSP-0009): every call starts one worker, lcty.v1/lcty.v1.t.worker.cjs of the site, posts
+// it one operation and resolves to its answer. The worker keeps the browser's copy of GET /v1/tags (IndexedDB "lcty_t",
+// store "t_full") and sends the requests that change the tags, syncing the copy after them; this module never opens the
+// database itself.
 //
 // In a tab the operations run one at a time, in the order they were called, so an older GET never overwrites a newer
 // copy in this tab and a read after a change sees it. Changes not made through this browser (a file edited by hand,
@@ -14,7 +14,7 @@
 
 import { siteUrl } from "../site.js";
 
-const WORKER_PATH = "lcty_t.worker.js"; // relative to the root of the site (LCTYSP-0005)
+const WORKER_PATH = "lcty.v1/lcty.v1.t.worker.cjs"; // relative to the root of the site (LCTYSP-0005)
 
 // tail: the last operation called in this tab; lastId: the id of the last message posted to a worker
 const state = { tail: null, lastId: 0 };

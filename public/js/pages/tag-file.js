@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The page of a tag file (/t/NNNNN-<part>.html. LCTYSP-0005, LCTYSP-0009). The file itself is served, and its <lcty-t>
-// (lcty.v1.js) has made it a page with the sidebar and a read-only view of the tag. This replaces the view with the
+// (lcty.v1.cjs) has made it a page with the sidebar and a read-only view of the tag. This replaces the view with the
 // tag editor for that tag alone: the same fields as in the tags dialog, saved with PUT /v1/tags like the dialog (the
 // rest of the set is sent back as it is). The tag is found in the browser's copy of the tags by the file name of the
 // page. Saving it under a new name gives it a new file, so the page goes to the new file's URL; deleting it goes to

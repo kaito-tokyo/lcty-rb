@@ -2,13 +2,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/lcty_t.worker.js and public/js/api/lcty-t.js (LCTYSP-0009). Each Scenario is a test of the
+# The behaviour of public/lcty.v1.t.worker.cjs and public/js/api/lcty-t.js (LCTYSP-0009). Each Scenario is a test of the
 # same title in tests/unit/lcty-t.spec.js, whose steps are the lines below.
 
-Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
+Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
 
   Every asynchronous operation on the tags runs in a worker, a classic script started with new
-  Worker("/lcty_t.worker.js") or new SharedWorker("/lcty_t.worker.js"): the page posts it a message {id, op, endpoint,
+  Worker("/lcty.v1.t.worker.cjs") or new SharedWorker("/lcty.v1/lcty.v1.t.worker.cjs"): the page posts it a message {id, op, endpoint,
   payload} and gets back, on the same port, {id, result}, or {id, errorType} on a failure: "unknownOperation", "error"
   with the error and the status (the HTTP status or null), or "errorMessage" when the error cannot be posted. endpoint
   is the URL of the site's v1/: an absolute URL on the worker's origin ending with "/", or the message is an error
@@ -141,7 +141,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty_t.worker.js
   # Playwright's routes do not catch the requests of a SharedWorker, so this scenario uses no request
   Scenario: A SharedWorker answers on the port the message came from
     Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1"
-    When two ports of new SharedWorker("/lcty_t.worker.js") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other
+    When two ports of new SharedWorker("/lcty.v1/lcty.v1.t.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other
     Then the first port is answered with the id 1, the tags ["00010-a.html"] and the ETag "e1"
     And the second port is answered with the id 2 and the error type "unknownOperation"
 

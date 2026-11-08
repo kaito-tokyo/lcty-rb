@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The sidebar shared by every page (LCTYSP-0005, LCTYSP-0007): <lcty-sidebar> and its <lcty-conv-list> (structure in
-// /c/lcty.v1.js, built from public/c/lcty.v1.js) get the search box, the list's items and handlers, the tags dialog
-// (LCTYSP-0009), the refresh button and the settings dialog (LCTYSP-0010) here.
+// /lcty.v1/lcty.v1.cjs) get the search box, the list's items and handlers, the tags dialog (LCTYSP-0009), the refresh
+// button and the settings dialog (LCTYSP-0010) here.
 
 import { forceSyncTags, getTags } from "../api/lcty-t.js";
 import { forceSyncMetaDb, resetMetaDb } from "../api/meta-db.js";

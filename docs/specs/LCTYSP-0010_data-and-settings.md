@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)
-- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/lcty_c.worker.js`
+- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/lcty.v1/lcty.v1.c.worker.cjs`
 
 ## Summary
 
@@ -29,14 +29,14 @@ source of truth at startup or by the browser. Everything else is source-of-truth
   - Backups only need files that do not start with `_` (for example `rsync -a --exclude='_*' data/ backup/`).
   - When the index misbehaves or its format changes, delete the `_` files and restart.
 
-| File                                           | Kind                                                                                                                   | Rebuilt by                                                                                    |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `c/*.html`                                     | Source (conversations; same layout as the URL `/c/<id>.html`)                                                          | —                                                                                             |
-| `c/lcty.v1.js`, `c/lcty.v1.css`                | Source (what reading a conversation offline needs: published at startup, rewritten only when changed; LCTYSP-0005)     | —                                                                                             |
-| `tags.sqlite`                                  | Source (the tags of conversations changed after creation; tag definitions and memory are `t/`, below)                  | —                                                                                             |
-| `_index.sqlite` (+ `-wal`, `-shm`)             | Derived (rounds and FTS)                                                                                               | Rebuilt from the conversation files at startup ([LCTYSP-0007](LCTYSP-0007_search.md))         |
-| `_vectors.<model>.sqlite` (+ `-wal`, `-shm`)   | Derived (vector DB)                                                                                                    | Re-embedded by the browser while a page is open ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) |
-| `_vectors.eg2_264.dat`, `_vectors.eg2_264.idx` | Derived (distribution files of the default embedding model: the rows and their ids, served as `/v1/vectors.eg2_264.*`) | Rebuilt from the vector DB on the next request                                                |
+| File                                           | Kind                                                                                                                             | Rebuilt by                                                                                    |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `c/*.html`                                     | Source (conversations; same layout as the URL `/c/<id>.html`)                                                                    | —                                                                                             |
+| `c/lcty.v1.js`, `c/lcty.v1.css`                | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                             |
+| `tags.sqlite`                                  | Source (the tags of conversations changed after creation; tag definitions and memory are `t/`, below)                            | —                                                                                             |
+| `_index.sqlite` (+ `-wal`, `-shm`)             | Derived (rounds and FTS)                                                                                                         | Rebuilt from the conversation files at startup ([LCTYSP-0007](LCTYSP-0007_search.md))         |
+| `_vectors.<model>.sqlite` (+ `-wal`, `-shm`)   | Derived (vector DB)                                                                                                              | Re-embedded by the browser while a page is open ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) |
+| `_vectors.eg2_264.dat`, `_vectors.eg2_264.idx` | Derived (distribution files of the default embedding model: the rows and their ids, served as `/v1/vectors.eg2_264.*`)           | Rebuilt from the vector DB on the next request                                                |
 
 ### Revision: tag files (implemented, except the IndexedDB split)
 
@@ -51,11 +51,11 @@ directory changes as follows. The rule on `_` is unchanged.
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out             |
 | `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
 
-In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned by `lcty_c.worker.js`, below) and
-`lcty_t` (stores `t_full` and `t_set`, owned by `lcty_t.worker.js`), a full copy of the tags, one row per tag
+In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned by `lcty.v1.c.worker.cjs`, below) and
+`lcty_t` (stores `t_full` and `t_set`, owned by `lcty.v1.t.worker.cjs`), a full copy of the tags, one row per tag
 file, with the set's `ETag`
 ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). The database before the split,
-`lcty`, is deleted by `lcty_c.worker.js` after a sync, not converted.
+`lcty`, is deleted by `lcty.v1.c.worker.cjs` after a sync, not converted.
 
 - SQLite files use WAL mode. To back up `tags.sqlite`, copy `tags.sqlite-wal` with it or run `PRAGMA wal_checkpoint`
   first.
@@ -68,9 +68,9 @@ file, with the set's `ETag`
     tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
     messages, from the search index); the last three are only hints. It is the only store: an upgrade drops every
     other store.
-- **Every operation on it is one worker:** `lcty_c.worker.js` (a classic worker script with no imports, served at
-  `/lcty_c.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
-  [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)), the same pattern as `lcty_t.worker.js`
+- **Every operation on it is one worker:** `lcty.v1.c.worker.cjs` (a classic worker script with no imports, served at
+  `/lcty.v1/lcty.v1.c.worker.cjs` with the frame that starts it; never copied into `data/c/`, since a conversation file
+  opened on its own does not need it, [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)), the same pattern as `lcty.v1.t.worker.cjs`
   ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Started by `new Worker(url)` for one operation, it is posted one
   message `{id, op, endpoint}` and posts one back, `{id, result}` or `{id, errorType, ...}` (the RPC of the workers,
   [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)); then the page terminates it. It is the only code that opens the
@@ -93,8 +93,8 @@ file, with the set's `ETag`
   Changes not made through this browser (a file edited by hand, another browser) are seen at the next sync.
 - **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) removes the snapshot and syncs at once,
   not when idle. The list is shown again through `onMetaDbChange`; a failure is shown as a toast.
-- **Readers:** `lcty.v1.js` (`<lcty-sidebar>`, when it is in the document) reads the snapshot below, or `c_meta` when
-  there is none (through the worker's `get`, found at `../lcty_c.worker.js` from the page, which is one directory
+- **Readers:** `lcty.v1.cjs` (`<lcty-sidebar>`, when it is in the document) reads the snapshot below, or `c_meta` when
+  there is none (through the worker's `get`, found at `../lcty.v1/lcty.v1.c.worker.cjs` from the page, which is one directory
   below the root), to fill the sidebar before any module has loaded. Once the module has loaded, the sidebar's list and
   its `tag:` filters come from `c_meta`, read by `readMetaDb()` (`js/api/meta-db.js`, the worker's `get`), which tells
   whether there is a copy yet (`stale` until the first sync has finished), read again whenever a sync has stored a new

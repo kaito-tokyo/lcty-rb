@@ -12,7 +12,7 @@
 import { expect, test } from "@playwright/test";
 import { openUnitPage } from "./unit-page.js";
 
-const WORKER_URL = "/lcty_t.worker.js";
+const WORKER_URL = "/lcty.v1/lcty.v1.t.worker.cjs";
 
 /** A tag file as GET /v1/tags returns it (LCTYSP-0006). */
 const tag = (file) => ({ file, name: file, ops: [], prompt: "", memory: [] });
@@ -615,7 +615,7 @@ test("A SharedWorker answers on the port the message came from", async ({
 	await background(page, context);
 	await givenTFullHolds(page, ["00010-a.html"], "e1");
 	let answers;
-	await test.step('When two ports of new SharedWorker("/lcty_t.worker.js") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
+	await test.step('When two ports of new SharedWorker("/lcty.v1/lcty.v1.t.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
 		answers = await page.evaluate(async (url) => {
 			const ask = (message) =>
 				new Promise((resolve) => {

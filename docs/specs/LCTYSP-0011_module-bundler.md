@@ -14,7 +14,7 @@ SPDX-License-Identifier: Apache-2.0
 ## Summary
 
 At startup the server turns the new conversation page's module entry (`/c/index.js`) and every module it imports into one
-module file. The conversation page's entry, `lcty.v1.module.js`, is not bundled: it is served as it is and the browser
+module file. The conversation page's entry, `lcty.v1.async.mjs`, is not bundled: it is served as it is and the browser
 imports the modules itself ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The bundler is
 a few regular expressions on whole lines: each module becomes a block, its import lines become `const` aliases, and a
 `var` at the end of the block publishes its exports. The code of a module is never rewritten. This is correct only
@@ -105,7 +105,7 @@ A module that breaks one of these is rejected with its file, line and the reason
     (`state.viewMap ??= new WeakMap()`);
   - a class is a class expression returned by a function (`cmdElementClass()`, `convListClass()`), and a custom
     element is defined by a function the page calls (`defineConvList()` from `initSidebar`);
-  - only the entry runs code at the top level, which starts the page: `lcty.v1.module.js` holds the conversation
+  - only the entry runs code at the top level, which starts the page: `lcty.v1.async.mjs` holds the conversation
     page's code, and `public/c/index.js` calls an init function (`initNewPage()`).
 - **No top-level await,** in the entry either: every module evaluates synchronously.
 - **An entry sits one directory below the root of the site,** as the pages do (`public/c/index.js`). _Why:_ in the
