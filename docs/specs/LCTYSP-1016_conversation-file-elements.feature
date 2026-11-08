@@ -31,7 +31,7 @@ Feature: LCTYSP-1016 The elements of a conversation file
 
   Scenario: A page that loads /c/lcty.v1.js runs /lcty.v1/lcty.v1.cjs
     When /c/lcty.v1.js is fetched
-    Then it is redirected to /lcty.v1/lcty.v1.cjs
+    Then it is redirected to a path under /lcty.v1/
     And its body is that of /lcty.v1/lcty.v1.cjs
 
   Scenario: lcty.v1.cjs defines the elements with the classes it declares

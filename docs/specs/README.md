@@ -66,15 +66,9 @@ for the backend ones).
 | [LCTYSP-3006](LCTYSP-3006_vector-records.feature)             | Vector binary records                         | `tests/backend/vector_records_test.rb`                       |
 | [LCTYSP-3007](LCTYSP-3007_vector-db.feature)                  | Vector DB                                     | `tests/backend/vector_db_test.rb`                            |
 | [LCTYSP-3008](LCTYSP-3008_server-settings.feature)            | Server settings                               | `tests/backend/config_test.rb`                               |
-| [LCTYSP-3009](LCTYSP-3009_module-bundler.feature)             | Module bundler                                | `tests/backend/bundle_test.rb`                               |
-| [LCTYSP-3010](LCTYSP-3010_module-servlet.feature)             | Module servlet                                | `tests/backend/module_servlet_test.rb`                       |
-| [LCTYSP-3011](LCTYSP-3011_conversation-servlet.feature)       | Conversation servlet                          | `tests/backend/c_servlet_test.rb`                            |
 | [LCTYSP-3012](LCTYSP-3012_http-api.feature)                   | HTTP API                                      | `tests/backend/v1_servlet_test.rb`                           |
-| [LCTYSP-3013](LCTYSP-3013_gzip.feature)                       | Transparent gzip                              | `tests/backend/gzip_test.rb`                                 |
 | [LCTYSP-3014](LCTYSP-3014_tag-files.feature)                  | Tag files                                     | `tests/backend/tag_files_test.rb`                            |
-| [LCTYSP-3015](LCTYSP-3015_tag-order-servlet.feature)          | Tag reorder servlet                           | `tests/backend/t_servlet_test.rb`                            |
 | [LCTYSP-3016](LCTYSP-3016_file-types.feature)                 | The types of the files served                 | `tests/backend/file_types_test.rb`                           |
-| [LCTYSP-3017](LCTYSP-3017_lcty-v1-servlet.feature)            | The scripts of every page: /lcty.v1/          | `tests/backend/lcty_v1_test.rb`                              |
 
 ## Number ranges
 

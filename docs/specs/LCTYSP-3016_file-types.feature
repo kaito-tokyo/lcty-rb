@@ -2,18 +2,18 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of Chatty::MIME_TYPES in lcty.rb (LCTYSP-0005). Each Scenario is a test of the same title in
-# tests/backend/file_types_test.rb, whose steps are the lines below.
+# The behaviour of Lcty::Servlets::MIME_TYPES in lib/servlets.rb (LCTYSP-0005). Each Scenario is a test of the same
+# title in tests/backend/file_types_test.rb, whose steps are the lines below.
 
 Feature: LCTYSP-3016 The types of the files served
 
-  Chatty::MIME_TYPES is the table of types that every servlet of lcty.rb serves files with: WEBrick's own table, with
-  the text types given charset=utf-8. A JavaScript file is "text/javascript; charset=utf-8" whatever its extension
-  (.js, .mjs or .cjs), since WebKit and Firefox load a worker script only when it has a JavaScript type, and WEBrick's
-  own table has no .cjs (it would be application/octet-stream).
+  Lcty::Servlets::MIME_TYPES is the table of types that every servlet of the site serves files with: WEBrick's own
+  table, with the text types given charset=utf-8. A JavaScript file is "text/javascript; charset=utf-8" whatever its
+  extension (.js, .mjs or .cjs), since WebKit and Firefox load a worker script only when it has a JavaScript type, and
+  WEBrick's own table has no .cjs (it would be application/octet-stream).
 
   Background:
-    Given WEBrick's file handler on a temporary folder, with Chatty::MIME_TYPES
+    Given WEBrick's file handler on a temporary folder, with Lcty::Servlets::MIME_TYPES
 
   Scenario Outline: A JavaScript file is served as text/javascript
     Given the folder has the file "a.<extension>"
