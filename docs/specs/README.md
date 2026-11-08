@@ -27,9 +27,9 @@ Specifications of lcty-rb. Each spec describes the current design of one topic a
 Behaviour written as Gherkin. Each feature is tested by one test per Scenario, with the Scenario's title and its lines
 as the test's steps (for the frontend unit features, `LCTYSP-1xxx`, a `node:test` file in Node.js and a Playwright spec
 for the Scenarios that need a browser; a Playwright spec for the UI features, `LCTYSP-2xxx`; and a Minitest file for the
-backend features, `LCTYSP-3xxx`; see
-[LCTYSP-1000](LCTYSP-1000_frontend-unit-tests.md) for the frontend unit tests and
-[LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md) for the backend ones).
+backend features, `LCTYSP-3xxx`; see [LCTYSP-1000](LCTYSP-1000_frontend-unit-tests.md) for the frontend unit tests,
+[LCTYSP-2000](LCTYSP-2000_frontend-ui-tests.md) for the UI tests and [LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md)
+for the backend ones).
 
 | ID                                                            | Title                                         | Tested by                                                    |
 | ------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
@@ -53,6 +53,11 @@ backend features, `LCTYSP-3xxx`; see
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | Tags, drafts and memory                       | `tests/unit/tags.test.js`, `tests/unit/tags.spec.js`         |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | The search panel of the sidebar               | `tests/unit/search-panel.spec.js`                            |
 | [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | The tags in the browser: lcty.v1.t.worker.cjs | `tests/unit/lcty-t.spec.js`                                  |
+| [LCTYSP-2001](LCTYSP-2001_new-conversation-page.feature)      | The new conversation page /c/                 | `tests/ui/new-conversation.spec.js`                          |
+| [LCTYSP-2002](LCTYSP-2002_conversation-page.feature)          | The conversation page                         | `tests/ui/conversation.spec.js`                              |
+| [LCTYSP-2003](LCTYSP-2003_sidebar.feature)                    | The sidebar                                   | `tests/ui/sidebar.spec.js`                                   |
+| [LCTYSP-2004](LCTYSP-2004_tag-pages.feature)                  | The tag pages: /t/ and the tag files          | `tests/ui/tag-order.spec.js`                                 |
+| [LCTYSP-2005](LCTYSP-2005_site-routing.feature)               | The paths of the site                         | `tests/ui/site.spec.js`                                      |
 | [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)                    | Message ids as UUIDv7                         | `tests/backend/uuid_test.rb`                                 |
 | [LCTYSP-3002](LCTYSP-3002_conversation-html.feature)          | Conversation files as HTML                    | `tests/backend/conv_html_test.rb`                            |
 | [LCTYSP-3003](LCTYSP-3003_store.feature)                      | Storing conversations, tags and memory        | `tests/backend/store_test.rb`                                |
@@ -84,7 +89,8 @@ IDs have four digits, and the first digit says what kind of document it is:
 
 The first number of a test range, `x000`, is a Markdown document that explains the range: what it covers, how its
 features and tests are written, and how they run. [LCTYSP-1000](LCTYSP-1000_frontend-unit-tests.md) explains the 1000
-range and [LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md) the 3000 range; the features start at `x001`.
+range, [LCTYSP-2000](LCTYSP-2000_frontend-ui-tests.md) the 2000 range and
+[LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md) the 3000 range; the features start at `x001`.
 
 ## Conventions
 
