@@ -9,7 +9,7 @@
  * - Every asynchronous operation on the tags in the browser runs in this worker: the browser's copy of GET /v1/tags
  *   (IndexedDB "lcty_t", stores "t_full" and "t_set") and the requests that change the tags. It is a classic worker
  *   script with no imports, started by js/api/lcty-t.js as new Worker(siteUrl("lcty.v1/lcty.v1.t.worker.cjs")); no
- *   module imports it, so the bundler never sees it.
+ *   module imports it.
  * - It is the only code that opens "lcty_t": it alone defines the schema, and every connection is closed when the
  *   operation ends, so an upgrade is never blocked.
  * - It is an RPC server, like lcty.v1.c.worker.cjs, that runs as a Worker or as a SharedWorker alike: a {@link Request} is

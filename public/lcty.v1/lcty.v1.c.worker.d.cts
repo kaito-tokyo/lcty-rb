@@ -8,7 +8,7 @@
  *
  * - Every asynchronous operation on the browser's copy of every conversation's meta (IndexedDB "lcty_c", store
  *   "c_meta") runs in this worker. It is a classic worker script with no imports, started by js/api/meta-db.js and by
- *   lcty.v1.cjs as new Worker(…/lcty.v1/lcty.v1.c.worker.cjs); no module imports it, so the bundler never sees it.
+ *   lcty.v1.cjs as new Worker(…/lcty.v1/lcty.v1.c.worker.cjs); no module imports it.
  * - It is the only code that opens "lcty_c": it alone defines the schema, and every connection is closed when the
  *   operation ends, so an upgrade is never blocked.
  * - It is an RPC server, like lcty.v1.t.worker.cjs, that runs as a Worker or as a SharedWorker alike: a top-level var sets

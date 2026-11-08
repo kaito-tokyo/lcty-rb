@@ -8,19 +8,19 @@ SPDX-License-Identifier: Apache-2.0
 
 Specifications of lcty-rb. Each spec describes the current design of one topic and the reasons behind it.
 
-| ID                                              | Title                             | Status   |
-| ----------------------------------------------- | --------------------------------- | -------- |
-| [LCTYSP-0001](LCTYSP-0001_architecture.md)      | Architecture                      | Accepted |
-| [LCTYSP-0002](LCTYSP-0002_llm-backend.md)       | LLM backend                       | Accepted |
-| [LCTYSP-0003](LCTYSP-0003_conversation-file.md) | Conversation file                 | Accepted |
-| [LCTYSP-0004](LCTYSP-0004_editing.md)           | Editing a conversation            | Accepted |
-| [LCTYSP-0005](LCTYSP-0005_page-and-elements.md) | Pages and custom elements         | Accepted |
-| [LCTYSP-0006](LCTYSP-0006_http-api.md)          | HTTP API                          | Accepted |
-| [LCTYSP-0007](LCTYSP-0007_search.md)            | Search                            | Accepted |
-| [LCTYSP-0008](LCTYSP-0008_vector-binary.md)     | Vector binary and semantic search | Accepted |
-| [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)   | Tags and memory                   | Accepted |
-| [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) | Data directory and settings       | Accepted |
-| [LCTYSP-0011](LCTYSP-0011_module-bundler.md)    | Module bundler                    | Accepted |
+| ID                                              | Title                             | Status    |
+| ----------------------------------------------- | --------------------------------- | --------- |
+| [LCTYSP-0001](LCTYSP-0001_architecture.md)      | Architecture                      | Accepted  |
+| [LCTYSP-0002](LCTYSP-0002_llm-backend.md)       | LLM backend                       | Accepted  |
+| [LCTYSP-0003](LCTYSP-0003_conversation-file.md) | Conversation file                 | Accepted  |
+| [LCTYSP-0004](LCTYSP-0004_editing.md)           | Editing a conversation            | Accepted  |
+| [LCTYSP-0005](LCTYSP-0005_page-and-elements.md) | Pages and custom elements         | Accepted  |
+| [LCTYSP-0006](LCTYSP-0006_http-api.md)          | HTTP API                          | Accepted  |
+| [LCTYSP-0007](LCTYSP-0007_search.md)            | Search                            | Accepted  |
+| [LCTYSP-0008](LCTYSP-0008_vector-binary.md)     | Vector binary and semantic search | Accepted  |
+| [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)   | Tags and memory                   | Accepted  |
+| [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) | Data directory and settings       | Accepted  |
+| [LCTYSP-0011](LCTYSP-0011_module-bundler.md)    | Module bundler                    | Withdrawn |
 
 ## Gherkin features
 
@@ -69,6 +69,8 @@ for the backend ones).
 | [LCTYSP-3012](LCTYSP-3012_http-api.feature)                   | HTTP API                                      | `tests/backend/v1_servlet_test.rb`                           |
 | [LCTYSP-3014](LCTYSP-3014_tag-files.feature)                  | Tag files                                     | `tests/backend/tag_files_test.rb`                            |
 | [LCTYSP-3016](LCTYSP-3016_file-types.feature)                 | The types of the files served                 | `tests/backend/file_types_test.rb`                           |
+| [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)              | The servlets of the site                      | `tests/backend/servlets_test.rb`                             |
+| [LCTYSP-3019](LCTYSP-3019_entry-point.feature)                | The entry point                               | `tests/backend/lcty_test.rb`                                 |
 
 ## Number ranges
 

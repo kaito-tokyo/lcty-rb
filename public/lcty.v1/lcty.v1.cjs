@@ -933,7 +933,7 @@
  * sidebar), and holds the view, an element of its own that it puts first among its children. The children of the file
  * are hidden (lcty.v1.css); once they have been parsed the view shows them read-only, as the tag editor's fields.
  * The page's features (/t/tag-file.js, next to the tag file over HTTP) are imported once the page has loaded and
- * replace the view with the editor; opened directly (file://) the import fails and the page stays read-only. The bundle
+ * replace the view with the editor; opened directly (file://) the import fails and the page stays read-only. The module
  * is found from the page's URL, not from this script's, which is /lcty.v1/lcty.v1.cjs (/t/ redirects lcty.v1.js here).
  */
 /*export*/ class LctyTElement extends HTMLElement {

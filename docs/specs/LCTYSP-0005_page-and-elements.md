@@ -7,8 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 # LCTYSP-0005: Pages and custom elements
 
 - Status: Accepted
-- Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0011](LCTYSP-0011_module-bundler.md)
-- Implementation: `lib/c/servlet.rb`, `lib/lcty_v1.rb`, `public/lcty.v1/lcty.v1.cjs` (documented in
+- Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md)
+- Implementation: `lcty.rb`, `lib/servlets.rb`, `public/lcty.v1/lcty.v1.cjs` (documented in
   `public/lcty.v1/lcty.v1.d.cts`), `public/lcty.v1/*`,
   `public/js/ui/lcty-elements.js`, `public/js/pages/*.js`
 
@@ -34,7 +34,7 @@ a module imported once the page has loaded attaches every feature without blocki
   [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)) on every page; saving updates the page's tag choices. The ⚙︎ button opens the
   settings dialog (a modal `<dialog>`, `js/ui/settings-dialog.js`, appended to `<body>`): editing the browser settings and a connection test
   ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
-- **The tag reorder page (`js/pages/tag-order.js`, served by `lib/t/servlet.rb`).** With tags stored as one HTML file per tag
+- **The tag reorder page (`js/pages/tag-order.js`, served by `Lcty::Servlets::T`).** With tags stored as one HTML file per tag
   ([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), reordering
   moves out of the tag editor, which loses its ↑↓ buttons. A separate page at `/t/` (`public/t/index.html`, also
   `/t/index.html`; one directory below the root like every page, see [Routing](#routing)) has the sidebar like every
@@ -46,8 +46,7 @@ a module imported once the page has loaded attaches every feature without blocki
     redirects to `/lcty.v1/` as `/c/lcty.v1.*` does, so a tag file loads them by name like a conversation file. The tag files are served
     under `/t/` too (below); their names start with five digits (`00010-ruby.html`) and cannot collide with
     `index.html` or `lcty.v1.*`.
-  - Its entry module is the bundle `/t/index.js` like `/c/index.js` ([LCTYSP-0011](LCTYSP-0011_module-bundler.md)),
-    so `siteUrl()` finds the root from it. `/t` without the slash redirects to `t/` as `/c` does.
+  - Its entry module is `/t/index.js` like `/c/index.js`, so `siteUrl()` finds the root from it. `/t` without the slash redirects to `t/` as `/c` does.
   - The sidebar's links are relative to the page, one directory below the root: the new conversation page is
     `../c/` and a conversation `../c/<id>.html`, from `/c/` and `/t/` alike.
   - Each tag's name in the list is a link to its tag file (`00010-ruby.html`, relative to the page).
@@ -60,9 +59,8 @@ a module imported once the page has loaded attaches every feature without blocki
     view (`div.tag-file-view`) first among its children. The file's own children are hidden; once they have been
     parsed the view shows the tag with the editor's fields, read-only. The page's title is the tag's name. Opened
     directly (`file://`) the page stays so.
-  - Once the page has loaded, `<lcty-t>` imports `tag-file.js` next to the page (the bundle `/t/tag-file.js`, found
-    from the page's URL since the script is served from `/lcty.v1/`,
-    [LCTYSP-0011](LCTYSP-0011_module-bundler.md)). It reads the tags (the browser's copy, after the sidebar's
+  - Once the page has loaded, `<lcty-t>` imports `tag-file.js` next to the page (the entry module `/t/tag-file.js`,
+    found from the page's URL since the script is served from `/lcty.v1/`). It reads the tags (the browser's copy, after the sidebar's
     `sync_full`), finds the tag by the file name of the page and replaces the view with the tag editor for it
     (`renderTagsEditor` with `file`): the same fields and buttons as in the dialog, without "+ New tag". Saving sends
     the whole set with `PUT /v1/tags`, the other tags unchanged. A new name is a new file, so after the save the page
@@ -83,8 +81,7 @@ a module imported once the page has loaded attaches every feature without blocki
     are in `/c/`. A page refers to the files of its own directory by their names (`lcty.v1.js`, `<id>.html`, `./`) and
     to the others through `../` (`../lcty.v1/lcty.v1.cjs`).
   - **A module finds the root from its own URL:** `siteUrl(path)` of `public/js/site.js` is `path` resolved against
-    the directory above the file that runs it, `js/site.js` itself or the bundle it is part of (`/c/index.js`,
-    [LCTYSP-0011](LCTYSP-0011_module-bundler.md)), which is one directory below the root like the pages. The API
+    the directory above `js/site.js` itself, which is one directory below the root like the pages. The API
     client asks it for `v1/…`, `convUrl()` for `c/<id>.html`, and the pages for the workers, which are given whole URLs
     (`lcty.v1.c.worker.cjs` and `lcty.v1.t.worker.cjs` get the URL of `v1/` as the `endpoint` of every message,
     [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
@@ -94,7 +91,7 @@ a module imported once the page has loaded attaches every feature without blocki
   redirects to `c/` with its query, so that the page's relative paths resolve. The `lcty.v1.*` names a conversation
   file loads are redirected to their files in `/lcty.v1/` (below), the server's own copy, so an edit there shows at the
   next load without a restart; the copies of `lcty.v1.js` and `lcty.v1.css` in `data/c/` are never served. The page's
-  entry `/c/index.js` is the bundle served from memory (`lib/module_servlet.rb`). Nothing else is served.
+  entry `/c/index.js` is `public/c/index.js` as it is. Nothing else is served.
   The header lines use relative paths, so the same file works over HTTP and opened directly.
 - **`/c/` URLs are permanent** (conversation permalinks and the files the header lines load), so they are never moved
   under a versioned path such as `/v1/`. The assets carry their version in the file name (`lcty.v1.*`), and the names a
@@ -102,21 +99,23 @@ a module imported once the page has loaded attaches every feature without blocki
 - Everything else under `/` is served from `public/` (`/` is `public/index.html`, which moves to `c/`).
 - Ruby answers dynamically under `/v1/*` ([LCTYSP-0006](LCTYSP-0006_http-api.md), including `/v1/defaults.json` of
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Everything under `/c/` is static.
-- **Serving code lives per URL prefix:** `/c/` in `lib/c/servlet.rb` (`Chatty::C::Servlet`), `/lcty.v1/` in
-  `lib/lcty_v1.rb` (`Chatty::LctyV1::Servlet`), `/v1/` in
-  `lib/v1/servlet.rb` (`Chatty::V1::Servlet`). Everything about vectors (the vector binary and the vector DB) is under
-  `lib/v1/` too.
-- **`chatty.rb` only wires the servlets together:** it opens the data (`Chatty.open_data`), builds the WEBrick server and
-  mounts `/v1`, `/c`, `/t`, `/lcty.v1` and `/`. At startup it copies what a file opened directly needs into the data
-  directory (`C.publish_assets`). It also applies transparent gzip to every servlet
-  (`GzipServer`): 200 responses to GET of text-like types of 1 KiB or more, when `Accept-Encoding` allows gzip. The
-  ETag is kept and `Vary: Accept-Encoding` is added, so conditional GETs still return 304. Shared parts live in `lib/`: settings
-  (`lib/config.rb`) and storage (`lib/store.rb`).
+- **The servlets of the site live in `lib/servlets.rb`** (`Lcty::Servlets`, [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)):
+  `StaticFileServlet` (one file, with its type, `Cache-Control`, `Last-Modified` and an `ETag`, `304` on a matching
+  `If-None-Match`), `C` and `T` (`/c/` and `/t/`) and `PublicDirectoryServlet` (the rest of `public/`, never a path with
+  an empty part, a part starting with `.` or a NUL). The API is `lib/v1/servlet.rb` (`Chatty::V1::Servlet`);
+  everything about vectors (the vector binary and the vector DB) is under `lib/v1/` too. The servlets follow WEBrick's
+  own model: a part every servlet needs is a helper the servlet calls, not a layer around the server.
+- **`lcty.rb` only wires the servlets together** ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)): it opens the data
+  (`Chatty.open_data`), copies what a file opened directly needs into the data directory (`Lcty.publish_offline`),
+  builds the WEBrick server and mounts everything under `LCTY_BASE_URL` (`Lcty.mount_all`): `v1`, `c`, `t`, each file
+  of `lcty.v1/`, the page entries and the rest of `public/`. It is started in the root of the repository: the files of
+  the site are found from the working directory. Nothing is gzipped (the server is usually on the same machine). Shared
+  parts live in `lib/`: settings (`lib/config.rb`) and storage (`lib/store.rb`).
 
 ## The `lcty.v1` files
 
 Every page loads the same scripts and stylesheet, the files of `public/lcty.v1/`, served as they are at `/lcty.v1/`
-(`lib/lcty_v1.rb`) with `Cache-Control: no-cache`: a browser keeps one copy of each and checks it (`304`) before using
+(one `StaticFileServlet` per file) with `Cache-Control: no-cache`: a browser keeps one copy of each and checks it (`304`) before using
 it, so every page runs the same version.
 
 **Rule: the names a conversation file loads are permanent.** Line 2 of a conversation file (and of a tag file) loads
@@ -129,14 +128,14 @@ pointed to keeps being served,** so a redirect a browser kept from before a chan
 The script that runs is then `/lcty.v1/lcty.v1.cjs`, and what it resolves against its own URL (the module it imports)
 is in `/lcty.v1/`; what belongs to the page (`tag-file.js`, the workers) it finds from the page's URL instead.
 
-| Name in a file (`/c/`, `/t/`) | File (`public/lcty.v1/`) | Role                                                                                                                                                                                                                                                                                                                                                         |
-| ----------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `lcty.v1.css`                 | `lcty.v1.css`            | The stylesheet for every page, loaded by `<link>` so pages are styled even without scripts.                                                                                                                                                                                                                                                                  |
-| `lcty.v1.js`                  | `lcty.v1.cjs`            | Classic script loaded synchronously in `<head>`. Declares `LctyT` and the custom elements (DOM structure only) and defines the elements at its end.                                                                                                                                                                                                          |
-| `lcty.v1.lang-ja.js`          | `lcty.v1.lang-ja.cjs`    | The Japanese texts, `LctyT.addLang("ja", …);`, a classic script loaded right after `lcty.v1.cjs`.                                                                                                                                                                                                                                                            |
-| `lcty.v1.module.js`           | `lcty.v1.async.mjs`      | The module entry of the conversation page, imported by `<lcty-c>` once the page has loaded (so it never blocks rendering): it attaches the event listeners and features `/c/<id>.html` needs. Not bundled: it imports the modules in `public/js/` through `../js/…`, which the browser fetches from `/js/` of the site, so the features work over HTTP only. |
-| (none)                        | `lcty.v1.c.worker.cjs`   | The worker that keeps the sidebar's meta database ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).                                                                                                                                                                                                                                                         |
-| (none)                        | `lcty.v1.t.worker.cjs`   | The worker that keeps the browser's copy of the tags ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).                                                                                                                                                                                                                                                        |
+| Name in a file (`/c/`, `/t/`) | File (`public/lcty.v1/`) | Role                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lcty.v1.css`                 | `lcty.v1.css`            | The stylesheet for every page, loaded by `<link>` so pages are styled even without scripts.                                                                                                                                                                                                                                                     |
+| `lcty.v1.js`                  | `lcty.v1.cjs`            | Classic script loaded synchronously in `<head>`. Declares `LctyT` and the custom elements (DOM structure only) and defines the elements at its end.                                                                                                                                                                                             |
+| `lcty.v1.lang-ja.js`          | `lcty.v1.lang-ja.cjs`    | The Japanese texts, `LctyT.addLang("ja", …);`, a classic script loaded right after `lcty.v1.cjs`.                                                                                                                                                                                                                                               |
+| `lcty.v1.module.js`           | `lcty.v1.async.mjs`      | The module entry of the conversation page, imported by `<lcty-c>` once the page has loaded (so it never blocks rendering): it attaches the event listeners and features `/c/<id>.html` needs. It imports the modules in `public/js/` through `../js/…`, which the browser fetches from `/js/` of the site, so the features work over HTTP only. |
+| (none)                        | `lcty.v1.c.worker.cjs`   | The worker that keeps the sidebar's meta database ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).                                                                                                                                                                                                                                            |
+| (none)                        | `lcty.v1.t.worker.cjs`   | The worker that keeps the browser's copy of the tags ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).                                                                                                                                                                                                                                           |
 
 The other pages load the files directly, by `../lcty.v1/…`. Types and documentation are in the `.d.cts` file next to
 each script (`lcty.v1.d.cts`, `lcty.v1.c.worker.d.cts`, `lcty.v1.t.worker.d.cts`); `/lcty.v1/` does not serve them,
@@ -153,22 +152,17 @@ The stylesheet is linked once, by line 2, and no Shadow DOM loads one (it would 
 between the pages are relative: the sidebar links to the new conversation page as `./` and to a conversation as
 `<id>.html`, since every page that shows it is in `/c/`.
 
-The new conversation page has its own module entry: `public/c/index.js` (`/c/`, `js/pages/new.js`). It is bundled at
-startup and served from memory at `/c/index.js` (`lib/module_servlet.rb`). The entry only imports the page's init
-function (`initNewPage` in `js/pages/new.js`) and calls it.
+The new conversation page has its own module entry: `public/c/index.js` (`/c/`, `js/pages/new.js`), served as it is
+at `/c/index.js`. The entry only imports the page's init function (`initNewPage` in `js/pages/new.js`) and calls it.
 
-**Rule: worker scripts are directly in `public/` or in `public/lcty.v1/`,** never bundled, since no module imports
-them. `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search, with its kernel
+**Rule: worker scripts are directly in `public/` or in `public/lcty.v1/`.** `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search, with its kernel
 `public/bdot264.wasm`, built from `public/bdot264.wat`) is at the root; the two workers of the browser's copies of
 server data are in `public/lcty.v1/` with the frame that starts them.
 
-- **The new conversation page's entry is bundled at startup** into one module file, by the module bundler
-  ([LCTYSP-0011](LCTYSP-0011_module-bundler.md)): every module becomes a block and its code is never rewritten. This
-  relies on conventions the modules follow (imports and exports on single lines, immutable exports, and every module
-  except the entry only declaring at its top level); the server does not start when one is broken. So module state is a
-  `const state = { … }` literal, classes are returned by functions (`cmdElementClass`, `convListClass`), and only the
-  entry runs code at the top level: `lcty.v1.async.mjs` (not bundled, but following the same conventions) holds the
-  conversation page's code, and `index.js` calls an init function.
+- **Nothing is bundled.** The page entries (`/c/index.js`, `/t/index.js`, `/t/tag-file.js`, `lcty.v1.async.mjs`) are
+  served as they are, and the browser imports the modules of `js/` they import over HTTP. A file opened directly
+  (`file://`) runs no module at all, so it needs none of them. (The module bundler of
+  [LCTYSP-0011](LCTYSP-0011_module-bundler.md) is no longer used.)
 - **`v1` is the rendering version.** When the format changes, the version goes up (`lcty.v2.*`) and old files keep
   opening with the old version.
 - **The scripts are classic scripts, and nothing is generated from them.** `lcty.v1.cjs` and the language scripts are
@@ -184,7 +178,7 @@ server data are in `public/lcty.v1/` with the frame that starts them.
   or at once when the page has already loaded. It is not preloaded: after the first visit it comes from the HTTP cache,
   checked first (`Cache-Control: no-cache`). Opened directly (`file://`), the import fails and the error is left as it
   is.
-- **There is no inline script,** so a Content Security Policy needs only `script-src 'self'`. (chatty.rb does not
+- **There is no inline script,** so a Content Security Policy needs only `script-src 'self'`. (lcty.rb does not
   send a CSP header yet.)
 - The new conversation page (`/c/`) loads the same two classic scripts (`../lcty.v1/lcty.v1.cjs` and the language
   script), then its own entry `index.js` (`/c/index.js`) as a module script (deferred, so it never blocks rendering).

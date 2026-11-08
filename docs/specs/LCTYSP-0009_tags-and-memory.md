@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 - Status: Accepted; revised ([Revision draft: one HTML file per tag](#revision-draft-one-html-file-per-tag), implemented
   except the browser copy `t_full`, see there)
 - Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
-- Implementation: `lib/tag_files.rb`, `lib/tag_store.rb`, `lib/t/servlet.rb`, `public/js/tag-names.js`,
+- Implementation: `lib/tag_files.rb`, `lib/tag_store.rb`, `lib/servlets.rb` (`T`), `public/js/tag-names.js`,
   `public/js/tags.js`, `public/js/pages/tag-order.js`, `public/js/pages/tag-file.js`
 
 ## Summary

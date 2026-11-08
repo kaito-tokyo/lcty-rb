@@ -29,7 +29,7 @@ The top priority is performance, above all the time from sending a message to th
    same origin           │                │  cross origin (CORS)
    static files, /v1/*   │                │  POST /v1/responses (SSE), /v1/embeddings
                  ┌───────▼──────┐  ┌──────▼──────────────────┐
-                 │ chatty.rb    │  │ llama-server             │
+                 │ lcty.rb      │  │ llama-server             │
                  │ (WEBrick)    │  │ (router mode, :12345)    │
                  │ 127.0.0.1    │  └─────────────────────────┘
                  └───────┬──────┘
@@ -59,7 +59,7 @@ Two principles drive the design:
 - Ruby barely interprets conversations. The exceptions are the rule that limits undo to one turn
   ([LCTYSP-0004](LCTYSP-0004_editing.md)), validation of what it writes ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)),
   and deriving the search index ([LCTYSP-0007](LCTYSP-0007_search.md)).
-- Pages are static files. Ruby never assembles HTML from templates; it only serves files (copying `lcty.v1.js` and `lcty.v1.css` into `data/c/` and bundling the module entries at startup) and answers `/v1/*`
+- Pages are static files. Ruby never assembles HTML from templates; it only serves files (copying `lcty.v1.js` and `lcty.v1.css` into `data/c/` at startup) and answers `/v1/*`
   ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0006](LCTYSP-0006_http-api.md)).
 
 ### The source of truth is files on the server
