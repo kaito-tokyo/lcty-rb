@@ -367,13 +367,10 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
     hidden too. No script watches the children.
   - Buttons do nothing until the module has loaded.
 - **The sidebar's list is filled from the browser's copy of the meta, on every page.** `<lcty-sidebar>` fills its list
-  as soon as it is in the document, before any module has loaded ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
-  - from the `localStorage` snapshot `lcty.meta.v1` (the newest 20 conversations: id, title, `updated_at_hint`,
-    `tags_hint` and `messages_hint`),
-    synchronously, so the first view is there at the first paint;
-  - when there is no snapshot, from IndexedDB `lcty_c` (store `c_meta`), asynchronously, through the operation `get`
-    of `lcty.v1.c.worker.cjs` (resolved as `../lcty.v1/lcty.v1.c.worker.cjs` from the page). The database is only read: when it
-    does not exist yet it is not created (the worker's sync owns the schema), and the list stays empty.
+  as soon as it is in the document, before any module has loaded ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)),
+  from IndexedDB `lcty_c` (store `c_meta`), asynchronously, through the operation `get` of `lcty.v1.c.worker.cjs`
+  (resolved as `../lcty.v1/lcty.v1.c.worker.cjs` from the page). The database is only read: when it does not exist yet
+  it is not created (the worker's sync owns the schema), and the list stays empty.
 
   These items have titles, dates, `tags_hint` as their tags and `messages_hint` as their counts (`showCached`), so
   they look the same as the module's items when the hints are up to date. `<lcty-c>`

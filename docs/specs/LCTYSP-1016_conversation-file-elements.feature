@@ -348,25 +348,11 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And they have the parts "lcty-sidebar__new lcty-sidebar__link lcty-button lcty-button--primary", "lcty-sidebar__tags lcty-sidebar__link lcty-button", "lcty-sidebar__refresh lcty-sidebar__link lcty-button" and "lcty-sidebar__settings lcty-sidebar__link lcty-button"
     And the search box holds its field search, a search field with the placeholder "Search chats", and its field searchStatus
 
-  Scenario: The sidebar's list is filled from the snapshot in localStorage
-    Given localStorage "lcty.meta.v1" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03, "c" updated on 2026-11-03 and a broken entry
-    And the database "lcty_c" holds "z" in "c_meta"
+  Scenario: The sidebar's list is filled from IndexedDB
+    Given the database "lcty_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta"
     When a <lcty-sidebar> is put into the body
     Then its list shows "c", "b" and "a", in that order
     And the item "a" shows its tags_hint as tags and its messages_hint as the count
-
-  Scenario Outline: The sidebar's list is filled from IndexedDB when there is no usable snapshot
-    Given localStorage "lcty.meta.v1" <snapshot>
-    And the database "lcty_c" holds "a" updated on 2026-11-01 and "b" updated on 2026-11-03 in "c_meta"
-    When a <lcty-sidebar> is put into the body
-    Then its list shows "b" and "a", in that order
-
-    Examples:
-      | snapshot         |
-      | is not set       |
-      | holds []         |
-      | holds "not json" |
-      | holds {"a": 1}   |
 
   Scenario: The sidebar names its list's tags from the browser's copy of the tags
     Given "t_full" of the database "lcty_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"

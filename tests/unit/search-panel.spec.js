@@ -181,7 +181,7 @@ async function givenTheLoadedPanel(page) {
 	await test.step("Given the panel has loaded the copy after a sync", async () => {
 		await createPanel(page);
 		await page.evaluate(async () => {
-			await (await import("/js/api/meta-db.js")).resetMetaDb();
+			await (await import("/js/api/meta-db.js")).forceSyncMetaDb();
 		});
 		await shownTimes(page, 1);
 	});
@@ -352,7 +352,7 @@ test("An empty copy says there are no conversations", async ({
 	await test.step("And the panel has loaded the copy after a sync", async () => {
 		await createPanel(page);
 		await page.evaluate(async () => {
-			await (await import("/js/api/meta-db.js")).resetMetaDb();
+			await (await import("/js/api/meta-db.js")).forceSyncMetaDb();
 		});
 		await shownTimes(page, 1);
 	});
@@ -762,7 +762,7 @@ test("The rounds of the conversations are fetched once until the list changes", 
 	});
 	await test.step("When a sync stores a new list", async () => {
 		await page.evaluate(async () => {
-			await (await import("/js/api/meta-db.js")).resetMetaDb();
+			await (await import("/js/api/meta-db.js")).forceSyncMetaDb();
 		});
 	});
 	await test.step("Then the search runs again and GET /v1/conversations is fetched again", async () => {

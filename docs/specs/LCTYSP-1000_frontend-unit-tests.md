@@ -47,14 +47,14 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                         |      23 |       0 |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API    |      29 |       0 |
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation        |      17 |       0 |
-| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      25 |       9 |
-| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the browser's copy of the meta         |       0 |      17 |
+| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      26 |       7 |
+| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the browser's copy of the meta         |       0 |      13 |
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search           |      25 |       0 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing                |      27 |       0 |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      28 |       0 |
 | [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | `js/ui/markdown.js`: Markdown rendering                     |      67 |      15 |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                           |       0 |      17 |
-| [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      73 |
+| [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      70 |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      27 |
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                       |      15 |      45 |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel               |       0 |      21 |

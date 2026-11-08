@@ -1931,27 +1931,20 @@ test("The sidebar holds its links, the search box and the list", async ({
 	});
 });
 
-test("The sidebar's list is filled from the snapshot in localStorage", async ({
+test("The sidebar's list is filled from IndexedDB", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given localStorage "lcty.meta.v1" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03, "c" updated on 2026-11-03 and a broken entry', () =>
-		page.evaluate(
-			(items) => localStorage.setItem("lcty.meta.v1", JSON.stringify(items)),
-			[
-				meta("a", "01", { tags_hint: ["ruby"], messages_hint: 4 }),
-				meta("b", "03"),
-				null,
-				{ id: 5 },
-				meta("c", "03"),
-			],
-		));
-	await test.step('And the database "lcty_c" holds "z" in "c_meta"', () =>
-		seedCMeta(page, [meta("z", "05")]));
+	await test.step('Given the database "lcty_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta"', () =>
+		seedCMeta(page, [
+			meta("a", "01", { tags_hint: ["ruby"], messages_hint: 4 }),
+			meta("b", "03"),
+			meta("c", "03"),
+		]));
 	await whenSidebarPut(page);
 	await test.step('Then its list shows "c", "b" and "a", in that order', async () => {
-		expect(await listIds(page, true)).toEqual(["c", "b", "a"]);
+		await expect.poll(() => listIds(page, true)).toEqual(["c", "b", "a"]);
 	});
 	await test.step('And the item "a" shows its tags_hint as tags and its messages_hint as the count', async () => {
 		expect(
@@ -1967,30 +1960,6 @@ test("The sidebar's list is filled from the snapshot in localStorage", async ({
 		).toEqual([["ruby"], "2026-11-01 00:00 · 4 messages"]);
 	});
 });
-
-for (const [snapshot, value] of [
-	["is not set", null],
-	["holds []", "[]"],
-	['holds "not json"', "not json"],
-	['holds {"a": 1}', '{"a": 1}'],
-]) {
-	test(`The sidebar's list is filled from IndexedDB when there is no usable snapshot (${snapshot})`, async ({
-		page,
-		context,
-	}) => {
-		await background(page, context);
-		await test.step(`Given localStorage "lcty.meta.v1" ${snapshot}`, () =>
-			page.evaluate((value) => {
-				if (value !== null) localStorage.setItem("lcty.meta.v1", value);
-			}, value));
-		await test.step('And the database "lcty_c" holds "a" updated on 2026-11-01 and "b" updated on 2026-11-03 in "c_meta"', () =>
-			seedCMeta(page, [meta("a", "01"), meta("b", "03")]));
-		await whenSidebarPut(page);
-		await test.step('Then its list shows "b" and "a", in that order', async () => {
-			await expect.poll(() => listIds(page, true)).toEqual(["b", "a"]);
-		});
-	});
-}
 
 test("The sidebar names its list's tags from the browser's copy of the tags", async ({
 	page,

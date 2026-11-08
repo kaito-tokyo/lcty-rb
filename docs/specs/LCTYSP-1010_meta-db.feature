@@ -9,12 +9,11 @@ Feature: LCTYSP-1010 The browser's copy of the meta
 
   The module keeps the browser's copy of every conversation's meta, the store "c_meta" of the IndexedDB database
   "lcty_c". A sync posts {"id": n, "op": "sync_meta"} to the worker /lcty.v1.c.worker.cjs (LCTYSP-1001), which replaces
-  the store with GET /v1/meta-all.json; then the module writes a snapshot of the newest 20 conversations to
-  localStorage "lcty.meta.v1" for the first paint and calls the listeners of onMetaDbChange. requestMetaDbSync()
-  syncs when the browser is idle (the pages call it on loading the list and after sending a change), resetMetaDb()
-  removes the snapshot and syncs at once (the sidebar's refresh button), and readMetaDb() reads the copy newest first
-  through the worker ({"id": n, "op": "get"}), which never creates the database. In a tab at most one sync runs: syncs
-  requested while one runs share one more sync after it.
+  the store with GET /v1/meta-all.json; then the module calls the listeners of onMetaDbChange. requestMetaDbSync()
+  syncs when the browser is idle (the pages call it on loading the list and after sending a change),
+  forceSyncMetaDb() syncs at once (every page when it is shown, and the sidebar's refresh button), and readMetaDb()
+  reads the copy newest first through the worker ({"id": n, "op": "get"}), which never creates the database. In a tab
+  at most one sync runs: syncs requested while one runs share one more sync after it.
 
   Background:
     Given a page on the server's origin
@@ -43,37 +42,21 @@ Feature: LCTYSP-1010 The browser's copy of the meta
     When readMetaDb() reads the copy
     Then the database "lcty_c" can be opened at version 2 without being blocked
 
-  Scenario: A reset syncs at once
+  Scenario: A forced sync syncs at once
     Given there is no database "lcty_c"
     And GET /v1/meta-all.json returns the conversations "a" and "b"
     And a listener is registered with onMetaDbChange
-    When resetMetaDb() is called
+    When forceSyncMetaDb() is called
     Then it resolves after GET /v1/meta-all.json was requested once
     And readMetaDb() returns the conversations "a" and "b" and stale false
     And the listener was called once
 
-  Scenario: A sync writes a snapshot of the newest 20 conversations
-    Given GET /v1/meta-all.json returns 25 conversations, each updated at a different time
-    When resetMetaDb() is called
-    Then localStorage "lcty.meta.v1" holds the newest 20 of them, newest first
-    And each entry has only id, title, updated_at_hint, tags_hint and messages_hint
-
-  Scenario: A snapshot that does not fit is removed
-    Given localStorage "lcty.meta.v1" holds an old snapshot
-    And GET /v1/meta-all.json returns 20 conversations whose titles together are too large for localStorage
-    When resetMetaDb() is called
-    Then it resolves
-    And localStorage has no "lcty.meta.v1"
-    And readMetaDb() returns the 20 conversations
-
-  Scenario Outline: A failed reset rejects with the worker's error and keeps the copy
+  Scenario Outline: A failed forced sync rejects with the worker's error and keeps the copy
     Given "c_meta" holds the conversations "a" and "b"
-    And localStorage "lcty.meta.v1" holds an old snapshot
     And a listener is registered with onMetaDbChange
     And GET /v1/meta-all.json <answer>
-    When resetMetaDb() is called
+    When forceSyncMetaDb() is called
     Then it rejects with an error whose message has "<message>" and does not start with "Uncaught"
-    And localStorage has no "lcty.meta.v1"
     And readMetaDb() returns the conversations "a" and "b"
     And the listener was not called
 
@@ -82,9 +65,9 @@ Feature: LCTYSP-1010 The browser's copy of the meta
       | answers with the status 500   | Failed to fetch /v1/meta-all.json: 500 |
       | returns an object, not a list | meta-all.json is invalid               |
 
-  Scenario: Resets made during a sync share one sync after it
+  Scenario: Forced syncs made during a sync share one sync after it
     Given GET /v1/meta-all.json is held until the test answers it
-    When resetMetaDb() is called three times
+    When forceSyncMetaDb() is called three times
     Then GET /v1/meta-all.json has been requested once
     And the second and the third call return the same promise
     When the first request is answered with the conversation "a"
@@ -95,7 +78,7 @@ Feature: LCTYSP-1010 The browser's copy of the meta
 
   Scenario: A sync queued after a failed one still runs
     Given GET /v1/meta-all.json answers with the status 500 first and returns the conversation "a" next
-    When resetMetaDb() is called twice at once
+    When forceSyncMetaDb() is called twice at once
     Then the first call rejects and the second resolves
     And readMetaDb() returns only the conversation "a"
 
@@ -129,18 +112,7 @@ Feature: LCTYSP-1010 The browser's copy of the meta
     Given a listener that throws is registered with onMetaDbChange
     And a second listener is registered with onMetaDbChange
     And GET /v1/meta-all.json returns the conversation "a"
-    When resetMetaDb() is called
+    When forceSyncMetaDb() is called
     Then it resolves
     And the second listener was called once
     And the error of the first listener is logged as a warning
-
-  Scenario: A snapshot written in another document notifies the listeners
-    Given a listener is registered with onMetaDbChange
-    When another document of the same origin writes localStorage "lcty.meta.v1"
-    Then the listener is called once
-    And GET /v1/meta-all.json was not requested
-
-  Scenario: Other keys written in another document do not notify the listeners
-    Given a listener is registered with onMetaDbChange
-    When another document of the same origin writes localStorage "lcty.other"
-    Then the listener was not called

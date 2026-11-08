@@ -90,28 +90,24 @@ file, with the set's `ETag`
   later; 1 s later where it is missing); requests made before it starts share it. In a tab at most one worker runs: a
   sync requested while one runs is run once after it, so an older response never overwrites a newer one in this tab
   and a change made meanwhile is still fetched. Tabs do not coordinate: the transaction that commits last wins.
-  Changes not made through this browser (a file edited by hand, another browser) are seen at the next sync.
-- **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) removes the snapshot and syncs at once,
+  Changes not made through this browser or this tab (a file edited by hand, another browser, another tab) are seen at
+  the next sync.
+- **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) syncs at once (`forceSyncMetaDb()`),
   not when idle. The list is shown again through `onMetaDbChange`; a failure is shown as a toast.
-- **Readers:** `lcty.v1.cjs` (`<lcty-sidebar>`, when it is in the document) reads the snapshot below, or `c_meta` when
-  there is none (through the worker's `get`, found at `../lcty.v1/lcty.v1.c.worker.cjs` from the page, which is one directory
-  below the root), to fill the sidebar before any module has loaded. Once the module has loaded, the sidebar's list and
+- **Readers:** `lcty.v1.cjs` (`<lcty-sidebar>`, when it is in the document) reads `c_meta` (through the worker's `get`,
+  found at `../lcty.v1/lcty.v1.c.worker.cjs` from the page, which is one directory below the root) to fill the sidebar
+  before any module has loaded. Once the module has loaded, the sidebar's list and
   its `tag:` filters come from `c_meta`, read by `readMetaDb()` (`js/api/meta-db.js`, the worker's `get`), which tells
-  whether there is a copy yet (`stale` until the first sync has finished), read again whenever a sync has stored a new
-  list (`onMetaDbChange`: in this tab when its sync finishes, in other tabs through the snapshot's `storage` event)
-  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). Every connection is closed when its operation ends, so an
-  upgrade is not blocked.
-- **`localStorage` key `lcty.meta.v1`**: a snapshot for the first view only: the newest 20 conversations by
-  `updated_at_hint`, with only what the sidebar shows before a module has loaded (`[{id, title, updated_at_hint,
-tags_hint, messages_hint}]`). Unlike
-  IndexedDB, it can be read synchronously: the sidebar is filled from it before the first paint. Derived from the database:
-  `js/api/meta-db.js` writes it on the main thread (workers have no `localStorage`) after each sync; when it does not
-  fit, it is removed and the sidebar reads the database instead. A snapshot that is not a list is ignored, and the
-  sidebar skips entries of it that have no `id`, reading `c_meta` instead when none is left.
+  whether there is a copy yet (`stale` until the first sync has finished), read again whenever a sync in this tab has
+  stored a new list (`onMetaDbChange`) ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). Every connection is closed
+  when its operation ends, so an upgrade is not blocked.
+- **No `localStorage` copy.** A snapshot of the newest conversations in `localStorage` key `lcty.meta.v1`, read
+  synchronously for the first paint, was removed to keep the meta's handling simple; a browser that still has the key
+  ignores it.
 - **One order everywhere:** lists of conversations are newest first by `updated_at_hint`, then by id (which starts with
-  the creation time), on the server (`meta-all.json`, `/v1/conversations`), in `readMetaDb()`, in the snapshot and in
-  the sidebar. With the date alone, conversations with the same `updated_at_hint` came out in a different order from the
-  snapshot and from the database, and swapped places when the module redrew the list.
+  the creation time), on the server (`meta-all.json`, `/v1/conversations`), in `readMetaDb()` and in the sidebar. With
+  the date alone, conversations with the same `updated_at_hint` came out in a different order from different sources,
+  and swapped places when the module redrew the list.
 - `localStorage` key `lcty.settings.v1`: the changed settings (below).
 
 ## Settings
