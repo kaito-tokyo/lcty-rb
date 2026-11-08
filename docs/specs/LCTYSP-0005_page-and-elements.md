@@ -122,7 +122,10 @@ it, so every page runs the same version.
 **Rule: the names a conversation file loads are permanent.** Line 2 of a conversation file (and of a tag file) loads
 `lcty.v1.js`, `lcty.v1.lang-ja.js` and `lcty.v1.css` by relative paths, and `lcty.v1.js` imports `lcty.v1.module.js`:
 the files on disk keep those names. So `/c/` and `/t/` answer each of them with a redirect to its file in `/lcty.v1/`
-(`302`, relative, so the site may be under any path; a browser does not keep a `302`, so where it points can change).
+(`302`, relative, so the site may be under any path). The redirect carries `Cache-Control: max-age=86400`: a browser
+keeps it for a day without asking again, which saves a round trip for each file, and a change of where it points
+reaches every browser within a day, since a `302` is never kept longer (a `301` or `308` would be kept for good). **A file a redirect has
+pointed to keeps being served,** so a redirect a browser kept from before a change still leads to a working file.
 The script that runs is then `/lcty.v1/lcty.v1.cjs`, and what it resolves against its own URL (the module it imports)
 is in `/lcty.v1/`; what belongs to the page (`tag-file.js`, the workers) it finds from the page's URL instead.
 

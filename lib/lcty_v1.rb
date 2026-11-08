@@ -9,8 +9,11 @@
 # Conversation files and tag files load them by the names of version 1 next to themselves (lcty.v1.js,
 # lcty.v1.lang-<lang>.js, lcty.v1.css, and lcty.v1.module.js, which lcty.v1.js imports): those names are permanent, as
 # the files on disk keep them. /c/ and /t/ answer them with a redirect to the one file here (LEGACY), so every page uses
-# the same file and the browser keeps one copy of it. The redirect is 302, which a browser does not keep, so it can be
-# changed; the files here carry Cache-Control: no-cache, so a cached copy is checked (304) before it is used.
+# the same file and the browser keeps one copy of it. The redirect is 302 with Cache-Control: max-age=86400
+# (REDIRECT_MAX_AGE): a browser keeps it for a day without asking again, and where it points can still change, since a
+# 302 is never kept longer than that (a 301 or 308 would be kept for good). The files here carry Cache-Control:
+# no-cache, so a cached copy is checked (304) before it is used. A file that a redirect has pointed to keeps being
+# served, so a redirect kept from before a change still leads to a working file.
 #
 # What a file opened directly (offline) needs is copied from here into the data directories at startup, under the names
 # of version 1 (C.publish_assets).
@@ -30,6 +33,7 @@ module Chatty
       'lcty.v1.module.js' => 'lcty.v1.async.mjs'
     }.freeze
     LANG_RE = /\Alcty\.v1\.lang-([a-z]{2,3}(?:-[a-z0-9]+)*)\.js\z/i.freeze
+    REDIRECT_MAX_AGE = 86_400 # seconds a browser keeps a redirect: a day
 
     # The file of public/lcty.v1/ that the version 1 name stands for, or nil when name is not one
     def self.file_for(name)
@@ -37,11 +41,13 @@ module Chatty
       file if file && File.file?(File.join(SRC_DIR, file))
     end
 
-    # Answer a version 1 name under /c/ or /t/ with a redirect to its file here (set_redirect raises the 302, which
-    # WEBrick sends); false when name is not one. The Location is relative, so the site may be under any path.
+    # Answer a version 1 name under /c/ or /t/ with a redirect to its file here, kept by the browser for
+    # REDIRECT_MAX_AGE (set_redirect raises the 302, which WEBrick sends); false when name is not one. The Location is
+    # relative, so the site may be under any path.
     def self.redirect(name, res)
       file = file_for(name)
       return false unless file
+      res['Cache-Control'] = "max-age=#{REDIRECT_MAX_AGE}"
       res.set_redirect(WEBrick::HTTPStatus::Found, "../lcty.v1/#{file}")
     end
 

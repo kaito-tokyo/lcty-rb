@@ -10,11 +10,12 @@ Feature: LCTYSP-3011 Conversation servlet
   Chatty::C::Servlet, mounted at /c, serves under /c/ the conversation files of data/c/ (/c/<id>.html, untouched) and
   the files of public/c/ that C.publish_assets listed at startup (the new conversation page index.html, without the
   .d.ts and .license files), and redirects the version 1 names a conversation file loads (lcty.v1.js,
-  lcty.v1.lang-<lang>.js, lcty.v1.css and lcty.v1.module.js) to their files in /lcty.v1/ (LCTYSP-3017); everything else
-  is 404. /c/ itself is the new conversation page, and /c without the slash redirects to c/ with its query, so that the
-  page's relative paths resolve (LCTYSP-0005). C.publish_assets also copies what a conversation file opened directly
-  needs into data/c/, under the version 1 names (lcty.v1.js from public/lcty.v1/lcty.v1.cjs, and lcty.v1.css), and
-  C.write_if_changed writes a file by an atomic replace only when its bytes change.
+  lcty.v1.lang-<lang>.js, lcty.v1.css and lcty.v1.module.js) to their files in /lcty.v1/ (LCTYSP-3017), with
+  Cache-Control: max-age=86400 so a browser keeps the redirect for a day; everything else is 404. /c/ itself is the new
+  conversation page, and /c without the slash redirects to c/ with its query, so that the page's relative paths resolve
+  (LCTYSP-0005). C.publish_assets also copies what a conversation file opened directly needs into data/c/, under the
+  version 1 names (lcty.v1.js from public/lcty.v1/lcty.v1.cjs, and lcty.v1.css), and C.write_if_changed writes a file by
+  an atomic replace only when its bytes change.
 
   Scenario: A conversation file is served as it is
     Given a conversation file made by the store
@@ -62,6 +63,7 @@ Feature: LCTYSP-3011 Conversation servlet
   Scenario Outline: The lcty.v1 names redirect to their files in /lcty.v1/
     When GET /c/<name> is requested
     Then the status is 302 with the Location "../lcty.v1/<file>", relative to the request
+    And Cache-Control is "max-age=86400"
 
     Examples:
       | name               | file                |

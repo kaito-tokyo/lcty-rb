@@ -10,9 +10,9 @@ Feature: LCTYSP-3015 Tag reorder servlet
   Chatty::T::Servlet, mounted at /t, mirrors /c/ for the tags: /t/ (and /t/index.html) is the tag reorder page,
   public/t/index.html, and /t without the slash redirects to t/ with its query, so that the page's relative paths
   resolve. Tag files load the version 1 names next to themselves, as conversation files do, so /t/lcty.v1.* redirects
-  them to their files in /lcty.v1/ (LCTYSP-3017). /t/NNNNN-<part>.html returns the tag file data/t/NNNNN-<part>.html as it is,
-  as /c/<id>.html does a conversation file; its name starts with five digits, so it never collides with the page or
-  the lcty.v1 files. Everything else is 404.
+  them to their files in /lcty.v1/ (LCTYSP-3017), kept by a browser for a day as those of /c/. /t/NNNNN-<part>.html
+  returns the tag file data/t/NNNNN-<part>.html as it is, as /c/<id>.html does a conversation file; its name starts with
+  five digits, so it never collides with the page or the lcty.v1 files. Everything else is 404.
 
   Scenario Outline: /t/ is the tag reorder page, public/t/index.html
     When GET <path> is requested
@@ -36,6 +36,7 @@ Feature: LCTYSP-3015 Tag reorder servlet
   Scenario Outline: The lcty.v1 names redirect to their files in /lcty.v1/
     When GET /t/<name> is requested
     Then the status is 302 with the Location "../lcty.v1/<file>", relative to the request
+    And Cache-Control is "max-age=86400"
 
     Examples:
       | name               | file                |

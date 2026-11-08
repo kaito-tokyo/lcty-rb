@@ -78,6 +78,7 @@ class TServletTest < Lcty::Scenarios
         assert_equal '302', res.code
         assert_equal "http://127.0.0.1:#{self.class.port}/lcty.v1/#{file}", res['location']
       end
+      step('And Cache-Control is "max-age=86400"') { assert_equal 'max-age=86400', res['cache-control'] }
     end
   end
 
