@@ -61,7 +61,7 @@ a module imported once the page has loaded attaches every feature without blocki
     directly (`file://`) the page stays so.
   - Once the page has loaded, `<lcty-t>` imports `tag-file.js` next to `lcty.v1.js` (the bundle `/t/tag-file.js`,
     [LCTYSP-0011](LCTYSP-0011_module-bundler.md)). It reads the tags (the browser's copy, after the sidebar's
-    `force_sync`), finds the tag by the file name of the page and replaces the view with the tag editor for it
+    `sync_full`), finds the tag by the file name of the page and replaces the view with the tag editor for it
     (`renderTagsEditor` with `file`): the same fields and buttons as in the dialog, without "+ New tag". Saving sends
     the whole set with `PUT /v1/tags`, the other tags unchanged. A new name is a new file, so after the save the page
     moves to its URL (`location.replace`); deleting the tag saves at once and moves to the reorder page `./`. A tag no
@@ -84,7 +84,8 @@ a module imported once the page has loaded attaches every feature without blocki
     the directory above the file that runs it, `js/site.js` itself or the bundle it is part of (`/c/index.js`,
     [LCTYSP-0011](LCTYSP-0011_module-bundler.md)), which is one directory below the root like the pages. The API
     client asks it for `v1/…`, `convUrl()` for `c/<id>.html`, and the pages for the workers, which are given whole URLs
-    (or, for `js/lcty_c.worker.js` and `js/lcty_t.worker.js`, resolve `../v1/` against their own URL).
+    (`lcty_c.worker.js` and `lcty_t.worker.js` get the URL of `v1/` as the `endpoint` of every message,
+    [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
   - `/` itself (`public/index.html`) only moves to `c/` (a `<meta http-equiv="refresh">`, without the query).
 - **Under `/c/`, only conversation files come from `data/c/`.** `<id>.html` returns the conversation file untouched,
   and `/c/` itself (and `/c/index.html`) is the new conversation page, `public/c/index.html`; `/c` without the slash
@@ -120,7 +121,7 @@ as they are.
 paths, so over HTTP they are `/c/lcty.v1.*` (in `public/c/`), and opened directly the two in `data/c/` are found next
 to the file. A file a conversation file does not need on its own (one that only serves the
 other pages, or a copy of server data such as the sidebar's meta database) is not a `/c/` file: it lives under
-`public/` outside `public/c/` and is served from the root of the site (`js/lcty_c.worker.js`,
+`public/` outside `public/c/` and is served from the root of the site (`lcty_c.worker.js`,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md); `fuzzy_search.worker.js` and `bdot264.wasm`,
 [LCTYSP-0008](LCTYSP-0008_vector-binary.md)). The `lcty.v1.` prefix is for `/c/` files only. The new conversation page
 (`index.html` and its entry `index.js`) is in `public/c/` too, as a page of `/c/`, but it is not published into
@@ -146,9 +147,10 @@ Types and documentation of `lcty.v1.js` are in `public/c/lcty.v1.d.ts`. `public/
 The new conversation page has its own module entry, which is not part of `data/c/`: `public/c/index.js` (`/c/`,
 `js/pages/new.js`). It is bundled at startup and served from memory at `/c/index.js`
 (`lib/module_servlet.rb`). The entry only imports the page's init function (`initNewPage` in `js/pages/new.js`) and calls it.
-The workers are not `/c/` files either: `public/js/lcty_c.worker.js` (`/js/lcty_c.worker.js`, which keeps the
-sidebar's meta database, a copy of server data; a module worker that no module imports, so it is never bundled; so is
-`public/js/lcty_t.worker.js` for the tags) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
+**Rule: every worker script (`*.worker.js`) is directly in `public/`,** served at the root of the site. The workers
+are not `/c/` files either: `public/lcty_c.worker.js` (`/lcty_c.worker.js`, which keeps the
+sidebar's meta database, a copy of server data; a classic worker script that no module imports, so it is never
+bundled; so is `public/lcty_t.worker.js` for the tags) and `public/fuzzy_search.worker.js` (`/fuzzy_search.worker.js`, semantic search,
 with its kernel `public/bdot264.wasm`, built from `public/bdot264.wat`) work on server data, which a conversation file
 opened on its own does not need.
 
@@ -369,7 +371,7 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
     `tags_hint` and `messages_hint`),
     synchronously, so the first view is there at the first paint;
   - when there is no snapshot, from IndexedDB `lcty_c` (store `c_meta`), asynchronously, through the operation `get`
-    of `js/lcty_c.worker.js` (resolved as `../js/lcty_c.worker.js` from the page). The database is only read: when it
+    of `lcty_c.worker.js` (resolved as `../lcty_c.worker.js` from the page). The database is only read: when it
     does not exist yet it is not created (the worker's sync owns the schema), and the list stays empty.
 
   These items have titles, dates, `tags_hint` as their tags and `messages_hint` as their counts (`showCached`), so

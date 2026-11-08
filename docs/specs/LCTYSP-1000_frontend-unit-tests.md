@@ -39,7 +39,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 
 | ID                                                            | Module                                                   | Node.js | Browser |
 | ------------------------------------------------------------- | -------------------------------------------------------- | ------: | ------: |
-| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `js/lcty_c.worker.js`: the meta in the browser           |       0 |      14 |
+| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `lcty_c.worker.js`: the meta in the browser              |       0 |      18 |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                      |      21 |       0 |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts            |      22 |      10 |
 | [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings            |      34 |      10 |
@@ -59,7 +59,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                    |      15 |      45 |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel            |       0 |      21 |
 | [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references  |      62 |       0 |
-| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `js/lcty_t.worker.js` and `js/api/lcty-t.js`: the tags   |       0 |      17 |
+| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `lcty_t.worker.js` and `js/api/lcty-t.js`: the tags      |       0 |      20 |
 
 ## How a feature is written
 

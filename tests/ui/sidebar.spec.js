@@ -41,7 +41,7 @@ test("conversations are listed as links to their pages", async ({
 	await page.waitForURL(`/c/${conv.id}.html`);
 });
 
-test("every page takes the server's tags as soon as it is shown (force_sync, LCTYSP-0009)", async ({
+test("every page takes the server's tags as soon as it is shown (sync_full, LCTYSP-0009)", async ({
 	page,
 	request,
 }) => {

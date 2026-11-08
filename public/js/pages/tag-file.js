@@ -67,7 +67,7 @@ export function initTagFilePage() {
 
 	(async () => {
 		state.settings = await loadSettings();
-		// The page edits the set, so it starts from the server's: initSidebar has already run force_sync, and the calls
+		// The page edits the set, so it starts from the server's: initSidebar has already run sync_full, and the calls
 		// of a tab run in order, so this read comes after it (LCTYSP-0009)
 		await load();
 		panel.refresh();

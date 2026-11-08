@@ -3,23 +3,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // lcty_c.worker.js: every asynchronous operation on the browser's copy of every conversation's meta (IndexedDB
-// "lcty_c", store "c_meta", LCTYSP-0010, LCTYSP-0009). A module worker with no imports, started by js/api/meta-db.js
-// and by /c/lcty.v1.js as new Worker(…/js/lcty_c.worker.js, { type: "module" }); no module imports it, so the bundler
-// never sees it. This worker is the only code that opens "lcty_c": it alone defines the schema, and every connection is
+// "lcty_c", store "c_meta", LCTYSP-0010, LCTYSP-0009). A classic worker script with no imports, started by
+// js/api/meta-db.js and by /c/lcty.v1.js as new Worker(…/lcty_c.worker.js); no module imports it, so the bundler never
+// sees it. This worker is the only code that opens "lcty_c": it alone defines the schema, and every connection is
 // closed when the operation ends, so an upgrade is never blocked.
 //
-// One worker, one operation, as js/lcty_t.worker.js: the page posts one message {op} and gets one message back,
-// {result} or {error, status} (status: the HTTP status, or null when there is none); then the page ends the worker.
-// An error is posted, not thrown, because a rejection inside an async handler does not reliably reach the page as the
-// Worker's error event; that event is left for a worker that could not be loaded.
+// An RPC server, as lcty_t.worker.js, that runs as a Worker or as a SharedWorker alike: a message {id, op, endpoint,
+// payload} is answered on the port it came from (the worker itself, or the SharedWorker's port) by {id, result}, or by
+// {id, errorType} on a failure: "unknownOperation" for an op it does not have, "error" with error (the Error itself)
+// and status (the HTTP status, or null when there is none), or "errorMessage" with errorMessage (its text) when the
+// error cannot be posted as it is. A message without an id cannot be answered. An error is posted, not thrown, because
+// a rejection inside an async handler does not reliably reach the page as the Worker's error event; that event is left
+// for a worker that could not be loaded.
 //
-//   {op: "force_sync"}  GET v1/meta-all.json → c_meta cleared and filled in one transaction (so conversations
-//                       deleted on the server disappear from it too) → the old database "lcty" deleted → result
-//                       undefined. On failure the copy is left as it was. Every page runs it whenever it is shown
-//                       (js/ui/sidebar.js), and after a change of conversations (js/api/meta-db.js).
-//   {op: "get"}         c_meta → result {items, stale}: items newest first by updated_at_hint, then by id (the order
-//                       of the server and the sidebar); stale true, with no items, when there is no copy yet (the
-//                       first force_sync has not finished). It never creates the database: only force_sync does.
+//   {op: "sync_meta"}  GET v1/meta-all.json → c_meta cleared and filled in one transaction (so conversations deleted
+//                      on the server disappear from it too) → the old database "lcty" deleted → result undefined. On
+//                      failure the copy is left as it was. Every page runs it whenever it is shown (js/ui/sidebar.js),
+//                      and after a change of conversations (js/api/meta-db.js).
+//   {op: "get"}        c_meta → result {items, stale}: items newest first by updated_at_hint, then by id (the order of
+//                      the server and the sidebar); stale true, with no items, when there is no copy yet (the first
+//                      sync_meta has not finished). It never creates the database: only sync_meta does.
 //
 //   database "lcty_c" (version DB_VERSION)
 //     store "c_meta" (key: id): {id, title, created_at, updated_at_hint, setup_tags, tags_hint, messages_hint}, as
@@ -30,13 +33,29 @@
 // database that does not exist is deleted at once). A deletion blocked by a connection of a page still running older
 // code is not waited for; the next sync tries again.
 //
-// The site's v1/ is found from this file's URL: it is js/ under the root (LCTYSP-0005).
+// endpoint is the URL of the site's v1/, which the page knows (siteUrl("v1/")): every message carries it, so the worker
+// does not depend on where it is served. It must be on the worker's origin and end with "/"; otherwise the message is
+// answered with an error, before any operation.
 
 const DB_NAME = "lcty_c";
 const DB_VERSION = 1; // raised when what is stored changes
 const STORE = "c_meta";
 const OLD_DB_NAME = "lcty";
-const META_ALL = new URL("../v1/meta-all.json", import.meta.url);
+
+/**
+ * The URL of the API (v1/) that a message names as its endpoint: an absolute URL on this worker's origin, ending in "/"
+ * (the copy in IndexedDB is the origin's, so it must not be filled from another server).
+ */
+function endpointOf(endpoint) {
+	if (typeof endpoint !== "string")
+		throw new Error("the message has no endpoint");
+	const url = new URL(endpoint);
+	if (url.origin !== location.origin)
+		throw new Error(`the endpoint is not on this origin: ${endpoint}`);
+	if (!url.pathname.endsWith("/"))
+		throw new Error(`the endpoint does not end with /: ${endpoint}`);
+	return url;
+}
 
 /** The error of a failed request, with the HTTP status as status. */
 function httpError(status, message) {
@@ -93,8 +112,8 @@ function deleteOldDb() {
 	});
 }
 
-async function forceSync() {
-	const response = await fetch(META_ALL);
+async function syncMeta(v1) {
+	const response = await fetch(new URL("meta-all.json", v1));
 	if (!response.ok)
 		throw httpError(
 			response.status,
@@ -147,18 +166,42 @@ async function get() {
 	}
 }
 
-const OPS = { force_sync: forceSync, get };
-
-self.onmessage = async ({ data }) => {
-	self.onmessage = null; // one operation per worker
+var onmessage = async ({
+	data: { id, op, endpoint, payload },
+	target: port,
+}) => {
 	try {
-		const run = OPS[data?.op];
-		if (!run) throw new Error(`unknown operation: ${data?.op}`);
-		self.postMessage({ result: await run(data) });
-	} catch (e) {
-		self.postMessage({
-			error: String(e?.message || e),
-			status: e?.status ?? null,
-		});
+		const v1 = endpointOf(endpoint);
+		switch (op) {
+			case "sync_meta": {
+				const result = await syncMeta(v1, payload);
+				port.postMessage({ id, result });
+				break;
+			}
+			case "get": {
+				const result = await get(v1, payload);
+				port.postMessage({ id, result });
+				break;
+			}
+			default:
+				port.postMessage({ id, errorType: "unknownOperation" });
+		}
+	} catch (error) {
+		const status = error?.status ?? null;
+		try {
+			port.postMessage({ id, errorType: "error", error, status });
+		} catch {
+			port.postMessage({
+				id,
+				errorType: "errorMessage",
+				errorMessage: error?.errorMessage ?? String(error),
+				status,
+			});
+		}
 	}
+};
+
+// biome-ignore lint/correctness/noUnusedVariables: the global handler of a SharedWorker, set by a top-level var
+var onconnect = ({ ports: [port] }) => {
+	port.onmessage = onmessage;
 };

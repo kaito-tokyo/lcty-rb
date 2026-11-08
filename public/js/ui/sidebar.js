@@ -63,8 +63,8 @@ export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
 		.then(({ tags }) => showTagNames(sidebar.list, tags))
 		.catch(() => {}); // the chips keep their references
 	// Every page has the sidebar: the browser's copies of the tags and of the meta are replaced with the server's
-	// (force_sync) whenever the page is shown: at once when it loads, and again when it comes back from the back/forward
-	// cache (pageshow with persisted), where no script runs anew (LCTYSP-0009, LCTYSP-0010)
+	// (sync_full, sync_meta) whenever the page is shown: at once when it loads, and again when it comes back from the
+	// back/forward cache (pageshow with persisted), where no script runs anew (LCTYSP-0009, LCTYSP-0010)
 	const forceSync = () => {
 		forceSyncTags()
 			.then(getTags)

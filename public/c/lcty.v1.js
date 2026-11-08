@@ -583,16 +583,14 @@
 	#filled = false;
 
 	// The display names of the list's tags, for the first paint too: the browser's copy of the tags (IndexedDB "lcty_t",
-	// store "t_full") through the worker that alone opens it (js/lcty_t.worker.js, operation "get", which fetches
+	// store "t_full") through the worker that alone opens it (lcty_t.worker.js, operation "get", which fetches
 	// GET /v1/tags first when there is no copy yet; LCTYSP-0009), found from the page's URL like lcty_c.worker.js below.
 	// The references are the tag files' names without the number and .html (tagRef in js/tag-names.js). The module sets
 	// the same attributes when it has read the tags; whichever comes first, the second sets the same values.
 	#loadTagNames() {
 		let worker;
 		try {
-			worker = new Worker(new URL("../js/lcty_t.worker.js", document.baseURI), {
-				type: "module",
-			});
+			worker = new Worker(new URL("../lcty_t.worker.js", document.baseURI));
 		} catch {
 			return;
 		}
@@ -614,13 +612,17 @@
 			e.preventDefault();
 			worker.terminate();
 		};
-		worker.postMessage({ op: "get" });
+		worker.postMessage({
+			id: 1,
+			op: "get",
+			endpoint: new URL("../v1/", document.baseURI).href,
+		});
 	}
 
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
 	// before any module has loaded (LCTYSP-0010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
 	// there at the first paint, or else from IndexedDB ("lcty_c", store "c_meta"), asynchronously, through the worker that
-	// alone opens it (js/lcty_c.worker.js, operation "get", which never creates the database; LCTYSP-0009). The worker is
+	// alone opens it (lcty_c.worker.js, operation "get", which never creates the database; LCTYSP-0009). The worker is
 	// found from the page's URL: every page is one directory below the root of the site (LCTYSP-0005). Opened directly
 	// (file://) no worker can start, and the list stays empty. A module that has already shown its own items wins.
 	connectedCallback() {
@@ -658,9 +660,7 @@
 		}
 		let worker;
 		try {
-			worker = new Worker(new URL("../js/lcty_c.worker.js", document.baseURI), {
-				type: "module",
-			});
+			worker = new Worker(new URL("../lcty_c.worker.js", document.baseURI));
 		} catch {
 			return;
 		}
@@ -675,7 +675,11 @@
 			e.preventDefault();
 			worker.terminate();
 		};
-		worker.postMessage({ op: "get" });
+		worker.postMessage({
+			id: 1,
+			op: "get",
+			endpoint: new URL("../v1/", document.baseURI).href,
+		});
 	}
 }
 

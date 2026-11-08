@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Accepted
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)
-- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/js/lcty_c.worker.js`
+- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/lcty_c.worker.js`
 
 ## Summary
 
@@ -51,8 +51,8 @@ directory changes as follows. The rule on `_` is unchanged.
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out             |
 | `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
 
-In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned by `js/lcty_c.worker.js`, below) and
-`lcty_t` (stores `t_full` and `t_set`, owned by `js/lcty_t.worker.js`), a full copy of the tags, one row per tag
+In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned by `lcty_c.worker.js`, below) and
+`lcty_t` (stores `t_full` and `t_set`, owned by `lcty_t.worker.js`), a full copy of the tags, one row per tag
 file, with the set's `ETag`
 ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). The database before the split,
 `lcty`, is deleted by `lcty_c.worker.js` after a sync, not converted.
@@ -68,14 +68,14 @@ file, with the set's `ETag`
     tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
     messages, from the search index); the last three are only hints. It is the only store: an upgrade drops every
     other store.
-- **Every operation on it is one worker:** `js/lcty_c.worker.js` (a module worker with no imports, served at
-  `/js/lcty_c.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
-  [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)), the same pattern as `js/lcty_t.worker.js`
-  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Started by `new Worker(url, { type: "module" })` for one operation,
-  it is posted one message `{op}` and posts one back, `{result}` or `{error, status}` (`status` the HTTP status, or
-  `null`); then the page terminates it. It is the only code that opens the database, so the schema is defined there
-  alone ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature)).
-  - `force_sync` fetches `GET /v1/meta-all.json`, clears and fills `c_meta` in one transaction (so a conversation deleted
+- **Every operation on it is one worker:** `lcty_c.worker.js` (a classic worker script with no imports, served at
+  `/lcty_c.worker.js`; not a `/c/` file, since a conversation file opened on its own does not need it,
+  [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)), the same pattern as `lcty_t.worker.js`
+  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Started by `new Worker(url)` for one operation, it is posted one
+  message `{id, op, endpoint}` and posts one back, `{id, result}` or `{id, errorType, ...}` (the RPC of the workers,
+  [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)); then the page terminates it. It is the only code that opens the
+  database, so the schema is defined there alone ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature)).
+  - `sync_meta` fetches `GET /v1/meta-all.json`, clears and fills `c_meta` in one transaction (so a conversation deleted
     on the server disappears from it too), deletes the old database `lcty`, and answers no result. When a step fails
     the copy is left as it was; when it cannot open the database (a newer version left by other code, a broken
     database), the sync fails with that error.
@@ -84,7 +84,7 @@ file, with the set's `ETag`
     would create it is aborted).
 - **When a sync runs:** every page runs one at once whenever it is shown (`forceSyncMetaDb()`, called by
   `js/ui/sidebar.js` when the page loads and on `pageshow` from the back/forward cache, together with the tags'
-  `force_sync`, [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Loading the list and sending a change of conversations
+  `sync_full`, [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Loading the list and sending a change of conversations
   to the server (creating, appending lines, popping, deleting: `js/api/storage.js`) also request one, run when the
   browser is idle (`requestIdleCallback`, at most 10 s
   later; 1 s later where it is missing); requests made before it starts share it. In a tab at most one worker runs: a
@@ -94,7 +94,7 @@ file, with the set's `ETag`
 - **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) removes the snapshot and syncs at once,
   not when idle. The list is shown again through `onMetaDbChange`; a failure is shown as a toast.
 - **Readers:** `lcty.v1.js` (`<lcty-sidebar>`, when it is in the document) reads the snapshot below, or `c_meta` when
-  there is none (through the worker's `get`, found at `../js/lcty_c.worker.js` from the page, which is one directory
+  there is none (through the worker's `get`, found at `../lcty_c.worker.js` from the page, which is one directory
   below the root), to fill the sidebar before any module has loaded. Once the module has loaded, the sidebar's list and
   its `tag:` filters come from `c_meta`, read by `readMetaDb()` (`js/api/meta-db.js`, the worker's `get`), which tells
   whether there is a copy yet (`stale` until the first sync has finished), read again whenever a sync has stored a new

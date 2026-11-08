@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The browser's copy of every conversation's meta (IndexedDB "lcty_c", store "c_meta", LCTYSP-0010). Every operation on
-// it starts one worker, js/lcty_c.worker.js of the site, posts it one message ({op: "sync"} or {op: "get"}) and gets
-// its answer, {result} or {error, status}; the worker is the only code that opens the database (LCTYSP-0009). A sync
-// (force_sync) fetches GET v1/meta-all.json and replaces the whole store; a read returns the copy without ever
-// creating it.
+// it starts one worker, lcty_c.worker.js of the site, posts it one message ({id, op: "sync_meta"} or {id, op: "get"},
+// with the site's v1/ as the endpoint) and gets its answer, {id, result} or {id, errorType, ...}; the worker is the only
+// code that opens the database (LCTYSP-0009). A sync (sync_meta) fetches GET v1/meta-all.json and replaces the whole
+// store; a read returns the copy without ever creating it.
 //
 // Every page syncs whenever it is shown (forceSyncMetaDb(), called by js/ui/sidebar.js, at once). Pages also request a
 // sync when they load the list and after sending a change of conversations to the server (requestMetaDbSync(), called
@@ -23,32 +23,34 @@
 
 import { siteUrl } from "../site.js";
 
-const WORKER_PATH = "js/lcty_c.worker.js"; // relative to the root of the site (LCTYSP-0005)
+const WORKER_PATH = "lcty_c.worker.js"; // relative to the root of the site (LCTYSP-0005)
 const IDLE_TIMEOUT_MS = 10000; // run by then even if the browser never becomes idle
 const FALLBACK_DELAY_MS = 1000; // where requestIdleCallback is missing
 const SNAPSHOT_KEY = "lcty.meta.v1"; // localStorage, read by lcty.v1.js
 const SNAPSHOT_SIZE = 20; // the newest conversations only: it is the first view, not the list
 
-// running: the sync in progress; queued: the one that runs after it; scheduled: a requested sync waits for idle time;
-// listeners: called when a new list was stored
+// lastId: the id of the last message posted to a worker; running: the sync in progress; queued: the one that runs
+// after it; scheduled: a requested sync waits for idle time; listeners: called when a new list was stored
 const state = {
+	lastId: 0,
 	running: null,
 	queued: null,
 	scheduled: false,
 	listeners: null,
 };
 
-// One worker, one operation: resolves to its result, rejects with its error (with the HTTP status as status)
-function runWorker(message) {
+// One worker, one operation: posts {id, op, endpoint (the site's v1/), payload} and resolves to the result of the
+// answer with that id, or rejects with its error (with the HTTP status as status)
+function runWorker(op, payload) {
 	return new Promise((resolve, reject) => {
-		const worker = new Worker(siteUrl(WORKER_PATH), { type: "module" });
+		state.lastId += 1;
+		const id = state.lastId;
+		const worker = new Worker(siteUrl(WORKER_PATH));
 		worker.onmessage = ({ data }) => {
+			if (data?.id !== id) return;
 			worker.terminate();
-			if (data && "error" in data) {
-				const e = new Error(data.error);
-				e.status = data.status;
-				reject(e);
-			} else resolve(data?.result);
+			if (data.errorType) reject(errorOf(data, op));
+			else resolve(data.result);
 		};
 		// A worker that could not be loaded (or threw outside an operation). Chromium prefixes "Uncaught "
 		worker.onerror = (e) => {
@@ -57,10 +59,23 @@ function runWorker(message) {
 			const text = (e.message || "").replace(/^Uncaught /, "");
 			reject(new Error(text || "the meta sync worker failed"));
 		};
-		worker.postMessage(message);
+		worker.postMessage({ id, op, endpoint: siteUrl("v1/").href, payload });
 	});
 }
 
+// The Error of an answer {errorType, error?, errorMessage?, status}, with the HTTP status (or null) as status
+function errorOf(data, op) {
+	const e =
+		data.errorType === "error" && data.error instanceof Error
+			? data.error
+			: new Error(
+					data.errorType === "unknownOperation"
+						? `unknown operation: ${op}`
+						: String(data.errorMessage ?? data.error),
+				);
+	e.status = data.status ?? null;
+	return e;
+}
 // Keep only what the sidebar shows before a module has loaded: the newest SNAPSHOT_SIZE, and only their id, title,
 // updated_at_hint, tags_hint and messages_hint
 function saveSnapshot(items) {
@@ -95,7 +110,7 @@ function notify() {
 // A sync now; while one runs, one more after it (requests made meanwhile share it)
 function sync() {
 	if (!state.running) {
-		state.running = runWorker({ op: "force_sync" })
+		state.running = runWorker("sync_meta")
 			.then(readMetaDb)
 			.then(({ items }) => {
 				saveSnapshot(items);
@@ -145,7 +160,7 @@ export function requestMetaDbSync() {
 }
 
 /**
- * Sync now, not when idle (force_sync): every page whenever it is shown. Resolves when the new list has been stored
+ * Sync now, not when idle (sync_meta): every page whenever it is shown. Resolves when the new list has been stored
  * (listeners are notified), rejects with the worker's error.
  */
 export function forceSyncMetaDb() {
@@ -168,5 +183,5 @@ export function resetMetaDb() {
  * no copy yet (the first sync has not finished), and items is then [].
  */
 export function readMetaDb() {
-	return runWorker({ op: "get" });
+	return runWorker("get");
 }

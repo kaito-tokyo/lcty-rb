@@ -291,7 +291,7 @@ declare class LctyConvListElement extends HTMLElement {
  * When it is in the document it fills its list from the browser's copy of every conversation's meta,
  * before any module has loaded: the localStorage snapshot lcty.meta.v1 synchronously (so it is there at the first paint),
  * or IndexedDB "lcty_c" (store "c_meta"; only read, never created) when there is none. It also sets its list's
- * data-tag-defs and data-tag-names from IndexedDB "lcty_t" (store "t_full", through js/lcty_t.worker.js). Named lcty-sidebar for
+ * data-tag-defs and data-tag-names from IndexedDB "lcty_t" (store "t_full", through lcty_t.worker.js at the root of the site). Named lcty-sidebar for
  * cross-document view transitions (lcty.v1.css).
  */
 declare class LctySidebarElement extends HTMLElement {

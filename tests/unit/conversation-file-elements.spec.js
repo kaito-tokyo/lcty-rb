@@ -2019,7 +2019,7 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 		page.evaluate(
 			() =>
 				new Promise((resolve, reject) => {
-					const req = indexedDB.open("lcty_t", 2); // the schema of js/lcty_t.worker.js
+					const req = indexedDB.open("lcty_t", 2); // the schema of lcty_t.worker.js
 					req.onupgradeneeded = () => {
 						const rows = req.result.createObjectStore("t_full", {
 							keyPath: "file",
