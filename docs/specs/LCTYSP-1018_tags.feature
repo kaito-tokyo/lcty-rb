@@ -143,6 +143,33 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then the status says "Tag names must be unique"
     And nothing is sent to PUT /v1/tags
 
+  # renderTagsEditor with file: the page of a tag file (/t/NNNNN-<part>.html) edits that tag alone
+
+  Scenario: With a file, the editor shows only that tag and no + New tag
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and "go" for the file "00020-go.html"
+    Then it shows one section, "go", with its prompt
+    And there is no button "+ New tag"
+
+  Scenario: Saving with a file sends the whole set and gives onSaved the tag's new file
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and "go" for the file "00020-go.html"
+    When the name is changed to "Golang" and Save is clicked
+    Then PUT /v1/tags is sent "00010-ruby.html" as it was and "00020-golang.html" named "Golang"
+    And onSaved is given the file "00020-golang.html"
+
+  Scenario: Deleting the tag of the file saves at once and gives onSaved no file
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and "go" for the file "00020-go.html"
+    When Delete is clicked and the question is accepted
+    Then PUT /v1/tags is sent only "00010-ruby.html"
+    And onSaved is given the file null
+
+  Scenario: A file that is not in the set shows that the tag is gone
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" for the file "00020-go.html"
+    Then no section is shown and the list says "This tag is not in the tags any more: it was renamed or deleted."
+
   Scenario: A name is trimmed and may have 40 code points
     Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"

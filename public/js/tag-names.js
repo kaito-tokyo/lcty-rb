@@ -95,6 +95,19 @@ export function assignFileNames(tags) {
 	});
 }
 
+/**
+ * The file name of a tag file's page from its URL path (/t/00010-ruby.html): the last segment, percent-decoded and
+ * composed to NFC as the tags' file names are. A segment that cannot be decoded is returned as it is.
+ */
+export function tagFileOfPath(path) {
+	const last = path.split("/").pop();
+	try {
+		return decodeURIComponent(last).normalize("NFC");
+	} catch {
+		return last;
+	}
+}
+
 /** The same tags renumbered in the given order, 00010, 00020, … (the reorder page) */
 export function renumber(tags) {
 	return tags.map((t, i) => ({

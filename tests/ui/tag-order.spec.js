@@ -97,6 +97,62 @@ test("the reorder page does not list an invalid tag and sends it back as it is (
 	expect(puts[0].tags[2]).toEqual(invalid);
 });
 
+test("a tag's name on the reorder page opens its file, which edits the tag and moves to its new file on a rename (LCTYSP-0009)", async ({
+	page,
+	request,
+}) => {
+	const [a, b] = [uniqueWord("a"), uniqueWord("b")];
+	await putTags(request, [
+		{ name: a, prompt: "A", memory: [{ id: "m1", text: "keep" }] },
+		{ name: b, prompt: "B" },
+	]);
+	await page.goto("/t/");
+	await page.locator("#tag-order").getByRole("link", { name: b }).click();
+	await expect(page).toHaveURL(new RegExp(`/t/00020-${b}\\.html$`));
+	await expect(page).toHaveTitle(b);
+	// the sidebar like every page, and the editor of that tag alone
+	await expect(page.locator("body > lcty-sidebar")).toBeVisible();
+	const name = page.getByRole("textbox", { name: "タグの名前" });
+	await expect(name).toHaveValue(b);
+	await expect(name).toBeEditable();
+	await expect(page.locator("lcty-t section.tag-edit")).toHaveCount(1);
+
+	await name.fill(`${b}x`);
+	await page
+		.locator("lcty-t")
+		.getByRole("button", { name: "保存", exact: true })
+		.click();
+	await expect(page).toHaveURL(new RegExp(`/t/00020-${b}x\\.html$`));
+	await expect(page.getByRole("textbox", { name: "タグの名前" })).toHaveValue(
+		`${b}x`,
+	);
+	const tags = await getTags(request);
+	expect(tags.map((t) => [t.file, t.name])).toEqual([
+		[`00010-${a}.html`, a],
+		[`00020-${b}x.html`, `${b}x`],
+	]);
+	expect(tags[0]).toMatchObject({ memory: [{ id: "m1", text: "keep" }] });
+});
+
+test("deleting the tag on its file's page saves at once and goes to the reorder page (LCTYSP-0009)", async ({
+	page,
+	request,
+}) => {
+	const [a, b] = [uniqueWord("a"), uniqueWord("b")];
+	await putTags(request, [{ name: a }, { name: b }]);
+	await page.goto(`/t/00010-${a}.html`);
+	page.once("dialog", (d) => d.accept());
+	await page
+		.locator("lcty-t .tag-edit-head")
+		.getByRole("button", { name: "削除" })
+		.click();
+	await expect(page).toHaveURL(/\/t\/$/);
+	await expect(page.locator("#tag-order > li")).toHaveText([new RegExp(b)]);
+	expect((await getTags(request)).map((t) => t.file)).toEqual([
+		`00020-${b}.html`,
+	]);
+});
+
 test("the reorder page shows the sidebar, whose links lead to /c/ (LCTYSP-0005)", async ({
 	page,
 	request,

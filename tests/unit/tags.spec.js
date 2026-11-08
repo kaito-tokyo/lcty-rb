@@ -139,21 +139,26 @@ const [RUBY, GO] = defsOf(
 
 // ---- The editor ----
 
-/** renderTagsEditor(container, {defs, etag, onSaved, toast}) into a new <div id="editor">, kept as window.editor. */
-function renderEditor(page, defs, etag) {
+/**
+ * renderTagsEditor(container, {defs, etag, onSaved, toast}) into a new <div id="editor">, kept as window.editor. With
+ * file (a tag file's page), onSaved's second argument is kept too.
+ */
+function renderEditor(page, defs, etag, file) {
 	return page.evaluate(
-		({ defs, etag }) => {
+		({ defs, etag, file }) => {
 			const div = document.createElement("div");
 			div.id = "editor";
 			document.body.append(div);
 			window.editor = window.T.renderTagsEditor(div, {
 				defs,
 				etag,
-				onSaved: (d) => window.seen.push(["saved", d]),
+				...(file === undefined ? {} : { file }),
+				onSaved: (d, s) =>
+					window.seen.push(file === undefined ? ["saved", d] : ["saved", d, s]),
 				toast: (m) => window.seen.push(["toast", m]),
 			});
 		},
-		{ defs, etag },
+		{ defs, etag, file },
 	);
 }
 
@@ -627,6 +632,88 @@ test("A new tag with the file-name part of an invalid tag is not saved", async (
 	});
 	await test.step("And nothing is sent to PUT /v1/tags", () => {
 		expect(server.puts).toEqual([]);
+	});
+});
+
+// ---- renderTagsEditor with a file (the page of a tag file) ----
+
+async function givenTheEditorOfGo(page, defs = [RUBY, GO]) {
+	await test.step(`Given the editor of the definitions ${defs.map((d) => `"${d.name}"`).join(" and ")} for the file "00020-go.html"`, () =>
+		renderEditor(page, defs, "e0", "00020-go.html"));
+}
+
+test("With a file, the editor shows only that tag and no + New tag", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenTheEditorOfGo(page);
+	await test.step('Then it shows one section, "go", with its prompt', async () => {
+		expect((await editorState(page)).map((s) => [s.name, s.prompt])).toEqual([
+			["go", "Go prompt"],
+		]);
+	});
+	await test.step('And there is no button "+ New tag"', async () => {
+		await expect(button(page, "+ New tag")).toHaveCount(0);
+	});
+});
+
+test("Saving with a file sends the whole set and gives onSaved the tag's new file", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditorOfGo(page);
+	await test.step('When the name is changed to "Golang" and Save is clicked', async () => {
+		await nameInput(page, 0).fill("Golang");
+		await clickSave(page, server);
+	});
+	await test.step('Then PUT /v1/tags is sent "00010-ruby.html" as it was and "00020-golang.html" named "Golang"', () => {
+		expect(server.puts).toHaveLength(1);
+		const [ruby, go] = server.puts[0].tags;
+		expect(ruby).toEqual(RUBY);
+		expect([go.file, go.name]).toEqual(["00020-golang.html", "Golang"]);
+	});
+	await test.step('And onSaved is given the file "00020-golang.html"', async () => {
+		const saved = (await seen(page)).filter(([k]) => k === "saved");
+		expect(saved.map(([, , s]) => s)).toEqual([{ file: "00020-golang.html" }]);
+	});
+});
+
+test("Deleting the tag of the file saves at once and gives onSaved no file", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditorOfGo(page);
+	await test.step("When Delete is clicked and the question is accepted", async () => {
+		answerNextQuestion(page, true, []);
+		await section(page, 0)
+			.locator(".tag-edit-head")
+			.getByRole("button", { name: "Delete" })
+			.click();
+		await expect.poll(() => seen(page)).toContainEqual(["toast", "Tags saved"]);
+	});
+	await test.step('Then PUT /v1/tags is sent only "00010-ruby.html"', () => {
+		expect(putFiles(server)).toEqual([[["00010-ruby.html", "ruby"]]]);
+	});
+	await test.step("And onSaved is given the file null", async () => {
+		const saved = (await seen(page)).filter(([k]) => k === "saved");
+		expect(saved.map(([, , s]) => s)).toEqual([{ file: null }]);
+	});
+});
+
+test("A file that is not in the set shows that the tag is gone", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenTheEditorOfGo(page, [RUBY]);
+	await test.step('Then no section is shown and the list says "This tag is not in the tags any more: it was renamed or deleted."', async () => {
+		expect(await editorState(page)).toEqual([]);
+		expect(await page.locator("#editor .tags-edit").textContent()).toBe(
+			"This tag is not in the tags any more: it was renamed or deleted.",
+		);
 	});
 });
 

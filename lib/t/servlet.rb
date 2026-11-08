@@ -8,12 +8,15 @@
 #
 # /t/ (and /t/index.html) is public/t/index.html; its entry /t/index.js is the bundle that ModuleServlet mounts over it.
 # Every directory of the site that holds HTML has the lcty.v1.* files, so /t/lcty.v1.* serves those of public/c/ (one
-# copy in the repository). /t without its slash is redirected to t/ so that the page's relative paths resolve. Tag
-# files are not served here (only through /v1/tags).
+# copy in the repository). /t without its slash is redirected to t/ so that the page's relative paths resolve.
+# /t/NNNNN-<part>.html returns the tag file data/t/NNNNN-<part>.html untouched, as /c/<id>.html does a conversation
+# file: its <lcty-t> is the tag's page, and its features are the bundle /t/tag-file.js (LCTYSP-0005). Its name starts
+# with five digits, so it never collides with index.html or lcty.v1.*.
 
 require 'webrick'
 require_relative '../config'
 require_relative '../c/servlet'
+require_relative '../tag_files'
 
 module Chatty
   module T
@@ -34,7 +37,10 @@ module Chatty
         end
         return @page.do_GET(req, res) if name.empty? || name == 'index.html'
         return @assets.do_GET(req, res) if ASSET_RE.match?(name) && C.published.include?(name)
-        raise WEBrick::HTTPStatus::NotFound
+        path = File.join(TAG_DIR, name)
+        raise WEBrick::HTTPStatus::NotFound unless TagFiles.file_name_error(name).nil? && File.file?(path)
+        res['Content-Type'] = 'text/html; charset=utf-8'
+        res.body = File.read(path, mode: 'r:UTF-8')
       end
     end
   end

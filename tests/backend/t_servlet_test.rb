@@ -84,9 +84,29 @@ class TServletTest < Lcty::Scenarios
     end
   end
 
-  %w[/t/00010-ruby.html /t/lcty.v1.d.ts /t/index.js.license /t/notes.html /t/sub/index.html
-     /t/..%2Fc%2Findex.html].each do |path|
-    scenario "What is not the page or an lcty.v1 file is 404 (#{path})" do
+  [
+    ['00010-ruby.html', '/t/00010-ruby.html'],
+    ['00020-料理.html', '/t/00020-%E6%96%99%E7%90%86.html'],
+    ['00030-c~23.html', '/t/00030-c~23.html']
+  ].each do |file, path|
+    scenario "A tag file is served as it is (\"#{file}\")" do
+      res = nil
+      body = %(<!DOCTYPE html>\n<lcty-t data-tag="#{file[6...-5]}">\n</lcty-t>\n)
+      step("Given the tag file \"#{file}\" in data/t/") { File.write(File.join(Chatty::TAG_DIR, file), body) }
+      step("When GET #{path} is requested") { res = get(path) }
+      step('Then the status is 200 with the type "text/html; charset=utf-8"') do
+        assert_equal '200', res.code
+        assert_equal 'text/html; charset=utf-8', res['content-type']
+      end
+      step('And the body is the bytes of the file') { assert_equal body.b, res.body.b }
+    ensure
+      FileUtils.rm_f(File.join(Chatty::TAG_DIR, file))
+    end
+  end
+
+  %w[/t/00020-ruby.html /t/0010-ruby.html /t/00010-ruby.htm /t/lcty.v1.d.ts /t/index.js.license /t/notes.html
+     /t/sub/index.html /t/..%2Fc%2Findex.html].each do |path|
+    scenario "What is not the page, an lcty.v1 file or a tag file is 404 (#{path})" do
       res = nil
       step('Given the tag file "00010-ruby.html" in data/t/') do
         File.write(File.join(Chatty::TAG_DIR, '00010-ruby.html'), '<lcty-t data-tag="ruby"></lcty-t>')

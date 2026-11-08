@@ -488,3 +488,29 @@ scenario("Renumbering composes a decomposed file name", async ({ step }) => {
 		expect(files(renumbered)).toEqual(["00010-café.html"]);
 	});
 });
+
+for (const [caseName, path, file] of [
+	["an ASCII name", '"/t/00010-ruby.html"', '"00010-ruby.html"'],
+	["an escape", '"/t/00020-c~23.html"', '"00020-c~23.html"'],
+	[
+		"percent-encoded",
+		'"/t/00030-%E6%96%99%E7%90%86.html"',
+		'"00030-料理.html"',
+	],
+	["decomposed", '"/t/00040-cafe%CC%81.html"', '"00040-caf" U+00E9 ".html"'],
+	["below another directory", '"/site/t/00010-ruby.html"', '"00010-ruby.html"'],
+	["a broken escape", '"/t/00010-%E6.html"', '"00010-%E6.html"'],
+]) {
+	scenario(
+		`The file of a tag file's page is read from its path (${caseName})`,
+		async ({ step }) => {
+			let got;
+			await step(`When tagFileOfPath reads the path ${path}`, () => {
+				got = N.tagFileOfPath(text(path));
+			});
+			await step(`Then it returns ${file}`, () => {
+				expect(got).toBe(text(file));
+			});
+		},
+	);
+}

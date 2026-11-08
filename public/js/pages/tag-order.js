@@ -62,8 +62,10 @@ export function initTagOrderPage() {
 				const li = document.createElement("li");
 				li.className = "tag-order-item";
 				li.dataset.file = t.file;
-				const name = document.createElement("span");
+				// The name is a link to the tag's file, the page that edits it (next to this page)
+				const name = document.createElement("a");
 				name.className = "tag-chip";
+				name.href = encodeURIComponent(t.file);
 				name.textContent = t.name;
 				li.append(
 					name,
