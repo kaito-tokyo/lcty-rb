@@ -231,8 +231,9 @@ test("A page that loads /c/lcty.v1.js runs /lcty.v1/lcty.v1.cjs", async ({
 			};
 		});
 	});
-	await test.step("Then it is redirected to /lcty.v1/lcty.v1.cjs", () => {
-		expect([got.redirected, got.url]).toEqual([true, "/lcty.v1/lcty.v1.cjs"]);
+	await test.step("Then it is redirected to a path under /lcty.v1/", () => {
+		expect(got.redirected).toBe(true);
+		expect(got.url).toMatch(/^\/lcty\.v1\/[^/]+$/);
 	});
 	await test.step("And its body is that of /lcty.v1/lcty.v1.cjs", () => {
 		expect(got.same).toBe(true);

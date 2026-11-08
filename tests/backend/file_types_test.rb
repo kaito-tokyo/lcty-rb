@@ -6,12 +6,12 @@
 # LCTYSP-3016: the scenarios of docs/specs/LCTYSP-3016_file-types.feature, written by hand. Each test has the title of
 # its Scenario (an Examples row is added in parentheses) and one step per line of it, so the two read side by side.
 #
-# A WEBrick server on 127.0.0.1 (a free port) with Chatty::MIME_TYPES, as Chatty.run configures it, mounts WEBrick's
-# file handler on a temporary folder.
+# A WEBrick server on 127.0.0.1 (a free port) with Lcty::Servlets::MIME_TYPES, as Lcty.run configures it, mounts
+# WEBrick's file handler on a temporary folder.
 
 require_relative 'helper'
 require 'net/http'
-require File.expand_path('../../lcty.rb', __dir__)
+require File.expand_path('../../lib/servlets.rb', __dir__)
 
 class FileTypesTest < Lcty::Scenarios
   FILES = Dir.mktmpdir('lcty-3016-')
@@ -19,7 +19,7 @@ class FileTypesTest < Lcty::Scenarios
 
   def self.port
     @port ||= begin
-      server = WEBrick::HTTPServer.new(BindAddress: '127.0.0.1', Port: 0, MimeTypes: Chatty::MIME_TYPES,
+      server = WEBrick::HTTPServer.new(BindAddress: '127.0.0.1', Port: 0, MimeTypes: Lcty::Servlets::MIME_TYPES,
                                        Logger: WEBrick::Log.new(File::NULL), AccessLog: [], DoNotReverseLookup: true)
       server.mount('/', WEBrick::HTTPServlet::FileHandler, FILES, FancyIndexing: false)
       Thread.new { server.start }
@@ -29,7 +29,7 @@ class FileTypesTest < Lcty::Scenarios
   end
 
   def background
-    step("Given WEBrick's file handler on a temporary folder, with Chatty::MIME_TYPES") { self.class.port }
+    step("Given WEBrick's file handler on a temporary folder, with Lcty::Servlets::MIME_TYPES") { self.class.port }
   end
 
   %w[js mjs cjs].each do |extension|

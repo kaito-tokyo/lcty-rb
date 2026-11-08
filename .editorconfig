@@ -27,4 +27,8 @@ tab_width = 2
 
 [*.wat]
 indent_style = space
-tab_width = 2
+indent_size = 2
+
+[*.rb]
+indent_style = space
+indent_size = 2
