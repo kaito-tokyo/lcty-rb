@@ -8,34 +8,23 @@
 // (i18n.spec.js).
 //
 // js/i18n.js runs in Node.js (node-unit.js). Each Scenario gets its own LctyT, as each page loads its own
-// /c/lcty.v1.js: lcty.v1.mjs (which lcty.v1.js is generated from) is imported anew, with a query, and made the global
-// LctyT that tr() reads. <html lang> is the stand-in document.documentElement.lang of setLang(), the only part of the
-// document LctyT._() reads. The Japanese table is the language script the pages load, /c/lcty.v1.lang-ja.js itself,
-// run as a classic script in this global scope (node:vm), as a <script> tag does.
+// /lcty.v1/lcty.v1.cjs: the classic script is run anew (newLctyT) and its LctyT made the global that tr() reads.
+// <html lang> is the stand-in document.documentElement.lang of setLang(), the only part of the document LctyT._()
+// reads. The Japanese table is the language script the pages load, /lcty.v1/lcty.v1.lang-ja.cjs itself, run as a
+// classic script in this global scope (node:vm), as a <script> tag does.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { runInThisContext } from "node:vm";
-import { expect, publicUrl, scenario, setLang } from "./node-unit.js";
+import {
+	expect,
+	newLctyT,
+	publicUrl,
+	runScript,
+	scenario,
+	setLang,
+} from "./node-unit.js";
 
 const { tr } = await import(publicUrl("js/i18n.js"));
-
-/** Run the file of public/ at path as a classic script, as <script src> does in a page. */
-function runScript(path) {
-	runInThisContext(readFileSync(fileURLToPath(publicUrl(path)), "utf8"), {
-		filename: path,
-	});
-}
-
-let pages = 0;
-
-/** A new global LctyT with no language, as a page that has loaded /c/lcty.v1.js alone has. */
-async function newLctyT() {
-	globalThis.HTMLElement ??= class HTMLElement {};
-	globalThis.LctyT = (
-		await import(`${publicUrl("c/lcty.v1.mjs")}?page=${++pages}`)
-	).LctyT;
-}
 
 /** "Given the page's lang is <label> and <tables>": set <html lang> and load the Japanese table unless noTable. */
 async function givenLang(step, lang, { label = `"${lang}"`, noTable } = {}) {
@@ -43,9 +32,9 @@ async function givenLang(step, lang, { label = `"${lang}"`, noTable } = {}) {
 		? "no language table is loaded"
 		: "the Japanese table is loaded";
 	await step(`Given the page's lang is ${label} and ${tables}`, async () => {
-		await newLctyT();
+		globalThis.LctyT = newLctyT();
 		setLang(lang);
-		if (!noTable) runScript("c/lcty.v1.lang-ja.js");
+		if (!noTable) runScript("lcty.v1/lcty.v1.lang-ja.cjs");
 		expect(Object.hasOwn(LctyT.dicts, "ja")).toBe(!noTable);
 	});
 }
@@ -133,7 +122,7 @@ scenario("An empty translation counts as none", async ({ step }) => {
 	await step(
 		'Given the page\'s lang is "xx" and the language "xx" has the empty text for "delete"',
 		async () => {
-			await newLctyT();
+			globalThis.LctyT = newLctyT();
 			setLang("xx");
 			LctyT.addLang("xx", { delete: "" });
 		},
@@ -299,10 +288,10 @@ scenario(
 		await givenLang(step, "ja");
 		let keys;
 		await step(
-			"When the keys of LctyT.dicts.ja are compared with LctyTextKey of /c/lcty.v1.d.ts",
+			"When the keys of LctyT.dicts.ja are compared with LctyTextKey of /lcty.v1/lcty.v1.d.cts",
 			() => {
 				const dts = readFileSync(
-					fileURLToPath(publicUrl("c/lcty.v1.d.ts")),
+					fileURLToPath(publicUrl("lcty.v1/lcty.v1.d.cts")),
 					"utf8",
 				);
 				const union = dts.match(/type LctyTextKey =([^;]*);/)[1];

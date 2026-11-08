@@ -240,7 +240,7 @@ export async function openNewPage(page, path = "/c/") {
 	await expect(page.locator("#setup-tags > button")).toBeVisible();
 }
 
-/** Open a conversation and wait until lcty.v1.module.js has started (it sets data-tag-defs once the tags arrived). */
+/** Open a conversation and wait until lcty.v1.async.mjs has started (it sets data-tag-defs once the tags arrived). */
 export async function openConversation(page, id) {
 	await page.goto(`/c/${id}.html`);
 	await expect(page.locator("lcty-c")).toHaveAttribute("data-tag-defs", /.*/);

@@ -8,11 +8,13 @@
 Feature: LCTYSP-3011 Conversation servlet
 
   Chatty::C::Servlet, mounted at /c, serves under /c/ the conversation files of data/c/ (/c/<id>.html, untouched) and
-  the files of public/c/ that C.publish_assets listed at startup (lcty.v1.* and the new conversation page index.html,
-  without the .d.ts and .license files); everything else is 404. /c/ itself is the new conversation page, and /c
-  without the slash redirects to c/ with its query, so that the page's relative paths resolve (LCTYSP-0005). C.publish_assets also copies what a
-  conversation file opened directly needs (lcty.v1.js and lcty.v1.css) into data/c/, and C.write_if_changed writes a
-  file by an atomic replace only when its bytes change.
+  the files of public/c/ that C.publish_assets listed at startup (the new conversation page index.html, without the
+  .d.ts and .license files), and redirects the version 1 names a conversation file loads (lcty.v1.js,
+  lcty.v1.lang-<lang>.js, lcty.v1.css and lcty.v1.module.js) to their files in /lcty.v1/ (LCTYSP-3017); everything else
+  is 404. /c/ itself is the new conversation page, and /c without the slash redirects to c/ with its query, so that the
+  page's relative paths resolve (LCTYSP-0005). C.publish_assets also copies what a conversation file opened directly
+  needs into data/c/, under the version 1 names (lcty.v1.js from public/lcty.v1/lcty.v1.cjs, and lcty.v1.css), and
+  C.write_if_changed writes a file by an atomic replace only when its bytes change.
 
   Scenario: A conversation file is served as it is
     Given a conversation file made by the store
@@ -34,6 +36,8 @@ Feature: LCTYSP-3011 Conversation servlet
       | /c/<id>%20copy.html        |
       | /c/notes.txt               |
       | /c/lcty.v1.d.ts            |
+      | /c/lcty.v1.cjs             |
+      | /c/lcty.v1.mjs             |
       | /c/..%2Fsecret.html        |
 
   Scenario Outline: /c/ is the new conversation page, public/c/index.html
@@ -55,43 +59,41 @@ Feature: LCTYSP-3011 Conversation servlet
       | /c               | "c/"                 |
       | /c?fork=abc&at=3 | "c/?fork=abc&at=3"   |
 
-  Scenario Outline: The published files are served from public/c/
+  Scenario Outline: The lcty.v1 names redirect to their files in /lcty.v1/
     When GET /c/<name> is requested
-    Then the status is 200 with the type <type>
-    And the body is the bytes of public/c/<name>
+    Then the status is 302 with the Location "../lcty.v1/<file>", relative to the request
 
     Examples:
-      | name                 | type                               |
-      | lcty.v1.css          | "text/css; charset=utf-8"          |
-      | lcty.v1.js           | "text/javascript; charset=utf-8"   |
-      | lcty.v1.mjs          | "text/javascript; charset=utf-8"   |
-      | lcty.v1.lang-ja.js   | "text/javascript; charset=utf-8"   |
-      | lcty.v1.module.js    | "text/javascript; charset=utf-8"   |
+      | name               | file                |
+      | lcty.v1.css        | lcty.v1.css         |
+      | lcty.v1.js         | lcty.v1.cjs         |
+      | lcty.v1.lang-ja.js | lcty.v1.lang-ja.cjs |
+      | lcty.v1.module.js  | lcty.v1.async.mjs   |
 
   Scenario: A published file answers 304 when it has not changed
-    Given the ETag of GET /c/lcty.v1.css
-    When GET /c/lcty.v1.css is requested with If-None-Match of that ETag
+    Given the ETag of GET /c/index.html
+    When GET /c/index.html is requested with If-None-Match of that ETag
     Then the status is 304
 
   Scenario: The copy in data/c/ is never what /c/ serves
-    Given the copy of lcty.v1.css in data/c/ differs from public/c/lcty.v1.css
+    Given the copy of lcty.v1.css in data/c/ differs from public/lcty.v1/lcty.v1.css
     When GET /c/lcty.v1.css is requested
-    Then the body is the bytes of public/c/lcty.v1.css
+    Then it is redirected to /lcty.v1/lcty.v1.css, not answered with the copy
 
   Scenario: C.publish_assets lists the files of public/c/ but documentation and licences
     When C.publish_assets runs
     Then C.published is every file under public/c/, sorted, except the names ending in .d.ts or .license
-    And it has lcty.v1.css and lcty.v1.js but not lcty.v1.d.ts
+    And it has index.html
     And it is frozen
 
   Scenario: C.publish_assets copies what a conversation file opened directly needs into data/c/
     When C.publish_assets runs
-    Then data/c/lcty.v1.js and data/c/lcty.v1.css have the bytes of those in public/c/
-    And no other file of public/c/ is copied, such as lcty.v1.module.js
+    Then data/c/lcty.v1.js and data/c/lcty.v1.css have the bytes of public/lcty.v1/lcty.v1.cjs and lcty.v1.css
+    And no other file of public/lcty.v1/ is copied, such as lcty.v1.module.js (lcty.v1.async.mjs)
 
   Scenario: C.publish_assets copies the same files into the root of data/ and into data/t/, for the tag files
     When C.publish_assets runs
-    Then data/lcty.v1.js, data/lcty.v1.css, data/t/lcty.v1.js and data/t/lcty.v1.css have the bytes of those in public/c/
+    Then data/lcty.v1.js, data/lcty.v1.css, data/t/lcty.v1.js and data/t/lcty.v1.css have the same bytes as those of data/c/
 
   Scenario: C.publish_assets leaves copies that are up to date alone
     Given C.publish_assets has run
@@ -101,7 +103,7 @@ Feature: LCTYSP-3011 Conversation servlet
   Scenario: C.publish_assets puts back a copy that was changed
     Given data/c/lcty.v1.css was changed
     When C.publish_assets runs
-    Then data/c/lcty.v1.css has the bytes of public/c/lcty.v1.css again
+    Then data/c/lcty.v1.css has the bytes of public/lcty.v1/lcty.v1.css again
 
   Scenario: C.publish_assets leaves the other files of data/c/ alone
     Given a file "lcty.v0.js" in data/c/ that an older server made

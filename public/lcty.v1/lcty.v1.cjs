@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// `lcty.v1.js` MUST be committed on the repository after being generated from this file:
-//   ruby -E UTF-8 -e 'puts ARGF.read.gsub(/^export/, "/*export*/").gsub(%r[^//\?], "")' lcty.v1.mjs >lcty.v1.js
+"use strict";
 
-export const LctyT = {
+/*export*/ const LctyT = {
 	dicts: Object.create(null),
 	addLang(lang, dict) {
 		LctyT.dicts[lang] = Object.freeze(dict);
@@ -17,7 +16,7 @@ export const LctyT = {
 };
 
 /** <lcty-setup>: the system prompt (line 4 of a conversation file), shown by itself, collapsed (LCTYSP-0005) */
-export class LctySetupElement extends HTMLElement {
+/*export*/ class LctySetupElement extends HTMLElement {
 	static observedAttributes = ["data-instructions", "data-instructions-base64"];
 
 	constructor() {
@@ -51,7 +50,7 @@ export class LctySetupElement extends HTMLElement {
 	}
 }
 
-export class LctyCElement extends HTMLElement {
+/*export*/ class LctyCElement extends HTMLElement {
 	// What each attribute decides (LCTYSP-0005): data-setup-tags the chips (the tags at
 	// creation; the current ones are not shown yet) and data-tag-defs which of them are unknown and the picker's choices
 	static observedAttributes = [
@@ -215,14 +214,15 @@ export class LctyCElement extends HTMLElement {
 		LctyCElement.#importFeatures();
 	}
 
-	// The conversation page's features (lcty.v1.module.js, next to this file) are imported once the page has loaded, so
-	// they never block rendering. import() resolves against this script's URL. Opened directly (file://) the import fails
-	// and the page stays a static view (LCTYSP-0005).
+	// The conversation page's features (lcty.v1.async.mjs, next to this file in /lcty.v1/) are imported once the page has
+	// loaded, so they never block rendering. import() resolves against this script's URL, which is /lcty.v1/lcty.v1.cjs:
+	// a conversation file loads lcty.v1.js, which /c/ redirects here. Opened directly (file://) the import fails and the
+	// page stays a static view (LCTYSP-0005).
 	static #featuresRequested = false;
 	static #importFeatures() {
 		if (LctyCElement.#featuresRequested) return;
 		LctyCElement.#featuresRequested = true;
-		const run = () => import("./lcty.v1.module.js");
+		const run = () => import("./lcty.v1.async.mjs");
 		if (document.readyState === "complete") run();
 		else addEventListener("load", run, { once: true });
 	}
@@ -303,7 +303,7 @@ export class LctyCElement extends HTMLElement {
  * tags and data-tag-names their display names, in the same order, as on <lcty-c>: a chip shows the display name of its
  * reference, or the reference itself when it has none. Setting them redraws the items.
  */
-export class LctyConvListElement extends HTMLElement {
+/*export*/ class LctyConvListElement extends HTMLElement {
 	static observedAttributes = ["data-tag-defs", "data-tag-names"];
 
 	#items = [];
@@ -481,7 +481,7 @@ export class LctyConvListElement extends HTMLElement {
 	}
 }
 
-export class LctySidebarElement extends HTMLElement {
+/*export*/ class LctySidebarElement extends HTMLElement {
 	static _ = LctyT._;
 
 	constructor() {
@@ -583,16 +583,17 @@ export class LctySidebarElement extends HTMLElement {
 	#filled = false;
 
 	// The display names of the list's tags, for the first paint too: the browser's copy of the tags (IndexedDB "lcty_t",
-	// store "t_full") through the worker that alone opens it (js/lcty_t.worker.js, operation "get", which fetches
-	// GET /v1/tags first when there is no copy yet; LCTYSP-0009), found from the page's URL like lcty_c.worker.js below.
+	// store "t_full") through the worker that alone opens it (lcty.v1.t.worker.cjs, operation "get", which fetches
+	// GET /v1/tags first when there is no copy yet; LCTYSP-0009), found from the page's URL like lcty.v1.c.worker.cjs
+	// below.
 	// The references are the tag files' names without the number and .html (tagRef in js/tag-names.js). The module sets
 	// the same attributes when it has read the tags; whichever comes first, the second sets the same values.
 	#loadTagNames() {
 		let worker;
 		try {
-			worker = new Worker(new URL("../js/lcty_t.worker.js", document.baseURI), {
-				type: "module",
-			});
+			worker = new Worker(
+				new URL("../lcty.v1/lcty.v1.t.worker.cjs", document.baseURI),
+			);
 		} catch {
 			return;
 		}
@@ -614,13 +615,17 @@ export class LctySidebarElement extends HTMLElement {
 			e.preventDefault();
 			worker.terminate();
 		};
-		worker.postMessage({ op: "get" });
+		worker.postMessage({
+			id: 1,
+			op: "get",
+			endpoint: new URL("../v1/", document.baseURI).href,
+		});
 	}
 
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
 	// before any module has loaded (LCTYSP-0010): from the localStorage snapshot (lcty.meta.v1) synchronously, so it is
 	// there at the first paint, or else from IndexedDB ("lcty_c", store "c_meta"), asynchronously, through the worker that
-	// alone opens it (js/lcty_c.worker.js, operation "get", which never creates the database; LCTYSP-0009). The worker is
+	// alone opens it (lcty.v1.c.worker.cjs, operation "get", which never creates the database; LCTYSP-0009). The worker is
 	// found from the page's URL: every page is one directory below the root of the site (LCTYSP-0005). Opened directly
 	// (file://) no worker can start, and the list stays empty. A module that has already shown its own items wins.
 	connectedCallback() {
@@ -658,9 +663,9 @@ export class LctySidebarElement extends HTMLElement {
 		}
 		let worker;
 		try {
-			worker = new Worker(new URL("../js/lcty_c.worker.js", document.baseURI), {
-				type: "module",
-			});
+			worker = new Worker(
+				new URL("../lcty.v1/lcty.v1.c.worker.cjs", document.baseURI),
+			);
 		} catch {
 			return;
 		}
@@ -675,11 +680,15 @@ export class LctySidebarElement extends HTMLElement {
 			e.preventDefault();
 			worker.terminate();
 		};
-		worker.postMessage({ op: "get" });
+		worker.postMessage({
+			id: 1,
+			op: "get",
+			endpoint: new URL("../v1/", document.baseURI).href,
+		});
 	}
 }
 
-export class LctyMessageElement extends HTMLElement {
+/*export*/ class LctyMessageElement extends HTMLElement {
 	static observedAttributes = [
 		"data-role",
 		"data-status",
@@ -860,7 +869,7 @@ export class LctyMessageElement extends HTMLElement {
 	}
 }
 
-export class LctyComposerElement extends HTMLElement {
+/*export*/ class LctyComposerElement extends HTMLElement {
 	constructor() {
 		super();
 
@@ -923,10 +932,11 @@ export class LctyComposerElement extends HTMLElement {
  * the others: it puts an <lcty-sidebar> before itself and the class "page" on <body> (the layout of the pages with a
  * sidebar), and holds the view, an element of its own that it puts first among its children. The children of the file
  * are hidden (lcty.v1.css); once they have been parsed the view shows them read-only, as the tag editor's fields.
- * The page's features (/t/tag-file.js, next to this file over HTTP) are imported once the page has loaded and replace
- * the view with the editor; opened directly (file://) the import fails and the page stays read-only.
+ * The page's features (/t/tag-file.js, next to the tag file over HTTP) are imported once the page has loaded and
+ * replace the view with the editor; opened directly (file://) the import fails and the page stays read-only. The bundle
+ * is found from the page's URL, not from this script's, which is /lcty.v1/lcty.v1.cjs (/t/ redirects lcty.v1.js here).
  */
-export class LctyTElement extends HTMLElement {
+/*export*/ class LctyTElement extends HTMLElement {
 	constructor() {
 		super();
 		this.view = document.createElement("div");
@@ -953,7 +963,7 @@ export class LctyTElement extends HTMLElement {
 	static #importFeatures() {
 		if (LctyTElement.#featuresRequested) return;
 		LctyTElement.#featuresRequested = true;
-		const run = () => import("./tag-file.js");
+		const run = () => import(new URL("tag-file.js", document.baseURI).href);
 		if (document.readyState === "complete") run();
 		else addEventListener("load", run, { once: true });
 	}
@@ -1055,7 +1065,7 @@ export class LctyTElement extends HTMLElement {
 	}
 }
 
-export function defineLctyV1CustomElements(
+/*export*/ function defineLctyV1CustomElements(
 	registry = globalThis.customElements,
 ) {
 	registry.define("lcty-conv-list", LctyConvListElement);
@@ -1067,4 +1077,4 @@ export function defineLctyV1CustomElements(
 	registry.define("lcty-t", LctyTElement);
 }
 
-//?defineLctyV1CustomElements();
+/*mjs-ignore*/ defineLctyV1CustomElements();

@@ -403,7 +403,7 @@ lcty-c::part(lcty-c__tag-remove) {
 	font: inherit;
 	line-height: 1;
 	color: var(--fg-dim);
-} /* the bare button: lcty.v1.js */
+} /* the bare button: lcty.v1.cjs */
 /* the picker's width is fixed, so the header does not move when the options (the tag definitions) arrive */
 lcty-c::part(lcty-c__tag-picker) {
 	box-sizing: border-box;
@@ -474,7 +474,7 @@ lcty-c::part(lcty-c__float) {
 	display: flex;
 	gap: 8px;
 	justify-content: center;
-	align-items: center; /* clicks pass between its buttons: lcty.v1.js */
+	align-items: center; /* clicks pass between its buttons: lcty.v1.cjs */
 }
 lcty-c::part(lcty-c__to-end) {
 	border-radius: var(--radius-pill);
@@ -513,7 +513,7 @@ lcty-c::part(lcty-composer__input) {
 	width: 100%;
 	font: inherit;
 	color: inherit;
-} /* the field itself: lcty.v1.js */
+} /* the field itself: lcty.v1.cjs */
 lcty-composer::part(lcty-composer__buttons),
 lcty-c::part(lcty-composer__buttons) {
 	display: flex;
@@ -583,7 +583,7 @@ lcty-message::part(lcty-message__foot) {
 	color: var(--fg-dim);
 	margin-top: 4px;
 }
-/* the ⓘ of a reply's timings, a bare button that opens them in a popover, one item per line (lcty.v1.js) */
+/* the ⓘ of a reply's timings, a bare button that opens them in a popover, one item per line (lcty.v1.cjs) */
 lcty-message::part(lcty-message__info) {
 	font: inherit;
 	color: inherit;

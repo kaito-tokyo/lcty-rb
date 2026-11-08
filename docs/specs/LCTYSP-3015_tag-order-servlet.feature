@@ -9,8 +9,8 @@ Feature: LCTYSP-3015 Tag reorder servlet
 
   Chatty::T::Servlet, mounted at /t, mirrors /c/ for the tags: /t/ (and /t/index.html) is the tag reorder page,
   public/t/index.html, and /t without the slash redirects to t/ with its query, so that the page's relative paths
-  resolve. Every directory of the site that holds HTML has the lcty.v1.* files, so /t/lcty.v1.* serves those of
-  public/c/ that C.publish_assets listed. /t/NNNNN-<part>.html returns the tag file data/t/NNNNN-<part>.html as it is,
+  resolve. Tag files load the version 1 names next to themselves, as conversation files do, so /t/lcty.v1.* redirects
+  them to their files in /lcty.v1/ (LCTYSP-3017). /t/NNNNN-<part>.html returns the tag file data/t/NNNNN-<part>.html as it is,
   as /c/<id>.html does a conversation file; its name starts with five digits, so it never collides with the page or
   the lcty.v1 files. Everything else is 404.
 
@@ -33,17 +33,16 @@ Feature: LCTYSP-3015 Tag reorder servlet
       | /t        | "t/"       |
       | /t?x=1    | "t/?x=1"   |
 
-  Scenario Outline: The lcty.v1 files are served from public/c/
+  Scenario Outline: The lcty.v1 names redirect to their files in /lcty.v1/
     When GET /t/<name> is requested
-    Then the status is 200 with the type <type>
-    And the body is the bytes of public/c/<name>
+    Then the status is 302 with the Location "../lcty.v1/<file>", relative to the request
 
     Examples:
-      | name                 | type                               |
-      | lcty.v1.css          | "text/css; charset=utf-8"          |
-      | lcty.v1.js           | "text/javascript; charset=utf-8"   |
-      | lcty.v1.lang-ja.js   | "text/javascript; charset=utf-8"   |
-      | lcty.v1.module.js    | "text/javascript; charset=utf-8"   |
+      | name               | file                |
+      | lcty.v1.css        | lcty.v1.css         |
+      | lcty.v1.js         | lcty.v1.cjs         |
+      | lcty.v1.lang-ja.js | lcty.v1.lang-ja.cjs |
+      | lcty.v1.module.js  | lcty.v1.async.mjs   |
 
   Scenario Outline: A tag file is served as it is
     Given the tag file <file> in data/t/

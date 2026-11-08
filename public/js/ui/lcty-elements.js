@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Features of the conversation elements (LCTYSP-0005). The custom elements in /c/lcty.v1.js (built from public/c/lcty.v1.js) build the DOM structure and expose
-// their inner elements as fields (container.composer, composer.input, message.undoButton, …). Nothing is added to the elements here;
-// handlers are attached directly to the exposed elements, and features are plain functions that operate on the DOM.
+// Features of the conversation elements (LCTYSP-0005). The custom elements in /lcty.v1/lcty.v1.cjs build the DOM
+// structure and expose their inner elements as fields (container.composer, composer.input, message.undoButton, …).
+// Nothing is added to the elements here; handlers are attached directly to the exposed elements, and features are plain
+// functions that operate on the DOM.
 //
 //   initConversationElements(container, handlers)   initializes elements from the conversation file and attaches handlers (once at startup)
 //     handlers: { onSend(text), onStop(), onUndo(el), onFork(el), onRegenerate(el) }
@@ -144,7 +145,7 @@ function viewFinish(view) {
 }
 
 // ---- Thinking (while a reply is generated) ----
-// A reply's thinking view is part of <lcty-message> (its Shadow DOM, lcty.v1.js), built from data-thinking. While the
+// A reply's thinking view is part of <lcty-message> (its Shadow DOM, lcty.v1.cjs), built from data-thinking. While the
 // reply streams in, the text is kept here and written to the view's summary and body (the body only while it is open);
 // at the end it becomes data-thinking and the element shows it itself.
 
@@ -290,8 +291,8 @@ export function messageOf(el) {
 	return m;
 }
 
-// The foot is the element's own (lcty.v1.js): it shows the end of an incomplete reply from data-status / data-error and
-// the ⓘ from data-timings / data-client. A message made on screen gets those attributes here; the timings text goes
+// The foot is the element's own (lcty.v1.cjs): it shows the end of an incomplete reply from data-status / data-error
+// and the ⓘ from data-timings / data-client. A message made on screen gets those attributes here; the timings text goes
 // into the popover the ⓘ opens, so filling it in after the first paint changes nothing on screen.
 function renderFoot(el) {
 	const m = messageOf(el);
@@ -312,7 +313,7 @@ function wireMessage(el) {
 		el.regenerateButton.onclick = () => state.handlers.onRegenerate?.(el);
 }
 
-/** Append a message created on screen to the end of container (the head and foot are Shadow DOM in lcty.v1.js). */
+/** Append a message created on screen to the end of container (the head and foot are Shadow DOM in lcty.v1.cjs). */
 function addMessage(container, m) {
 	const el = document.createElement("lcty-message");
 	messagesOf().set(el, m);
@@ -389,7 +390,7 @@ export function removeFrom(container, index) {
 
 // ---- Composer (<lcty-composer>) ----
 
-// The composer's inside is Shadow DOM (lcty.v1.js); its textarea is exposed as composer.input
+// The composer's inside is Shadow DOM (lcty.v1.cjs); its textarea is exposed as composer.input
 function textareaOf(composer) {
 	return composer.input;
 }
@@ -419,7 +420,7 @@ export function initConversationElements(container, h = {}) {
 	for (const el of messageEls(container)) {
 		wireMessage(el);
 		renderFoot(el);
-		// The thinking view is the element's own, from data-thinking (lcty.v1.js). Files written before that may still
+		// The thinking view is the element's own, from data-thinking (lcty.v1.cjs). Files written before that may still
 		// have a <lcty-thinking> child of their own (hidden by lcty.v1.css); it is dropped
 		el.querySelector(":scope > lcty-thinking")?.remove();
 		// Replies without saved presentation HTML (e.g. created through the API directly) are rendered from the attribute

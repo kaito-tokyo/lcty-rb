@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/c/lcty.v1.mjs and the classic script generated from it, public/c/lcty.v1.js (LCTYSP-0003
+# The behaviour of the classic script public/lcty.v1/lcty.v1.cjs (LCTYSP-0003
 # "File layout", "Elements" and "Characters XML cannot represent"; LCTYSP-0005 "The lcty.v1 files", "Custom elements"
 # and "UI texts"; LCTYSP-0010 for the sidebar's cached list). The attributes the elements read are the ones
 # lib/conv_html.rb writes (LCTYSP-3002). Each Scenario is a test of the same title in
@@ -10,40 +10,38 @@
 
 Feature: LCTYSP-1016 The elements of a conversation file
 
-  A conversation file loads /c/lcty.v1.js in its <head>, a classic script generated from /c/lcty.v1.mjs, which
+  A conversation file loads lcty.v1.js in its <head>, which /c/ redirects to /lcty.v1/lcty.v1.cjs, a classic script that
   declares LctyT (the UI texts) and the custom elements, and defines them at its end: <lcty-c> (the frame), <lcty-setup>
   (the system prompt), <lcty-message>, <lcty-composer>, <lcty-sidebar> and its <lcty-conv-list>. They build their
   structure in Shadow DOM from their own attributes only, so the page is settled at the first paint, before any module
-  has loaded; the features are /c/lcty.v1.module.js, which <lcty-c> imports once the page has loaded. In these steps
+  has loaded; the features are /lcty.v1/lcty.v1.async.mjs, which <lcty-c> imports once the page has loaded, next to the
+  script. In these steps
   that module is an empty module, and a text in quotes is a JSON string ("\u001b" is ESC).
 
   A tag file loads the same script, and <lcty-t> (LCTYSP-0009) makes it a page: it puts an <lcty-sidebar> before itself
   and the class "page" on <body>, and shows the tag read-only in its view, the first of its children, once they have
-  been parsed. Its features are tag-file.js next to lcty.v1.js (/t/tag-file.js on the site), which it imports once the
-  page has loaded; in these steps /c/tag-file.js is an empty module too.
+  been parsed. Its features are tag-file.js next to the page (/t/tag-file.js on the site), which it imports once the
+  page has loaded; in these steps the page is at the root of the site, and /tag-file.js is an empty module too.
 
   Background:
     Given a page on the server's origin
-    And /c/lcty.v1.module.js and /c/tag-file.js are empty modules
+    And /lcty.v1/lcty.v1.async.mjs and /tag-file.js are empty modules
 
-  # ---- lcty.v1.js and lcty.v1.mjs ----
+  # ---- lcty.v1.cjs ----
 
-  Scenario: lcty.v1.js is lcty.v1.mjs converted by the command in its head
-    When /c/lcty.v1.mjs and /c/lcty.v1.js are fetched
-    Then lcty.v1.mjs's head comment holds the command that turns "export" at a line start into "/*export*/" and drops "//?" at a line start
-    And lcty.v1.js is lcty.v1.mjs with those two replacements, ending with a newline
+  Scenario: A page that loads /c/lcty.v1.js runs /lcty.v1/lcty.v1.cjs
+    When /c/lcty.v1.js is fetched
+    Then it is redirected to /lcty.v1/lcty.v1.cjs
+    And its body is that of /lcty.v1/lcty.v1.cjs
 
-  Scenario: lcty.v1.js defines the elements with the classes it declares
+  Scenario: lcty.v1.cjs defines the elements with the classes it declares
     Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t" are defined
     And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement, LctyComposerElement and LctyTElement
     And "lcty-cmd" is not defined
 
-  Scenario: lcty.v1.mjs defines nothing by itself and defineLctyV1CustomElements defines the elements in a registry
-    When /c/lcty.v1.mjs is imported as a module
-    Then it exports LctyT, the seven element classes and defineLctyV1CustomElements
-    And "lcty-c" is still defined by the global LctyCElement
+  Scenario: defineLctyV1CustomElements defines the elements in a registry it is given
     When defineLctyV1CustomElements is given a registry that records what is defined
-    Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the module's classes
+    Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the global classes
 
   # ---- LctyT ----
 
@@ -249,7 +247,7 @@ Feature: LCTYSP-1016 The elements of a conversation file
   Scenario: The frame imports the page's features once, after the page has loaded
     Given the body holds two <lcty-c> elements
     When the page has loaded
-    Then /c/lcty.v1.module.js has been requested once
+    Then /lcty.v1/lcty.v1.async.mjs has been requested once
 
   Scenario: "Scroll to bottom" shows while the end of the page is out of view
     Given the body holds <lcty-c id="c-conv"> with a message 3000px tall
@@ -283,8 +281,8 @@ Feature: LCTYSP-1016 The elements of a conversation file
   Scenario: The frame imports the tag file's features once, after the page has loaded
     Given the body holds a tag file's <lcty-t>
     When the page has loaded
-    Then /c/tag-file.js has been requested once
-    And /c/lcty.v1.module.js has not been requested
+    Then /tag-file.js has been requested once
+    And /lcty.v1/lcty.v1.async.mjs has not been requested
 
   # ---- <lcty-conv-list> and <lcty-sidebar> ----
 

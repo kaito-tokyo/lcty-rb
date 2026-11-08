@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/js/i18n.js, of the LctyT object of public/c/lcty.v1.js it uses and of the Japanese table
-# public/c/lcty.v1.lang-ja.js (LCTYSP-0005, "UI texts"). Each Scenario is a test of the same title in
+# The behaviour of public/js/i18n.js, of the LctyT object of public/lcty.v1/lcty.v1.cjs it uses and of the Japanese
+# table public/lcty.v1/lcty.v1.lang-ja.cjs (LCTYSP-0005, "UI texts"). Each Scenario is a test of the same title in
 # tests/unit/i18n.test.js (in Node.js) or, for localize(), in tests/unit/i18n.spec.js (in the browser), whose steps are
 # the lines below.
 
@@ -116,7 +116,7 @@ Feature: LCTYSP-1003 UI texts
 
   Scenario: The keys of the Japanese table are the keys of LctyTextKey
     Given the page's lang is "ja" and the Japanese table is loaded
-    When the keys of LctyT.dicts.ja are compared with LctyTextKey of /c/lcty.v1.d.ts
+    When the keys of LctyT.dicts.ja are compared with LctyTextKey of /lcty.v1/lcty.v1.d.cts
     Then each is in the other
     And every Japanese text is a non-empty string
 

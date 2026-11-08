@@ -7,7 +7,7 @@
 
 Feature: LCTYSP-1017 Messages and the composer of a conversation
 
-  The custom elements of /c/lcty.v1.js build the structure of a message (<lcty-message>) and of the composer
+  The custom elements of /lcty.v1/lcty.v1.cjs build the structure of a message (<lcty-message>) and of the composer
   (<lcty-composer>) and expose their inner elements; this module adds the behaviour with plain functions. A page
   calls initConversationElements(container, handlers) once at startup, which prepares the messages already in the
   conversation file and wires the composer, or initComposer(composer, {onSend, onStop}) for a composer of its own.

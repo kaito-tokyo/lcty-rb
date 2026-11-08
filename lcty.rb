@@ -24,13 +24,17 @@ require_relative 'lib/store'
 require_relative 'lib/module_servlet'
 require_relative 'lib/c/servlet'
 require_relative 'lib/t/servlet'
+require_relative 'lib/lcty_v1'
 require_relative 'lib/v1/servlet'
 
 module Chatty
+  # Every JavaScript file is text/javascript (RFC 9239), whatever its extension: WebKit and Firefox load a worker script
+  # only with a JavaScript type, and WEBrick serves .cjs as application/octet-stream
   MIME_TYPES = WEBrick::HTTPUtils::DefaultMimeTypes.merge(
     'html' => 'text/html; charset=utf-8',
     'js' => 'text/javascript; charset=utf-8',
     'mjs' => 'text/javascript; charset=utf-8',
+    'cjs' => 'text/javascript; charset=utf-8',
     'css' => 'text/css; charset=utf-8',
     'json' => 'application/json; charset=utf-8',
     'svg' => 'image/svg+xml'
@@ -89,6 +93,7 @@ module Chatty
     server.mount('/v1', V1::Servlet)
     server.mount('/c', C::Servlet)
     server.mount('/t', T::Servlet)
+    server.mount('/lcty.v1', LctyV1::Servlet)
     ModuleServlet.mount_all(server)
     server.mount('/', WEBrick::HTTPServlet::FileHandler, PUBLIC_DIR, FancyIndexing: false)
     %w[INT TERM].each { |sig| trap(sig) { server.shutdown } }

@@ -12,7 +12,7 @@
 import { expect, test } from "@playwright/test";
 import { openUnitPage } from "./unit-page.js";
 
-const WORKER_URL = "/js/lcty_t.worker.js";
+const WORKER_URL = "/lcty.v1/lcty.v1.t.worker.cjs";
 
 /** A tag file as GET /v1/tags returns it (LCTYSP-0006). */
 const tag = (file) => ({ file, name: file, ops: [], prompt: "", memory: [] });
@@ -52,6 +52,7 @@ async function background(page, context) {
 			return server.memory(route);
 		});
 	});
+	await test.step('And every message to the worker has the endpoint "/v1/" on the page\'s origin, unless the scenario says otherwise', () => {});
 	return server;
 }
 
@@ -148,20 +149,34 @@ function seedVersion1(page, set) {
 
 // ---- The worker ----
 
-/** Start the worker, post it message and resolve to the first message it answers (or its error event). */
+/**
+ * Start the worker, post it message (with the endpoint "/v1/" on the page's origin unless message has one; an endpoint
+ * null is left out) and resolve to the first message it answers, as {id, message (the rest, a posted
+ * Error kept as its message), hasResult}, or to its error event.
+ */
 function post(page, message) {
 	return page.evaluate(
 		({ url, message }) =>
 			new Promise((resolve) => {
-				const worker = new Worker(url, { type: "module" });
+				const { endpoint = "/v1/", ...sent } = message;
+				if (endpoint !== null)
+					sent.endpoint = new URL(endpoint, location.href).href;
+				const worker = new Worker(url);
 				window.lctyWorker = worker;
-				worker.onmessage = ({ data }) =>
-					resolve({ message: data, hasResult: "result" in data });
+				worker.onmessage = ({ data: { id, ...message } }) =>
+					resolve({
+						id,
+						message:
+							message.error instanceof Error
+								? { ...message, error: message.error.message }
+								: message,
+						hasResult: "result" in message,
+					});
 				worker.onerror = (e) => {
 					e.preventDefault();
 					resolve({ errorEvent: e.message || "(no message)" });
 				};
-				worker.postMessage(message);
+				worker.postMessage(sent);
 			}),
 		{ url: WORKER_URL, message },
 	);
@@ -201,6 +216,7 @@ async function whenPosted(page, json, message) {
 	await test.step(`When the worker is posted ${json}`, async () => {
 		answer = await post(page, message);
 	});
+	expect(answer.id).toBe(message.id);
 	return answer;
 }
 
@@ -212,7 +228,7 @@ async function thenAnswersTags(answer, files, etag) {
 
 async function thenAnswersError(answer, error, status) {
 	await test.step(`Then it answers the error "${error}" with the status ${status}`, () => {
-		expect(answer.message).toEqual({ error, status });
+		expect(answer.message).toEqual({ errorType: "error", error, status });
 	});
 }
 
@@ -261,8 +277,9 @@ test("A sync stores the set with NFC file names and the ETag", async ({
 				headers: { ETag: "e1" },
 			});
 	});
-	const answer = await whenPosted(page, '{"op": "force_sync"}', {
-		op: "force_sync",
+	const answer = await whenPosted(page, '{"id": 1, "op": "sync_full"}', {
+		id: 1,
+		op: "sync_full",
 	});
 	await test.step("Then it answers with no result", () => {
 		expect(answer.hasResult).toBe(true);
@@ -300,7 +317,10 @@ test("A sync composes the name of an invalid tag, which comes from its file name
 				headers: { ETag: "e1" },
 			});
 	});
-	await whenPosted(page, '{"op": "force_sync"}', { op: "force_sync" });
+	await whenPosted(page, '{"id": 1, "op": "sync_full"}', {
+		id: 1,
+		op: "sync_full",
+	});
 	let db;
 	await test.step('Then "t_full" holds the invalid tag "00010-café.html" named "café", both composed, with invalid true', async () => {
 		db = await readDb(page);
@@ -323,7 +343,10 @@ test("A database at version 1 is dropped and synced again", async ({
 	await test.step('Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"', () =>
 		seedVersion1(page, { tags: [tag("00010-a.html")], etag: "e1" }));
 	await givenGetReturns(server, ["00010-b.html"], "e2");
-	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
 	await thenAnswersTags(answer, ["00010-b.html"], "e2");
 	await thenRequests(server, "And the requests sent are GET /v1/tags", [
 		"GET /v1/tags",
@@ -341,7 +364,10 @@ test("Getting answers the tags in the order of their file names", async ({
 		["00020-b.html", "00010-c.html", "00030-a.html"],
 		"e1",
 	);
-	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
 	await thenAnswersTags(
 		answer,
 		["00010-c.html", "00020-b.html", "00030-a.html"],
@@ -353,11 +379,14 @@ test("An empty set is a copy too", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenNoDatabase(page);
 	await givenGetReturns(server, [], "e1");
-	await whenPosted(page, '{"op": "force_sync"}', { op: "force_sync" });
+	await whenPosted(page, '{"id": 1, "op": "sync_full"}', {
+		id: 1,
+		op: "sync_full",
+	});
 	let answer;
-	await test.step('And then a new worker is posted {"op": "get"}', async () => {
+	await test.step('And then a new worker is posted {"id": 2, "op": "get"}', async () => {
 		await page.evaluate(() => window.lctyWorker?.terminate());
-		answer = await post(page, { op: "get" });
+		answer = await post(page, { id: 2, op: "get" });
 	});
 	await thenAnswersTags(answer, [], "e1");
 	await thenRequests(server, "And the requests sent are GET /v1/tags", [
@@ -369,8 +398,9 @@ test("A sync replaces the set as a whole", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenTFullHolds(page, ["00010-a.html", "00020-b.html"], "e1");
 	await givenGetReturns(server, ["00010-c.html"], "e2");
-	const answer = await whenPosted(page, '{"op": "force_sync"}', {
-		op: "force_sync",
+	const answer = await whenPosted(page, '{"id": 1, "op": "sync_full"}', {
+		id: 1,
+		op: "sync_full",
 	});
 	await test.step("Then it answers with no result", () => {
 		expect(answer.message).toEqual({ result: undefined });
@@ -382,7 +412,10 @@ test("Getting without a copy syncs first", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenNoDatabase(page);
 	await givenGetReturns(server, ["00010-a.html"], "e1");
-	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
 	await thenAnswersTags(answer, ["00010-a.html"], "e1");
 	await thenRequests(server, "And the requests sent are GET /v1/tags", [
 		"GET /v1/tags",
@@ -393,7 +426,10 @@ test("Getting with a copy sends no request", async ({ page, context }) => {
 	const server = await background(page, context);
 	await givenTFullHolds(page, ["00010-a.html"], "e1");
 	await givenGetReturns(server, ["00010-b.html"], "e2");
-	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
 	await thenAnswersTags(answer, ["00010-a.html"], "e1");
 	await thenNoRequest(server);
 });
@@ -411,8 +447,12 @@ test("A put sends the If-Match it is given and syncs afterwards", async ({
 	await givenGetReturns(server, ["00010-b.html"], "e3");
 	const answer = await whenPosted(
 		page,
-		'{"op": "put", "tags": [{"file": "00010-b.html"}], "etag": "e0"}',
-		{ op: "put", tags: [{ file: "00010-b.html" }], etag: "e0" },
+		'{"id": 1, "op": "put", "payload": {"tags": [{"file": "00010-b.html"}], "etag": "e0"}}',
+		{
+			id: 1,
+			op: "put",
+			payload: { tags: [{ file: "00010-b.html" }], etag: "e0" },
+		},
 	);
 	await test.step('Then it answers "e3"', () => {
 		expect(answer.message).toEqual({ result: "e3" });
@@ -442,8 +482,8 @@ test("A put that fails answers the error with the status and still syncs", async
 	await givenGetReturns(server, ["00010-b.html"], "e2");
 	const answer = await whenPosted(
 		page,
-		'{"op": "put", "tags": [], "etag": "e1"}',
-		{ op: "put", tags: [], etag: "e1" },
+		'{"id": 1, "op": "put", "payload": {"tags": [], "etag": "e1"}}',
+		{ id: 1, op: "put", payload: { tags: [], etag: "e1" } },
 	);
 	await thenAnswersError(answer, "412 the tags have changed", 412);
 	await thenRequests(
@@ -467,8 +507,12 @@ test("Adding memory posts to the tag's file and syncs afterwards", async ({
 	await givenGetReturns(server, ["00010-a.html"], "e2");
 	const answer = await whenPosted(
 		page,
-		'{"op": "addMemory", "file": "00010-a/b.html", "body": {"text": "t"}}',
-		{ op: "addMemory", file: "00010-a/b.html", body: { text: "t" } },
+		'{"id": 1, "op": "addMemory", "payload": {"file": "00010-a/b.html", "body": {"text": "t"}}}',
+		{
+			id: 1,
+			op: "addMemory",
+			payload: { file: "00010-a/b.html", body: { text: "t" } },
+		},
 	);
 	await test.step('Then it answers {"id": "m1"}', () => {
 		expect(answer.message).toEqual({ result: { id: "m1" } });
@@ -490,8 +534,9 @@ test("A failed sync leaves the copy as it was", async ({ page, context }) => {
 	await test.step('And GET /v1/tags answers with the status 500 and "boom"', () => {
 		server.get = (route) => route.fulfill({ status: 500, body: "boom" });
 	});
-	const answer = await whenPosted(page, '{"op": "force_sync"}', {
-		op: "force_sync",
+	const answer = await whenPosted(page, '{"id": 1, "op": "sync_full"}', {
+		id: 1,
+		op: "sync_full",
 	});
 	await thenAnswersError(answer, "500 boom", 500);
 	await thenTFullHolds(page, ["00010-a.html"], "e1");
@@ -506,8 +551,12 @@ test("A request that fails without an answer has no status", async ({
 	await test.step("And GET /v1/tags fails without an answer", () => {
 		server.get = (route) => route.abort("failed");
 	});
-	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
 	await test.step("Then it answers an error with the status null", () => {
+		expect(answer.message.errorType).toBe("error");
 		expect(typeof answer.message.error).toBe("string");
 		expect(answer.message.status).toBeNull();
 	});
@@ -515,8 +564,13 @@ test("A request that fails without an answer has no status", async ({
 
 test("An unknown operation is an error", async ({ page, context }) => {
 	const server = await background(page, context);
-	const answer = await whenPosted(page, '{"op": "nope"}', { op: "nope" });
-	await thenAnswersError(answer, "unknown operation: nope", null);
+	const answer = await whenPosted(page, '{"id": 1, "op": "nope"}', {
+		id: 1,
+		op: "nope",
+	});
+	await test.step('Then it answers the error type "unknownOperation"', () => {
+		expect(answer.message).toEqual({ errorType: "unknownOperation" });
+	});
 	await thenNoRequest(server);
 });
 
@@ -527,7 +581,10 @@ test("The worker closes its connection after the operation", async ({
 	const server = await background(page, context);
 	await givenNoDatabase(page);
 	await givenGetReturns(server, ["00010-a.html"], "e1");
-	const answer = await whenPosted(page, '{"op": "get"}', { op: "get" });
+	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
 	await thenAnswersTags(answer, ["00010-a.html"], "e1");
 	await test.step('And the database "lcty_t" can be opened at version 3 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
@@ -548,6 +605,67 @@ test("The worker closes its connection after the operation", async ({
 		);
 		expect(result).toEqual({ opened: true, blocked: false });
 	});
+});
+
+// Playwright's routes do not catch the requests of a SharedWorker, so this scenario uses no request
+test("A SharedWorker answers on the port the message came from", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenTFullHolds(page, ["00010-a.html"], "e1");
+	let answers;
+	await test.step('When two ports of new SharedWorker("/lcty.v1/lcty.v1.t.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
+		answers = await page.evaluate(async (url) => {
+			const ask = (message) =>
+				new Promise((resolve) => {
+					const { port } = new SharedWorker(url);
+					port.onmessage = ({ data }) => resolve(data);
+					port.postMessage({
+						...message,
+						endpoint: new URL("/v1/", location.href).href,
+					});
+				});
+			const first = await ask({ id: 1, op: "get" });
+			const second = await ask({ id: 2, op: "nope" });
+			return { first, second };
+		}, WORKER_URL);
+	});
+	await test.step('Then the first port is answered with the id 1, the tags ["00010-a.html"] and the ETag "e1"', () => {
+		expect(answers.first).toEqual({
+			id: 1,
+			result: { tags: [tag("00010-a.html")], etag: "e1" },
+		});
+	});
+	await test.step('And the second port is answered with the id 2 and the error type "unknownOperation"', () => {
+		expect(answers.second).toEqual({ id: 2, errorType: "unknownOperation" });
+	});
+});
+
+test("A message without an endpoint is an error", async ({ page, context }) => {
+	const server = await background(page, context);
+	const answer = await whenPosted(
+		page,
+		'{"id": 1, "op": "sync_full"} without an endpoint',
+		{ id: 1, op: "sync_full", endpoint: null },
+	);
+	await thenAnswersError(answer, "the message has no endpoint", null);
+	await thenNoRequest(server);
+});
+
+test("An endpoint on another origin is an error", async ({ page, context }) => {
+	const server = await background(page, context);
+	const answer = await whenPosted(
+		page,
+		'{"id": 1, "op": "sync_full", "endpoint": "http://example.com/v1/"}',
+		{ id: 1, op: "sync_full", endpoint: "http://example.com/v1/" },
+	);
+	await thenAnswersError(
+		answer,
+		"the endpoint is not on this origin: http://example.com/v1/",
+		null,
+	);
+	await thenNoRequest(server);
 });
 
 // ---- Scenarios: js/api/lcty-t.js ----

@@ -13,7 +13,7 @@
 import { expect, test } from "@playwright/test";
 
 const PAGE = "/__lcty_unit.html";
-const WORKER_URL = "/js/lcty_c.worker.js";
+const WORKER_URL = "/lcty.v1/lcty.v1.c.worker.cjs";
 
 /** A conversation's meta as GET /v1/meta-all.json returns it (LCTYSP-0006). */
 function conv(id, title = `Conversation ${id}`) {
@@ -34,7 +34,10 @@ const byId = (items) => [...items].sort((a, b) => (a.id < b.id ? -1 : 1));
 
 /** A page on the server's origin, and GET /v1/meta-all.json answered by answer(route), which the test sets. */
 async function background(page, context) {
-	const server = { answer: (route) => route.fulfill({ json: [] }) };
+	const server = {
+		answer: (route) => route.fulfill({ json: [] }),
+		requested: [],
+	};
 	await test.step("Given a page on the server's origin", async () => {
 		await context.route(`**${PAGE}`, (route) =>
 			route.fulfill({
@@ -45,8 +48,12 @@ async function background(page, context) {
 		await page.goto(PAGE);
 	});
 	await test.step("And GET /v1/meta-all.json is answered by the test", async () => {
-		await context.route("**/v1/meta-all.json", (route) => server.answer(route));
+		await context.route("**/v1/meta-all.json", (route) => {
+			server.requested.push(new URL(route.request().url()).pathname);
+			return server.answer(route);
+		});
 	});
+	await test.step('And every message to the worker has the endpoint "/v1/" on the page\'s origin, unless the scenario says otherwise', () => {});
 	return server;
 }
 
@@ -129,23 +136,33 @@ function seedCMeta(page, items) {
 // ---- The worker ----
 
 /**
- * Start the worker, post it message and collect what it sends until it has answered or failed, and for a little while
- * after (so a second message would be seen). The worker stays alive (window.lctyWorker) until stopWorker().
+ * Start the worker, post it message (with the endpoint "/v1/" on the page's origin unless message has one; an endpoint
+ * null is left out, and a relative one is resolved against the page) and collect what it sends until it has answered or
+ * failed, and for a little while after (so a second message would be seen). The worker stays alive (window.lctyWorker)
+ * until stopWorker().
  */
 function runWorker(page, message) {
 	return page.evaluate(
 		({ url, message }) =>
 			new Promise((resolve) => {
+				const { endpoint = "/v1/", ...rest } = message;
+				if (endpoint !== null)
+					rest.endpoint = new URL(endpoint, location.href).href;
 				const seen = { messages: [], errors: [] };
-				const worker = new Worker(url, { type: "module" });
+				const worker = new Worker(url);
 				window.lctyWorker = worker;
 				let timer = null;
 				const settle = () => {
 					clearTimeout(timer);
 					timer = setTimeout(() => resolve(seen), 300);
 				};
-				worker.onmessage = (e) => {
-					seen.messages.push(e.data);
+				// A posted Error is kept as its message, so the answer can be compared as JSON
+				worker.onmessage = ({ data }) => {
+					seen.messages.push(
+						data?.error instanceof Error
+							? { ...data, error: data.error.message }
+							: data,
+					);
 					settle();
 				};
 				worker.onerror = (e) => {
@@ -153,7 +170,7 @@ function runWorker(page, message) {
 					seen.errors.push(e.message || "(no message)");
 					settle();
 				};
-				worker.postMessage(message);
+				worker.postMessage(rest);
 			}),
 		{ url: WORKER_URL, message },
 	);
@@ -183,17 +200,19 @@ async function givenCMetaHolds(page, items, text) {
 
 async function whenPosted(page, op) {
 	let seen;
-	await test.step(`When the worker is posted {"op": "${op}"}`, async () => {
-		seen = await runWorker(page, { op });
+	await test.step(`When the worker is posted {"id": 1, "op": "${op}"}`, async () => {
+		seen = await runWorker(page, { id: 1, op });
 	});
 	return seen;
 }
 
-/** The one answer the worker posted, and no error event. */
+/** The one answer the worker posted, with the id 1 (left out), and no error event. */
 function answerOf(seen) {
 	expect(seen.errors).toEqual([]);
 	expect(seen.messages).toHaveLength(1);
-	return seen.messages[0];
+	const { id, ...answer } = seen.messages[0];
+	expect(id).toBe(1);
+	return answer;
 }
 
 async function thenAnswersNoResult(seen) {
@@ -206,13 +225,18 @@ async function thenAnswersNoResult(seen) {
 
 async function thenAnswersError(seen, message, status) {
 	await test.step(`Then it answers the error "${message}" with the status ${status}`, () => {
-		expect(answerOf(seen)).toEqual({ error: message, status });
+		expect(answerOf(seen)).toEqual({
+			errorType: "error",
+			error: message,
+			status,
+		});
 	});
 }
 
 async function thenAnswersAnError(seen) {
 	await test.step("Then it answers an error with the status null", () => {
 		const answer = answerOf(seen);
+		expect(answer.errorType).toBe("error");
 		expect(typeof answer.error).toBe("string");
 		expect(answer.status).toBeNull();
 	});
@@ -244,7 +268,7 @@ test("A sync stores every conversation of the list", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversations "a" and "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersNoResult(seen);
 	await thenOnlyCMetaAtVersion1(page);
 	await thenCMetaHoldsExactly(
@@ -265,7 +289,7 @@ test("A sync replaces the copy as a whole", async ({ page, context }) => {
 	await test.step('And GET /v1/meta-all.json returns the conversation "b" with a new title and the conversation "c"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersNoResult(seen);
 	await thenCMetaHoldsExactly(
 		page,
@@ -284,7 +308,7 @@ test("An empty list empties the copy", async ({ page, context }) => {
 	await test.step("And GET /v1/meta-all.json returns no conversations", () => {
 		server.answer = (route) => route.fulfill({ json: [] });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersNoResult(seen);
 	await test.step('And "c_meta" is empty', async () => {
 		expect((await readDb(page)).items).toEqual([]);
@@ -306,7 +330,7 @@ test("A sync deletes the old database lcty", async ({ page, context }) => {
 	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersNoResult(seen);
 	await test.step('And there is no database "lcty"', async () => {
 		expect((await readDb(page, "lcty")).exists).toBe(false);
@@ -342,7 +366,7 @@ test("A connection to the old database does not hold up the sync", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: list });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersNoResult(seen);
 	await thenCMetaHoldsExactly(page, list, 'the conversation "b", as returned');
 	await page.evaluate(() => window.oldDb.close());
@@ -357,7 +381,7 @@ test("The worker closes its connection after the sync", async ({
 	await test.step('And GET /v1/meta-all.json returns the conversation "a"', () => {
 		server.answer = (route) => route.fulfill({ json: [conv("a")] });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersNoResult(seen);
 	await test.step('And the database "lcty_c" can be opened at version 2 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
@@ -404,7 +428,7 @@ for (const { answer, message, status, fulfill } of [
 		await test.step(`And GET /v1/meta-all.json ${answer}`, () => {
 			server.answer = fulfill;
 		});
-		const seen = await whenPosted(page, "force_sync");
+		const seen = await whenPosted(page, "sync_meta");
 		await thenAnswersError(seen, message, status);
 		await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 	});
@@ -421,7 +445,7 @@ test("A response that is not JSON leaves the copy as it was", async ({
 		server.answer = (route) =>
 			route.fulfill({ contentType: "application/json", body: "not json" });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersAnError(seen);
 	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 });
@@ -436,7 +460,7 @@ test("A failed request leaves the copy as it was", async ({
 	await test.step("And GET /v1/meta-all.json fails without a response", () => {
 		server.answer = (route) => route.abort("failed");
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersAnError(seen);
 	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
 });
@@ -452,7 +476,7 @@ test("A newer database is left alone", async ({ page, context }) => {
 	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
 		server.answer = (route) => route.fulfill({ json: [conv("b")] });
 	});
-	const seen = await whenPosted(page, "force_sync");
+	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersAnError(seen);
 	await test.step('And the database "lcty_c" is still at version 2', async () => {
 		expect((await readDb(page)).version).toBe(2);
@@ -510,8 +534,105 @@ test("An unknown operation is an error", async ({ page, context }) => {
 		return route.fulfill({ json: [] });
 	};
 	const seen = await whenPosted(page, "nope");
-	await thenAnswersError(seen, "unknown operation: nope", null);
+	await test.step('Then it answers the error type "unknownOperation"', () => {
+		expect(answerOf(seen)).toEqual({ errorType: "unknownOperation" });
+	});
 	await test.step("And GET /v1/meta-all.json is not fetched", () => {
 		expect(requested).toBe(false);
 	});
+});
+
+// Playwright's routes do not catch the requests of a SharedWorker, so this scenario uses no request
+test("A SharedWorker answers on the port the message came from", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenCMetaHolds(page, [conv("a")], 'the conversation "a"');
+	let answers;
+	await test.step('When two ports of new SharedWorker("/lcty.v1/lcty.v1.c.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
+		answers = await page.evaluate(async (url) => {
+			const ask = (message) =>
+				new Promise((resolve) => {
+					const { port } = new SharedWorker(url);
+					port.onmessage = ({ data }) => resolve(data);
+					port.postMessage({
+						...message,
+						endpoint: new URL("/v1/", location.href).href,
+					});
+				});
+			const first = await ask({ id: 1, op: "get" });
+			const second = await ask({ id: 2, op: "nope" });
+			return { first, second };
+		}, WORKER_URL);
+	});
+	await test.step('Then the first port is answered with the id 1 and the conversation "a"', () => {
+		expect(answers.first).toEqual({
+			id: 1,
+			result: { items: [conv("a")], stale: false },
+		});
+	});
+	await test.step('And the second port is answered with the id 2 and the error type "unknownOperation"', () => {
+		expect(answers.second).toEqual({ id: 2, errorType: "unknownOperation" });
+	});
+});
+
+test("A message without an endpoint is an error", async ({ page, context }) => {
+	const server = await background(page, context);
+	let seen;
+	await test.step('When the worker is posted {"id": 1, "op": "sync_meta"} without an endpoint', async () => {
+		seen = await runWorker(page, { id: 1, op: "sync_meta", endpoint: null });
+	});
+	await thenAnswersError(seen, "the message has no endpoint", null);
+	await test.step("And GET /v1/meta-all.json is not fetched", () => {
+		expect(server.requested).toEqual([]);
+	});
+});
+
+test("An endpoint on another origin is an error", async ({ page, context }) => {
+	const server = await background(page, context);
+	let seen;
+	await test.step('When the worker is posted {"id": 1, "op": "sync_meta", "endpoint": "http://example.com/v1/"}', async () => {
+		seen = await runWorker(page, {
+			id: 1,
+			op: "sync_meta",
+			endpoint: "http://example.com/v1/",
+		});
+	});
+	await thenAnswersError(
+		seen,
+		"the endpoint is not on this origin: http://example.com/v1/",
+		null,
+	);
+	await test.step("And GET /v1/meta-all.json is not fetched", () => {
+		expect(server.requested).toEqual([]);
+	});
+});
+
+test("A sync fetches the list from the endpoint it is given", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenNoDatabase(page);
+	await test.step('And GET /api/v1/meta-all.json returns the conversation "a"', () => {
+		server.answer = (route) => route.fulfill({ json: [conv("a")] });
+	});
+	let seen;
+	await test.step('When the worker is posted {"id": 1, "op": "sync_meta"} with the endpoint "/api/v1/" on the page\'s origin', async () => {
+		seen = await runWorker(page, {
+			id: 1,
+			op: "sync_meta",
+			endpoint: "/api/v1/",
+		});
+	});
+	await thenAnswersNoResult(seen);
+	await test.step("And the list was fetched from /api/v1/meta-all.json only", () => {
+		expect(server.requested).toEqual(["/api/v1/meta-all.json"]);
+	});
+	await thenCMetaHoldsExactly(
+		page,
+		[conv("a")],
+		'the conversation "a", as returned',
+	);
 });

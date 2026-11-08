@@ -40,7 +40,8 @@ conversation page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 - **Lines 1 and 2 are a fixed header.** Line 1 is `<!DOCTYPE html><html lang="ja" />`; line 2 is the `<head>`, ending
   with `</head>`. It loads `lcty.v1.js` (the element definitions, which define the elements at its end) and
   `lcty.v1.lang-ja.js` (the Japanese texts, registered with `LctyT`), in that order, as classic scripts, and links the
-  stylesheet. The page's features, `lcty.v1.module.js`, are not in the header: `<lcty-c>` imports them once the page
+  stylesheet. These names are permanent: over HTTP, `/c/` redirects each to its file in `/lcty.v1/`
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The page's features, `lcty.v1.module.js`, are not in the header: `<lcty-c>` imports them once the page
   has loaded, so they never block rendering ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). There is no inline script. The
   `/>` on `<html>` (and on `<lcty-c>`) is ignored by the HTML parser. Opened over HTTP, the file shows as the
   conversation.

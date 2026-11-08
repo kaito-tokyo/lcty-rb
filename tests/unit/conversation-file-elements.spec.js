@@ -6,9 +6,9 @@
 // has the title of its Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two
 // read side by side.
 //
-// The empty unit page (tests/unit/unit-page.js) loads /c/lcty.v1.js as a conversation file does, so LctyT and the
-// element classes are globals and the elements are defined. <lcty-c> imports /c/lcty.v1.module.js once the page has
-// loaded; a route answers it with an empty module (and counts the requests), so the page's features never run. Texts
+// The empty unit page (tests/unit/unit-page.js) loads /c/lcty.v1.js as a conversation file does (redirected to
+// /lcty.v1/lcty.v1.cjs), so LctyT and the element classes are globals and the elements are defined. <lcty-c> imports
+// /lcty.v1/lcty.v1.async.mjs once the page has loaded; a route answers it with an empty module (and counts the requests), so the page's features never run. Texts
 // in quotes are JSON strings, decoded by json().
 
 import { expect, test } from "@playwright/test";
@@ -31,7 +31,7 @@ const ELEMENTS = [
 async function background(page, context) {
 	await givenAPage(page, context);
 	const server = { moduleRequests: 0, tagFileRequests: 0 };
-	await test.step("And /c/lcty.v1.module.js and /c/tag-file.js are empty modules", async () => {
+	await test.step("And /lcty.v1/lcty.v1.async.mjs and /tag-file.js are empty modules", async () => {
 		const empty = (count) => (route) => {
 			server[count]++;
 			return route.fulfill({
@@ -39,8 +39,11 @@ async function background(page, context) {
 				body: "export {};",
 			});
 		};
-		await context.route("**/c/lcty.v1.module.js", empty("moduleRequests"));
-		await context.route("**/c/tag-file.js", empty("tagFileRequests"));
+		await context.route(
+			"**/lcty.v1/lcty.v1.async.mjs",
+			empty("moduleRequests"),
+		);
+		await context.route("**/tag-file.js", empty("tagFileRequests"));
 	});
 	return server;
 }
@@ -164,7 +167,7 @@ const meta = (id, day, extra = {}) => ({
 	...extra,
 });
 
-/** Create the database "lcty_c" at version 1 with c_meta holding items, as lcty_c.worker.js leaves it. */
+/** Create the database "lcty_c" at version 1 with c_meta holding items, as lcty.v1.c.worker.cjs leaves it. */
 function seedCMeta(page, items) {
 	return page.evaluate(
 		(items) =>
@@ -209,44 +212,34 @@ async function whenSidebarPut(page) {
 		));
 }
 
-// ---- lcty.v1.js and lcty.v1.mjs ----
+// ---- lcty.v1.cjs ----
 
-test("lcty.v1.js is lcty.v1.mjs converted by the command in its head", async ({
+test("A page that loads /c/lcty.v1.js runs /lcty.v1/lcty.v1.cjs", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
-	let files;
-	await test.step("When /c/lcty.v1.mjs and /c/lcty.v1.js are fetched", async () => {
-		files = await page.evaluate(async () => {
-			const get = async (url) => {
-				const res = await fetch(url, { cache: "no-store" });
-				if (!res.ok) throw new Error(`${url}: ${res.status}`);
-				return res.text();
-			};
+	let got;
+	await test.step("When /c/lcty.v1.js is fetched", async () => {
+		got = await page.evaluate(async () => {
+			const res = await fetch("/c/lcty.v1.js", { cache: "no-store" });
+			const file = await fetch("/lcty.v1/lcty.v1.cjs", { cache: "no-store" });
 			return {
-				mjs: await get("/c/lcty.v1.mjs"),
-				js: await get("/c/lcty.v1.js"),
+				redirected: res.redirected,
+				url: new URL(res.url).pathname,
+				same: (await res.text()) === (await file.text()),
 			};
 		});
 	});
-	await test.step('Then lcty.v1.mjs\'s head comment holds the command that turns "export" at a line start into "/*export*/" and drops "//?" at a line start', () => {
-		const head = files.mjs.split("\n").slice(0, 8).join("\n");
-		expect(head).toContain(
-			`ruby -E UTF-8 -e 'puts ARGF.read.gsub(/^export/, "/*export*/").gsub(%r[^//\\?], "")' lcty.v1.mjs >lcty.v1.js`,
-		);
+	await test.step("Then it is redirected to /lcty.v1/lcty.v1.cjs", () => {
+		expect([got.redirected, got.url]).toEqual([true, "/lcty.v1/lcty.v1.cjs"]);
 	});
-	await test.step("And lcty.v1.js is lcty.v1.mjs with those two replacements, ending with a newline", () => {
-		// the same as bin/prepare-commit.sh; Ruby's puts adds a newline unless the text ends with one
-		let converted = files.mjs
-			.replace(/^export/gm, "/*export*/")
-			.replace(/^\/\/\?/gm, "");
-		if (!converted.endsWith("\n")) converted += "\n";
-		expect(files.js).toBe(converted);
+	await test.step("And its body is that of /lcty.v1/lcty.v1.cjs", () => {
+		expect(got.same).toBe(true);
 	});
 });
 
-test("lcty.v1.js defines the elements with the classes it declares", async ({
+test("lcty.v1.cjs defines the elements with the classes it declares", async ({
 	page,
 	context,
 }) => {
@@ -284,47 +277,35 @@ test("lcty.v1.js defines the elements with the classes it declares", async ({
 	});
 });
 
-test("lcty.v1.mjs defines nothing by itself and defineLctyV1CustomElements defines the elements in a registry", async ({
+test("defineLctyV1CustomElements defines the elements in a registry it is given", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
-	await test.step("When /c/lcty.v1.mjs is imported as a module", () =>
-		page.evaluate(async () => {
-			window.mod = await import("/c/lcty.v1.mjs");
-		}));
-	await test.step("Then it exports LctyT, the seven element classes and defineLctyV1CustomElements", async () => {
-		expect(await page.evaluate(() => Object.keys(window.mod).sort())).toEqual(
-			[
-				"LctyT",
-				...ELEMENTS.map(([, cls]) => cls),
-				"defineLctyV1CustomElements",
-			].sort(),
-		);
-	});
-	await test.step('And "lcty-c" is still defined by the global LctyCElement', async () => {
-		expect(
-			await page.evaluate(
-				() =>
-					customElements.get("lcty-c") === LctyCElement &&
-					window.mod.LctyCElement !== LctyCElement,
-			),
-		).toBe(true);
-	});
 	let defined;
 	await test.step("When defineLctyV1CustomElements is given a registry that records what is defined", async () => {
 		defined = await page.evaluate(() => {
+			// the classes are global lexical bindings of the classic script, reachable by name only
+			const classes = {
+				LctyConvListElement,
+				LctySidebarElement,
+				LctyCElement,
+				LctySetupElement,
+				LctyMessageElement,
+				LctyComposerElement,
+				LctyTElement,
+			};
 			const seen = [];
-			window.mod.defineLctyV1CustomElements({
+			defineLctyV1CustomElements({
 				define: (name, cls) => seen.push([name, cls]),
 			});
 			return seen.map(([name, cls]) => [
 				name,
-				Object.entries(window.mod).find(([, v]) => v === cls)?.[0] ?? null,
+				Object.entries(classes).find(([, v]) => v === cls)?.[0] ?? null,
 			]);
 		});
 	});
-	await test.step('Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the module\'s classes', () => {
+	await test.step('Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the global classes', () => {
 		expect(defined).toEqual(ELEMENTS);
 	});
 });
@@ -1319,7 +1300,7 @@ test("The frame imports the page's features once, after the page has loaded", as
 		await page.waitForLoadState("load");
 		await page.waitForLoadState("networkidle");
 	});
-	await test.step("Then /c/lcty.v1.module.js has been requested once", () => {
+	await test.step("Then /lcty.v1/lcty.v1.async.mjs has been requested once", () => {
 		expect(server.moduleRequests).toBe(1);
 	});
 });
@@ -1500,10 +1481,10 @@ test("The frame imports the tag file's features once, after the page has loaded"
 		await page.waitForLoadState("load");
 		await page.waitForLoadState("networkidle");
 	});
-	await test.step("Then /c/tag-file.js has been requested once", () => {
+	await test.step("Then /tag-file.js has been requested once", () => {
 		expect(server.tagFileRequests).toBe(1);
 	});
-	await test.step("And /c/lcty.v1.module.js has not been requested", () => {
+	await test.step("And /lcty.v1/lcty.v1.async.mjs has not been requested", () => {
 		expect(server.moduleRequests).toBe(0);
 	});
 });
@@ -2019,7 +2000,7 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 		page.evaluate(
 			() =>
 				new Promise((resolve, reject) => {
-					const req = indexedDB.open("lcty_t", 2); // the schema of js/lcty_t.worker.js
+					const req = indexedDB.open("lcty_t", 2); // the schema of lcty.v1.t.worker.cjs
 					req.onupgradeneeded = () => {
 						const rows = req.result.createObjectStore("t_full", {
 							keyPath: "file",

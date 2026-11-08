@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// `lcty.lang-ja.v1.js` MUST be committed on the repository after being generated from this file:
-//   ruby -E UTF-8 -e 'puts ARGF.read.gsub(/^import /, "// import ")' lcty.v1.lang-ja.mjs >lcty.v1.lang-ja.js
+// lcty.v1.lang-ja.cjs: the Japanese texts, a classic script loaded right after lcty.v1.cjs (LCTYSP-0005). Pages that
+// load the version 1 names load it as lcty.v1.lang-ja.js, which /c/ and /t/ redirect here.
 
-import { LctyT } from "./lcty.v1.mjs";
+/*import { LctyT } from "./lcty.v1.mjs";*/
 
 LctyT.addLang("ja", {
 	newConversation: "＋ 新しい会話",

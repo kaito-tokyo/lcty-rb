@@ -8,12 +8,13 @@
 Feature: LCTYSP-1010 The browser's copy of the meta
 
   The module keeps the browser's copy of every conversation's meta, the store "c_meta" of the IndexedDB database
-  "lcty_c". A sync posts {"op": "force_sync"} to the worker /js/lcty_c.worker.js (LCTYSP-1001), which replaces the store with
-  GET /v1/meta-all.json; then the module writes a snapshot of the newest 20 conversations to localStorage
-  "lcty.meta.v1" for the first paint and calls the listeners of onMetaDbChange. requestMetaDbSync() syncs when the
-  browser is idle (the pages call it on loading the list and after sending a change), resetMetaDb() removes the
-  snapshot and syncs at once (the sidebar's refresh button), and readMetaDb() reads the copy newest first through the worker
-  ({"op": "get"}), which never creates the database. In a tab at most one sync runs: syncs requested while one runs share one more sync after it.
+  "lcty_c". A sync posts {"id": n, "op": "sync_meta"} to the worker /lcty.v1.c.worker.cjs (LCTYSP-1001), which replaces
+  the store with GET /v1/meta-all.json; then the module writes a snapshot of the newest 20 conversations to
+  localStorage "lcty.meta.v1" for the first paint and calls the listeners of onMetaDbChange. requestMetaDbSync()
+  syncs when the browser is idle (the pages call it on loading the list and after sending a change), resetMetaDb()
+  removes the snapshot and syncs at once (the sidebar's refresh button), and readMetaDb() reads the copy newest first
+  through the worker ({"id": n, "op": "get"}), which never creates the database. In a tab at most one sync runs: syncs
+  requested while one runs share one more sync after it.
 
   Background:
     Given a page on the server's origin

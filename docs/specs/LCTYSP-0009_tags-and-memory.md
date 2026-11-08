@@ -152,7 +152,7 @@ API shape:
 ## Revision draft: one HTML file per tag
 
 Status: implemented (2026-11-08). [The browser copy `t_full`](#in-the-browser-t_full-like-c_meta) and its worker
-`js/lcty_t.worker.js` are implemented; every page reads and changes the tags through it, and shows references by their
+`lcty.v1.t.worker.cjs` are implemented; every page reads and changes the tags through it, and shows references by their
 display names. Where this section disagrees with the sections above, this
 section is the design; the sections above (the old `Storage`) record the design before it.
 
@@ -207,7 +207,7 @@ unasked.
   conversation file is at `/c/<id>.html`. Only a name that passes the file-name check of replace-all and is a file in
   `t/` is served; anything else is 404. A file without `<lcty-t>` is served too.
 - **The screen is the tag editor** of the tags dialog, for that tag alone: its name, prompt and memory, its Delete
-  button, Discard changes and Save, but not "+ New tag". `<lcty-t>` (in `lcty.v1.js`) makes the file a page with the
+  button, Discard changes and Save, but not "+ New tag". `<lcty-t>` (in `lcty.v1.cjs`) makes the file a page with the
   sidebar and shows the tag read-only from the file's own elements; the page's features (`/t/tag-file.js`) replace that
   with the editor, which reads the tag from the browser's copy by the file name of the page
   ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
@@ -266,7 +266,7 @@ unasked.
   XML cannot represent, it is written as `name-base64` instead
   ([LCTYSP-0003](LCTYSP-0003_conversation-file.md#characters-xml-cannot-represent)). The display name cannot contain
   them (category C is forbidden), so in practice only `data-content` can.
-- **No presentation children** for now: the elements are empty, and what is shown comes from `lcty.v1.js` (`<lcty-t>`,
+- **No presentation children** for now: the elements are empty, and what is shown comes from `lcty.v1.cjs` (`<lcty-t>`,
   [Tag file pages](#tag-file-pages)).
 - **The JSON of the API** mirrors the markup:
   `{file, name, ops: [{type, content}], prompt, memory: [{id, text, at, source?}]}`
@@ -274,9 +274,10 @@ unasked.
 
 #### lcty.v1 assets in every directory
 
-- Every directory that holds HTML has its own copy of `lcty.v1.*`, so a page or file refers to them by name alone
-  (`lcty.v1.js`). In the data directory: `$LCTY_DATA_DIR/` (the root), `c/` and `t/`, published at startup as `c/` is
-  today ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). On the site: `/`, `/c/` and `/t/`.
+- Every directory that holds HTML has its own `lcty.v1.*`, so a page or file refers to them by name alone
+  (`lcty.v1.js`). In the data directory: `$LCTY_DATA_DIR/` (the root), `c/` and `t/` get copies at startup
+  ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). On the site, `/c/` and `/t/` redirect those names to the one copy
+  in `/lcty.v1/` ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 
 ### Character handling is the browser's
 
@@ -373,37 +374,51 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
     read in key order are the set in order. A reorder changes a tag's key; a sync rewrites every row anyway.
   - **`t_set` holds the set's `ETag`,** one record under the key `"set"`, `{etag}`: the ETag is the whole set's, so it
     is not a row. Its presence marks a copy, so an empty set (no rows) is a copy too.
-  - **The two stores are always written and read in one transaction** (`force_sync` clears the rows, puts every tag
+  - **The two stores are always written and read in one transaction** (`sync_full` clears the rows, puts every tag
     and the ETag; `get` reads both), so the rows and the ETag are always the same set.
   - Version 1 held the set as one record `"set"`, `{tags, etag}`, in `t_full` with out-of-line keys. Since the copy is
     derived, an upgrade drops every store and recreates them empty, and the next `get` syncs; nothing is converted.
 - **One database per resource:** `lcty_c` for what is derived from `c/` (store `c_meta`) and `lcty_t` for what is
   derived from `t/` (stores `t_full` and `t_set`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the data
   directory. The database before the split, `lcty`, became `lcty_c`; since it is derived, it was not converted:
-  `lcty_c.worker.js` fills `lcty_c` at the next sync and then deletes the old `lcty` (`indexedDB.deleteDatabase`; a
+  `lcty.v1.c.worker.cjs` fills `lcty_c` at the next sync and then deletes the old `lcty` (`indexedDB.deleteDatabase`; a
   deletion blocked by a connection of a page still running older code is not waited for, and the next sync tries
   again).
   - Each database has exactly one piece of code that opens it with a version and defines its schema
-    (`lcty_c.worker.js` for `lcty_c`, `lcty_t.worker.js` for `lcty_t`). The workers have no imports, so a
+    (`lcty.v1.c.worker.cjs` for `lcty_c`, `lcty.v1.t.worker.cjs` for `lcty_t`). The workers have no imports, so a
     shared database would mean the same version and schema written in two places, and one worker's upgrade could be
     blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never need
     to be read in one transaction.
   - **The same pattern for both:** each worker is also the only code that opens its database, readers included.
-    `lcty_c.worker.js` has the operations `force_sync` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
-    [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)); `js/api/meta-db.js` and `lcty.v1.js` read `c_meta` through it.
-- **Every asynchronous operation on the tags is one worker:** `js/lcty_t.worker.js`, a module worker with no imports
-  like `js/lcty_c.worker.js`, and the only code that opens `lcty_t` (readers included). `js/api/lcty-t.js` starts
-  one per call, posts it one message `{op, ...}` and gets one message back: `{result}`, or `{error, status}` with the
-  HTTP status (`null` when there is none). Errors are posted, not thrown, since a rejection inside an async message
-  handler does not reliably reach the page as the `Worker`'s `error` event; that event is left for a worker that could
-  not be loaded. The worker resolves `../v1/` against its own URL ([LCTYSP-1021](LCTYSP-1021_lcty-t.feature)).
+    `lcty.v1.c.worker.cjs` has the operations `sync_meta` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
+    [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)); `js/api/meta-db.js` and `lcty.v1.cjs` read `c_meta` through it.
+- **Every asynchronous operation on the tags is one worker:** `lcty.v1.t.worker.cjs`, a classic worker script with no
+  imports like `lcty.v1.c.worker.cjs`, and the only code that opens `lcty_t` (readers included). `js/api/lcty-t.js`
+  starts one per call.
+- **The workers are RPC servers that run as a `Worker` or as a `SharedWorker` alike:** both `lcty.v1.c.worker.cjs` and
+  `lcty.v1.t.worker.cjs` set the global `onmessage` (which a `Worker` uses) and `onconnect` (which a `SharedWorker` uses,
+  giving each port the same handler). A message `{id, op, endpoint, payload}` is answered on the port it came from (the
+  worker itself, or the `SharedWorker`'s port: the event's `target`) by `{id, result}`, or on a failure by
+  `{id, errorType}`: `"unknownOperation"` for an `op` the worker does not have; `"error"` with `error` (the `Error`
+  itself, as the structured clone keeps it) and `status` (the HTTP status, `null` when there is none, since the clone
+  drops it); or `"errorMessage"` with `errorMessage` (the error as text) and `status` when the error cannot be posted. A
+  message without an `id` cannot be answered. Classic scripts, not module workers, so a top-level `var` sets the global
+  handler. Errors are posted, not thrown, since a rejection inside an async message handler does not reliably reach the
+  page as the `Worker`'s `error` event; that event is left for a worker that could not be loaded
+  ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature), [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)).
+  - **`endpoint` is the URL of the site's `v1/`,** which the page knows (`siteUrl("v1/")`), so the worker does not
+    depend on where it is served. Every message carries it: the worker keeps no state between messages, and the ports
+    of a `SharedWorker` may come from any page of the site. It must be an absolute URL on the worker's origin, ending
+    with `/`, since the copy in IndexedDB is the origin's and must not be filled from another server; otherwise the
+    message is answered with an `"error"` before any operation (also for an `op` that sends no request, so every
+    message is checked the same way).
 
-  | `op`         | What the worker does                                                                                       | `result`          |
-  | ------------ | ---------------------------------------------------------------------------------------------------------- | ----------------- |
-  | `force_sync` | `GET v1/tags`, then replaces the rows and the ETag in one transaction; a failure leaves the copy as it was | none              |
-  | `get`        | reads the rows (in file-name order) and the ETag; when there is no copy yet, syncs first                   | `{tags, etag}`    |
-  | `put`        | `PUT v1/tags` with `{tags}` and the `If-Match` it is given, then syncs (also on failure)                   | the new `ETag`    |
-  | `addMemory`  | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                                      | the server's JSON |
+  | `op`        | `payload`      | What the worker does                                                                                       | `result`          |
+  | ----------- | -------------- | ---------------------------------------------------------------------------------------------------------- | ----------------- |
+  | `sync_full` | none           | `GET v1/tags`, then replaces the rows and the ETag in one transaction; a failure leaves the copy as it was | none              |
+  | `get`       | none           | reads the rows (in file-name order) and the ETag; when there is no copy yet, syncs first                   | `{tags, etag}`    |
+  | `put`       | `{tags, etag}` | `PUT v1/tags` with `{tags}` and the `If-Match` `etag`, then syncs (also on failure)                        | the new `ETag`    |
+  | `addMemory` | `{file, body}` | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                                      | the server's JSON |
   - **`put` takes the ETag from the caller,** the one `get` returned with the tags the user edited, not the copy's:
     the copy may have been synced to a newer set meanwhile, and sending its ETag would let the save overwrite a change
     the user never saw.
@@ -412,16 +427,16 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 - **In a tab the calls run one at a time,** in the order they were made (`js/api/lcty-t.js` chains them), so an older
   `GET` never overwrites a newer copy in this tab and a `get` after a change sees it. Tabs are not coordinated: their
   copies are the same database, and the last sync wins.
-- **When a sync runs:** every page runs `force_sync` whenever it is shown: at once when it loads, and again when it
+- **When a sync runs:** every page runs `sync_full` whenever it is shown: at once when it loads, and again when it
   comes back from the back/forward cache (`pageshow` with `persisted`), where no script runs anew. `js/ui/sidebar.js`
   does it, for the tags and the meta alike (every page has the sidebar), and then shows the new display names. `put`
   and `addMemory` sync after the request, and the first `get` in a browser syncs. The reorder page, which edits the
-  set, reads it after the sidebar's `force_sync` (the calls of a tab run in order), so it starts from the server's.
+  set, reads it after the sidebar's `sync_full` (the calls of a tab run in order), so it starts from the server's.
 - **Readers** go through the worker's `get`: the tag editor, the tag choice on the new conversation page, the
   conversation page, the memory dialog and the reorder page, and the display of references (part → display name):
   - **the header** (`<lcty-c>`'s chips) gets `data-tag-defs` and `data-tag-names` from the conversation page;
   - **the sidebar's list** (`<lcty-conv-list>`) gets the same two attributes, from `<lcty-sidebar>` itself as soon
-    as it is in the document (the worker's `get`, found at `../js/lcty_t.worker.js` from the page, so the names are
+    as it is in the document (the worker's `get`, found at `../lcty.v1/lcty.v1.t.worker.cjs` from the page, so the names are
     there with the first view of the list) and from `js/ui/sidebar.js` once the module has read the tags and whenever
     the tags dialog saves them. A chip shows the display name and keeps its reference in `data-tag`;
   - **`tag:` in search** needs no copy: the search panel derives the part from what was typed (`tagPart`), which

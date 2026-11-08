@@ -30,36 +30,36 @@ is answered by the test (`context.route` in the browser, a replaced `fetch` in N
 the answers it needs.
 
 The page modules that wire everything together, `js/pages/new.js`, `js/ui/sidebar.js`, `js/ui/settings-dialog.js` and
-`/c/lcty.v1.module.js`, are tested through the pages they make: they belong to the UI tests (`LCTYSP-2xxx`,
+`/lcty.v1/lcty.v1.async.mjs`, are tested through the pages they make: they belong to the UI tests (`LCTYSP-2xxx`,
 `tests/ui/`).
 
 ## The features
 
 The last two columns count the Scenarios (an Examples row counts as one) tested in Node.js and in the browser.
 
-| ID                                                            | Module                                                   | Node.js | Browser |
-| ------------------------------------------------------------- | -------------------------------------------------------- | ------: | ------: |
-| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `js/lcty_c.worker.js`: the meta in the browser           |       0 |      14 |
-| [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                      |      21 |       0 |
-| [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts            |      22 |      10 |
-| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings            |      34 |      10 |
-| [LCTYSP-1005](LCTYSP-1005_text-attributes.feature)            | `js/ui/text-attr.js`: text attributes and base64         |      17 |       0 |
-| [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                      |      23 |       0 |
-| [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API |      29 |       0 |
-| [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation     |      17 |       0 |
-| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API          |      25 |       9 |
-| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the browser's copy of the meta      |       0 |      17 |
-| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search        |      25 |       0 |
-| [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing             |      27 |       0 |
-| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                |      28 |       0 |
-| [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | `js/ui/markdown.js`: Markdown rendering                  |      67 |      15 |
-| [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                        |       0 |      17 |
-| [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/c/lcty.v1.mjs`: the elements of a conversation file    |       0 |      73 |
-| [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer      |       0 |      27 |
-| [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                    |      15 |      45 |
-| [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel            |       0 |      21 |
-| [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references  |      62 |       0 |
-| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `js/lcty_t.worker.js` and `js/api/lcty-t.js`: the tags   |       0 |      17 |
+| ID                                                            | Module                                                      | Node.js | Browser |
+| ------------------------------------------------------------- | ----------------------------------------------------------- | ------: | ------: |
+| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `lcty.v1.c.worker.cjs`: the meta in the browser             |       0 |      18 |
+| [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                         |      21 |       0 |
+| [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts               |      22 |      10 |
+| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings               |      34 |      10 |
+| [LCTYSP-1005](LCTYSP-1005_text-attributes.feature)            | `js/ui/text-attr.js`: text attributes and base64            |      17 |       0 |
+| [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                         |      23 |       0 |
+| [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API    |      29 |       0 |
+| [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation        |      17 |       0 |
+| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      25 |       9 |
+| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the browser's copy of the meta         |       0 |      17 |
+| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search           |      25 |       0 |
+| [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing                |      27 |       0 |
+| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      28 |       0 |
+| [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | `js/ui/markdown.js`: Markdown rendering                     |      67 |      15 |
+| [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                           |       0 |      17 |
+| [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      73 |
+| [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      27 |
+| [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                       |      15 |      45 |
+| [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel               |       0 |      21 |
+| [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references     |      62 |       0 |
+| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `lcty.v1.t.worker.cjs` and `js/api/lcty-t.js`: the tags     |       0 |      20 |
 
 ## How a feature is written
 
@@ -125,7 +125,8 @@ scenario("A new id is a canonical UUIDv7", async ({ step }) => {
 - `tests/unit/node-unit.js`: `scenario(title, fn)` is a `node:test` test; `step(line, body)` runs a line as a subtest
   named after it, and a failed step stops the Scenario, as `test.step()` does in Playwright. `expect` is Playwright's,
   so the assertions read the same in both runners. `publicUrl(path)` is the file of `public/` to import,
-  `useLctyT({ lang, langs })` makes the global `LctyT` that `js/i18n.js` needs from `/c/lcty.v1.mjs` and its languages,
+  `useLctyT({ lang, langs })` makes the global `LctyT` that `js/i18n.js` needs by running `/lcty.v1/lcty.v1.cjs` and
+  its languages as classic scripts (node:vm),
   and `routeFetch(t, handler)` answers every request of the test with `handler(request)`. In Node.js the root of the
   site that `siteUrl()` of `js/site.js` finds is `public/` itself ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)),
   so `routeFetch` gives the handler a URL under `public/` as the same path on the page's origin
@@ -152,7 +153,7 @@ test("A new id is a canonical UUIDv7", async ({ page, context }) => {
 ```
 
 - `tests/unit/unit-page.js` serves the empty page: `givenAPage(page, context, { lang, langs, body })` is the line
-  "Given a page on the server's origin". The page loads `/c/lcty.v1.js` (the global `LctyT` that `js/i18n.js` needs)
+  "Given a page on the server's origin". The page loads `/c/lcty.v1.js`, redirected as in a conversation file (the global `LctyT` that `js/i18n.js` needs)
   unless told not to, and the languages it is given.
 - Modules are imported inside the page with `import()`. Values cross between the test and the page as JSON, so a test
   turns typed arrays, `Map`s and elements into plain values inside `page.evaluate` before returning them.
