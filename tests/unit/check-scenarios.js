@@ -2,17 +2,20 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Check that the frontend unit tests that ran are the Scenarios of docs/specs/LCTYSP-1*.feature (LCTYSP-1000): one
-// passing test per Scenario (an Examples row adds its first column in parentheses), titled after it, whose steps are
-// the lines of the Background and the Scenario, word for word, in order. A Scenario whose lines include "Given a page
-// on the server's origin" runs in the browser (Playwright, in every unit-* project); the others run in Node.js.
+// Check that the frontend tests that ran are the Scenarios of docs/specs/LCTYSP-1*.feature (the unit tests,
+// LCTYSP-1000) and LCTYSP-2*.feature (the UI tests, LCTYSP-2000): one passing test per Scenario (an Examples row adds
+// its first column in parentheses), titled after it, whose steps are the lines of the Background and the Scenario, word
+// for word, in order. A unit Scenario whose lines include "Given a page on the server's origin" runs in the browser
+// (Playwright, in every unit-* project); the other unit Scenarios run in Node.js. A UI Scenario runs in every ui-*
+// project.
 //
 //   node tests/unit/check-scenarios.js [--node <node:test JSON>] [--browser <Playwright JSON>]
 //
-// The node:test JSON is written by tests/unit/scenarios-reporter.js, the Playwright JSON by its json reporter. Each
-// file checks its own runner completely: every Scenario of that runner is there and every test is a Scenario of it.
-// The feature of a test file is the first LCTYSP-1NNN in it (not LCTYSP-1000, the guide); a Playwright test in a file
-// without one (such as unit-page.spec.js) is a check of the test setup, not a Scenario, and is only counted.
+// The node:test JSON is written by tests/unit/scenarios-reporter.js, the Playwright JSON by its json reporter (it holds
+// the unit-* and the ui-* projects). Each file checks its own runners completely: every Scenario of that runner is there
+// and every test is a Scenario of it. The feature of a test file is the first LCTYSP-1NNN or LCTYSP-2NNN in it (not
+// LCTYSP-1000 or LCTYSP-2000, the guides); a unit Playwright test in a file without one (such as unit-page.spec.js) is a
+// check of the test setup, not a Scenario, and is only counted.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -105,24 +108,28 @@ export function parseFeature(path) {
 	return scenarios.map((s) => ({
 		id,
 		...s,
-		runner: s.lines.includes(PAGE_LINE) ? "browser" : "node",
+		runner: id.startsWith("LCTYSP-2")
+			? "ui"
+			: s.lines.includes(PAGE_LINE)
+				? "browser"
+				: "node",
 	}));
 }
 
-/** Every Scenario of docs/specs/LCTYSP-1*.feature. */
+/** Every Scenario of docs/specs/LCTYSP-1*.feature and LCTYSP-2*.feature. */
 export function allScenarios() {
 	return readdirSync(SPECS)
-		.filter((f) => /^LCTYSP-1\d{3}_.*\.feature$/.test(f))
+		.filter((f) => /^LCTYSP-[12]\d{3}_.*\.feature$/.test(f))
 		.sort()
 		.flatMap((f) => parseFeature(join(SPECS, f)));
 }
 
 const featureOfFile = new Map();
-/** The feature a test file is for: the first LCTYSP-1NNN in it, or null. */
+/** The feature a test file is for: the first LCTYSP-1NNN or LCTYSP-2NNN in it (not a guide), or null. */
 function featureOf(file) {
 	if (!featureOfFile.has(file)) {
 		const m = readFileSync(join(ROOT, file), "utf8").match(
-			/LCTYSP-1(?!000)\d{3}/,
+			/LCTYSP-[12](?!000)\d{3}/,
 		);
 		featureOfFile.set(file, m ? m[0] : null);
 	}
@@ -135,7 +142,7 @@ function nodeRuns(path) {
 	return [{ runner: "node", name: "node", tests }];
 }
 
-/** The runs of the tests in a Playwright JSON report: one per unit-* project. */
+/** The runs of the tests in a Playwright JSON report: one per unit-* project ("browser") and ui-* project ("ui"). */
 function browserRuns(path) {
 	const report = JSON.parse(readFileSync(path, "utf8"));
 	const testDir = report.config?.rootDir ?? ROOT;
@@ -143,7 +150,7 @@ function browserRuns(path) {
 	const walk = (suite) => {
 		for (const spec of suite.specs ?? []) {
 			for (const t of spec.tests) {
-				if (!t.projectName.startsWith("unit-")) continue;
+				if (!/^(unit|ui)-/.test(t.projectName)) continue;
 				const result = t.results.at(-1);
 				if (!byProject.has(t.projectName)) byProject.set(t.projectName, []);
 				byProject.get(t.projectName).push({
@@ -158,7 +165,7 @@ function browserRuns(path) {
 	};
 	for (const s of report.suites) walk(s);
 	return [...byProject].map(([name, tests]) => ({
-		runner: "browser",
+		runner: name.startsWith("ui-") ? "ui" : "browser",
 		name,
 		tests,
 	}));
@@ -179,7 +186,7 @@ export function checkRun(run, scenarios) {
 			continue;
 		}
 		if (!id) {
-			if (run.runner === "node")
+			if (run.runner !== "browser")
 				errors.push(
 					`${t.file}: "${t.title}" is in a file that names no feature`,
 				);
@@ -195,7 +202,7 @@ export function checkRun(run, scenarios) {
 			);
 			errors.push(
 				elsewhere
-					? `${where}: the Scenario runs in ${elsewhere.runner === "browser" ? "the browser" : "Node.js"}, not here`
+					? `${where}: the Scenario runs in ${RUNNERS[elsewhere.runner]}, not here`
 					: `${where}: no such Scenario`,
 			);
 			continue;
@@ -219,6 +226,12 @@ export function checkRun(run, scenarios) {
 	return { errors, checked: seen.size, other };
 }
 
+const RUNNERS = {
+	node: "Node.js",
+	browser: "the browser (unit-*)",
+	ui: "the UI tests (ui-*)",
+};
+
 function main(argv) {
 	const runs = [];
 	for (let i = 0; i < argv.length; i += 2) {
@@ -232,7 +245,7 @@ function main(argv) {
 	const scenarios = allScenarios();
 	const count = (r) => scenarios.filter((s) => s.runner === r).length;
 	console.log(
-		`${scenarios.length} Scenarios: ${count("node")} in Node.js, ${count("browser")} in the browser`,
+		`${scenarios.length} Scenarios: ${count("node")} in Node.js, ${count("browser")} in the browser, ${count("ui")} in the UI tests`,
 	);
 	if (runs.length === 0) return 0;
 	let failed = false;
@@ -244,10 +257,7 @@ function main(argv) {
 		for (const e of errors) console.log(`  ${e}`);
 		failed ||= errors.length > 0;
 	}
-	if (
-		!runs.some((r) => r.runner === "browser") ||
-		!runs.some((r) => r.runner === "node")
-	)
+	if (!["node", "browser", "ui"].every((n) => runs.some((r) => r.runner === n)))
 		console.log("(only the runners given were checked)");
 	return failed ? 1 : 0;
 }
