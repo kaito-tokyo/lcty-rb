@@ -7,7 +7,7 @@
 // button and the settings dialog (LCTYSP-0010) here.
 
 import { forceSyncTags, getTags } from "../api/lcty-t.js";
-import { forceSyncMetaDb, resetMetaDb } from "../api/meta-db.js";
+import { forceSyncMetaDb } from "../api/meta-db.js";
 import { showToast } from "../common.js";
 import { tr } from "../i18n.js";
 import { createSearchPanel } from "../search/search-panel.js";
@@ -41,7 +41,7 @@ export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
 	refresh.addEventListener("click", async () => {
 		refresh.disabled = true;
 		try {
-			await resetMetaDb();
+			await forceSyncMetaDb();
 		} catch (e) {
 			showToast(
 				tr("listFailed", "Failed to load the list: {error}", {
