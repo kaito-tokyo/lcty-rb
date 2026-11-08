@@ -10,7 +10,7 @@ SPDX-License-Identifier: Apache-2.0
   except the browser copy `t_full`, see there)
 - Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 - Implementation: `lib/tag_files.rb`, `lib/tag_store.rb`, `lib/t/servlet.rb`, `public/js/tag-names.js`,
-  `public/js/tags.js`, `public/js/pages/tag-order.js`
+  `public/js/tags.js`, `public/js/pages/tag-order.js`, `public/js/pages/tag-file.js`
 
 ## Summary
 
@@ -201,6 +201,22 @@ unasked.
   unchanged. A memory proposal leaves it out, as an undefined tag. Its prompt and memory are empty, so it adds nothing
   to a draft.
 
+#### Tag file pages
+
+- **The tag files are served** at `/t/NNNNN-<part>.html`, beside the reorder page `/t/`, as they are, as a
+  conversation file is at `/c/<id>.html`. Only a name that passes the file-name check of replace-all and is a file in
+  `t/` is served; anything else is 404. A file without `<lcty-t>` is served too.
+- **The screen is the tag editor** of the tags dialog, for that tag alone: its name, prompt and memory, its Delete
+  button, Discard changes and Save, but not "+ New tag". `<lcty-t>` (in `lcty.v1.js`) makes the file a page with the
+  sidebar and shows the tag read-only from the file's own elements; the page's features (`/t/tag-file.js`) replace that
+  with the editor, which reads the tag from the browser's copy by the file name of the page
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
+- **Saving is the same replace-all** as the dialog's (`PUT /v1/tags` with `If-Match`), with the other tags sent back
+  as they are. A rename gives the tag a new file, so the page moves to the new file's URL; deleting it saves at once
+  and moves to the reorder page.
+- **The reorder page links** each tag's name to its file. The tags dialog and the conversations' tag chips do not (not
+  adopted for now).
+
 ### Tag file markup
 
 ```html
@@ -250,7 +266,8 @@ unasked.
   XML cannot represent, it is written as `name-base64` instead
   ([LCTYSP-0003](LCTYSP-0003_conversation-file.md#characters-xml-cannot-represent)). The display name cannot contain
   them (category C is forbidden), so in practice only `data-content` can.
-- **No presentation children** for now: the elements are empty, and what is shown comes from `lcty.v1.js`.
+- **No presentation children** for now: the elements are empty, and what is shown comes from `lcty.v1.js` (`<lcty-t>`,
+  [Tag file pages](#tag-file-pages)).
 - **The JSON of the API** mirrors the markup:
   `{file, name, ops: [{type, content}], prompt, memory: [{id, text, at, source?}]}`
   ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
@@ -494,7 +511,8 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   undefined tag, until the conversation's tags are changed.
 - Not adopted: converting the old tags in the browser or with a one-off script.
 
-Not yet discussed: whether tag files are served at a URL (for example `/t/NNNNN-<name>.html`, beside the reorder
-page) or only through the API; how the proposal flow uses the `add-memory` policy (adjusted later).
+Tag files are served at `/t/NNNNN-<part>.html`, beside the reorder page, as the page of the tag
+([Tag file pages](#tag-file-pages)). Not yet discussed: how the proposal flow uses the `add-memory` policy (adjusted
+later).
 The data directory is drafted in [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), and the changes to the backend tests
 are noted at the top of [LCTYSP-3005](LCTYSP-3005_tag-store.feature).

@@ -200,7 +200,8 @@ lcty-c::part(lcty-c__header) {
 }
 /* the new conversation page (/): the creation card at the top (so nothing above the draft moves when it grows), the
    composer at its bottom */
-main.new-card {
+main.new-card,
+lcty-t {
 	box-sizing: border-box;
 	display: grid;
 	gap: 8px;
@@ -920,12 +921,31 @@ lcty-c::part(lcty-memory__proposal) {
 	gap: 6px;
 	align-items: flex-start;
 }
+/* a tag file shown as a page (/t/NNNNN-<part>.html): <lcty-t> is the card, and its view shows the file's own
+   children, which are hidden */
+lcty-t > :is(lcty-tagop, lcty-system, lcty-memory) {
+	display: none;
+}
+.tag-file-view {
+	display: grid;
+	gap: 8px;
+}
+.tag-file-view h2 {
+	margin: 0;
+}
 /* the tag reorder page (/t/) */
 .tag-order-list {
 	margin: 0;
 	padding-left: 2em;
 	display: grid;
 	gap: 6px;
+}
+.tag-order-item > a.tag-chip {
+	color: inherit;
+	text-decoration: none;
+}
+.tag-order-item > a.tag-chip:hover {
+	border-color: var(--fg-dim);
 }
 /* the name, then ↑ and ↓ at the end of the line */
 .tag-order-item {

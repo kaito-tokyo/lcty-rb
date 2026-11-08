@@ -23,21 +23,24 @@ const ELEMENTS = [
 	["lcty-setup", "LctySetupElement"],
 	["lcty-message", "LctyMessageElement"],
 	["lcty-composer", "LctyComposerElement"],
+	["lcty-t", "LctyTElement"],
 ];
 
 // ---- Background ----
 
 async function background(page, context) {
 	await givenAPage(page, context);
-	const server = { moduleRequests: 0 };
-	await test.step("And /c/lcty.v1.module.js is an empty module", async () => {
-		await context.route("**/c/lcty.v1.module.js", (route) => {
-			server.moduleRequests++;
+	const server = { moduleRequests: 0, tagFileRequests: 0 };
+	await test.step("And /c/lcty.v1.module.js and /c/tag-file.js are empty modules", async () => {
+		const empty = (count) => (route) => {
+			server[count]++;
 			return route.fulfill({
 				contentType: "text/javascript",
 				body: "export {};",
 			});
-		});
+		};
+		await context.route("**/c/lcty.v1.module.js", empty("moduleRequests"));
+		await context.route("**/c/tag-file.js", empty("tagFileRequests"));
 	});
 	return server;
 }
@@ -249,7 +252,7 @@ test("lcty.v1.js defines the elements with the classes it declares", async ({
 }) => {
 	await background(page, context);
 	let defined;
-	await test.step('Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message" and "lcty-composer" are defined', async () => {
+	await test.step('Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t" are defined', async () => {
 		defined = await page.evaluate((elements) => {
 			// the classes are global lexical bindings of the classic script, reachable by name only
 			const classes = {
@@ -259,6 +262,7 @@ test("lcty.v1.js defines the elements with the classes it declares", async ({
 				LctySetupElement,
 				LctyMessageElement,
 				LctyComposerElement,
+				LctyTElement,
 			};
 			return elements.map(([name, cls]) => [
 				name,
@@ -270,7 +274,7 @@ test("lcty.v1.js defines the elements with the classes it declares", async ({
 			ELEMENTS.map(([name]) => [name, "function"]),
 		);
 	});
-	await test.step("And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement and LctyComposerElement", () => {
+	await test.step("And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement, LctyComposerElement and LctyTElement", () => {
 		expect(defined.every(([, , same]) => same)).toBe(true);
 	});
 	await test.step('And "lcty-cmd" is not defined', async () => {
@@ -289,7 +293,7 @@ test("lcty.v1.mjs defines nothing by itself and defineLctyV1CustomElements defin
 		page.evaluate(async () => {
 			window.mod = await import("/c/lcty.v1.mjs");
 		}));
-	await test.step("Then it exports LctyT, the six element classes and defineLctyV1CustomElements", async () => {
+	await test.step("Then it exports LctyT, the seven element classes and defineLctyV1CustomElements", async () => {
 		expect(await page.evaluate(() => Object.keys(window.mod).sort())).toEqual(
 			[
 				"LctyT",
@@ -320,7 +324,7 @@ test("lcty.v1.mjs defines nothing by itself and defineLctyV1CustomElements defin
 			]);
 		});
 	});
-	await test.step('Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message" and "lcty-composer", in that order, with the module\'s classes', () => {
+	await test.step('Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the module\'s classes', () => {
 		expect(defined).toEqual(ELEMENTS);
 	});
 });
@@ -1353,6 +1357,154 @@ test('"Scroll to bottom" shows while the end of the page is out of view', async 
 	});
 	await test.step("And the toEndButton is hidden", async () => {
 		await expect.poll(hidden).toBe(true);
+	});
+});
+
+// ---- <lcty-t> ----
+
+/** The view of <lcty-t> as plain values. */
+function tagViewOf(page) {
+	return page.evaluate(() => {
+		const t = document.querySelector("lcty-t");
+		const v = t.view;
+		const fields = (sel) =>
+			[...v.querySelectorAll(sel)].map((f) => [f.value, f.readOnly]);
+		return {
+			heading: v.querySelector("h2")?.textContent,
+			section: v.querySelector(":scope > section")?.className,
+			name: fields(".tag-edit-head input"),
+			prompt: fields("label.field textarea"),
+			memory: fields(".mem-list textarea"),
+			summary: v.querySelector("summary")?.textContent,
+			open: v.querySelector("details")?.open,
+		};
+	});
+}
+
+test("A tag file is a page with the sidebar and the tag shown read-only", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step("Given the page has no title", () =>
+		page.evaluate(() => {
+			document.title = "";
+		}));
+	await test.step('When the body is given a tag file\'s <lcty-t data-tag="Ruby"> with a prompt and two memory items', () =>
+		setBody(
+			page,
+			'<lcty-t data-tag="Ruby">\n<lcty-system data-tag="Ruby" data-content="be brief"></lcty-system>\n<lcty-memory id="t-mem-a" data-tag="Ruby" data-content="abcd"></lcty-memory>\n<lcty-memory id="t-mem-b" data-tag="Ruby" data-content="efghi"></lcty-memory>\n</lcty-t>',
+		));
+	await test.step('Then <body> has the class "page" and its children are the sidebar, then <lcty-t>', async () => {
+		expect(
+			await page.evaluate(() => [
+				document.body.className,
+				[...document.body.children].map((c) => c.localName),
+			]),
+		).toEqual(["page", ["lcty-sidebar", "lcty-t"]]);
+	});
+	await test.step("And the frame's sidebar is that <lcty-sidebar>", async () => {
+		expect(
+			await page.evaluate(
+				() =>
+					document.querySelector("lcty-t").sidebar ===
+					document.querySelector("lcty-sidebar"),
+			),
+		).toBe(true);
+	});
+	await test.step("And the first child of <lcty-t> is its view, div.tag-file-view", async () => {
+		expect(
+			await page.evaluate(() => {
+				const t = document.querySelector("lcty-t");
+				return [t.firstElementChild === t.view, t.view.className];
+			}),
+		).toEqual([true, "tag-file-view"]);
+	});
+	const view = await tagViewOf(page);
+	await test.step('And the view holds the heading "Tags" and a section.tag-edit', () => {
+		expect([view.heading, view.section]).toEqual(["Tags", "tag-edit"]);
+	});
+	await test.step('And the name field reads "Ruby", the prompt field the prompt and the memory fields the two items, all read-only', () => {
+		expect([view.name, view.prompt, view.memory]).toEqual([
+			[["Ruby", true]],
+			[["be brief", true]],
+			[
+				["abcd", true],
+				["efghi", true],
+			],
+		]);
+	});
+	await test.step('And the memory summary reads "Memory (2 items, about 9 characters)" and is open', () => {
+		expect([view.summary, view.open]).toEqual([
+			"Memory (2 items, about 9 characters)",
+			true,
+		]);
+	});
+	await test.step('And the page\'s title is "Ruby"', async () => {
+		expect(await page.title()).toBe("Ruby");
+	});
+});
+
+test("The view reads the texts written as base64", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('When the body is given <lcty-t data-tag="x"> whose prompt and memory item are written as data-content-base64', () =>
+		setBody(
+			page,
+			// "a\u001bb" and "é" in UTF-8
+			'<lcty-t data-tag="x"><lcty-system data-tag="x" data-content-base64="YRti"></lcty-system><lcty-memory id="t-mem-a" data-tag="x" data-content-base64="w6k="></lcty-memory></lcty-t>',
+		));
+	await test.step('Then the prompt field reads "a\\u001bb" and the memory field "é"', async () => {
+		const view = await tagViewOf(page);
+		expect([view.prompt[0][0], view.memory.map(([v]) => v)]).toEqual([
+			json("a\\u001bb"),
+			["é"],
+		]);
+	});
+});
+
+test("The view of a tag without prompt or memory has empty fields and a closed summary", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('When the body is given <lcty-t data-tag="x"></lcty-t>', () =>
+		setBody(page, '<lcty-t data-tag="x"></lcty-t>'));
+	const view = await tagViewOf(page);
+	await test.step('Then the prompt field is empty, there is no memory field and the summary reads "Memory (0 items, about 0 characters)"', () => {
+		expect([view.prompt, view.memory, view.summary]).toEqual([
+			[["", true]],
+			[],
+			"Memory (0 items, about 0 characters)",
+		]);
+	});
+	await test.step("And the summary is closed", () => {
+		expect(view.open).toBe(false);
+	});
+});
+
+test("The frame imports the tag file's features once, after the page has loaded", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await test.step("Given the body holds a tag file's <lcty-t>", async () => {
+		// parsed with the page, as a tag file is, so it is connected before the page has loaded
+		await openUnitPage(page, context, {
+			body: '<lcty-t data-tag="x"><lcty-system data-tag="x" data-content="p"></lcty-system></lcty-t>',
+		});
+	});
+	await test.step("When the page has loaded", async () => {
+		await page.waitForLoadState("load");
+		await page.waitForLoadState("networkidle");
+	});
+	await test.step("Then /c/tag-file.js has been requested once", () => {
+		expect(server.tagFileRequests).toBe(1);
+	});
+	await test.step("And /c/lcty.v1.module.js has not been requested", () => {
+		expect(server.moduleRequests).toBe(0);
 	});
 });
 

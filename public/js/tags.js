@@ -8,6 +8,7 @@
 //  - (the name rules, file names and references are in tag-names.js)
 //  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
 //  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the sidebar
+//    (and, for one tag, on the page of its tag file)
 //  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
 
 import { addMemory, getTags, putTags } from "./api/lcty-t.js";
@@ -51,15 +52,30 @@ export function composeDraft(defs, selected) {
 
 /**
  * Draws the editor for tag definitions (name, prompt, memory) into container: defs and etag are what GET /v1/tags
- * returned. The order is changed on the reorder page (/t/), not here. Calls onSaved(new definitions) after saving.
- * Returns { isDirty }: whether there are unsaved edits.
+ * returned. The order is changed on the reorder page (/t/), not here. Calls onSaved(new definitions, {file}) after
+ * saving. Returns { isDirty }: whether there are unsaved edits.
+ *
+ * With file (the page of a tag file, LCTYSP-0009), only the tag in that file is shown and there is no "+ New tag"; the
+ * rest of the set is sent back as it is. Deleting it saves at once. onSaved's file is the tag's file after the save
+ * (a new name gives a new file), or null when it was deleted.
  */
-export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
+export function renderTagsEditor(
+	container,
+	{ defs, etag, onSaved, toast, file },
+) {
 	let saved = structuredClone(defs);
 	let work = structuredClone(saved);
 	let version = etag;
+	const single = file !== undefined;
+	let currentFile = file;
+	let current = single ? work.find((t) => t.file === currentFile) : null;
 	const list = el("div", { class: "tags-edit" });
 	const status = el("p", { class: "hint" });
+	// Takes work anew (after a reload or a save): the tag shown on a tag file's page is found again by its file
+	const reset = (tags) => {
+		work = structuredClone(tags);
+		if (single) current = work.find((t) => t.file === currentFile);
+	};
 
 	const render = () => {
 		const deleteButton = (t, i) =>
@@ -77,116 +93,133 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 						if (!confirm(msg)) return;
 						work.splice(i, 1);
 						render();
+						if (single) save();
 					},
 				},
 				tr("delete", "Delete"),
 			);
+		if (single && !current) {
+			list.replaceChildren(
+				el(
+					"p",
+					{ class: "hint" },
+					tr(
+						"tagFileGone",
+						"This tag is not in the tags any more: it was renamed or deleted.",
+					),
+				),
+			);
+			return;
+		}
 		list.replaceChildren(
-			...work.map((t, i) => {
-				// A file without <lcty-t>: shown with its name, not editable; saving sends it back and the server keeps it
-				if (t.invalid)
-					return el(
-						"section",
-						{ class: "tag-edit tag-invalid" },
-						el(
-							"div",
-							{ class: "tag-edit-head" },
-							el("span", { class: "tag-chip" }, t.name),
-							deleteButton(t, i),
-						),
-						el(
-							"p",
-							{ class: "hint" },
-							tr(
-								"invalidTagFile",
-								"The tag file {file} cannot be read (it has no <lcty-t>), so it cannot be edited here. Fix or delete the file in t/ of the data directory.",
-								{ file: t.file },
+			...work
+				.flatMap((t, i) => (single && t !== current ? [] : [[t, i]]))
+				.map(([t, i]) => {
+					// A file without <lcty-t>: shown with its name, not editable; saving sends it back and the server keeps it
+					if (t.invalid)
+						return el(
+							"section",
+							{ class: "tag-edit tag-invalid" },
+							el(
+								"div",
+								{ class: "tag-edit-head" },
+								el("span", { class: "tag-chip" }, t.name),
+								deleteButton(t, i),
+							),
+							el(
+								"p",
+								{ class: "hint" },
+								tr(
+									"invalidTagFile",
+									"The tag file {file} cannot be read (it has no <lcty-t>), so it cannot be edited here. Fix or delete the file in t/ of the data directory.",
+									{ file: t.file },
+								),
+							),
+						);
+					const memList = el(
+						"ul",
+						{ class: "mem-list" },
+						(t.memory || []).map((m, k) =>
+							el(
+								"li",
+								{},
+								el(
+									"textarea",
+									{ rows: 2, oninput: (e) => (m.text = e.target.value) },
+									m.text,
+								),
+								el(
+									"button",
+									{
+										type: "button",
+										class: "danger",
+										onclick: () => {
+											t.memory.splice(k, 1);
+											render();
+										},
+									},
+									tr("delete", "Delete"),
+								),
 							),
 						),
 					);
-				const memList = el(
-					"ul",
-					{ class: "mem-list" },
-					(t.memory || []).map((m, k) =>
+					const memChars = (t.memory || []).reduce(
+						(s, m) => s + m.text.length,
+						0,
+					);
+					return el(
+						"section",
+						{ class: "tag-edit" },
 						el(
-							"li",
-							{},
+							"div",
+							{ class: "tag-edit-head" },
+							el("input", {
+								type: "text",
+								value: t.name,
+								"aria-label": tr("tagName", "Tag name"),
+								oninput: (e) => (t.name = e.target.value.trim()),
+							}),
+							deleteButton(t, i),
+						),
+						el(
+							"label",
+							{ class: "field" },
+							el(
+								"span",
+								{},
+								tr(
+									"tagPromptLabel",
+									"System prompt (also write here what to remember)",
+								),
+							),
 							el(
 								"textarea",
-								{ rows: 2, oninput: (e) => (m.text = e.target.value) },
-								m.text,
+								{ rows: 3, oninput: (e) => (t.prompt = e.target.value) },
+								t.prompt || "",
 							),
+						),
+						el(
+							"details",
+							{
+								open:
+									(t.memory || []).length > 0 && (t.memory || []).length <= 5,
+							},
 							el(
-								"button",
-								{
-									type: "button",
-									class: "danger",
-									onclick: () => {
-										t.memory.splice(k, 1);
-										render();
+								"summary",
+								{},
+								tr(
+									"memorySummary",
+									"Memory ({count} items, about {chars} characters)",
+									{
+										count: (t.memory || []).length,
+										chars: memChars.toLocaleString(),
 									},
-								},
-								tr("delete", "Delete"),
+								),
 							),
+							memList,
 						),
-					),
-				);
-				const memChars = (t.memory || []).reduce(
-					(s, m) => s + m.text.length,
-					0,
-				);
-				return el(
-					"section",
-					{ class: "tag-edit" },
-					el(
-						"div",
-						{ class: "tag-edit-head" },
-						el("input", {
-							type: "text",
-							value: t.name,
-							"aria-label": tr("tagName", "Tag name"),
-							oninput: (e) => (t.name = e.target.value.trim()),
-						}),
-						deleteButton(t, i),
-					),
-					el(
-						"label",
-						{ class: "field" },
-						el(
-							"span",
-							{},
-							tr(
-								"tagPromptLabel",
-								"System prompt (also write here what to remember)",
-							),
-						),
-						el(
-							"textarea",
-							{ rows: 3, oninput: (e) => (t.prompt = e.target.value) },
-							t.prompt || "",
-						),
-					),
-					el(
-						"details",
-						{
-							open: (t.memory || []).length > 0 && (t.memory || []).length <= 5,
-						},
-						el(
-							"summary",
-							{},
-							tr(
-								"memorySummary",
-								"Memory ({count} items, about {chars} characters)",
-								{
-									count: (t.memory || []).length,
-									chars: memChars.toLocaleString(),
-								},
-							),
-						),
-						memList,
-					),
-				);
-			}),
+					);
+				}),
 		);
 	};
 
@@ -240,7 +273,7 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 					);
 					return;
 				}
-				work = structuredClone(saved);
+				reset(saved);
 				render();
 				status.textContent = tr(
 					"tagsChangedElsewhere",
@@ -253,14 +286,19 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 			});
 			return;
 		}
+		// The shown tag's file after the save: tags is in the order of work
+		if (single) {
+			const i = work.indexOf(current);
+			currentFile = i < 0 ? null : tags[i].file;
+		}
 		try {
 			// Take timestamps etc. from the saved values; the ETag is the one this GET read them with
 			({ tags: saved, etag: version } = await getTags());
 		} catch {
 			saved = tags; // Saved: keep what was sent, with the ETag PUT returned
 		}
-		work = structuredClone(saved);
-		onSaved(structuredClone(saved));
+		reset(saved);
+		onSaved(structuredClone(saved), { file: currentFile });
 		status.textContent = "";
 		render();
 		toast(tr("tagsSaved", "Tags saved"));
@@ -286,23 +324,25 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 				),
 			),
 			list,
-			el(
-				"button",
-				{
-					type: "button",
-					onclick: () => {
-						work.push({
-							file: null,
-							name: "",
-							ops: [],
-							prompt: "",
-							memory: [],
-						});
-						render();
-					},
-				},
-				tr("newTag", "+ New tag"),
-			),
+			single
+				? null
+				: el(
+						"button",
+						{
+							type: "button",
+							onclick: () => {
+								work.push({
+									file: null,
+									name: "",
+									ops: [],
+									prompt: "",
+									memory: [],
+								});
+								render();
+							},
+						},
+						tr("newTag", "+ New tag"),
+					),
 			status,
 			el(
 				"div",
@@ -322,7 +362,7 @@ export function renderTagsEditor(container, { defs, etag, onSaved, toast }) {
 								)
 							)
 								return;
-							work = structuredClone(saved);
+							reset(saved);
 							status.textContent = "";
 							render();
 						},

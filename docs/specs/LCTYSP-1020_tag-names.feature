@@ -16,7 +16,8 @@ Feature: LCTYSP-1020 Tag names, file names and references
   ! # $ % & ( ) * < > ? [ ] ^ { } escaped as ~ and two hex digits. tagFileName, tagNumber and tagRef make and read
   file names (a file system may list them decomposed, so tagRef composes), tagDisplayName and sortTags look
   references up in the tag files, and assignFileNames and renumber give the tags their file names when the editor
-  and the reorder page save them.
+  and the reorder page save them. tagFileOfPath reads the file name of a tag file's page (/t/NNNNN-<part>.html) from
+  its URL path.
 
   In the steps a name such as "a" U+00A0 "b" is the strings joined with that code point, and the definitions "a",
   "b", … are the tag files "00010-a.html", "00020-b.html", … named "a", "b", ….
@@ -165,3 +166,16 @@ Feature: LCTYSP-1020 Tag names, file names and references
     Given the tag "00070-cafe" U+0301 ".html" named "Café", listed decomposed
     When renumber renumbers it
     Then its file is "00010-caf" U+00E9 ".html"
+
+  Scenario Outline: The file of a tag file's page is read from its path
+    When tagFileOfPath reads the path <path>
+    Then it returns <file>
+
+    Examples:
+      | case                     | path                                             | file                          |
+      | an ASCII name            | "/t/00010-ruby.html"                             | "00010-ruby.html"             |
+      | an escape                | "/t/00020-c~23.html"                             | "00020-c~23.html"             |
+      | percent-encoded          | "/t/00030-%E6%96%99%E7%90%86.html"               | "00030-料理.html"              |
+      | decomposed               | "/t/00040-cafe%CC%81.html"                       | "00040-caf" U+00E9 ".html"    |
+      | below another directory  | "/site/t/00010-ruby.html"                        | "00010-ruby.html"             |
+      | a broken escape          | "/t/00010-%E6.html"                              | "00010-%E6.html"              |

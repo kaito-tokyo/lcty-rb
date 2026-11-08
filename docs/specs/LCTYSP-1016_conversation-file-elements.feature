@@ -17,9 +17,14 @@ Feature: LCTYSP-1016 The elements of a conversation file
   has loaded; the features are /c/lcty.v1.module.js, which <lcty-c> imports once the page has loaded. In these steps
   that module is an empty module, and a text in quotes is a JSON string ("\u001b" is ESC).
 
+  A tag file loads the same script, and <lcty-t> (LCTYSP-0009) makes it a page: it puts an <lcty-sidebar> before itself
+  and the class "page" on <body>, and shows the tag read-only in its view, the first of its children, once they have
+  been parsed. Its features are tag-file.js next to lcty.v1.js (/t/tag-file.js on the site), which it imports once the
+  page has loaded; in these steps /c/tag-file.js is an empty module too.
+
   Background:
     Given a page on the server's origin
-    And /c/lcty.v1.module.js is an empty module
+    And /c/lcty.v1.module.js and /c/tag-file.js are empty modules
 
   # ---- lcty.v1.js and lcty.v1.mjs ----
 
@@ -29,16 +34,16 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And lcty.v1.js is lcty.v1.mjs with those two replacements, ending with a newline
 
   Scenario: lcty.v1.js defines the elements with the classes it declares
-    Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message" and "lcty-composer" are defined
-    And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement and LctyComposerElement
+    Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t" are defined
+    And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement, LctyComposerElement and LctyTElement
     And "lcty-cmd" is not defined
 
   Scenario: lcty.v1.mjs defines nothing by itself and defineLctyV1CustomElements defines the elements in a registry
     When /c/lcty.v1.mjs is imported as a module
-    Then it exports LctyT, the six element classes and defineLctyV1CustomElements
+    Then it exports LctyT, the seven element classes and defineLctyV1CustomElements
     And "lcty-c" is still defined by the global LctyCElement
     When defineLctyV1CustomElements is given a registry that records what is defined
-    Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message" and "lcty-composer", in that order, with the module's classes
+    Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the module's classes
 
   # ---- LctyT ----
 
@@ -252,6 +257,34 @@ Feature: LCTYSP-1016 The elements of a conversation file
     When it is clicked
     Then the page is scrolled to its bottom
     And the toEndButton is hidden
+
+  # ---- <lcty-t> ----
+
+  Scenario: A tag file is a page with the sidebar and the tag shown read-only
+    Given the page has no title
+    When the body is given a tag file's <lcty-t data-tag="Ruby"> with a prompt and two memory items
+    Then <body> has the class "page" and its children are the sidebar, then <lcty-t>
+    And the frame's sidebar is that <lcty-sidebar>
+    And the first child of <lcty-t> is its view, div.tag-file-view
+    And the view holds the heading "Tags" and a section.tag-edit
+    And the name field reads "Ruby", the prompt field the prompt and the memory fields the two items, all read-only
+    And the memory summary reads "Memory (2 items, about 9 characters)" and is open
+    And the page's title is "Ruby"
+
+  Scenario: The view reads the texts written as base64
+    When the body is given <lcty-t data-tag="x"> whose prompt and memory item are written as data-content-base64
+    Then the prompt field reads "a\u001bb" and the memory field "é"
+
+  Scenario: The view of a tag without prompt or memory has empty fields and a closed summary
+    When the body is given <lcty-t data-tag="x"></lcty-t>
+    Then the prompt field is empty, there is no memory field and the summary reads "Memory (0 items, about 0 characters)"
+    And the summary is closed
+
+  Scenario: The frame imports the tag file's features once, after the page has loaded
+    Given the body holds a tag file's <lcty-t>
+    When the page has loaded
+    Then /c/tag-file.js has been requested once
+    And /c/lcty.v1.module.js has not been requested
 
   # ---- <lcty-conv-list> and <lcty-sidebar> ----
 

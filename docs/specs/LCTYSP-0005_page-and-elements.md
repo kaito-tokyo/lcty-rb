@@ -42,13 +42,31 @@ a module imported once the page has loaded attaches every feature without blocki
   ([LCTYSP-0006](LCTYSP-0006_http-api.md)). The contents of the tags are not changed. The tags dialog links to it
   (`siteUrl("t/")`). On 412 it loads the tags again and asks the user to redo the move.
   - `/t/` mirrors `/c/`: the conversations are `data/c/` and `/c/`, the tags `data/t/` and `/t/`. `/t/lcty.v1.*`
-    serves the files of `public/c/`, so the page loads them by name like the pages in `/c/`. Tag files are not served
-    under `/t/` (only through `/v1/tags`); should they ever be, their names start with five digits
-    (`00010-ruby.html`) and cannot collide with `index.html`.
+    serves the files of `public/c/`, so the page loads them by name like the pages in `/c/`. The tag files are served
+    under `/t/` too (below); their names start with five digits (`00010-ruby.html`) and cannot collide with
+    `index.html` or `lcty.v1.*`.
   - Its entry module is the bundle `/t/index.js` like `/c/index.js` ([LCTYSP-0011](LCTYSP-0011_module-bundler.md)),
     so `siteUrl()` finds the root from it. `/t` without the slash redirects to `t/` as `/c` does.
   - The sidebar's links are relative to the page, one directory below the root: the new conversation page is
     `../c/` and a conversation `../c/<id>.html`, from `/c/` and `/t/` alike.
+  - Each tag's name in the list is a link to its tag file (`00010-ruby.html`, relative to the page).
+- **The page of a tag file (`/t/NNNNN-<part>.html`; `<lcty-t>` in `/c/lcty.v1.js` and `js/pages/tag-file.js`).** As
+  `/c/<id>.html` is the conversation file, `/t/NNNNN-<part>.html` is the tag file `data/t/NNNNN-<part>.html` itself,
+  served as it is ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#tag-file-pages)). The screen is the tag editor of the
+  tags dialog, for that tag alone.
+  - The file's header loads `lcty.v1.js`, whose `<lcty-t>` makes the file a page: it puts an `<lcty-sidebar>` before
+    itself and the class `page` on `<body>` (the layout of `/c/` and `/t/`), styles itself as their card, and puts its
+    view (`div.tag-file-view`) first among its children. The file's own children are hidden; once they have been
+    parsed the view shows the tag with the editor's fields, read-only. The page's title is the tag's name. Opened
+    directly (`file://`) the page stays so.
+  - Once the page has loaded, `<lcty-t>` imports `tag-file.js` next to `lcty.v1.js` (the bundle `/t/tag-file.js`,
+    [LCTYSP-0011](LCTYSP-0011_module-bundler.md)). It reads the tags (the browser's copy, after the sidebar's
+    `force_sync`), finds the tag by the file name of the page and replaces the view with the tag editor for it
+    (`renderTagsEditor` with `file`): the same fields and buttons as in the dialog, without "+ New tag". Saving sends
+    the whole set with `PUT /v1/tags`, the other tags unchanged. A new name is a new file, so after the save the page
+    moves to its URL (`location.replace`); deleting the tag saves at once and moves to the reorder page `./`. A tag no
+    longer in the set (renamed or deleted elsewhere) is shown as gone.
+  - A file without `<lcty-t>` (an invalid tag) is served too, but nothing makes it a page.
 - Narrow screens (720px or less): the conversation page hides the sidebar; the new conversation page shows it above its content.
 - The history sent back to the model is read from the DOM: each `<lcty-message>` reads its text from attributes, which
   are exactly the saved strings ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). No JSON has to be fetched to open a

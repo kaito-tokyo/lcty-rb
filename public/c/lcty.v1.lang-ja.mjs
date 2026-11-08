@@ -61,6 +61,7 @@ LctyT.addLang("ja", {
 	duplicateTagName: "タグの名前が重複しています",
 	invalidTagFile:
 		"タグファイル {file} は読めない（<lcty-t> がない）ため、ここでは編集できません。データディレクトリの t/ にあるファイルを直すか、削除してください。",
+	tagFileGone: "このタグはもうありません。名前が変わったか、削除されました。",
 	tagNumbersFull:
 		"新しいタグに付ける番号がありません。先に並べ替えのページで番号を振り直してください。",
 	tagsChangedElsewhere:

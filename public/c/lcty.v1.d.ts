@@ -77,6 +77,7 @@ type LctyTextKey =
 	| "badTagName"
 	| "duplicateTagName"
 	| "invalidTagFile"
+	| "tagFileGone"
 	| "tagNumbersFull"
 	| "tagsChangedElsewhere"
 	| "tagsSaved"
@@ -382,7 +383,22 @@ declare class LctyComposerElement extends HTMLElement {
 }
 
 /**
- * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message and lcty-composer in registry. lcty.v1.js
+ * <lcty-t>: a tag file shown as a page (/t/NNNNN-<part>.html). It puts its sidebar before itself and the class "page"
+ * on <body>, and its view first among its children; the children of the file are hidden (lcty.v1.css). Once they have
+ * been parsed, the view shows the tag read-only with the tag editor's fields. /t/tag-file.js, imported once the page
+ * has loaded, replaces the view with the editor.
+ */
+declare class LctyTElement extends HTMLElement {
+	/** The sidebar, put before <lcty-t>: the same element every page has */
+	sidebar: LctySidebarElement;
+	/** What the page shows (div.tag-file-view, the first child of <lcty-t>) */
+	view: HTMLDivElement;
+	/** Shows the tag of the file (data-tag, <lcty-system>, <lcty-memory>) in the view, read-only */
+	showFile(): void;
+}
+
+/**
+ * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message, lcty-composer and lcty-t in registry. lcty.v1.js
  * calls it at its end; importing lcty.v1.mjs defines nothing. The elements are created while the body is parsed, after
  * the language scripts in <head> have registered their texts.
  */
@@ -396,4 +412,5 @@ interface HTMLElementTagNameMap {
 	"lcty-sidebar": LctySidebarElement;
 	"lcty-message": LctyMessageElement;
 	"lcty-composer": LctyComposerElement;
+	"lcty-t": LctyTElement;
 }

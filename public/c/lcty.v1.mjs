@@ -917,6 +917,144 @@ export class LctyComposerElement extends HTMLElement {
 	}
 }
 
+/**
+ * <lcty-t>: a tag file shown as a page (/t/NNNNN-<part>.html. LCTYSP-0005, LCTYSP-0009). The file holds only the tag
+ * (its name in data-tag, its <lcty-tagop>, <lcty-system> and <lcty-memory> children), so the frame makes it a page like
+ * the others: it puts an <lcty-sidebar> before itself and the class "page" on <body> (the layout of the pages with a
+ * sidebar), and holds the view, an element of its own that it puts first among its children. The children of the file
+ * are hidden (lcty.v1.css); once they have been parsed the view shows them read-only, as the tag editor's fields.
+ * The page's features (/t/tag-file.js, next to this file over HTTP) are imported once the page has loaded and replace
+ * the view with the editor; opened directly (file://) the import fails and the page stays read-only.
+ */
+export class LctyTElement extends HTMLElement {
+	constructor() {
+		super();
+		this.view = document.createElement("div");
+		this.view.className = "tag-file-view";
+		this.sidebar = document.createElement("lcty-sidebar");
+	}
+
+	connectedCallback() {
+		if (this.view.parentNode !== this) this.prepend(this.view);
+		if (!this.sidebar.isConnected) {
+			this.before(this.sidebar);
+			document.body.classList.add("page");
+		}
+		if (!document.title) document.title = this.getAttribute("data-tag") || "";
+		if (document.readyState === "loading")
+			document.addEventListener("DOMContentLoaded", () => this.showFile(), {
+				once: true,
+			});
+		else this.showFile();
+		LctyTElement.#importFeatures();
+	}
+
+	static #featuresRequested = false;
+	static #importFeatures() {
+		if (LctyTElement.#featuresRequested) return;
+		LctyTElement.#featuresRequested = true;
+		const run = () => import("./tag-file.js");
+		if (document.readyState === "complete") run();
+		else addEventListener("load", run, { once: true });
+	}
+
+	// A text attribute, or its -base64 form (UTF-8) when the text has characters an attribute cannot hold
+	static #text(el, name) {
+		const base64 = el?.getAttribute(`${name}-base64`);
+		if (base64 != null) {
+			try {
+				return new TextDecoder("utf-8", {
+					fatal: true,
+					ignoreBOM: true,
+				}).decode(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)));
+			} catch {
+				return "";
+			}
+		}
+		return el?.getAttribute(name) || "";
+	}
+
+	/** Shows the tag of the file in the view, read-only, with the tag editor's fields (the classes of js/tags.js) */
+	showFile() {
+		const _ = LctyT._;
+		const $ = (tag, attrs = {}, ...children) => {
+			const el = document.createElement(tag);
+			for (const [k, v] of Object.entries(attrs)) {
+				if (typeof v === "boolean") el[k] = v;
+				else el.setAttribute(k, v);
+			}
+			el.append(...children);
+			return el;
+		};
+		const text = LctyTElement.#text;
+		const name = this.getAttribute("data-tag") || "";
+		const prompt = text(
+			this.querySelector(":scope > lcty-system"),
+			"data-content",
+		);
+		const memory = [...this.querySelectorAll(":scope > lcty-memory")].map((m) =>
+			text(m, "data-content"),
+		);
+		const chars = memory.reduce((s, m) => s + m.length, 0);
+		const area = (value) => {
+			const t = $("textarea", { rows: 2, readOnly: true });
+			t.value = value;
+			return t;
+		};
+		const promptArea = area(prompt);
+		promptArea.rows = 3;
+		this.view.replaceChildren(
+			$("h2", {}, _("tags", "Tags")),
+			$(
+				"section",
+				{ class: "tag-edit" },
+				$(
+					"div",
+					{ class: "tag-edit-head" },
+					$("input", {
+						type: "text",
+						value: name,
+						"aria-label": _("tagName", "Tag name"),
+						readOnly: true,
+					}),
+				),
+				$(
+					"label",
+					{ class: "field" },
+					$(
+						"span",
+						{},
+						_(
+							"tagPromptLabel",
+							"System prompt (also write here what to remember)",
+						),
+					),
+					promptArea,
+				),
+				$(
+					"details",
+					{ open: memory.length > 0 && memory.length <= 5 },
+					$(
+						"summary",
+						{},
+						_(
+							"memorySummary",
+							"Memory ({count} items, about {chars} characters)",
+						)
+							.replace("{count}", String(memory.length))
+							.replace("{chars}", chars.toLocaleString()),
+					),
+					$(
+						"ul",
+						{ class: "mem-list" },
+						...memory.map((m) => $("li", {}, area(m))),
+					),
+				),
+			),
+		);
+	}
+}
+
 export function defineLctyV1CustomElements(
 	registry = globalThis.customElements,
 ) {
@@ -926,6 +1064,7 @@ export function defineLctyV1CustomElements(
 	registry.define("lcty-setup", LctySetupElement);
 	registry.define("lcty-message", LctyMessageElement);
 	registry.define("lcty-composer", LctyComposerElement);
+	registry.define("lcty-t", LctyTElement);
 }
 
 //?defineLctyV1CustomElements();
