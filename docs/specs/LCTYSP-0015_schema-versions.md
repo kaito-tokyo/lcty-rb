@@ -43,8 +43,9 @@ sides.
     ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)). It has no leading `_`, so backups keep it.
   - `lcty_c.sqlite`: not made yet; nothing of `c/` needs migrating today (the conversation files are the source of
     truth, and everything derived from them is in `_index.sqlite`).
-- **The browser's databases** are renamed to match, `lcty_v1_c` → `lcty_c` and `lcty_v1_t` → `lcty_t` (planned, in a
-  change of its own; [LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
+- **The browser's databases** have the names of the resources, `lcty_c` and `lcty_t`
+  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)), the names and versions they had
+  before they were named after the version of the files (`lcty_v1_c`, `lcty_v1_t`) for a time.
 
 ## One integer version per file
 

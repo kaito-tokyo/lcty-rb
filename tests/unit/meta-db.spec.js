@@ -63,8 +63,8 @@ function collectWarnings(page) {
 
 // ---- The database, from the page ----
 
-/** The database name ("lcty_v1_c" by default) as it is: {exists, version, stores}. Never creates it. */
-function dbInfo(page, name = "lcty_v1_c") {
+/** The database name ("lcty_c" by default) as it is: {exists, version, stores}. Never creates it. */
+function dbInfo(page, name = "lcty_c") {
 	return page.evaluate(
 		(name) =>
 			new Promise((resolve, reject) => {
@@ -89,8 +89,8 @@ function dbInfo(page, name = "lcty_v1_c") {
 	);
 }
 
-/** Create the database name ("lcty_v1_c" by default) at version with stores ({store: {keyPath?, records: [value]}}). */
-function seedDb(page, version, stores, name = "lcty_v1_c") {
+/** Create the database name ("lcty_c" by default) at version with stores ({store: {keyPath?, records: [value]}}). */
+function seedDb(page, version, stores, name = "lcty_c") {
 	return page.evaluate(
 		({ version, stores, name }) =>
 			new Promise((resolve, reject) => {
@@ -159,7 +159,7 @@ async function forcedSyncResults(page, n) {
 // ---- Steps shared by the scenarios ----
 
 async function givenNoDatabase(page) {
-	await test.step('Given there is no database "lcty_v1_c"', async () => {
+	await test.step('Given there is no database "lcty_c"', async () => {
 		expect((await dbInfo(page)).exists).toBe(false);
 	});
 }
@@ -229,7 +229,7 @@ test("Reading before any sync finds no copy", async ({ page, context }) => {
 	await givenNoDatabase(page);
 	const result = await whenReadMetaDb(page);
 	await thenNoItemsAndStale(result);
-	await test.step('And there is still no database "lcty_v1_c"', async () => {
+	await test.step('And there is still no database "lcty_c"', async () => {
 		expect((await dbInfo(page)).exists).toBe(false);
 	});
 });
@@ -260,12 +260,12 @@ test("Reading leaves no connection open", async ({ page, context }) => {
 	await background(page, context);
 	await givenCMetaHolds(page, [conv("a")], 'the conversation "a"');
 	await whenReadMetaDb(page);
-	await test.step('Then the database "lcty_v1_c" can be opened at version 2 without being blocked', async () => {
+	await test.step('Then the database "lcty_c" can be opened at version 2 without being blocked', async () => {
 		const result = await page.evaluate(
 			() =>
 				new Promise((resolve) => {
 					let blocked = false;
-					const req = indexedDB.open("lcty_v1_c", 2);
+					const req = indexedDB.open("lcty_c", 2);
 					req.onblocked = () => {
 						blocked = true;
 					};

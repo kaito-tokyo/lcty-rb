@@ -6,10 +6,10 @@
  * Types and documentation for lcty.v1.c.worker.cjs (LCTYSP-0010, LCTYSP-0009). The worker keeps only short comments; its
  * documentation lives here.
  *
- * - Every asynchronous operation on the browser's copy of every conversation's meta (IndexedDB "lcty_v1_c", store
+ * - Every asynchronous operation on the browser's copy of every conversation's meta (IndexedDB "lcty_c", store
  *   "c_meta") runs in this worker. It is a classic worker script with no imports, started by js/api/meta-db.js and by
  *   lcty.v1.cjs as new Worker(…/lcty.v1/lcty.v1.c.worker.cjs); no module imports it.
- * - It is the only code that opens "lcty_v1_c": it alone defines the schema, and every connection is closed when the
+ * - It is the only code that opens "lcty_c": it alone defines the schema, and every connection is closed when the
  *   operation ends, so an upgrade is never blocked.
  * - It is an RPC server, like lcty.v1.t.worker.cjs, that runs as a Worker or as a SharedWorker alike: a top-level var sets
  *   the global onmessage (a Worker's) and onconnect (a SharedWorker's, which gives each port the same handler). A
@@ -19,12 +19,12 @@
  * - endpoint is the URL of the site's v1/, which the page knows (siteUrl("v1/")): every message carries it, so the
  *   worker does not depend on where it is served. It must be an absolute URL on the worker's origin ending with "/",
  *   since the copy is the origin's; otherwise the message is answered with an error, before any operation.
- * - The database's name carries the version of the files (lcty_v1_c for lcty.v1, LCTYSP-0009): the files of another
- *   version open a database of their own and never read, convert or delete this one.
+ * - The database's name is its resource's (lcty_c, as the server's lcty_c.sqlite, LCTYSP-0009 and LCTYSP-0015); what it
+ *   stores is versioned by DB_VERSION, and an upgrade drops the stores and recreates them empty.
  */
 
 /**
- * A row of the store "c_meta" of the database "lcty_v1_c" (key path "id"): a conversation's meta as GET /v1/meta-all.json
+ * A row of the store "c_meta" of the database "lcty_c" (key path "id"): a conversation's meta as GET /v1/meta-all.json
  * gives it, built by the server from each conversation file's "<!" meta lines (LCTYSP-0003). The database is at
  * DB_VERSION and has no other store: an upgrade drops every other store.
  */

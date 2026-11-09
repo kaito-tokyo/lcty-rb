@@ -7,17 +7,17 @@
  * lives here.
  *
  * - Every asynchronous operation on the tags in the browser runs in this worker: the browser's copy of GET /v1/tags
- *   (IndexedDB "lcty_v1_t", stores "t_full" and "t_set") and the requests that change the tags. It is a classic worker
+ *   (IndexedDB "lcty_t", stores "t_full" and "t_set") and the requests that change the tags. It is a classic worker
  *   script with no imports, started by js/api/lcty-t.js as new Worker(siteUrl("lcty.v1/lcty.v1.t.worker.cjs")); no
  *   module imports it.
- * - It is the only code that opens "lcty_v1_t": it alone defines the schema, and every connection is closed when the
+ * - It is the only code that opens "lcty_t": it alone defines the schema, and every connection is closed when the
  *   operation ends, so an upgrade is never blocked.
  * - It is an RPC server, like lcty.v1.c.worker.cjs, that runs as a Worker or as a SharedWorker alike: a {@link Request} is
  *   answered on the port it came from by a {@link Response}, and its endpoint is checked first (lcty.v1.c.worker.d.cts).
  * - put and addMemory sync afterwards, also when they failed (the server's set may have changed: a 412 or 404 means it
  *   did), so the caller reads the new set with get. A failure of that sync is not reported: the change itself is what
  *   the caller asked about, and the next sync fixes the copy.
- * - The database "lcty_v1_t" (at DB_VERSION) has two stores, both written and read in one transaction, so the rows and the
+ * - The database "lcty_t" (at DB_VERSION) has two stores, both written and read in one transaction, so the rows and the
  *   ETag are always one set: "t_full" (key path "file"), one {@link Tag} per row, in key order, which is file-name
  *   order and so the order of the tags; and "t_set" (out-of-line keys), one {@link TagSet} under the key "set". The
  *   copy is derived: an upgrade drops every store and recreates them empty, and the next get syncs.

@@ -12,7 +12,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
   payload} and gets back, on the same port, {id, result}, or {id, errorType} on a failure: "unknownOperation", "error"
   with the error and the status (the HTTP status or null), or "errorMessage" when the error cannot be posted. endpoint
   is the URL of the site's v1/: an absolute URL on the worker's origin ending with "/", or the message is an error
-  before any operation. The worker keeps the browser's copy of GET /v1/tags in the IndexedDB database "lcty_v1_t", which no
+  before any operation. The worker keeps the browser's copy of GET /v1/tags in the IndexedDB database "lcty_t", which no
   other code opens: one row per tag in the store "t_full", keyed by its file name, and the set's ETag as the record
   "set" {etag} in the store "t_set", both written in one transaction. "sync_full" replaces the copy, "get" reads it
   (syncing first when there is none), "put" sends PUT /v1/tags with the If-Match it is given and "addMemory" sends POST
@@ -27,28 +27,28 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     And every message to the worker has the endpoint "/v1/" on the page's origin, unless the scenario says otherwise
 
   Scenario: A sync stores the set with NFC file names and the ETag
-    Given there is no database "lcty_v1_t"
+    Given there is no database "lcty_t"
     And GET /v1/tags returns the tag "00010-café.html" with the name decomposed and the ETag "e1"
     When the worker is posted {"id": 1, "op": "sync_full"}
     Then it answers with no result
-    And the database "lcty_v1_t" is at version 2 with only the stores "t_full" and "t_set"
+    And the database "lcty_t" is at version 2 with only the stores "t_full" and "t_set"
     And "t_full" has one row per tag, keyed by its file name
     And "t_full" holds the tags ["00010-café.html"] composed and the ETag "e1"
 
   Scenario: A sync composes the name of an invalid tag, which comes from its file name
-    Given there is no database "lcty_v1_t"
+    Given there is no database "lcty_t"
     And GET /v1/tags returns the invalid tag "00010-café.html" named "café", both decomposed, and the tag "00020-cafe" U+0301 ".html" with the name decomposed
     When the worker is posted {"id": 1, "op": "sync_full"}
     Then "t_full" holds the invalid tag "00010-café.html" named "café", both composed, with invalid true
     And the other tag keeps its decomposed name
 
   Scenario: A database at version 1 is dropped and synced again
-    Given the database "lcty_v1_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"
+    Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"
     And GET /v1/tags returns the tags ["00010-b.html"] with the ETag "e2"
     When the worker is posted {"id": 1, "op": "get"}
     Then it answers the tags ["00010-b.html"] and the ETag "e2"
     And the requests sent are GET /v1/tags
-    And the database "lcty_v1_t" is at version 2 with only the stores "t_full" and "t_set"
+    And the database "lcty_t" is at version 2 with only the stores "t_full" and "t_set"
 
   Scenario: Getting answers the tags in the order of their file names
     Given "t_full" holds the tags ["00020-b.html", "00010-c.html", "00030-a.html"] and the ETag "e1"
@@ -56,7 +56,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     Then it answers the tags ["00010-c.html", "00020-b.html", "00030-a.html"] and the ETag "e1"
 
   Scenario: An empty set is a copy too
-    Given there is no database "lcty_v1_t"
+    Given there is no database "lcty_t"
     And GET /v1/tags returns the tags [] with the ETag "e1"
     When the worker is posted {"id": 1, "op": "sync_full"}
     And then a new worker is posted {"id": 2, "op": "get"}
@@ -71,7 +71,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     And "t_full" holds the tags ["00010-c.html"] and the ETag "e2"
 
   Scenario: Getting without a copy syncs first
-    Given there is no database "lcty_v1_t"
+    Given there is no database "lcty_t"
     And GET /v1/tags returns the tags ["00010-a.html"] with the ETag "e1"
     When the worker is posted {"id": 1, "op": "get"}
     Then it answers the tags ["00010-a.html"] and the ETag "e1"
@@ -121,7 +121,7 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     And "t_full" holds the tags ["00010-a.html"] and the ETag "e1"
 
   Scenario: A request that fails without an answer has no status
-    Given there is no database "lcty_v1_t"
+    Given there is no database "lcty_t"
     And GET /v1/tags fails without an answer
     When the worker is posted {"id": 1, "op": "get"}
     Then it answers an error with the status null
@@ -132,11 +132,11 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     And no request is sent
 
   Scenario: The worker closes its connection after the operation
-    Given there is no database "lcty_v1_t"
+    Given there is no database "lcty_t"
     And GET /v1/tags returns the tags ["00010-a.html"] with the ETag "e1"
     When the worker is posted {"id": 1, "op": "get"}
     Then it answers the tags ["00010-a.html"] and the ETag "e1"
-    And the database "lcty_v1_t" can be opened at version 3 without being blocked, while the worker is still alive
+    And the database "lcty_t" can be opened at version 3 without being blocked, while the worker is still alive
 
   # Playwright's routes do not catch the requests of a SharedWorker, so this scenario uses no request
   Scenario: A SharedWorker answers on the port the message came from

@@ -12,7 +12,7 @@ Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty.v1.c.wo
   payload} and gets back, on the same port, {id, result}, or {id, errorType} on a failure: "unknownOperation", "error"
   with the error and the status (the HTTP status or null), or "errorMessage" when the error cannot be posted. endpoint
   is the URL of the site's v1/: an absolute URL on the worker's origin ending with "/", or the message is an error
-  before any operation. The worker is the only code that opens the IndexedDB database "lcty_v1_c". "sync_meta"
+  before any operation. The worker is the only code that opens the IndexedDB database "lcty_c". "sync_meta"
   fetches GET /v1/meta-all.json, replaces the store "c_meta" with the list in one transaction, closes its connection
   and answers no result; when a step fails the copy is left as it was. "get" answers the copy newest first, or no
   items and stale true when there is none, without ever creating the database.
@@ -23,11 +23,11 @@ Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty.v1.c.wo
     And every message to the worker has the endpoint "/v1/" on the page's origin, unless the scenario says otherwise
 
   Scenario: A sync stores every conversation of the list
-    Given there is no database "lcty_v1_c"
+    Given there is no database "lcty_c"
     And GET /v1/meta-all.json returns the conversations "a" and "b"
     When the worker is posted {"id": 1, "op": "sync_meta"}
     Then it answers with no result
-    And the database "lcty_v1_c" is at version 1 with only the store "c_meta"
+    And the database "lcty_c" is at version 1 with only the store "c_meta"
     And "c_meta" holds exactly the conversations "a" and "b", as returned
 
   Scenario: A sync replaces the copy as a whole
@@ -45,11 +45,11 @@ Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty.v1.c.wo
     And "c_meta" is empty
 
   Scenario: The worker closes its connection after the sync
-    Given there is no database "lcty_v1_c"
+    Given there is no database "lcty_c"
     And GET /v1/meta-all.json returns the conversation "a"
     When the worker is posted {"id": 1, "op": "sync_meta"}
     Then it answers with no result
-    And the database "lcty_v1_c" can be opened at version 2 without being blocked, while the worker is still alive
+    And the database "lcty_c" can be opened at version 2 without being blocked, while the worker is still alive
 
   Scenario Outline: A failed sync leaves the copy as it was
     Given "c_meta" holds the conversations "a" and "b"
@@ -78,18 +78,18 @@ Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty.v1.c.wo
     And "c_meta" holds exactly the conversations "a" and "b"
 
   Scenario: A newer database is left alone
-    Given the database "lcty_v1_c" is at version 2 with the store "c_meta" holding the conversation "a"
+    Given the database "lcty_c" is at version 2 with the store "c_meta" holding the conversation "a"
     And GET /v1/meta-all.json returns the conversation "b"
     When the worker is posted {"id": 1, "op": "sync_meta"}
     Then it answers an error with the status null
-    And the database "lcty_v1_c" is still at version 2
+    And the database "lcty_c" is still at version 2
     And "c_meta" holds exactly the conversation "a"
 
   Scenario: Getting before any sync finds no copy
-    Given there is no database "lcty_v1_c"
+    Given there is no database "lcty_c"
     When the worker is posted {"id": 1, "op": "get"}
     Then it answers no items and stale true
-    And there is still no database "lcty_v1_c"
+    And there is still no database "lcty_c"
 
   Scenario: Getting returns the copy newest first
     Given "c_meta" holds the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00
@@ -119,7 +119,7 @@ Feature: LCTYSP-1001 The meta of every conversation in the browser: lcty.v1.c.wo
     And GET /v1/meta-all.json is not fetched
 
   Scenario: A sync fetches the list from the endpoint it is given
-    Given there is no database "lcty_v1_c"
+    Given there is no database "lcty_c"
     And GET /api/v1/meta-all.json returns the conversation "a"
     When the worker is posted {"id": 1, "op": "sync_meta"} with the endpoint "/api/v1/" on the page's origin
     Then it answers with no result

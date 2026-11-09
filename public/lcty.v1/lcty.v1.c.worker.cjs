@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// lcty.v1.c.worker.cjs: the browser's copy of every conversation's meta (IndexedDB "lcty_v1_c", LCTYSP-0010), an RPC
+// lcty.v1.c.worker.cjs: the browser's copy of every conversation's meta (IndexedDB "lcty_c", LCTYSP-0010), an RPC
 // server that runs as a Worker or as a SharedWorker. The messages, the database and why it works this way are in
 // lcty.v1.c.worker.d.cts.
 
 "use strict";
 
-const DB_NAME = "lcty_v1_c";
+const DB_NAME = "lcty_c";
 const DB_VERSION = 1; // raised when what is stored changes
 const STORE = "c_meta";
 

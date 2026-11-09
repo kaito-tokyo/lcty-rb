@@ -58,13 +58,13 @@ async function background(page, context) {
 
 // ---- The database, from the page ----
 
-/** The database "lcty_v1_t" as it is: {exists, version, stores, keyPath (of t_full), tags (the rows of t_full in key
+/** The database "lcty_t" as it is: {exists, version, stores, keyPath (of t_full), tags (the rows of t_full in key
  * order), etag (of the record "set" of t_set)}. Never creates it. */
 function readDb(page) {
 	return page.evaluate(
 		() =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty_v1_t");
+				const req = indexedDB.open("lcty_t");
 				req.onupgradeneeded = () => req.transaction.abort();
 				req.onerror = () =>
 					req.error?.name === "AbortError"
@@ -106,12 +106,12 @@ function readDb(page) {
 	);
 }
 
-/** "lcty_v1_t" at version 2, as the worker leaves it, holding the set {tags, etag}: the rows are put in the given order. */
+/** "lcty_t" at version 2, as the worker leaves it, holding the set {tags, etag}: the rows are put in the given order. */
 function seedSet(page, set) {
 	return page.evaluate(
 		(set) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty_v1_t", 2);
+				const req = indexedDB.open("lcty_t", 2);
 				req.onupgradeneeded = () => {
 					const rows = req.result.createObjectStore("t_full", {
 						keyPath: "file",
@@ -129,12 +129,12 @@ function seedSet(page, set) {
 	);
 }
 
-/** "lcty_v1_t" at version 1 as the worker before rows left it: t_full with out-of-line keys and one record "set". */
+/** "lcty_t" at version 1 as the worker before rows left it: t_full with out-of-line keys and one record "set". */
 function seedVersion1(page, set) {
 	return page.evaluate(
 		(set) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty_v1_t", 1);
+				const req = indexedDB.open("lcty_t", 1);
 				req.onupgradeneeded = () =>
 					req.result.createObjectStore("t_full").put(set, "set");
 				req.onsuccess = () => {
@@ -191,7 +191,7 @@ test.afterEach(async ({ page }) => {
 const list = (files) => JSON.stringify(files).replaceAll(",", ", ");
 
 async function givenNoDatabase(page) {
-	await test.step('Given there is no database "lcty_v1_t"', async () => {
+	await test.step('Given there is no database "lcty_t"', async () => {
 		expect((await readDb(page)).exists).toBe(false);
 	});
 }
@@ -255,7 +255,7 @@ async function thenTFullHolds(page, files, etag, composed = "") {
 }
 
 async function thenVersion2(page) {
-	await test.step('And the database "lcty_v1_t" is at version 2 with only the stores "t_full" and "t_set"', async () => {
+	await test.step('And the database "lcty_t" is at version 2 with only the stores "t_full" and "t_set"', async () => {
 		const db = await readDb(page);
 		expect(db.version).toBe(2);
 		expect(db.stores).toEqual(["t_full", "t_set"]);
@@ -340,7 +340,7 @@ test("A database at version 1 is dropped and synced again", async ({
 	context,
 }) => {
 	const server = await background(page, context);
-	await test.step('Given the database "lcty_v1_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"', () =>
+	await test.step('Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"', () =>
 		seedVersion1(page, { tags: [tag("00010-a.html")], etag: "e1" }));
 	await givenGetReturns(server, ["00010-b.html"], "e2");
 	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
@@ -586,12 +586,12 @@ test("The worker closes its connection after the operation", async ({
 		op: "get",
 	});
 	await thenAnswersTags(answer, ["00010-a.html"], "e1");
-	await test.step('And the database "lcty_v1_t" can be opened at version 3 without being blocked, while the worker is still alive', async () => {
+	await test.step('And the database "lcty_t" can be opened at version 3 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
 			() =>
 				new Promise((resolve) => {
 					let blocked = false;
-					const req = indexedDB.open("lcty_v1_t", 3);
+					const req = indexedDB.open("lcty_t", 3);
 					req.onblocked = () => {
 						blocked = true;
 					};
