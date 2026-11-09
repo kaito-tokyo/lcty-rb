@@ -21,6 +21,7 @@ Specifications of lcty-rb. Each spec describes the current design of one topic a
 | [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)   | Tags and memory                   | Accepted  |
 | [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) | Data directory and settings       | Accepted  |
 | [LCTYSP-0011](LCTYSP-0011_module-bundler.md)    | Module bundler                    | Withdrawn |
+| [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)      | RPC protocol                      | Draft     |
 
 ## Gherkin features
 

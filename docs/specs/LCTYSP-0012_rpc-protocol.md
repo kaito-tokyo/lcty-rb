@@ -1,0 +1,143 @@
+<!--
+SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# LCTYSP-0012: RPC protocol
+
+- Status: Draft (prototype at `/v1/rpc`; nothing uses it yet)
+- Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md) (the conversation file this protocol writes),
+  [LCTYSP-0006](LCTYSP-0006_http-api.md) (the HTTP API it is to replace for changes),
+  [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the browser's copies it keeps up to date)
+- Methods: [LCTYSP-0012_rpc-protocol.openrpc.yml](LCTYSP-0012_rpc-protocol.openrpc.yml) (OpenRPC, the source of the
+  method list)
+- Implementation: `lib/rpc/websocket.rb`, `lib/rpc/servlet.rb`, `lib/rpc/conv_store.rb`
+
+## Summary
+
+`/v1/rpc` is the one place where the data of the server changes and where every change is announced. Messages are
+JSON-RPC 2.0. A page keeps a WebSocket open to it: it sends requests and gets their responses, and the server sends a
+notification of every change to every connection that receives it, numbered by a global version. The same requests can
+also be sent one by one with `POST`, for tools and tests. Reading everything at once stays plain `GET`.
+
+The prototype writes conversations in the format of the [revision draft of
+LCTYSP-0003](LCTYSP-0003_conversation-file.md#revision-draft-lcty-msg) into a directory of its own, `c-next/` of the
+data directory, so it never touches the real conversations.
+
+## Transports
+
+- **WebSocket:** `GET /v1/rpc` with `Upgrade: websocket` opens a WebSocket (RFC 6455, version 13). Every message is
+  one text message holding one JSON-RPC message or one batch; a binary message closes the connection (1003). Both
+  sides may send at any time: the page sends requests, the server sends responses and notifications.
+- **POST:** `POST /v1/rpc` with `Content-Type: application/json` holds one request or one batch, and the response is
+  the JSON-RPC response (`200`), or `204` when nothing is to be answered (only notifications were sent). No
+  notification of other changes comes back this way.
+- **Anything else** at `/v1/rpc` is refused: a `GET` without `Upgrade` gets `426`, a `POST` of another type `415`.
+- **Origin.** A request whose `Origin` names another host and port than the request's `Host` is refused with `403`, for
+  the WebSocket handshake and for `POST` alike. A request without `Origin` is accepted: it does not come from a page,
+  and no page can make a browser send it. WebSocket is not covered by CORS, so without this check any page on the web
+  could write to the user's conversations through the user's browser. `POST` takes only `application/json` for the same
+  reason: a page of another site can send `text/plain` without asking the server first.
+- **Size.** One message, after its fragments are joined, is at most 64 MiB.
+- **Ping.** The server answers a ping with a pong. Keeping an idle connection alive is the page's choice.
+
+## Messages
+
+Every message follows [JSON-RPC 2.0](https://www.jsonrpc.org/specification):
+
+- A **request** is `{"jsonrpc": "2.0", "method", "params", "id"}`; `params` is an object. The response carries the same
+  `id`, with `result` or `error`.
+- A **notification** has no `id` and gets no response. The server sends its notifications this way.
+- A **batch** is an array of requests, answered by an array of responses (notifications left out). A batch is not
+  atomic: each request succeeds or fails on its own, in no promised order. Changes that must happen together are one
+  method, never a batch.
+- An **error** is `{"code", "message", "data"?}`. The codes JSON-RPC reserves are used as it defines them (`-32700`
+  parse error, `-32600` invalid request, `-32601` method not found, `-32602` invalid params, `-32603` internal
+  error). The errors of the application are small positive numbers, with details in `data`:
+  - `1` conflict: the last element is not the one the request names; `data.last` is the id of the last element (or
+    `null`).
+  - `2` locked: the last element is an `lcty-cmd`; `data.last` is its id.
+  - `3` invalid: the element breaks a rule of the format; `message` says which.
+  - `4` not found: there is no such conversation.
+  - `5` exists: the conversation already exists.
+
+## The global version
+
+Every change gets the next number of one version shared by all data: `"<boot>.<seq>"`. `<boot>` is new each time the
+server starts; `<seq>` counts the changes since. Changes are numbered and announced one at a time, so every connection
+sees the notifications in version order and with no gaps.
+
+- `initialize` returns the current version, and `POST /v1/rpc` returns it in the `Lcty-Version` header. (Every other
+  response of `/v1/` is to carry the header too: a page that reads everything with `GET` learns which version it read,
+  and listens from there.)
+- A page that sees another `<boot>` than the one it knew has missed changes it cannot get back (the server keeps no
+  history across a restart) and reads everything again.
+- The version says nothing about a single file. A page that needs to know whether its own copy of a file is current
+  asks for that (planned, see [Open points](#open-points)).
+
+## Both ends speak one protocol
+
+The page and the server are two ends of the same protocol: there are not methods "to the server" and methods "to the
+page", only methods, and either end may receive one. What each end receives is its capability, declared when the
+session starts.
+
+- **`initialize`** is the first request on a WebSocket. Its params carry the page's capabilities
+  (`{"capabilities": {"receives": [method names]}}`); its result carries the server's (`receives`, the methods the
+  server takes), with the protocol name and the global version.
+- **An end sends only what the other end declared it receives.** The server sends a page no notification before
+  `initialize`, and afterwards only those the page listed. A method the receiver did not declare is answered with
+  `-32601`. A page that wants no notifications (a worker that only reads, say) declares none.
+- **Capabilities are fixed for the session.** To change them, the page opens a new connection.
+- **`POST` has no session:** it may call the methods the server receives, and gets no notification.
+- **`rpc.discover`** returns the [OpenRPC](https://spec.open-rpc.org/) document of the protocol. Its source is
+  [LCTYSP-0012_rpc-protocol.openrpc.yml](LCTYSP-0012_rpc-protocol.openrpc.yml), YAML so that it can hold comments; the
+  server reads it at startup, and no JSON copy is kept in the repository. Every method, its params, its result and its
+  errors are defined there; `x-receiver` says which end usually receives it.
+
+## Methods
+
+The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this section gives the rules a list cannot.
+
+- **Conversations** (`c.create`, `c.append.*`, `c.unappend`) follow the two operations of the [revision draft of
+  LCTYSP-0003](LCTYSP-0003_conversation-file.md#writing): appending one element at the end and removing the last one.
+- **There is one append method per element:** `c.append.msg` (`lcty-msg`), `c.append.thinking` (`lcty-thinking`) and
+  `c.append.cmd` (`lcty-cmd`, the lock). The method names the element, so its params are only `cid`, `after`, `attrs`
+  (the attributes as an object, in their one order) and `innerHTML` (the presentation; none for `lcty-cmd`). `after`
+  names the last element as the page knows it (`null` before the first one). A new kind of element gets a method of its
+  own, so each one has its own rules and its own entry in a page's capabilities.
+- **Notifications** (`c.created`, `c.appended`, `c.unappended`) announce every change, the one the receiving page made
+  included, with the new `version` in their params. `c.appended` carries the element as written, as
+  `{tag, attrs, innerHTML}`. A page applies a notification only when its `after` (or `id`) matches what it holds;
+  otherwise it reads the conversation again.
+
+**Sending a request again is safe.** When a response is lost and the page sends the same `c.append.*` again, the second
+one fails with `1` and `data.last` is the id of the page's own element: the first one succeeded. An id is made by the
+page, so it knows its own.
+
+**A finished reply** is written by removing the `lcty-cmd` and then appending the elements one by one. Each step names
+the last id it expects, so a tab that acted in between makes the next step fail instead of mixing the two.
+
+## Reading everything
+
+Reading a whole store is not a method of `/v1/rpc` alone: it is also plain `GET`, so that a worker that keeps no
+WebSocket can read it (planned: `GET /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and
+the store of the browser's copy, [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the
+version they were read at, read before the data so that the data is at least that new. The page then listens from that
+version; a notification it already holds is recognised by its ids and ignored.
+
+## Open points
+
+- **Notifications carry whole elements.** A long reply is sent to every connection in full. Whether notifications
+  carry only ids, and pages fetch what they need, is undecided.
+- **The title.** Changing a title overwrites the slot in the middle of the file, which the last id cannot guard. Its
+  method and how it is guarded are undecided.
+- **`data-at`.** The prototype accepts any ISO 8601 time with an offset; whether one form (UTC with milliseconds, or
+  local time) is required is undecided.
+- **Conflict or locked first.** When the last element is an `lcty-cmd` and the request names another `after`, the
+  prototype answers `1`, not `2`. Which is checked first is undecided.
+- **Checking a page against the server** at `initialize` (the path of the page and the state of what it shows), so
+  that a page opened before a change knows it is stale.
+- **The methods of tags, settings and vectors**, the timings and usage kept in a database, and the full reads above.
+- **Many tabs.** Each tab keeps its own WebSocket; whether one connection is shared (a SharedWorker) is left until the
+  number of connections matters.

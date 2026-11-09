@@ -1,0 +1,249 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# -*- encoding: utf-8 -*-
+# /v1/rpc: JSON-RPC 2.0 (prototype). A WebSocket (GET with Upgrade) carries requests, their responses and the
+# notifications of every change; POST carries one request (or a batch) and its response, for curl and tests. Mounted at
+# /v1/rpc by lcty.rb.
+#
+# Every change gets the next number of the global version, "<boot id>.<seq>": the boot id is new at every start, so a
+# client that sees another one knows the server restarted and its history of notifications is gone.
+#
+# Both ends speak the same protocol. In initialize each end declares the methods it receives (capabilities.receives),
+# and a notification goes only to the connections that declared it. The methods are described in
+# docs/specs/LCTYSP-0012_rpc-protocol.openrpc.yml, read at startup and returned by rpc.discover.
+
+require 'json'
+require 'securerandom'
+require 'set'
+require 'uri'
+require 'webrick'
+require 'yaml'
+require_relative 'websocket'
+require_relative 'conv_store'
+
+module Lcty
+  module Rpc
+    PARSE_ERROR = -32_700
+    INVALID_REQUEST = -32_600
+    METHOD_NOT_FOUND = -32_601
+    INVALID_PARAMS = -32_602
+    INTERNAL_ERROR = -32_603
+
+    # The OpenRPC document of the protocol (the YAML is the source; rpc.discover answers it as JSON)
+    DOC_PATH = File.expand_path('../../docs/specs/LCTYSP-0012_rpc-protocol.openrpc.yml', __dir__)
+    DOC = YAML.safe_load(File.read(DOC_PATH)).freeze
+
+    # One open WebSocket and the methods its page receives (empty until initialize)
+    class Peer
+      attr_reader :conn
+      attr_accessor :receives
+
+      def initialize(conn)
+        @conn = conn
+        @receives = Set.new
+      end
+    end
+
+    # The open connections and the global version. A change runs inside commit, which numbers it and sends its
+    # notification to every connection that receives it before the next change starts, so notifications arrive in
+    # version order.
+    class Hub
+      def initialize
+        @boot = SecureRandom.hex(4)
+        @seq = 0
+        @conns = Set.new
+        @lock = Mutex.new
+      end
+
+      def version
+        @lock.synchronize { "#{@boot}.#{@seq}" }
+      end
+
+      def add(conn)
+        @lock.synchronize { @conns << conn }
+      end
+
+      def remove(conn)
+        @lock.synchronize { @conns.delete(conn) }
+      end
+
+      # Run the change (the block returns [method, params] of its notification) and notify every connection
+      def commit
+        @lock.synchronize do
+          method, params = yield
+          @seq += 1
+          version = "#{@boot}.#{@seq}"
+          msg = JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params.merge('version' => version))
+          @conns.each { |peer| peer.conn.send_text(msg) rescue nil if peer.receives.include?(method) }
+          version
+        end
+      end
+    end
+
+    HUB = Hub.new
+
+    # The methods the server receives: name => ->(params, peer) { result }. peer is nil for POST.
+    METHODS = {
+      'initialize' => lambda do |p, peer|
+        receives = p.dig('capabilities', 'receives') || []
+        unless receives.is_a?(Array) && receives.all? { |m| m.is_a?(String) }
+          raise Error.new(INVALID_PARAMS, 'capabilities.receives must be an array of method names')
+        end
+        peer.receives = Set.new(receives) if peer
+        { 'protocol' => 'lcty-rpc-prototype', 'version' => HUB.version,
+          'capabilities' => { 'receives' => METHODS.keys } }
+      end,
+
+      'rpc.discover' => ->(_p, _peer) { DOC },
+
+      'c.create' => lambda do |p, _peer|
+        cid = p['cid']
+        version = HUB.commit do
+          ConvStore.create(cid, created_at: p['createdAt'], title: p['title'], lang: p['lang'],
+                                title_max_size: p['titleMaxSize'], lcty_version: p['lctyVersion'])
+          ['c.created', { 'cid' => cid }]
+        end
+        { 'version' => version }
+      end,
+
+      # Append one element, one method per element: {cid, after, attrs, innerHTML} (no innerHTML for the lcty-cmd)
+      'c.append.msg' => ->(p, _peer) { Rpc.append(p, 'lcty-msg', p['innerHTML']) },
+      'c.append.thinking' => ->(p, _peer) { Rpc.append(p, 'lcty-thinking', p['innerHTML']) },
+      'c.append.cmd' => ->(p, _peer) { Rpc.append(p, 'lcty-cmd', '') },
+
+      # Remove the last element: {cid, id}
+      'c.unappend' => lambda do |p, _peer|
+        version = HUB.commit do
+          ConvStore.remove(p['cid'], p['id'])
+          ['c.unappended', { 'cid' => p['cid'], 'id' => p['id'] }]
+        end
+        { 'version' => version }
+      end,
+
+      'c.list' => lambda do |p, _peer|
+        { 'version' => HUB.version, 'elements' => ConvStore.list(p['cid']) }
+      end
+    }.freeze
+
+    module_function
+
+    # Append one element of tag after the element named, and announce it as c.appended with the element as written
+    def append(p, tag, inner)
+      attrs = nil
+      version = HUB.commit do
+        attrs = ConvStore.append(p['cid'], p['after'], tag, p['attrs'], inner)
+        ['c.appended', { 'cid' => p['cid'], 'after' => p['after'],
+                         'element' => { 'tag' => tag, 'attrs' => attrs, 'innerHTML' => inner.to_s } }]
+      end
+      { 'version' => version, 'attrs' => attrs }
+    end
+
+    # The response to one decoded request (a Hash), or nil for a notification
+    def call(req, peer = nil)
+      unless req.is_a?(Hash) && req['jsonrpc'] == '2.0' && req['method'].is_a?(String) &&
+             (!req.key?('params') || req['params'].is_a?(Hash))
+        return error_response(req.is_a?(Hash) ? req['id'] : nil, INVALID_REQUEST, 'invalid request')
+      end
+      notification = !req.key?('id')
+      fn = METHODS[req['method']]
+      result =
+        begin
+          raise Error.new(METHOD_NOT_FOUND, "method not found: #{req['method']}") unless fn
+          fn.call(req['params'] || {}, peer)
+        rescue Error => e
+          return notification ? nil : error_response(req['id'], e.code, e.message, e.data)
+        rescue StandardError => e
+          warn "rpc #{req['method']}: #{e.class}: #{e.message}"
+          return notification ? nil : error_response(req['id'], INTERNAL_ERROR, 'internal error')
+        end
+      notification ? nil : { 'jsonrpc' => '2.0', 'result' => result, 'id' => req['id'] }
+    end
+
+    # The response text to a message (a request or a batch), or nil when nothing is to be answered
+    def handle(text, peer = nil)
+      msg = begin
+        JSON.parse(text)
+      rescue JSON::ParserError
+        return JSON.generate(error_response(nil, PARSE_ERROR, 'parse error'))
+      end
+      if msg.is_a?(Array)
+        return JSON.generate(error_response(nil, INVALID_REQUEST, 'empty batch')) if msg.empty?
+        out = msg.map { |r| call(r, peer) }.compact
+        return out.empty? ? nil : JSON.generate(out)
+      end
+      (r = call(msg, peer)) && JSON.generate(r)
+    end
+
+    def error_response(id, code, message, data = nil)
+      err = { 'code' => code, 'message' => message }
+      err['data'] = data if data
+      { 'jsonrpc' => '2.0', 'error' => err, 'id' => id }
+    end
+
+    # Same origin, or no Origin at all (a client that is not a browser cannot be made to send this on a page's behalf)
+    def origin_ok?(req)
+      origin = req['origin']
+      return true if origin.nil?
+      uri = URI.parse(origin) rescue nil
+      return false unless uri&.host
+      "#{uri.host}:#{uri.port}" == host_port(req)
+    end
+
+    def host_port(req)
+      host = req['host'].to_s
+      host.include?(':') && !host.end_with?(']') ? host : "#{host}:#{req.port}"
+    end
+
+    class Servlet < WEBrick::HTTPServlet::AbstractServlet
+      def do_GET(req, res)
+        raise WEBrick::HTTPStatus::Forbidden, 'cross-origin' unless Rpc.origin_ok?(req)
+        unless WebSocket.upgrade?(req)
+          res.status = 426
+          res['Upgrade'] = 'websocket'
+          res.body = 'open a WebSocket, or POST a request'
+          return
+        end
+        conn = WebSocket.accept(req)
+        # The request was HTTP/1.1, so WEBrick would wait for another request on the socket (up to RequestTimeout)
+        # before closing it, and the client waits for that close: end the connection as soon as the WebSocket ends
+        res.keep_alive = false
+        peer = Peer.new(conn)
+        HUB.add(peer)
+        begin
+          while (msg = conn.read_message)
+            type, data = msg
+            next conn.close(1003) unless type == :text
+            out = Rpc.handle(data, peer)
+            conn.send_text(out) if out
+          end
+        rescue WebSocket::ProtocolError
+          conn.close(1002)
+        rescue IOError, SystemCallError
+          nil
+        ensure
+          HUB.remove(peer)
+          conn.close
+        end
+      end
+
+      # A request in the body. Only application/json, so that a page of another site cannot send it as a simple request.
+      def do_POST(req, res)
+        raise WEBrick::HTTPStatus::Forbidden, 'cross-origin' unless Rpc.origin_ok?(req)
+        unless req.content_type.to_s.split(';').first.to_s.strip.casecmp?('application/json')
+          raise WEBrick::HTTPStatus::UnsupportedMediaType, 'application/json only'
+        end
+        out = Rpc.handle(req.body.to_s.force_encoding(Encoding::UTF_8))
+        res['Cache-Control'] = 'no-store'
+        res['Lcty-Version'] = HUB.version
+        if out
+          res.content_type = 'application/json; charset=utf-8'
+          res.body = out
+        else
+          res.status = 204
+        end
+      end
+    end
+  end
+end
