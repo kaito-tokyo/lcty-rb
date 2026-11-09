@@ -9,6 +9,7 @@ require 'webrick'
 require 'json'
 require 'socket'
 require 'securerandom'
+require 'digest'
 require_relative '../store'
 require_relative 'vector_db'
 
@@ -74,19 +75,18 @@ module Chatty
           end
           return json(res, 200, VECTORS.put(model, revs, (req.body || '').b))
         when ['GET', 'vectors.eg2_264.dat'], ['GET', 'vectors.eg2_264.idx']
-          # The distribution files of the default embedding model (LCTYSP-0008), rewritten on request when stale. Both
-          # carry the same ETag (the pair's version), so the browser can tell a pair fetched across a rewrite; 304 if
-          # unchanged
-          dat_path, idx_path = VECTORS.export(V1.defaults['embedding_model'])
-          dat = File.stat(dat_path)
-          etag = %("#{dat.mtime.to_i}.#{dat.mtime.nsec}-#{dat.size}-#{File.size(idx_path)}")
+          # The distribution of the default embedding model (LCTYSP-0008), built in memory on every request and never
+          # stored. Both carry the same ETag, a digest of the pair, so the browser can tell a pair fetched across a
+          # change; 304 if unchanged
+          dat, idx = VECTORS.export(V1.defaults['embedding_model'])
+          etag = %("#{Digest::SHA256.hexdigest("#{dat.bytesize}:#{dat}#{idx}")[0, 32]}")
           res['ETag'] = etag
           if req['if-none-match'] == etag
             res.status = 304
             return
           end
           res['Content-Type'] = 'application/octet-stream'
-          res.body = File.binread(parts[0] == 'vectors.eg2_264.dat' ? dat_path : idx_path)
+          res.body = parts[0] == 'vectors.eg2_264.dat' ? dat : idx
           return
         when ['GET', 'tags']
           # Every tag file, with one ETag for the set (LCTYSP-0009)

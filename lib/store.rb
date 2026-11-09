@@ -316,8 +316,8 @@ module Chatty
 
   end
 
-  # At startup: open the stores (TAG_FILES, TAGS, INDEX, VECTORS), sync the index with the files and garbage-collect
-  # vectors.
+  # At startup: open the stores (TAG_FILES, TAGS, INDEX, VECTORS), sync the index with the files, garbage-collect
+  # vectors and delete the cache files of the former layout.
   def self.open_data
     FileUtils.mkdir_p(CONV_DIR)
     const_set(:TAG_FILES, TagFiles.new(TAG_DIR, TAG_LOCK_PATH))

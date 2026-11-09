@@ -100,40 +100,30 @@ class VectorDBTest < Lcty::Scenarios
     v.map { |x| x / n }.pack('e*') + ("\0" * 32).b
   end
 
-  def dat_path
-    File.join(@dir, '_vectors.eg2_264.dat')
-  end
-
-  def idx_path
-    File.join(@dir, '_vectors.eg2_264.idx')
+  # Build the distribution of the model, kept for dat and idx_ids
+  def export(model = 'm')
+    @dat, @idx = @vdb.export(model)
   end
 
   def dat
-    File.binread(dat_path)
+    @dat
   end
 
   def idx_ids
-    File.binread(idx_path).scan(/.{16}/m).map { |b| Uuid.from_bytes(b) }
-  end
-
-  # Read the vector DB file of the model with a connection of its own
-  def vector_file(model)
-    db = SQLite3::Database.new(File.join(@dir, "_vectors.#{model}.sqlite"))
-    yield db
-  ensure
-    db.close if db
+    @idx.scan(/.{16}/m).map { |b| Uuid.from_bytes(b) }
   end
 
   def stored(model, id)
-    vector_file(model) { |db| db.execute('SELECT vec FROM vectors WHERE msg_id = ? ORDER BY part', [id]).map(&:first) }
+    @index.db.execute('SELECT vec FROM vectors WHERE model = ? AND msg_id = ? ORDER BY part', [model, id]).map(&:first)
   end
 
   def stored_ids(model)
-    vector_file(model) { |db| db.execute('SELECT DISTINCT msg_id FROM vectors ORDER BY msg_id').map(&:first) }
+    @index.db.execute('SELECT DISTINCT msg_id FROM vectors WHERE model = ? ORDER BY msg_id', [model]).map(&:first)
   end
 
-  def vector_db_files
-    Dir.glob(File.join(@dir, '_vectors.*.sqlite'))
+  # The files of the data directory that are not the search index (_index.sqlite and its WAL)
+  def other_files
+    Dir.children(@dir).reject { |f| f.start_with?('_index.sqlite') }.sort
   end
 
   # The error the block raises (nil when it raises none)
@@ -207,12 +197,10 @@ class VectorDBTest < Lcty::Scenarios
     end
     step('Then the round is not pending for the model "a"') { assert_equal [], pending_ids('a') }
     step('But it is pending for the model "b"') { assert_equal [round['id']], pending_ids('b') }
-    step('And the data directory has the files _vectors.a.sqlite and _vectors.b.sqlite') do
-      assert_equal %w[_vectors.a.sqlite _vectors.b.sqlite], vector_db_files.map { |f| File.basename(f) }.sort
-    end
+    step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
   end
 
-  scenario 'More models than SQLite can attach at once are all served' do
+  scenario 'Many models are all served' do
     round = nil
     pendings = {}
     step('Given a round with a vector registered for the model "m0"') do
@@ -282,7 +270,7 @@ class VectorDBTest < Lcty::Scenarios
       assert_equal 1, put_round(round, [unit(3), unit(4)])['accepted']
     end
     step('Then the exported rows are those of C and D, in that order') do
-      @vdb.export('m')
+      export
       assert_equal row_of(unit(3)) + row_of(unit(4)), dat
       assert_equal [round['id'], round['id']], idx_ids
     end
@@ -355,10 +343,7 @@ class VectorDBTest < Lcty::Scenarios
       step("Then it raises an HttpError 400 saying \"invalid model name: #{label}\"") do
         assert_http_error(400, "invalid model name: #{model.inspect}", error)
       end
-      step('And no vector DB file is made') do
-        assert_equal [], vector_db_files
-        assert_equal [], Dir.glob(File.join(File.dirname(@dir), '_vectors.m.sqlite*')) if model == '../m'
-      end
+      step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
     end
   end
 
@@ -391,7 +376,7 @@ class VectorDBTest < Lcty::Scenarios
       round = add_round
       put_round(round, [(Array.new(256, 2.0) + Array.new(512, 1.0)).pack('e*')])
     end
-    step('When VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
+    step('When VectorDB#export builds the distribution of the model "m"') { export }
     step('Then the row of the round is 256 values of 1/16') do
       assert_equal ROW, dat.bytesize
       dat[0, 1024].unpack('e*').each { |x| assert_in_delta 1.0 / 16, x, 1e-7 }
@@ -401,32 +386,29 @@ class VectorDBTest < Lcty::Scenarios
 
   # ---- export ----
 
-  scenario 'Export writes the rows and the ids of the valid vectors' do
-    short = long = paths = nil
+  scenario 'Export builds the rows and the ids of the valid vectors' do
+    short = long = nil
     step('Given a round of 11:00 with one part and a round of 10:00 with two parts, all with vectors of the model "m"') do
       short = add_round('11:00')
       long = add_round('10:00', user: LONG_USER, reply: LONG_REPLY)
       put_round(short, [unit(1)])
       put_round(long, [unit(2), unit(3)])
     end
-    step('When VectorDB#export writes the distribution files of the model "m"') { paths = @vdb.export('m') }
-    step('Then it returns the paths _vectors.eg2_264.dat and _vectors.eg2_264.idx in the data directory') do
-      assert_equal [dat_path, idx_path], paths
-    end
-    step('And the .dat file has 3 rows of 1,056 bytes and the .idx file 3 ids of 16 bytes') do
-      assert_equal 3 * ROW, File.size(dat_path)
-      assert_equal 3 * 16, File.size(idx_path)
+    step('When VectorDB#export builds the distribution of the model "m"') { export }
+    step('Then the .dat has 3 rows of 1,056 bytes and the .idx 3 ids of 16 bytes') do
+      assert_equal 3 * ROW, dat.bytesize
+      assert_equal 3 * 16, @idx.bytesize
     end
     step('And the rows are the two parts of the 10:00 round, then the 11:00 round') do
       assert_equal row_of(unit(2)) + row_of(unit(3)) + row_of(unit(1)), dat
       assert_equal [long['id'], long['id'], short['id']], idx_ids
     end
-    step('And no temporary file is left') { assert_equal [], Dir.glob(File.join(@dir, '*.tmp-*')) }
+    step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
   end
 
-  scenario 'Export of a model without vectors writes empty files' do
-    step('When VectorDB#export writes the distribution files of the model "empty"') { @vdb.export('empty') }
-    step('Then both files are empty') { assert_equal [0, 0], [File.size(dat_path), File.size(idx_path)] }
+  scenario 'Export of a model without vectors is empty' do
+    step('When VectorDB#export builds the distribution of the model "empty"') { export('empty') }
+    step('Then both are empty') { assert_equal [0, 0], [dat.bytesize, @idx.bytesize] }
   end
 
   scenario 'Export leaves out the vectors of a changed round' do
@@ -437,90 +419,41 @@ class VectorDBTest < Lcty::Scenarios
       put_round(rounds[1], [unit(2)])
     end
     step('When the text of the first round changes') { change_round(rounds[0], user: 'edited question') }
-    step('And VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
+    step('And VectorDB#export builds the distribution of the model "m"') { export }
     step('Then only the second round has a row') do
       assert_equal row_of(unit(2)), dat
       assert_equal [rounds[1]['id']], idx_ids
     end
   end
 
-  scenario 'Export reuses the files until the vectors change' do
+  scenario 'Export builds the distribution anew on every call' do
     rounds = nil
-    step('Given two rounds, the first with a vector of the model "m", and the exported files') do
+    step('Given two rounds, the first with a vector of the model "m", and its distribution') do
       rounds = [add_round('10:00'), add_round('11:00')]
       put_round(rounds[0], [unit(1)])
-      @vdb.export('m')
+      export
     end
-    step('When the .dat file is overwritten with "x"') { File.binwrite(dat_path, 'x') }
-    step('And VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
-    step('Then the .dat file is still "x"') { assert_equal 'x', dat }
     step('When VectorDB#put registers a vector for the second round') { put_round(rounds[1], [unit(2)]) }
-    step('And VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
-    step('Then the .dat file has the rows of both rounds') do
+    step('And VectorDB#export builds the distribution of the model "m"') { export }
+    step('Then the .dat has the rows of both rounds') do
       assert_equal row_of(unit(1)) + row_of(unit(2)), dat
       assert_equal rounds.map { |r| r['id'] }, idx_ids
     end
   end
 
-  scenario 'Export rewrites the files when the rounds change' do
+  scenario 'Export of another model holds only its own vectors' do
     round = nil
-    step('Given a round with a vector of the model "m" and its exported files') do
+    step('Given a round with a vector of the model "m"') do
       round = add_round
       put_round(round)
-      @vdb.export('m')
     end
-    step('When the .dat file is overwritten with "x"') { File.binwrite(dat_path, 'x') }
-    step('And a new round is added to the search index') { add_round('12:00') }
-    step('And VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
-    step('Then the .dat file has the row of the round again') do
+    step('When VectorDB#export builds the distribution of the model "other", which has no vectors') { export('other') }
+    step('Then both are empty') { assert_equal [0, 0], [dat.bytesize, @idx.bytesize] }
+    step('When VectorDB#export builds the distribution of the model "m"') { export }
+    step('Then the .dat has the row of the round') do
       assert_equal row_of(unit), dat
       assert_equal [round['id']], idx_ids
     end
-  end
-
-  scenario 'Export rewrites the files for another model' do
-    round = nil
-    step('Given a round with a vector of the model "m" and its exported files') do
-      round = add_round
-      put_round(round)
-      @vdb.export('m')
-    end
-    step('When VectorDB#export writes the distribution files of the model "other", which has no vectors') do
-      @vdb.export('other')
-    end
-    step('Then both files are empty') { assert_equal [0, 0], [File.size(dat_path), File.size(idx_path)] }
-    step('When VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
-    step('Then the .dat file has the row of the round again') do
-      assert_equal row_of(unit), dat
-      assert_equal [round['id']], idx_ids
-    end
-  end
-
-  scenario 'Export rewrites the files when one is missing' do
-    round = nil
-    step('Given a round with a vector of the model "m" and its exported files') do
-      round = add_round
-      put_round(round)
-      @vdb.export('m')
-    end
-    step('When the .idx file is deleted') { File.delete(idx_path) }
-    step('And VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
-    step('Then both files are there with the row and the id of the round') do
-      assert_equal row_of(unit), dat
-      assert_equal [round['id']], idx_ids
-    end
-  end
-
-  scenario 'Export removes the former distribution files' do
-    former = nil
-    step('Given the vector DB of the model "m" in the data directory') { @vdb.pending('m', 1) }
-    step('And the files _vectors.m.256.rows, _vectors.m.256.ids and _vectors.m.256.bin beside it') do
-      former = %w[rows ids bin].map { |ext| File.join(@dir, "_vectors.m.256.#{ext}") }
-      former.each { |f| File.binwrite(f, 'old') }
-    end
-    step('When VectorDB#export writes the distribution files of the model "m"') { @vdb.export('m') }
-    step('Then those three files are gone') { assert_equal [false] * 3, former.map { |f| File.exist?(f) } }
-    step('And the vector DB _vectors.m.sqlite is kept') { assert File.exist?(File.join(@dir, '_vectors.m.sqlite')) }
   end
 
   # ---- garbage collection ----
@@ -536,8 +469,8 @@ class VectorDBTest < Lcty::Scenarios
     step('Then the round is pending again') { assert_equal [round['id']], pending_ids }
     step('When the text changes back') { change_round(round, user: original) }
     step('Then the round is not pending') { assert_equal [], pending_ids }
-    step('And VectorDB#export writes its row') do
-      @vdb.export('m')
+    step('And VectorDB#export builds its row') do
+      export
       assert_equal row_of(unit), dat
     end
   end
@@ -553,11 +486,11 @@ class VectorDBTest < Lcty::Scenarios
       delete_round(rounds[1])
     end
     step('And VectorDB#gc collects the model "m"') { _, err = capture_io { n = @vdb.gc('m') } }
-    step('Then it returns 2 and warns "gc: removed 2 stale vectors from _vectors.m.sqlite"') do
+    step('Then it returns 2 and warns "gc: removed 2 stale vectors of the model m"') do
       assert_equal 2, n
-      assert_equal "gc: removed 2 stale vectors from _vectors.m.sqlite\n", err
+      assert_equal "gc: removed 2 stale vectors of the model m\n", err
     end
-    step('And only the vector of the third round is left in _vectors.m.sqlite') do
+    step('And only the vector of the third round is left for the model "m"') do
       assert_equal [rounds[2]['id']], stored_ids('m')
     end
   end
@@ -580,11 +513,11 @@ class VectorDBTest < Lcty::Scenarios
       n = nil
       step("When VectorDB#gc collects the model #{label}") { n = @vdb.gc(model) }
       step('Then it returns 0') { assert_equal 0, n }
-      step('And no vector DB file is made') { assert_equal [], vector_db_files }
+      step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
     end
   end
 
-  scenario 'Garbage collection at startup collects every vector DB of the directory' do
+  scenario 'Garbage collection at startup collects every model' do
     rounds = index = vdb = nil
     step('Given two rounds with vectors of the models "a" and "b"') do
       rounds = [add_round('10:00'), add_round('11:00')]
@@ -596,28 +529,22 @@ class VectorDBTest < Lcty::Scenarios
     end
     step('When the first round is deleted') { delete_round(rounds[0], index: index) }
     step('And VectorDB#gc_all collects the data directory') { capture_io { vdb.gc_all } }
-    step('Then _vectors.a.sqlite and _vectors.b.sqlite keep only the vectors of the second round') do
+    step('Then the models "a" and "b" keep only the vectors of the second round') do
       assert_equal [rounds[1]['id']], stored_ids('a')
       assert_equal [rounds[1]['id']], stored_ids('b')
     end
   end
 
-  scenario 'A vector DB of another schema version is rebuilt' do
-    round = result = nil
-    step('Given a file _vectors.m.sqlite whose user_version is 0 and whose vectors table has other columns') do
-      vector_file('m') do |db|
-        db.execute('CREATE TABLE vectors (msg_id TEXT, old BLOB)')
-        db.execute("INSERT INTO vectors VALUES ('x', x'00')")
-      end
+  scenario 'Garbage collection at startup deletes the cache files of the former layout' do
+    former = nil
+    step('Given the files _vectors.m.sqlite, _vectors.m.sqlite-wal, _vectors.eg2_264.dat, _vectors.eg2_264.idx and _vectors.m.256.bin in the data directory') do
+      former = %w[_vectors.m.sqlite _vectors.m.sqlite-wal _vectors.eg2_264.dat _vectors.eg2_264.idx _vectors.m.256.bin]
+      former.each { |f| File.binwrite(File.join(@dir, f), 'old') }
     end
-    step('And a round without vectors') { round = add_round }
-    step('When VectorDB#pending lists the rounds of the model "m" up to 16') { result = @vdb.pending('m', 16) }
-    step('Then the round is pending') { assert_equal [round['id']], result.map { |r| r['id'] } }
-    step('When VectorDB#put registers a vector for it with its rev') { result = put_round(round) }
-    step('Then it returns 1 accepted and no stale ids') { assert_equal({ 'accepted' => 1, 'stale' => [] }, result) }
-    step("And the file's user_version is 1") do
-      assert_equal 1, vector_file('m') { |db| db.get_first_value('PRAGMA user_version') }
-      assert_equal [round['id']], stored_ids('m')
+    step('When VectorDB#gc_all collects the data directory') { @vdb.gc_all }
+    step('Then those files are gone and the data directory holds no file but _index.sqlite') do
+      assert_equal [], other_files
+      assert File.exist?(File.join(@dir, '_index.sqlite'))
     end
   end
 end

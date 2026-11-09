@@ -22,11 +22,13 @@ the browser scans with hand-written WebAssembly SIMD.
 - **Vector binary**: the exchange format for registration (`lctyvLE0`, PUT body, 768 dims).
 - **Distribution files**: what the server serves, 256 dims, for the default embedding model: `vectors.eg2_264.dat` (the
   rows: 256 × Float32 LE + 32 zero bytes each, the kernel's row layout) and `vectors.eg2_264.idx` (16 bytes per row, the
-  UUIDv7 message id, in the same order), at `/v1/vectors.eg2_264.dat` and `/v1/vectors.eg2_264.idx`; derived data in `data/` (`_vectors.eg2_264.dat`, `_vectors.eg2_264.idx`).
+  UUIDv7 message id, in the same order), at `/v1/vectors.eg2_264.dat` and `/v1/vectors.eg2_264.idx`. They are built in
+  memory from the vector DB on every request and never written to disk.
   The name says what the rows are: `eg2` the embedding model (embeddinggemma-2, the default), `264` the row layout of
   the kernel `bdot264` (256 floats and 32 B of padding). A different default model or row layout gets a new name.
-- **Vector DB**: the persistent format in SQLite, `data/_vectors.<model>.sqlite` per embedding model (derived data). Only
-  the server reads and writes it.
+- **Vector DB**: the persistent format in SQLite, the table `vectors` of `data/_index.sqlite` (derived data, like every
+  cache that may be lost: [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#data-directory)). Only the server reads and
+  writes it.
 
 ## Record format
 
@@ -59,15 +61,17 @@ A record is 32 + size bytes (3,104 for registration), a multiple of 16.
 
 ## Vector DB
 
-- One file per embedding model, `data/_vectors.<model>.sqlite`, ATTACHed to `_index.sqlite` so it can be joined with the
-  rounds. Model names become file names and may contain only `[A-Za-z0-9._-]`.
+- One table of `_index.sqlite`, the search index's file, for every embedding model, so it is joined with the rounds on
+  the same connection. A row names its model; model names may contain only `[A-Za-z0-9._-]` (at most 80 characters).
+  The table follows the index's schema version: when that changes, it is dropped with the rest and the browser embeds
+  again.
 
 ```sql
 CREATE TABLE vectors (
-  msg_id TEXT NOT NULL, part INTEGER NOT NULL, rev TEXT NOT NULL,
-  vec BLOB NOT NULL,      -- 768 dims, Float32, L2-normalized (source of truth)
+  model TEXT NOT NULL, msg_id TEXT NOT NULL, part INTEGER NOT NULL, rev TEXT NOT NULL,
+  vec BLOB NOT NULL,      -- 768 dims, Float32, L2-normalized (as registered)
   vec256 BLOB NOT NULL,   -- the first 256 dims of vec, L2-renormalized (derived uniquely from vec)
-  PRIMARY KEY (msg_id, part));
+  PRIMARY KEY (model, msg_id, part));
 ```
 
 - `vec256` is computed at registration, so building the distribution files only concatenates rows. Truncation relies on
@@ -107,14 +111,14 @@ CREATE TABLE vectors (
     1,056 × that.
 - Every valid vector is included, joined with the
   current rounds on `msg_id`, `part` and `rev`.
-- The files are rewritten as a whole (temporary files, then `rename`, the ids first) on the next request after vectors
-  or rounds change (and when the server has just started).
-  There are no incremental fetches (no `Range`): **full sync only.** Deletions and replacements show up in the rewritten
-  files, so no list of invalidated ids is needed.
-- **Both files carry the same `ETag`**, the pair's version (`vectors.eg2_264.dat`'s modification time and both sizes),
-  and nothing that gives them a freshness lifetime (no `Cache-Control`, no `Last-Modified`), so the browser revalidates
-  every time and gets 304 when nothing changed. The worker fetches
-  the two at once; when their `ETag`s differ (a rewrite between the two requests) it fetches the pair again. Storage on
+- **The files are built in memory on every request** from the vector DB and never stored: a cache file of its own
+  would break the rule that every cache is a table of `_index.sqlite`
+  ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md#data-directory)). There are no incremental fetches (no `Range`):
+  **full sync only.** Deletions and replacements show up in the next build, so no list of invalidated ids is needed.
+- **Both files carry the same `ETag`**, the pair's version (a SHA-256 digest of the two as built), and nothing that
+  gives them a freshness lifetime (no `Cache-Control`, no `Last-Modified`), so the browser revalidates every time and
+  gets 304 when nothing changed. The worker fetches the two at once; when their `ETag`s differ (a change between the two
+  requests) it fetches the pair again. Storage on
   the browser side is left to the HTTP cache; when the `ETag` is unchanged the files are not read again.
 - **The browser uses only what the server serves.** It never appends vectors it PUT itself.
 
