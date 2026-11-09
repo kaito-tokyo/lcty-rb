@@ -533,7 +533,7 @@ class RpcTest < Lcty::Scenarios
     step('When c.list is called') { r = rpc('c.list')['result'] }
     step('Then the items hold both with their cid, lang, title and updatedAt') do
       assert_match(/\A\h+\.\d+\z/, r['version'])
-      items = r['items'].select { |m| [c1, c2].include?(m['cid']) }.sort_by { |m| m['cid'] }
+      items = r['items'].select { |m| [c1, c2].include?(m['cid']) }.sort_by { |m| [c1, c2].index(m['cid']) }
       assert_equal [[c1, 'ja', 'one'], [c2, 'en', 'two']], items.map { |m| [m['cid'], m['lang'], m['title']] }
       assert(items.all? { |m| m['updatedAt'].match?(/\A\d{4}-\d\d-\d\dT/) })
     end
