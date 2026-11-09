@@ -211,8 +211,16 @@ come; the sections above record the current format. Open points are listed at th
 - **Lines are independent.** Every element is one line, and a line is checked on its own. The order of the lines has
   a canonical form (below), but it is not validated when writing, since that would mean reading the file; a reader
   makes the best of a file whose lines are out of order.
-- **A file changes only at its end.** Lines are appended at the end, and undoing removes lines from the end; the title
-  slot is still overwritten in place. Nothing in the middle of a file is ever rewritten.
+- **A file changes only at its end, one line at a time.** The only operations on the elements are appending one
+  element at the end and removing the last one ([Writing](#writing)); the title slot is still overwritten in place.
+  Nothing in the middle of a file is ever rewritten.
+- **The file does not hold the tags of a conversation.** Which tags a conversation has is kept only in the tag
+  database ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)); pages read them from the browser's copy of it. The
+  `data-tag` of a `system` or `memory` only records where that snapshot came from.
+- **No forks.** Copying a conversation creates a new one with every id assigned anew, so the same id never appears in
+  two files and a copied message needs no mark.
+- **One user.** The system is personal: there is only ever one user, possibly with several tabs. Where tabs disagree,
+  the page asks the user.
 
 ### Example
 
@@ -230,7 +238,8 @@ come; the sections above record the current format. Open points are listed at th
 <lcty-msg data-role="model" id="msg-m-…" data-at="2026-11-05T10:10:37+09:00" data-content-integrity="sha384-…" data-content="ブラウザのクライアントサイド…"><article><p>ブラウザのクライアントサイド…</p></article></lcty-msg>
 ```
 
-Lines 1 to 4 keep the head of today's format. Every line from line 5 on is one of the elements below.
+Lines 1 to 4 keep the head of today's format, except that `lcty-c` no longer has `data-setup-tags`. Every line from
+line 5 on is one of the elements below.
 
 ### `lcty-msg`
 
@@ -242,7 +251,8 @@ Lines 1 to 4 keep the head of today's format. Every line from line 5 on is one o
   - `model`: a reply of the model.
 - **`system` and `memory` are a snapshot taken when the conversation is created.** They are written before the first
   `user` and are not added later: changing the tags of a conversation affects the next conversation, not this one.
-  `data-created-at` of `lcty-c` is their time.
+  `data-created-at` of `lcty-c` is their time. Their `data-tag` is where they came from, not the tags of the
+  conversation (which the tag database holds); the tags at creation can be read back from them by reading the file.
 - **`id`** is a prefix from the role followed by a UUIDv7: `sys-` (system), `mem-` (memory), `msg-u-` (user) and
   `msg-m-` (model). The server rejects an id whose prefix does not match `data-role`.
 - **`data-at`** is when a `user` or `model` message was written.
@@ -270,7 +280,7 @@ Built from the file in order, element by element, by the element's name (Respons
 - `system` and `memory`: their texts joined by `"\n\n"`, in file order, are `instructions`. Nothing else is added.
 - `user`: `{role: "user", content}`.
 - `model`: `{type: "message", role: "assistant", content}`; a reply with an empty text is not sent.
-- `lcty-thinking`, `lcty-cmd`: not sent.
+- `lcty-thinking`, `lcty-cmd` (and its children): not sent.
 - `lcty-tool`: sent only within the current turn (after the last `user`), so that the model can use the results of its
   calls; never for earlier turns. Past turns are therefore exactly the `lcty-msg` elements.
 
@@ -280,40 +290,63 @@ The model's thinking for a reply, written before the `model` it belongs to. It h
 `data-at`, `data-content-integrity` and `data-content` (or `data-content-base64`), in that order, and an `<article>`
 rendered like a reply. It is never sent back to the model.
 
-### `lcty-tool` and `lcty-cmd`
+### `lcty-cmd`
 
-Both are recorded alongside the messages and are designed later; only their names are fixed now.
+`lcty-cmd` marks that something is being built in the conversation: a reply being generated, a tool being called. It
+works as a lock held by the file.
 
-- `lcty-tool` records a tool call and its result. Its form depends on the API and the model (how a call is shaped,
-  who assigns its id, how parallel calls are ordered), so it is a record for the environment that produced it rather
-  than a portable form. It is sent only as described above.
-- `lcty-cmd` records a command. **Its children are never written to the file:** while it runs, what it produces
-  (a message being generated, a call being made) is shown as its children, and only the finished elements are written,
-  as lines of their own.
+- **It is only ever the last element, and there is at most one.** While the last element is an `lcty-cmd`, nothing
+  can be appended; the only operation allowed is removing that `lcty-cmd`. An `lcty-cmd` can be appended only when the
+  last element is not one. Both rules are checked on the last line alone.
+- **It holds what is being built as its children, and its children are never written to the file.** A message being
+  generated (an `lcty-msg` among them) is shown inside it. When the work is done, the page removes the `lcty-cmd` and
+  appends the finished elements one by one.
+- **Attributes:** `id` (`cmd-` and a UUIDv7), `data-op` (the operation), `data-at`, and `data-error` when the work
+  failed. A failed `lcty-cmd` stays as the last element with `data-error` until it is removed; the rest of how a failure
+  is recorded is left to the page.
+- **A lock nobody holds** (its page was closed or crashed) is found when a page sees an `lcty-cmd` it did not start
+  as the last element. The page asks the user whether to run it again or remove it.
+- Its other contents are designed later.
+
+### `lcty-tool`
+
+`lcty-tool` records a tool call and its result; it is designed later, and only its name is fixed now. Its form depends
+on the API and the model (how a call is shaped, who assigns its id, how parallel calls are ordered), so it is a record
+for the environment that produced it rather than a portable form. It is sent only as described above.
 
 ### Writing
 
-The client sends elements as JSON, one object per element: `{attrs, innerHTML}`, where `attrs` holds the attributes in
-the order above and `innerHTML` the presentation. `lcty-msg` (and `lcty-thinking`) and `lcty-cmd` are written by
-separate operations of the API.
+The client sends an element as JSON, `{attrs, innerHTML}`, where `attrs` holds the attributes in the order above and
+`innerHTML` the presentation (empty for `lcty-cmd`). Apart from creating a file and overwriting the title slot, there
+are only two operations:
 
-- **Creating** writes lines 1 to 4 and the first elements in one write, and fails when the file exists.
-- **Appending** names `after`, the id of the element the new ones follow. The server appends only when the last
-  element of the file has that id, and otherwise rejects the request with the id it found. Two tabs appending at once
-  cannot both succeed, and a request sent again after it succeeded is recognised: the last id is then the client's own.
-- **Undoing** names the first element to remove and the id of the last element of the file. The server checks the
-  last id like an append, then truncates the file at the start of that element's line. Only lines at the end are ever
-  removed.
+- **Appending one element.** The request names `after`, the id of the last element as the page knows it. The server
+  appends only when the last element of the file has that id, and otherwise rejects the request with the id it found.
+- **Removing the last element.** The request names the id of the element to remove. The server removes it only when
+  it is the last element of the file, by truncating the file at the start of its line, and otherwise rejects the
+  request with the id it found.
+
+Everything else is a sequence of these. Creating a conversation writes lines 1 to 4 (and fails when the file exists),
+then appends the first elements one by one; finishing a reply removes the `lcty-cmd` and appends the results; undoing
+removes elements from the end one by one. Two tabs acting at once cannot both succeed, and a request sent again after
+it succeeded is recognised (the last id is then the page's own). A sequence interrupted halfway leaves a file that is
+still read as well as it can be.
+
 - **Not in the file:** the timings, the token usage and which client and model produced a reply are kept in a database
   keyed by the message id, not in the file.
 
+### Moving existing files
+
+Existing files are converted once to this format. `lcty-setup` becomes a `system` `lcty-msg` without `data-tag`;
+messages with `data-role` `user` and `assistant` become `user` and `model`; `data-thinking` becomes an `lcty-thinking`
+before its reply; `data-timings`, `data-usage` and `data-client` move to the database; `data-inherited` and
+`data-setup-tags` are dropped; `div.user-text` becomes `<article>`; `data-content-integrity` is computed. The ids get
+the new prefixes, and links to the old ids (`#c-msg-…`) are not kept.
+
 ### Open points
 
-- How a stopped or failed reply is recorded (today `data-status="incomplete"` and `data-error`); probably with
-  `lcty-cmd`.
-- Whether messages copied from the fork source keep a mark (today `data-inherited`).
-- The tags at creation (today `data-setup-tags` on line 4), which the list of conversations reads from the head lines.
-- The forms of `lcty-tool` and `lcty-cmd`.
+- The forms of `lcty-tool`, and the contents of `lcty-cmd` beyond the attributes above.
+- How a stopped reply is recorded beyond `data-error`, and how an `incomplete` reply of today is converted.
 - The hash that identifies the state of a conversation (for checking a page against the server), decided once this
   format is stable.
 - How an export looks (headings for the roles, how the text of `user` is quoted, separators).
