@@ -13,7 +13,8 @@ SPDX-License-Identifier: Apache-2.0
 - Methods: [LCTYSP-0012_rpc-protocol.openrpc.yml](LCTYSP-0012_rpc-protocol.openrpc.yml) (OpenRPC, the source of the
   method list)
 - Implementation: `lib/rpc/websocket.rb`, `lib/rpc/servlet.rb`, `lib/rpc/conv_store.rb`; tested by
-  [LCTYSP-3020](LCTYSP-3020_rpc.feature)
+  [LCTYSP-3020](LCTYSP-3020_rpc.feature) (each method) and [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature) (several pages
+  at once)
 
 ## Summary
 

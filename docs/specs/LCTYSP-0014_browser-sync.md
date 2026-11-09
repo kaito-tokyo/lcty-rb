@@ -13,7 +13,8 @@ SPDX-License-Identifier: Apache-2.0
   [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file),
   [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) and [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the copies and
   their workers)
-- Implementation: none yet
+- Implementation: none yet; what the pages rely on from the server is tested by
+  [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)
 
 ## Summary
 
