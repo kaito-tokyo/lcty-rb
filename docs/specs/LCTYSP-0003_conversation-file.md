@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0003: Conversation file
 
-- Status: Accepted
+- Status: Accepted; revision drafted ([Revision draft: `lcty-msg`](#revision-draft-lcty-msg), not implemented)
 - Related: [LCTYSP-0004](LCTYSP-0004_editing.md), [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md)
 - Implementation: `lib/conv_html.rb`, `lib/store.rb`
 
@@ -189,3 +189,132 @@ character references. They are handled by the kind of value:
 - When reading, `Nokogiri::XML::DocumentFragment.parse` (recovery mode) is used. If it reports errors (a write that was
   interrupted), the last element is dropped with a warning.
 - Ruby 2.6 ships nokogiri 1.13.8 with libxml2 2.9.13.
+
+## Revision draft: `lcty-msg`
+
+Status: draft, not implemented. Where this section disagrees with the sections above, this section is the design to
+come; the sections above record the current format. Open points are listed at the end.
+
+### Principles
+
+- **`lcty-msg` is the core of a conversation.** Joining the `data-content` of every `lcty-msg` in file order (the
+  value of `data-content-base64` decoded, where that is written), separated by `"\n\n"`, always reads as the
+  conversation. The same elements, and only they, are what the history sent to the model is built from and what a
+  Markdown export contains: `lcty-msg` defines the boundary of all three.
+- **Everything else is incidental.** `lcty-thinking`, `lcty-tool` and `lcty-cmd` record what happened around the
+  messages (thoughts, tool calls, commands). They are never part of the joined text or of an export, and may depend on
+  the model, the backend or the page that wrote them. The element name alone tells which kind a line is.
+- **Fat client, thin server.** The client builds every element: its attributes, its text and its rendered
+  presentation. The server checks what it receives and writes it, or rejects the whole request (nothing of it is
+  written); it never completes or corrects an element. Two exceptions: the title, which the server fits into the slot
+  (as today), and `data-content-integrity`, which the server computes when the client sends the placeholder.
+- **Lines are independent.** Every element is one line, and a line is checked on its own. The order of the lines has
+  a canonical form (below), but it is not validated when writing, since that would mean reading the file; a reader
+  makes the best of a file whose lines are out of order.
+- **A file changes only at its end.** Lines are appended at the end, and undoing removes lines from the end; the title
+  slot is still overwritten in place. Nothing in the middle of a file is ever rewritten.
+
+### Example
+
+```html
+<!DOCTYPE html><html lang="ja" />
+<head>…(line 2 as today)…</head>
+<title id="__512">IndexedDBとlocalStorageの違い</title><!--…<!---->
+<lcty-c id="c-20261105-100824-d3ad" data-created-at="2026-11-05T10:08:24+09:00" />
+<lcty-msg data-role="system" id="sys-…" data-template="thinking" data-content-integrity="sha384-…" data-content="たくさん考えて"><article><p>たくさん考えて</p></article></lcty-msg>
+<lcty-msg data-role="system" id="sys-…" data-tag="Ruby" data-content-integrity="sha384-…" data-content="あなたは Ruby に詳しいプログラマーです。"><article><p>あなたは Ruby に詳しいプログラマーです。</p></article></lcty-msg>
+<lcty-msg data-role="memory" id="mem-…" data-tag="Ruby" data-content-integrity="sha384-…" data-content="ユーザーは macOS 付属の Ruby 2.6 を使っている"><article><p>ユーザーは macOS 付属の Ruby 2.6 を使っている</p></article></lcty-msg>
+<lcty-msg data-role="system" id="sys-…" data-content-integrity="sha384-…" data-content="今回はフィボナッチ数列"><article><p>今回はフィボナッチ数列</p></article></lcty-msg>
+<lcty-msg data-role="user" id="msg-u-…" data-at="2026-11-05T10:09:51+09:00" data-content-integrity="sha384-…" data-content="ブラウザの IndexedDB と localStorage の違いは？"><article>ブラウザの IndexedDB と localStorage の違いは？</article></lcty-msg>
+<lcty-thinking id="think-…" data-at="2026-11-05T10:09:51+09:00" data-content-integrity="sha384-…" data-content="思考です"><article><p>思考です</p></article></lcty-thinking>
+<lcty-msg data-role="model" id="msg-m-…" data-at="2026-11-05T10:10:37+09:00" data-content-integrity="sha384-…" data-content="ブラウザのクライアントサイド…"><article><p>ブラウザのクライアントサイド…</p></article></lcty-msg>
+```
+
+Lines 1 to 4 keep the head of today's format. Every line from line 5 on is one of the elements below.
+
+### `lcty-msg`
+
+- **`data-role`** is one of `system`, `memory`, `user` and `model`.
+  - `system`: an instruction to the model. `data-template` names the template it came from; `data-tag` names the tag it
+    came from; one without either is the instruction of this conversation.
+  - `memory`: a memory of a tag (`data-tag`).
+  - `user`: a message of the user.
+  - `model`: a reply of the model.
+- **`system` and `memory` are a snapshot taken when the conversation is created.** They are written before the first
+  `user` and are not added later: changing the tags of a conversation affects the next conversation, not this one.
+  `data-created-at` of `lcty-c` is their time.
+- **`id`** is a prefix from the role followed by a UUIDv7: `sys-` (system), `mem-` (memory), `msg-u-` (user) and
+  `msg-m-` (model). The server rejects an id whose prefix does not match `data-role`.
+- **`data-at`** is when a `user` or `model` message was written.
+- **`data-content`** is the text, kept byte for byte. A text holding characters XML cannot represent is written as
+  `data-content-base64` instead (the rule of [Characters XML cannot represent](#characters-xml-cannot-represent));
+  exactly one of the two is written, and the client chooses it by that rule.
+- **`data-content-integrity`** is `sha384-` followed by the base64 (with padding) of the SHA-384 of the UTF-8 bytes of
+  the text, as in Subresource Integrity. It is there to find format errors (an attribute written or read wrongly, a
+  file edited by hand); it is not checked when writing. Checking it is left to whoever needs it: a check at startup, a
+  script, the tests. A mismatch is reported as a format error and does not stop the file from being read. The client
+  may send the placeholder `sha384-` (no digest), and the server then computes the value and writes it.
+- **Attributes come in one order:** `data-role`, `id`, `data-at`, `data-template`, `data-tag`,
+  `data-content-integrity`, then `data-content` or `data-content-base64`. An attribute that does not apply is left out.
+  The server rejects attributes in any other order and never reorders them.
+- **The child is one `<article>`,** the presentation, rendered by the client: the text as it is for `user` (shown with
+  its newlines kept), and the HTML rendered from Markdown for the other roles. The server rejects an `<article>` that
+  holds anything outside the [presentation allowlist](#presentation-allowlist), and for `user` one that holds anything
+  but the text. The attribute is the source of truth; the presentation is for reading the file without scripts.
+
+### The history sent to the model
+
+Built from the file in order, element by element, by the element's name (Responses API,
+[LCTYSP-0002](LCTYSP-0002_llm-backend.md)):
+
+- `system` and `memory`: their texts joined by `"\n\n"`, in file order, are `instructions`. Nothing else is added.
+- `user`: `{role: "user", content}`.
+- `model`: `{type: "message", role: "assistant", content}`; a reply with an empty text is not sent.
+- `lcty-thinking`, `lcty-cmd`: not sent.
+- `lcty-tool`: sent only within the current turn (after the last `user`), so that the model can use the results of its
+  calls; never for earlier turns. Past turns are therefore exactly the `lcty-msg` elements.
+
+### `lcty-thinking`
+
+The model's thinking for a reply, written before the `model` it belongs to. It has `id` (`think-` and a UUIDv7),
+`data-at`, `data-content-integrity` and `data-content` (or `data-content-base64`), in that order, and an `<article>`
+rendered like a reply. It is never sent back to the model.
+
+### `lcty-tool` and `lcty-cmd`
+
+Both are recorded alongside the messages and are designed later; only their names are fixed now.
+
+- `lcty-tool` records a tool call and its result. Its form depends on the API and the model (how a call is shaped,
+  who assigns its id, how parallel calls are ordered), so it is a record for the environment that produced it rather
+  than a portable form. It is sent only as described above.
+- `lcty-cmd` records a command. **Its children are never written to the file:** while it runs, what it produces
+  (a message being generated, a call being made) is shown as its children, and only the finished elements are written,
+  as lines of their own.
+
+### Writing
+
+The client sends elements as JSON, one object per element: `{attrs, innerHTML}`, where `attrs` holds the attributes in
+the order above and `innerHTML` the presentation. `lcty-msg` (and `lcty-thinking`) and `lcty-cmd` are written by
+separate operations of the API.
+
+- **Creating** writes lines 1 to 4 and the first elements in one write, and fails when the file exists.
+- **Appending** names `after`, the id of the element the new ones follow. The server appends only when the last
+  element of the file has that id, and otherwise rejects the request with the id it found. Two tabs appending at once
+  cannot both succeed, and a request sent again after it succeeded is recognised: the last id is then the client's own.
+- **Undoing** names the first element to remove and the id of the last element of the file. The server checks the
+  last id like an append, then truncates the file at the start of that element's line. Only lines at the end are ever
+  removed.
+- **Not in the file:** the timings, the token usage and which client and model produced a reply are kept in a database
+  keyed by the message id, not in the file.
+
+### Open points
+
+- How a stopped or failed reply is recorded (today `data-status="incomplete"` and `data-error`); probably with
+  `lcty-cmd`.
+- Whether messages copied from the fork source keep a mark (today `data-inherited`).
+- The tags at creation (today `data-setup-tags` on line 4), which the list of conversations reads from the head lines.
+- The forms of `lcty-tool` and `lcty-cmd`.
+- The hash that identifies the state of a conversation (for checking a page against the server), decided once this
+  format is stable.
+- How an export looks (headings for the roles, how the text of `user` is quoted, separators).
+- How `system` and `memory` are shown on the page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
