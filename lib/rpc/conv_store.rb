@@ -151,6 +151,12 @@ module Lcty
         Rpc.index.record_count(cid)
       end
 
+      # Every cached count, as rows of c_recordcount in the browser: [{cid, count}], ordered by cid. A conversation the
+      # cache has no count for is not among them (its count is unknown).
+      def list_record_counts
+        Rpc.index.record_counts.map { |cid, count| { 'cid' => cid, 'count' => count } }
+      end
+
       # At startup: fill the cache with the count of every conversation, replacing what it held. The names come from the
       # file system in the encoding of DIR (binary when it comes from an environment variable with no locale), and the
       # sqlite3 gem binds a binary string as a BLOB, which never equals the TEXT of a cid, so they are made UTF-8 (an id

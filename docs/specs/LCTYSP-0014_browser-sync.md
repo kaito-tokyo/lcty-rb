@@ -126,7 +126,9 @@ still open (they are closed by `versionchange` and read again when reloaded). Ev
 When the connection is open and `initialize` has answered:
 
 1. **The list:** `c.list` answers the meta of every conversation with its version; the worker of `lcty_c` replaces
-   `c_meta` with it under the rule above. The sidebar shows the list from `c_meta`.
+   `c_meta` with it under the rule above. The sidebar shows the list from `c_meta`. `c.recordcount.list` answers every
+   cached count with its version in the same way, and the worker replaces `c_recordcount` with it; a conversation it
+   does not list has no number in the sidebar.
 2. **The conversation shown** (the conversation page only): `c.subscribe` with its `cid` and the id of the last element
    in the document. When the answer is not `current`, the conversation is [out of sync](#out-of-sync); when it is,
    nothing was missed since the file was loaded, and the notifications of the conversation follow from the version
@@ -173,8 +175,6 @@ is not the page's own resend.
 ## Open points
 
 - **The store of the conversations' tags in `lcty_t`:** its name and rows, and the RPC methods that fill it.
-- **Reading every `c_recordcount`:** changes come as `c.batch.updated` records; the method that reads them all at
-  start (with `c.list`, or one of its own) is undecided.
 - **Tags, settings and vectors** have no RPC methods yet, so `lcty_t` keeps its sync of today until they do.
 - **Protecting the user's data before the reload:** what the user has in the page and the server does not (an unsent
   message in the composer, say) must not be lost when the user reloads an out-of-sync page; how it is kept is to be

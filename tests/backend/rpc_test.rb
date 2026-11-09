@@ -383,6 +383,33 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
+  scenario 'c.recordcount.list returns every cached count with the version' do
+    empty = two = gone = r = nil
+    step('Given a conversation with no element, one with two, and one with a system message whose cached count is removed') do
+      empty = create
+      two = create
+      s = sys_attrs
+      append(two, nil, s)
+      append(two, s['id'], user_attrs)
+      gone = create
+      append(gone, nil, sys_attrs)
+      Rpc.index.db.execute('DELETE FROM c_recordcount WHERE cid = ?', [gone])
+    end
+    step('When c.recordcount.list is called') { r = rpc('c.recordcount.list')['result'] }
+    step('Then the items are rows of only cid and count, ordered by cid, with 0 and 2 for the first two') do
+      assert_match(/\A\h+\.\d+\z/, r['version'])
+      assert(r['items'].all? { |i| i.keys == %w[cid count] })
+      cids = r['items'].map { |i| i['cid'] }
+      assert_equal cids.sort, cids
+      counts = r['items'].map { |i| [i['cid'], i['count']] }.to_h
+      assert_equal [0, 2], [counts[empty], counts[two]]
+    end
+    step('And the conversation whose count is not cached is not among them') do
+      refute(r['items'].any? { |i| i['cid'] == gone })
+    end
+    step('And the version is that of the last change') { assert_equal rpc('initialize', 'capabilities' => { 'receives' => [] })['result']['version'], r['version'] }
+  end
+
   scenario 'A notification names the actor that made the change' do
     cid = a = b = me = nil
     step('Given two pages following a conversation') do

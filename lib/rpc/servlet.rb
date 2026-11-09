@@ -274,6 +274,13 @@ module Lcty
         { 'version' => version, 'items' => items }
       end,
 
+      # Every cached count of elements, the rows of c_recordcount: what a page reads to fill it, or again after
+      # reconnecting. Read under the lock, as c.list, since a change writes its count before its version is given.
+      'c.recordcount.list' => lambda do |_p, _peer|
+        items, version = HUB.read { ConvStore.list_record_counts }
+        { 'version' => version, 'items' => items }
+      end,
+
       # Change the title: {cid, title}. The server fits it into the slot; the result is the title as written.
       'c.update.title' => lambda do |p, peer|
         title = nil
