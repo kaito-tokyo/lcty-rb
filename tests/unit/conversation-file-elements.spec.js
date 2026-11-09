@@ -167,12 +167,12 @@ const meta = (id, day, extra = {}) => ({
 	...extra,
 });
 
-/** Create the database "lcty_c" at version 1 with c_meta holding items, as lcty.v1.c.worker.cjs leaves it. */
+/** Create the database "lcty_v1_c" at version 1 with c_meta holding items, as lcty.v1.c.worker.cjs leaves it. */
 function seedCMeta(page, items) {
 	return page.evaluate(
 		(items) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty_c", 1);
+				const req = indexedDB.open("lcty_v1_c", 1);
 				req.onupgradeneeded = () => {
 					const store = req.result.createObjectStore("c_meta", {
 						keyPath: "id",
@@ -193,7 +193,7 @@ function databaseExists(page) {
 	return page.evaluate(
 		() =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty_c");
+				const req = indexedDB.open("lcty_v1_c");
 				req.onupgradeneeded = () => req.transaction.abort();
 				req.onerror = () =>
 					req.error?.name === "AbortError" ? resolve(false) : reject(req.error);
@@ -1936,7 +1936,7 @@ test("The sidebar's list is filled from IndexedDB", async ({
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given the database "lcty_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta"', () =>
+	await test.step('Given the database "lcty_v1_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta"', () =>
 		seedCMeta(page, [
 			meta("a", "01", { tags_hint: ["ruby"], messages_hint: 4 }),
 			meta("b", "03"),
@@ -1966,11 +1966,11 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given "t_full" of the database "lcty_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"', () =>
+	await test.step('Given "t_full" of the database "lcty_v1_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"', () =>
 		page.evaluate(
 			() =>
 				new Promise((resolve, reject) => {
-					const req = indexedDB.open("lcty_t", 2); // the schema of lcty.v1.t.worker.cjs
+					const req = indexedDB.open("lcty_v1_t", 2); // the schema of lcty.v1.t.worker.cjs
 					req.onupgradeneeded = () => {
 						const rows = req.result.createObjectStore("t_full", {
 							keyPath: "file",
@@ -2004,7 +2004,7 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 
 test("The sidebar never creates the database", async ({ page, context }) => {
 	await background(page, context);
-	await test.step('Given there is no database "lcty_c"', async () => {
+	await test.step('Given there is no database "lcty_v1_c"', async () => {
 		expect(await databaseExists(page)).toBe(false);
 	});
 	await whenSidebarPut(page);
@@ -2017,7 +2017,7 @@ test("The sidebar never creates the database", async ({ page, context }) => {
 			),
 		).toBe(0);
 	});
-	await test.step('And there is still no database "lcty_c"', async () => {
+	await test.step('And there is still no database "lcty_v1_c"', async () => {
 		expect(await databaseExists(page)).toBe(false);
 	});
 });

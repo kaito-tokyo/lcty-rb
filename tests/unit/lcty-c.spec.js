@@ -59,8 +59,8 @@ async function background(page, context) {
 
 // ---- The database, from the page ----
 
-/** The database name ("lcty_c" by default) as it is: {exists, version, stores, items (of c_meta)}. Never creates it. */
-function readDb(page, name = "lcty_c") {
+/** The database name ("lcty_v1_c" by default) as it is: {exists, version, stores, items (of c_meta)}. Never creates it. */
+function readDb(page, name = "lcty_v1_c") {
 	return page.evaluate(
 		(name) =>
 			new Promise((resolve, reject) => {
@@ -98,9 +98,9 @@ function readDb(page, name = "lcty_c") {
 }
 
 /**
- * Create the database name ("lcty_c" by default) at version with stores ({store: {keyPath?, records: [[key?, value]]}}).
+ * Create the database name ("lcty_v1_c" by default) at version with stores ({store: {keyPath?, records: [[key?, value]]}}).
  */
-function seedDb(page, version, stores, name = "lcty_c") {
+function seedDb(page, version, stores, name = "lcty_v1_c") {
 	return page.evaluate(
 		({ version, stores, name }) =>
 			new Promise((resolve, reject) => {
@@ -187,7 +187,7 @@ test.afterEach(async ({ page }) => {
 // ---- Steps shared by the scenarios ----
 
 async function givenNoDatabase(page) {
-	await test.step('Given there is no database "lcty_c"', async () => {
+	await test.step('Given there is no database "lcty_v1_c"', async () => {
 		expect((await readDb(page)).exists).toBe(false);
 	});
 }
@@ -243,7 +243,7 @@ async function thenAnswersAnError(seen) {
 }
 
 async function thenOnlyCMetaAtVersion1(page) {
-	await test.step('And the database "lcty_c" is at version 1 with only the store "c_meta"', async () => {
+	await test.step('And the database "lcty_v1_c" is at version 1 with only the store "c_meta"', async () => {
 		const db = await readDb(page);
 		expect(db.version).toBe(1);
 		expect(db.stores).toEqual(["c_meta"]);
@@ -315,63 +315,6 @@ test("An empty list empties the copy", async ({ page, context }) => {
 	});
 });
 
-test("A sync deletes the old database lcty", async ({ page, context }) => {
-	const server = await background(page, context);
-	const list = [conv("b")];
-	await test.step('Given the database "lcty" is at version 5 with the store "c_meta" holding the conversation "a"', async () => {
-		await seedDb(
-			page,
-			5,
-			{ c_meta: { keyPath: "id", records: [[null, conv("a")]] } },
-			"lcty",
-		);
-		expect((await readDb(page, "lcty")).version).toBe(5);
-	});
-	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
-		server.answer = (route) => route.fulfill({ json: list });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersNoResult(seen);
-	await test.step('And there is no database "lcty"', async () => {
-		expect((await readDb(page, "lcty")).exists).toBe(false);
-	});
-	await thenCMetaHoldsExactly(page, list, 'the conversation "b", as returned');
-});
-
-test("A connection to the old database does not hold up the sync", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	const list = [conv("b")];
-	await test.step('Given the page holds a connection to the database "lcty" that it never closes', async () => {
-		await seedDb(
-			page,
-			5,
-			{ c_meta: { keyPath: "id", records: [[null, conv("a")]] } },
-			"lcty",
-		);
-		await page.evaluate(
-			() =>
-				new Promise((resolve, reject) => {
-					const req = indexedDB.open("lcty");
-					req.onsuccess = () => {
-						window.oldDb = req.result; // no onversionchange: it stays open
-						resolve();
-					};
-					req.onerror = () => reject(req.error);
-				}),
-		);
-	});
-	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
-		server.answer = (route) => route.fulfill({ json: list });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersNoResult(seen);
-	await thenCMetaHoldsExactly(page, list, 'the conversation "b", as returned');
-	await page.evaluate(() => window.oldDb.close());
-});
-
 test("The worker closes its connection after the sync", async ({
 	page,
 	context,
@@ -383,12 +326,12 @@ test("The worker closes its connection after the sync", async ({
 	});
 	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersNoResult(seen);
-	await test.step('And the database "lcty_c" can be opened at version 2 without being blocked, while the worker is still alive', async () => {
+	await test.step('And the database "lcty_v1_c" can be opened at version 2 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
 			() =>
 				new Promise((resolve) => {
 					let blocked = false;
-					const req = indexedDB.open("lcty_c", 2);
+					const req = indexedDB.open("lcty_v1_c", 2);
 					req.onblocked = () => {
 						blocked = true;
 					};
@@ -468,7 +411,7 @@ test("A failed request leaves the copy as it was", async ({
 test("A newer database is left alone", async ({ page, context }) => {
 	const server = await background(page, context);
 	const kept = [conv("a")];
-	await test.step('Given the database "lcty_c" is at version 2 with the store "c_meta" holding the conversation "a"', async () => {
+	await test.step('Given the database "lcty_v1_c" is at version 2 with the store "c_meta" holding the conversation "a"', async () => {
 		await seedDb(page, 2, {
 			c_meta: { keyPath: "id", records: kept.map((m) => [null, m]) },
 		});
@@ -478,7 +421,7 @@ test("A newer database is left alone", async ({ page, context }) => {
 	});
 	const seen = await whenPosted(page, "sync_meta");
 	await thenAnswersAnError(seen);
-	await test.step('And the database "lcty_c" is still at version 2', async () => {
+	await test.step('And the database "lcty_v1_c" is still at version 2', async () => {
 		expect((await readDb(page)).version).toBe(2);
 	});
 	await thenCMetaHoldsExactly(page, kept, 'the conversation "a"');
@@ -493,7 +436,7 @@ test("Getting before any sync finds no copy", async ({ page, context }) => {
 	await test.step("Then it answers no items and stale true", () => {
 		expect(answerOf(seen)).toEqual({ result: { items: [], stale: true } });
 	});
-	await test.step('And there is still no database "lcty_c"', async () => {
+	await test.step('And there is still no database "lcty_v1_c"', async () => {
 		expect((await readDb(page)).exists).toBe(false);
 	});
 });

@@ -39,7 +39,7 @@ the version they were last brought to, so that an older answer never overwrites 
 
 ## The version of a copy
 
-- **Each database records the version it holds:** `lcty_c` and `lcty_t` get a store `sync` with one row,
+- **Each database records the version it holds:** `lcty_v1_c` and `lcty_v1_t` get a store `sync` with one row,
   `{boot, seq}`, the global version (`<boot>.<seq>`, [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md#the-global-version)) of
   the last data written into the database.
 - **A write is applied only when it is newer, in the same transaction:** the worker opens one read-write transaction
@@ -58,7 +58,7 @@ the version they were last brought to, so that an older answer never overwrites 
 
 When the connection is open and `initialize` has answered:
 
-1. **The list:** `c.list` answers the meta of every conversation with its version; the worker of `lcty_c` replaces
+1. **The list:** `c.list` answers the meta of every conversation with its version; the worker of `lcty_v1_c` replaces
    `c_meta` with it under the rule above. The sidebar shows the list from `c_meta`.
 2. **The conversation shown** (the conversation page only): `c.subscribe` with its `cid` and the id of the last element
    in the document. When the answer is not `current`, the page reloads the conversation file; when it is, nothing was
@@ -93,7 +93,7 @@ When the connection is open and `initialize` has answered:
   tags and the number of messages (`tags_hint`, `messages_hint`) from the search index. Whether the sidebar keeps them,
   and where the tags of conversations come from in the browser (the tag database is their source of truth), is
   undecided.
-- **Tags, settings and vectors** have no RPC methods yet, so `lcty_t` keeps its sync of today until they do.
-- **The upgrade of the databases** for the store `sync` (a new version of `lcty_c` and `lcty_t`).
+- **Tags, settings and vectors** have no RPC methods yet, so `lcty_v1_t` keeps its sync of today until they do.
+- **The upgrade of the databases** for the store `sync` (a new version of `lcty_v1_c` and `lcty_v1_t`).
 - **Reloading the conversation** when the page is stale: whether a whole reload of the page, or the elements read again
   and replaced in place.
