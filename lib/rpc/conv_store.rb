@@ -93,30 +93,41 @@ module Lcty
       end
 
       # Append one element after the element whose id is after (nil: the file has no element yet). Returns the
-      # attributes written (with the integrity filled in when the placeholder was sent).
+      # attributes written (with the integrity filled in when the placeholder was sent) and the number of elements the
+      # file holds now, counted while it is still locked.
       def append(cid, after, tag, attrs, inner)
         attrs = check(tag, attrs, inner)
         line = build(tag, attrs, inner)
-        locked(cid) do |f|
+        count = locked(cid) do |f|
           last = last_element(f)
           raise Error.new(CONFLICT, 'the last element is not the one named', 'last' => last && last[:id]) if last&.dig(:id) != after
           raise Error.new(LOCKED, 'the conversation is locked by an lcty-cmd', 'last' => last[:id]) if last && last[:tag] == 'lcty-cmd'
           f.seek(0, IO::SEEK_END)
           f.write(line + "\n")
           f.flush
+          record_count(f)
         end
-        attrs
+        [attrs, count]
       end
 
-      # Remove the last element, which must have the id given
+      # Remove the last element, which must have the id given. Returns the number of elements the file holds now.
       def remove(cid, id)
         locked(cid) do |f|
           last = last_element(f)
           raise Error.new(CONFLICT, 'the last element is not the one named', 'last' => last && last[:id]) if last.nil? || last[:id] != id
           f.truncate(last[:offset])
           f.flush
+          record_count(f)
         end
-        nil
+      end
+
+      # The number of elements of an open file, every one but lcty-c (LCTYSP-0014): each element is one line and line 4
+      # is the last of the head, so it is the number of lines less 4. Only lines are counted; nothing is parsed.
+      def record_count(f)
+        f.rewind
+        n = 0
+        f.each_line { n += 1 }
+        n - HEAD_LINES
       end
 
       # What the list of conversations shows of one, the row of c_meta in the browser (LCTYSP-0014): {cid, lang, title,

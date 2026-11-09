@@ -125,22 +125,27 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   (the attributes as an object, in their one order) and `innerHTML` (the presentation; none for `lcty-cmd`). `after`
   names the last element as the page knows it (`null` before the first one). A new kind of element gets a method of its
   own, so each one has its own rules and its own entry in a page's capabilities.
-- **Notifications** (`c.created`, `c.appended`, `c.unappended`) announce every change, the one the receiving page made
-  included, with the new `version` and the `actorId` of the change in their params. `c.appended` carries the element
-  as written, as `{tag, attrs, innerHTML}`. A page applies a notification only when its `after` (or `id`) matches what
-  it holds; otherwise it reads the conversation again.
+- **One notification, `c.batch.updated`, announces every change of `c/`,** the one the receiving page made included:
+  one change, one version, one notification. Its params are the new `version`, the `actorId` of the change and its
+  `records`, one per copy in the browser that the change touches, in the order they are applied
+  ([LCTYSP-0014](LCTYSP-0014_browser-sync.md#one-notification-for-every-change-of-c)). A record is `{store, op, row}`:
+  - `c_meta` / `put`: the meta, only what a list shows of a conversation: `cid`, `lang`, `title`, `titleTypeId` (the
+    id of `<title>`), `updatedAt` and `createdAt`. Creating, appending, unappending and changing the title send it.
+  - `c_recordcount` / `put`: `{cid, count}`, the number of elements of the file but `lcty-c` (its lines less 4),
+    counted while the file is still locked. Creating (`0`), appending and unappending send it.
+  - `c_html` / `append`: `{cid, after, tag, attrs, innerHTML}`, the element as written. `c_html` / `unappend`:
+    `{cid, id}`. A page applies one only when its `after` (or `id`) matches what it holds; otherwise the conversation
+    is out of sync.
+
+  A kind of update is a store, not a method, so a new one adds a record, not a notification.
 - **The title** is changed with `c.update.title`, which the server fits into the slot and answers as written. The slot
   is in the middle of the file, so no id guards it: the last title written wins, which is enough for a value that is
-  only shown. It is allowed while an `lcty-cmd` holds the conversation, and sends `c.meta.updated`.
-- **A page follows one conversation.** `c.appended` and `c.unappended` go only to the connections that follow their
-  conversation, set by `c.subscribe {cid, last}`; a page shows one conversation, so a connection follows at most one,
-  and a new `c.subscribe` replaces the old one (`cid: null` follows none). `c.created`, which the list of conversations
-  needs, still goes to every connection that receives it.
-- **`c.meta.updated` keeps lists up to date.** Every change of a conversation (creating it, appending, unappending)
-  also sends `c.meta.updated` with only what a list shows of it, the meta: `cid`, `lang`, `title`, `titleTypeId` (the
-  id of `<title>`), `updatedAt` and `createdAt`. It goes to
-  every connection that receives it, whatever it follows, and shares the version of the change it comes with: one
-  change, one version, one or more notifications.
+  only shown. It is allowed while an `lcty-cmd` holds the conversation, and sends a `c_meta` record.
+- **A page follows one conversation.** `c_html` records go only to the connections that follow their conversation,
+  set by `c.subscribe {cid, last}`; a page shows one conversation, so a connection follows at most one, and a new
+  `c.subscribe` replaces the old one (`cid: null` follows none). The other records go to every connection that
+  receives `c.batch.updated`, whatever it follows. The server leaves out the records a connection does not get, and
+  sends it nothing when none is left.
 - **Subscribing checks the page against the server.** `last` is the id of the last element the page holds. The result
   gives the last id of the conversation now and whether the page's is it (`current`), together with the version from
   which the notifications of this conversation follow, all taken in one step with no change in between. A page that is
@@ -163,8 +168,8 @@ not holding it. When none holds it, the page asks the user whether to run it aga
 
 ## Reading everything
 
-`c.list` returns the meta of every conversation, the same fields as `c.meta.updated`, with the version it was read at,
-taken together, so a page fills its list from it and follows `c.meta.updated` from that version; after reconnecting it
+`c.list` returns the meta of every conversation, the same fields as a `c_meta` record, with the version it was read
+at, taken together, so a page fills its list from it and follows the `c_meta` records from that version; after reconnecting it
 reads it again. The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
 /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the version they were read at, read before
