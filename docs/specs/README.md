@@ -8,20 +8,22 @@ SPDX-License-Identifier: Apache-2.0
 
 Specifications of lcty-rb. Each spec describes the current design of one topic and the reasons behind it.
 
-| ID                                              | Title                             | Status    |
-| ----------------------------------------------- | --------------------------------- | --------- |
-| [LCTYSP-0001](LCTYSP-0001_architecture.md)      | Architecture                      | Accepted  |
-| [LCTYSP-0002](LCTYSP-0002_llm-backend.md)       | LLM backend                       | Accepted  |
-| [LCTYSP-0003](LCTYSP-0003_conversation-file.md) | Conversation file                 | Accepted  |
-| [LCTYSP-0004](LCTYSP-0004_editing.md)           | Editing a conversation            | Accepted  |
-| [LCTYSP-0005](LCTYSP-0005_page-and-elements.md) | Pages and custom elements         | Accepted  |
-| [LCTYSP-0006](LCTYSP-0006_http-api.md)          | HTTP API                          | Accepted  |
-| [LCTYSP-0007](LCTYSP-0007_search.md)            | Search                            | Accepted  |
-| [LCTYSP-0008](LCTYSP-0008_vector-binary.md)     | Vector binary and semantic search | Accepted  |
-| [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)   | Tags and memory                   | Accepted  |
-| [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) | Data directory and settings       | Accepted  |
-| [LCTYSP-0011](LCTYSP-0011_module-bundler.md)    | Module bundler                    | Withdrawn |
-| [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)      | RPC protocol                      | Draft     |
+| ID                                                       | Title                             | Status    |
+| -------------------------------------------------------- | --------------------------------- | --------- |
+| [LCTYSP-0001](LCTYSP-0001_architecture.md)               | Architecture                      | Accepted  |
+| [LCTYSP-0002](LCTYSP-0002_llm-backend.md)                | LLM backend                       | Accepted  |
+| [LCTYSP-0003](LCTYSP-0003_conversation-file.md)          | Conversation file                 | Accepted  |
+| [LCTYSP-0004](LCTYSP-0004_editing.md)                    | Editing a conversation            | Accepted  |
+| [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)          | Pages and custom elements         | Accepted  |
+| [LCTYSP-0006](LCTYSP-0006_http-api.md)                   | HTTP API                          | Accepted  |
+| [LCTYSP-0007](LCTYSP-0007_search.md)                     | Search                            | Accepted  |
+| [LCTYSP-0008](LCTYSP-0008_vector-binary.md)              | Vector binary and semantic search | Accepted  |
+| [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)            | Tags and memory                   | Accepted  |
+| [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)          | Data directory and settings       | Accepted  |
+| [LCTYSP-0011](LCTYSP-0011_module-bundler.md)             | Module bundler                    | Withdrawn |
+| [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)               | RPC protocol                      | Draft     |
+| [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) | Conversation file (`lcty-msg`)    | Draft     |
+| [LCTYSP-0014](LCTYSP-0014_browser-sync.md)               | Browser copies and sync           | Draft     |
 
 ## Gherkin features
 
@@ -73,6 +75,18 @@ for the backend ones).
 | [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)              | The servlets of the site                      | `tests/backend/servlets_test.rb`                             |
 | [LCTYSP-3019](LCTYSP-3019_entry-point.feature)                | The entry point                               | `tests/backend/lcty_test.rb`                                 |
 | [LCTYSP-3020](LCTYSP-3020_rpc.feature)                        | The RPC protocol                              | `tests/backend/rpc_test.rb`                                  |
+| [LCTYSP-3021](LCTYSP-3021_openapi.feature)                    | The paths of openapi.yaml                     | `tests/backend/openapi_test.rb`                              |
+
+### Withdrawn features
+
+These numbers were used by features that were removed with what they tested. They are not reused; the features are in
+git.
+
+- LCTYSP-3009 Module bundler, LCTYSP-3010 Module servlet, LCTYSP-3011 Conversation servlet, LCTYSP-3013 Transparent
+  gzip, LCTYSP-3015 Tag reorder servlet and LCTYSP-3017 The scripts of every page: `/lcty.v1/`: removed in `9058e65`,
+  when `lcty.rb` replaced the servlets of the site and nothing was bundled or gzipped any more. The servlets that took
+  their place are [LCTYSP-3018](LCTYSP-3018_site-servlets.feature), and the entry point
+  [LCTYSP-3019](LCTYSP-3019_entry-point.feature).
 
 ## Number ranges
 

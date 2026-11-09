@@ -6,8 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0009: Tags and memory
 
-- Status: Accepted; revised ([Revision draft: one HTML file per tag](#revision-draft-one-html-file-per-tag), implemented
-  except the browser copy `t_full`, see there)
+- Status: Accepted
 - Related: [LCTYSP-0002](LCTYSP-0002_llm-backend.md), [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
 - Implementation: `lib/tag_files.rb`, `lib/tag_store.rb`, `lib/servlets.rb` (`T`), `public/js/tag-names.js`,
   `public/js/tags.js`, `public/js/pages/tag-order.js`, `public/js/pages/tag-file.js`
@@ -21,9 +20,10 @@ the model and added only when the user approves it.
 ## Tags
 
 - There are no folders ([LCTYSP-0007](LCTYSP-0007_search.md)). Tags both shape a conversation and label it for filtering.
-- **Tags are defined beforehand.** A tag has a name, an optional prompt and memory. Names are unique and contain no
-  whitespace or `:` (to tell them apart from `tag:name` in search). The order of the definitions is the order in which
-  drafts are composed.
+- **Tags are defined beforehand.** A tag has a display name, an optional prompt and memory, in a tag file of its own
+  ([Storage](#storage-one-html-file-per-tag)). Two display names with the same file-name part are the same tag, and
+  conversations refer to a tag by that part, which has no whitespace or `:` (to tell it apart from `tag:name` in
+  search). The order of the tag files is the order in which drafts are composed.
 - **The system prompt can only be set before the conversation starts.** It is fixed by the first send and saved as the
   conversation's instructions (the cache rule in [LCTYSP-0002](LCTYSP-0002_llm-backend.md)).
 - **Tags are only a hint.** Choosing tags before starting composes a draft into the system prompt field; the user may
@@ -99,62 +99,11 @@ UI → storage:  POST /v1/tags/:name/memory for each accepted one
 - Proposals only add items. Rewriting or removing existing items is not proposed; the user tidies memory in the tag
   editor.
 
-## Storage
+## Storage: one HTML file per tag
 
-> Superseded: this section describes the storage before the
-> [revision](#revision-draft-one-html-file-per-tag) below, which moved tag definitions and memory to one HTML file per
-> tag. `tags.sqlite` now holds only `conversation_tags` (format 3 dropped `tags` and `memory`), and the API is that of
-> [LCTYSP-0006](LCTYSP-0006_http-api.md). Kept for the history of the design.
-
-Tags and memory are source-of-truth data in `data/tags.sqlite`
-([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
-
-```sql
-CREATE TABLE tags (name TEXT PRIMARY KEY, prompt TEXT, position INTEGER NOT NULL);  -- position = draft order
-CREATE TABLE memory (
-  id TEXT PRIMARY KEY,
-  tag TEXT NOT NULL REFERENCES tags(name) ON UPDATE CASCADE ON DELETE CASCADE,
-  text TEXT NOT NULL, at TEXT NOT NULL, source_conv TEXT, source_msg TEXT);
-```
-
-- **Why SQLite:** memory is added, edited and deleted one item at a time, which suits row updates better than rewriting
-  a whole JSON file. Transactions and foreign keys guarantee that memory follows a renamed tag.
-- **A separate file from the index.** The index is derived and tags are the source of truth, so they live in separate
-  files and the derived file can be deleted on its own. SQLite is a stable format and is fine for source-of-truth data.
-- **Format changes migrate instead of rebuilding.** `PRAGMA user_version` decides which migrations to run; a newer
-  version than the code knows is an error at startup (deleting would lose data).
-- Saving the tag editor (`PUT /v1/tags`) is one transaction: create tags under new names first, move memory to them,
-  then delete tags that disappeared (which also handles renames).
-- `source` (`source_conv`, `source_msg`) records the conversation and its last message when the item was proposed, so
-  an item can link back to where it came from.
-
-API shape:
-
-```json
-{
-	"tags": [
-		{
-			"name": "ruby",
-			"prompt": "Answer with Ruby 2.6's standard library only. Remember design decisions and discovered constraints.",
-			"memory": [
-				{
-					"id": "mem-3f9a…",
-					"text": "WEBrick paths and query values are ASCII-8BIT; convert to UTF-8 before SQLite",
-					"at": "…",
-					"source": { "conv_id": "…", "msg_id": "…" }
-				}
-			]
-		}
-	]
-}
-```
-
-## Revision draft: one HTML file per tag
-
-Status: implemented (2026-11-08). [The browser copy `t_full`](#in-the-browser-t_full-like-c_meta) and its worker
-`lcty.v1.t.worker.cjs` are implemented; every page reads and changes the tags through it, and shows references by their
-display names. Where this section disagrees with the sections above, this
-section is the design; the sections above (the old `Storage`) record the design before it.
+Tag definitions and memory are one HTML file per tag (implemented on 2026-11-08, with the browser copy `t_full` and its
+worker `lcty.v1.t.worker.cjs`, through which every page reads and changes the tags). Before, they were the tables `tags`
+and `memory` of `tags.sqlite`; that design is in git.
 
 Scope: tag definitions (name, prompt, order) and memory, and how conversations refer to tags
 ([below](#conversations-refer-to-tags-by-the-file-name-part)). The current tags of conversations stay in
@@ -529,5 +478,5 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 Tag files are served at `/t/NNNNN-<part>.html`, beside the reorder page, as the page of the tag
 ([Tag file pages](#tag-file-pages)). Not yet discussed: how the proposal flow uses the `add-memory` policy (adjusted
 later).
-The data directory is drafted in [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), and the changes to the backend tests
+The data directory is described in [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), and the changes to the backend tests
 are noted at the top of [LCTYSP-3005](LCTYSP-3005_tag-store.feature).

@@ -6,15 +6,17 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0010: Data directory and settings
 
-- Status: Accepted
+- Status: Accepted. Keeping the browser's copies up to date is to be superseded by
+  [LCTYSP-0014](LCTYSP-0014_browser-sync.md) once the pages use `/v1/rpc`.
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)
-- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/lcty.v1/lcty.v1.c.worker.cjs`
+- Implementation: `lib/config.rb` (`PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`), `lcty.rb` (`LCTY_BASE_URL`),
+  `lib/rpc/servlet.rb` (`LCTY_ALLOWED_ORIGIN`), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/lcty.v1/lcty.v1.c.worker.cjs`
 
 ## Summary
 
 All data lives in the data directory, `~/Library/Application Support/tokyo.kaito.lcty-rb/Data/` by default on macOS
 (`$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data/` elsewhere; `LCTY_DATA_DIR`, below); the specs write it as `data/`. Files whose names start with `_` are derived and can be deleted at any
-time; everything else is the source of truth. Settings are not data: the server has only `PORT`, `LCTY_HOST` and `LCTY_DATA_DIR`, and
+time; everything else is the source of truth. Settings are not data: the server has only `PORT`, `LCTY_HOST`, `LCTY_DATA_DIR`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN`, and
 every other setting is kept by the browser.
 
 ## Data directory
@@ -38,11 +40,11 @@ source of truth at startup or by the browser. Everything else is source-of-truth
 | `_vectors.<model>.sqlite` (+ `-wal`, `-shm`)   | Derived (vector DB)                                                                                                              | Re-embedded by the browser while a page is open ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) |
 | `_vectors.eg2_264.dat`, `_vectors.eg2_264.idx` | Derived (distribution files of the default embedding model: the rows and their ids, served as `/v1/vectors.eg2_264.*`)           | Rebuilt from the vector DB on the next request                                                |
 
-### Revision: tag files (implemented, except the IndexedDB split)
+### Tag files
 
-With tag definitions and memory moved to one HTML file per tag
-([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), the data
-directory changes as follows. The rule on `_` is unchanged.
+Tag definitions and memory are one HTML file per tag
+([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#storage-one-html-file-per-tag)), so the data directory also holds
+the following. The rule on `_` is unchanged.
 
 | File                                      | Kind                                                                                                                                                                   |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -112,15 +114,17 @@ file, with the set's `ETag`
 
 ## Settings
 
-**Rule: the server has only three settings, all environment variables read at startup. Everything else is a browser
+**Rule: the server has only a few settings, all environment variables read at startup. Everything else is a browser
 setting.** The server never talks to the LLM ([LCTYSP-0001](LCTYSP-0001_architecture.md)), so the endpoint, key and model
 names only matter to the browser.
 
-| Environment variable | Default                                                                                                               | Meaning                |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| `PORT`               | `45280`                                                                                                               | lcty.rb listen port    |
-| `LCTY_HOST`          | `127.0.0.1`                                                                                                           | lcty.rb listen address |
-| `LCTY_DATA_DIR`      | macOS: `~/Library/Application Support/tokyo.kaito.lcty-rb/Data`; elsewhere: `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data` | Data directory         |
+| Environment variable  | Default                                                                                                               | Meaning                                                                                |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `PORT`                | `45280`                                                                                                               | lcty.rb listen port                                                                    |
+| `LCTY_HOST`           | `127.0.0.1`                                                                                                           | lcty.rb listen address                                                                 |
+| `LCTY_DATA_DIR`       | macOS: `~/Library/Application Support/tokyo.kaito.lcty-rb/Data`; elsewhere: `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data` | Data directory                                                                         |
+| `LCTY_BASE_URL`       | `/`                                                                                                                   | The path the site is served under ([LCTYSP-3019](LCTYSP-3019_entry-point.feature))     |
+| `LCTY_ALLOWED_ORIGIN` | `http://<LCTY_HOST>:<PORT>`, and `http://localhost:<PORT>` on `127.0.0.1`                                             | The origins whose pages may use `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)) |
 
 - **The data directory is outside the repository** by default, in the per-user application data folder (named by the
   reverse-DNS id `tokyo.kaito.lcty-rb`), so a checkout can be moved, cleaned or replaced without touching the data. It

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Conversation files in the format of the LCTYSP-0003 revision draft (prototype). They live in their own directory,
+# Conversation files in the format of LCTYSP-0013 (prototype). They live in their own directory,
 # c-next/ of the data directory (or LCTY_RPC_DIR), so the prototype never touches the real conversations.
 #
 # A file changes only at its end, one line at a time: append one element after a named id, or remove the last element.

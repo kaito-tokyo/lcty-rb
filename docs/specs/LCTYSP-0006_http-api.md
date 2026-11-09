@@ -6,7 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0006: HTTP API
 
-- Status: Accepted
+- Status: Accepted; to be replaced for every change by the RPC protocol of [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)
+  (`/v1/rpc`). Until the pages use it, this API is what they call. What stays plain `GET` after that (reading whole
+  stores, the vector binaries) is to be kept here.
 - Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0004](LCTYSP-0004_editing.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)
 - Implementation: `lib/v1/servlet.rb` (`Chatty::V1::Servlet`, mounted at `/v1`), client: `public/js/api/storage.js`
 
@@ -69,7 +71,7 @@ lcty.rb answers `/v1/*` on the same origin as the pages. Bodies are JSON unless 
 | POST   | `/v1/tags/:file/memory` | Add a memory item to the tag in file `:file` (`00010-ruby.html`). Body `{text, source}`. Under the exclusive lock, the server rewrites that one file; Ruby assigns `id` and `at`. Returns 201 with the item. 404 when the file does not exist, 409 when it has no `<lcty-t>` (the file is not changed). Changes the set's `ETag`.                                                                                                                                                                                                                                                                                                 |
 
 - Tag definitions and memory are one HTML file per tag in `t/`
-  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)).
+  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#storage-one-html-file-per-tag)).
 - Names are passed through untouched; the browser normalizes and validates them, and NFC-normalizes the names it
   receives before comparing them. The server writes and parses the HTML; the browser never sees it through this API.
 - There are no `PATCH` or `DELETE` on memory items (404): the tag editor edits memory through replace-all.

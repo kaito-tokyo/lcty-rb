@@ -68,7 +68,7 @@ methods:
       schema:
         type: object
 
-  # ---- Conversations (LCTYSP-0003, revision draft) ----
+  # ---- Conversations (LCTYSP-0013) ----
 
   - name: c.create
     x-receiver: server
@@ -581,7 +581,7 @@ components:
       type: string
       pattern: "^(sys|mem|msg-u|msg-m|think|cmd)-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
     Attrs:
-      description: The attributes of an element, in their one order (LCTYSP-0003)
+      description: The attributes of an element, in their one order (LCTYSP-0013)
       type: object
       additionalProperties:
         type: string

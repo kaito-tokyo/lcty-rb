@@ -35,7 +35,7 @@ a module imported once the page has loaded attaches every feature without blocki
   settings dialog (a modal `<dialog>`, `js/ui/settings-dialog.js`, appended to `<body>`): editing the browser settings and a connection test
   ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
 - **The tag reorder page (`js/pages/tag-order.js`, served by `Lcty::Servlets::T`).** With tags stored as one HTML file per tag
-  ([LCTYSP-0009, revision draft](LCTYSP-0009_tags-and-memory.md#revision-draft-one-html-file-per-tag)), reordering
+  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#storage-one-html-file-per-tag)), reordering
   moves out of the tag editor, which loses its ↑↓ buttons. A separate page at `/t/` (`public/t/index.html`, also
   `/t/index.html`; one directory below the root like every page, see [Routing](#routing)) has the sidebar like every
   page, lists the tags in their current (file-name) order with their display names, lets the user move them, and on
@@ -102,15 +102,19 @@ a module imported once the page has loaded attaches every feature without blocki
 - **The servlets of the site live in `lib/servlets.rb`** (`Lcty::Servlets`, [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)):
   `StaticFileServlet` (one file, with its type, `Cache-Control`, `Last-Modified` and an `ETag`, `304` on a matching
   `If-None-Match`), `C` and `T` (`/c/` and `/t/`) and `PublicDirectoryServlet` (the rest of `public/`, never a path with
-  an empty part, a part starting with `.` or a NUL). The API is `lib/v1/servlet.rb` (`Chatty::V1::Servlet`);
-  everything about vectors (the vector binary and the vector DB) is under `lib/v1/` too. The servlets follow WEBrick's
-  own model: a part every servlet needs is a helper the servlet calls, not a layer around the server.
+  an empty part, a part starting with `.` or a NUL, nor a REUSE licence file `*.license`). The API is
+  `lib/v1/servlet.rb` (`Chatty::V1::Servlet`); everything about vectors (the vector binary and the vector DB) is under
+  `lib/v1/` too. The servlets follow WEBrick's own model: a part every servlet needs is a helper the servlet calls, not
+  a layer around the server.
 - **`lcty.rb` only wires the servlets together** ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)): it opens the data
   (`Chatty.open_data`), copies what a file opened directly needs into the data directory (`Lcty.publish_offline`),
   builds the WEBrick server and mounts everything under `LCTY_BASE_URL` (`Lcty.mount_all`): `v1`, `c`, `t`, each file
   of `lcty.v1/`, the page entries and the rest of `public/`. It is started in the root of the repository: the files of
   the site are found from the working directory. Nothing is gzipped (the server is usually on the same machine). Shared
   parts live in `lib/`: settings (`lib/config.rb`) and storage (`lib/store.rb`).
+- **`openapi.yaml` at the root of the repository lists every path and method of the site** (paths and methods only; the
+  bodies are in the specs). [LCTYSP-3021](LCTYSP-3021_openapi.feature) checks it against `Lcty.mount_all`: every path
+  it lists is answered, and no other file of `public/` is.
 
 ## The `lcty.v1` files
 
