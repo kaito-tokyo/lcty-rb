@@ -8,14 +8,15 @@
 
 Feature: LCTYSP-3007 Vector DB
 
-  Chatty::V1::VectorDB keeps the vectors of the rounds of a search index, one SQLite file _vectors.<model>.sqlite per
-  embedding model, attached to the index's connection. VectorDB#pending lists the rounds without vectors, newest first.
-  VectorDB#put registers a registration vector binary (768 dims) for the revisions the caller embedded, L2-normalizes
-  each vector and keeps its first 256 dimensions renormalized; ids whose round changed meanwhile are dropped as stale.
-  VectorDB#export writes the distribution files _vectors.eg2_264.dat (256 Float32 + 32 zero bytes per row) and
-  _vectors.eg2_264.idx (16 bytes of id per row) of the vectors that match the current rounds, and rewrites them only
-  when vectors or rounds changed. VectorDB#gc and #gc_all delete the vectors that match no current round. Every test
-  has a search index and a data directory of its own in a temporary folder.
+  Chatty::V1::VectorDB keeps the vectors of the rounds of a search index in its table vectors, one row per embedding
+  model and round part, in _index.sqlite, the one file of every cache that may be lost. VectorDB#pending lists the
+  rounds without vectors, newest first. VectorDB#put registers a registration vector binary (768 dims) for the
+  revisions the caller embedded, L2-normalizes each vector and keeps its first 256 dimensions renormalized; ids whose
+  round changed meanwhile are dropped as stale. VectorDB#export builds in memory, on every call, the distribution of the
+  vectors that match the current rounds: the .dat (256 Float32 + 32 zero bytes per row) and the .idx (16 bytes of id
+  per row); nothing is written to disk. VectorDB#gc and #gc_all delete the vectors that match no current round, and
+  #gc_all the cache files of the former layout. Every test has a search index and a data directory of its own in a
+  temporary folder.
 
   Scenario: Rounds without vectors are pending, newest first
     Given three rounds answered at 10:00, 12:00 and 11:00
@@ -43,9 +44,9 @@ Feature: LCTYSP-3007 Vector DB
     Given a round with a vector registered for the model "a"
     Then the round is not pending for the model "a"
     But it is pending for the model "b"
-    And the data directory has the files _vectors.a.sqlite and _vectors.b.sqlite
+    And the data directory holds no file but _index.sqlite
 
-  Scenario: More models than SQLite can attach at once are all served
+  Scenario: Many models are all served
     Given a round with a vector registered for the model "m0"
     When the round's pending state is asked for the models "m1" to "m11"
     Then it is pending for each of them
@@ -111,7 +112,7 @@ Feature: LCTYSP-3007 Vector DB
   Scenario Outline: An invalid model name is a 400
     When VectorDB#pending lists the rounds of the model <model>
     Then it raises an HttpError 400 saying "invalid model name: <model>"
-    And no vector DB file is made
+    And the data directory holds no file but _index.sqlite
 
     Examples:
       | model                    |
@@ -132,63 +133,39 @@ Feature: LCTYSP-3007 Vector DB
 
   Scenario: The distributed vector is the first 256 dimensions renormalized
     Given a round with a vector registered whose first 256 dimensions are 2 and the rest are 1
-    When VectorDB#export writes the distribution files of the model "m"
+    When VectorDB#export builds the distribution of the model "m"
     Then the row of the round is 256 values of 1/16
     And it is followed by 32 zero bytes
 
-  Scenario: Export writes the rows and the ids of the valid vectors
+  Scenario: Export builds the rows and the ids of the valid vectors
     Given a round of 11:00 with one part and a round of 10:00 with two parts, all with vectors of the model "m"
-    When VectorDB#export writes the distribution files of the model "m"
-    Then it returns the paths _vectors.eg2_264.dat and _vectors.eg2_264.idx in the data directory
-    And the .dat file has 3 rows of 1,056 bytes and the .idx file 3 ids of 16 bytes
+    When VectorDB#export builds the distribution of the model "m"
+    Then the .dat has 3 rows of 1,056 bytes and the .idx 3 ids of 16 bytes
     And the rows are the two parts of the 10:00 round, then the 11:00 round
-    And no temporary file is left
+    And the data directory holds no file but _index.sqlite
 
-  Scenario: Export of a model without vectors writes empty files
-    When VectorDB#export writes the distribution files of the model "empty"
-    Then both files are empty
+  Scenario: Export of a model without vectors is empty
+    When VectorDB#export builds the distribution of the model "empty"
+    Then both are empty
 
   Scenario: Export leaves out the vectors of a changed round
     Given two rounds with vectors of the model "m"
     When the text of the first round changes
-    And VectorDB#export writes the distribution files of the model "m"
+    And VectorDB#export builds the distribution of the model "m"
     Then only the second round has a row
 
-  Scenario: Export reuses the files until the vectors change
-    Given two rounds, the first with a vector of the model "m", and the exported files
-    When the .dat file is overwritten with "x"
-    And VectorDB#export writes the distribution files of the model "m"
-    Then the .dat file is still "x"
+  Scenario: Export builds the distribution anew on every call
+    Given two rounds, the first with a vector of the model "m", and its distribution
     When VectorDB#put registers a vector for the second round
-    And VectorDB#export writes the distribution files of the model "m"
-    Then the .dat file has the rows of both rounds
+    And VectorDB#export builds the distribution of the model "m"
+    Then the .dat has the rows of both rounds
 
-  Scenario: Export rewrites the files when the rounds change
-    Given a round with a vector of the model "m" and its exported files
-    When the .dat file is overwritten with "x"
-    And a new round is added to the search index
-    And VectorDB#export writes the distribution files of the model "m"
-    Then the .dat file has the row of the round again
-
-  Scenario: Export rewrites the files for another model
-    Given a round with a vector of the model "m" and its exported files
-    When VectorDB#export writes the distribution files of the model "other", which has no vectors
-    Then both files are empty
-    When VectorDB#export writes the distribution files of the model "m"
-    Then the .dat file has the row of the round again
-
-  Scenario: Export rewrites the files when one is missing
-    Given a round with a vector of the model "m" and its exported files
-    When the .idx file is deleted
-    And VectorDB#export writes the distribution files of the model "m"
-    Then both files are there with the row and the id of the round
-
-  Scenario: Export removes the former distribution files
-    Given the vector DB of the model "m" in the data directory
-    And the files _vectors.m.256.rows, _vectors.m.256.ids and _vectors.m.256.bin beside it
-    When VectorDB#export writes the distribution files of the model "m"
-    Then those three files are gone
-    And the vector DB _vectors.m.sqlite is kept
+  Scenario: Export of another model holds only its own vectors
+    Given a round with a vector of the model "m"
+    When VectorDB#export builds the distribution of the model "other", which has no vectors
+    Then both are empty
+    When VectorDB#export builds the distribution of the model "m"
+    Then the .dat has the row of the round
 
   Scenario: The vectors of an undone change are reused
     Given a round with a vector of the model "m"
@@ -196,14 +173,14 @@ Feature: LCTYSP-3007 Vector DB
     Then the round is pending again
     When the text changes back
     Then the round is not pending
-    And VectorDB#export writes its row
+    And VectorDB#export builds its row
 
   Scenario: Garbage collection deletes the vectors that match no current round
     Given three rounds with vectors of the model "m"
     When the text of the first round changes and the second round is deleted
     And VectorDB#gc collects the model "m"
-    Then it returns 2 and warns "gc: removed 2 stale vectors from _vectors.m.sqlite"
-    And only the vector of the third round is left in _vectors.m.sqlite
+    Then it returns 2 and warns "gc: removed 2 stale vectors of the model m"
+    And only the vector of the third round is left for the model "m"
 
   Scenario: Garbage collection with nothing stale is quiet
     Given a round with a vector of the model "m"
@@ -213,25 +190,21 @@ Feature: LCTYSP-3007 Vector DB
   Scenario Outline: Garbage collection of an invalid model name does nothing
     When VectorDB#gc collects the model <model>
     Then it returns 0
-    And no vector DB file is made
+    And the data directory holds no file but _index.sqlite
 
     Examples:
       | model  |
       | "../m" |
       | nil    |
 
-  Scenario: Garbage collection at startup collects every vector DB of the directory
+  Scenario: Garbage collection at startup collects every model
     Given two rounds with vectors of the models "a" and "b"
     And a new search index and VectorDB opened on the same files, as at the next start
     When the first round is deleted
     And VectorDB#gc_all collects the data directory
-    Then _vectors.a.sqlite and _vectors.b.sqlite keep only the vectors of the second round
+    Then the models "a" and "b" keep only the vectors of the second round
 
-  Scenario: A vector DB of another schema version is rebuilt
-    Given a file _vectors.m.sqlite whose user_version is 0 and whose vectors table has other columns
-    And a round without vectors
-    When VectorDB#pending lists the rounds of the model "m" up to 16
-    Then the round is pending
-    When VectorDB#put registers a vector for it with its rev
-    Then it returns 1 accepted and no stale ids
-    And the file's user_version is 1
+  Scenario: Garbage collection at startup deletes the cache files of the former layout
+    Given the files _vectors.m.sqlite, _vectors.m.sqlite-wal, _vectors.eg2_264.dat, _vectors.eg2_264.idx and _vectors.m.256.bin in the data directory
+    When VectorDB#gc_all collects the data directory
+    Then those files are gone and the data directory holds no file but _index.sqlite

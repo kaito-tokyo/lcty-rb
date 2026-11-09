@@ -178,7 +178,8 @@ Feature: LCTYSP-3004 The search index
     Then a keyword search for "persimmons" finds the round
 
   Scenario: An index of another schema version is rebuilt
-    Given an index file of schema version 2 with a chunks table of another shape
+    Given an index file of schema version 3 with a chunks table and a vectors table of another shape
     When it is opened
-    Then it has schema version 3
+    Then it has schema version 4
     And a round about "quinces" can be synced and found
+    And its vectors table has a model column and no row

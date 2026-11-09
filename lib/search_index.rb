@@ -10,15 +10,16 @@
 #   chunks_fts  Keyword search (FTS5 trigram; rowid equals chunks.rowid)
 #   conv_tags   Current tags of each conversation (for tag: filtering)
 #   conv_stats  The number of messages of each conversation (all of them, inherited ones included; for lists)
+#   vectors     The vectors of the rounds, per embedding model (lib/v1/vector_db.rb, which shares this connection)
 #
-# Vectors live in the vector DB (lib/v1/vector_db.rb), which ATTACHes to this connection and joins on chunks.
+# Every cache that may be lost is a table of this one file (LCTYSP-0010).
 
 require 'sqlite3'
 require 'digest'
 
 module Chatty
   class SearchIndex
-    SCHEMA_VERSION = 3 # 3: moved the vector DB to its own file
+    SCHEMA_VERSION = 4 # 4: the vectors of every model are a table of this file again
     CHUNK_MAX_CHARS = 6000 # Split so each part fits the embedding model's context (8192 tokens)
 
     # The connection and its mutex are shared with the vector DB (V1::VectorDB), which joins vectors with chunks.
@@ -181,6 +182,9 @@ module Chatty
         CREATE TABLE IF NOT EXISTS conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (conv_id, tag));
         CREATE INDEX IF NOT EXISTS conv_tags_tag ON conv_tags(tag);
         CREATE TABLE IF NOT EXISTS conv_stats (conv_id TEXT PRIMARY KEY, messages INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS vectors (
+          model TEXT NOT NULL, msg_id TEXT NOT NULL, part INTEGER NOT NULL, rev TEXT NOT NULL, vec BLOB NOT NULL,
+          vec256 BLOB NOT NULL, PRIMARY KEY (model, msg_id, part));
       SQL
       @db.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
     end
