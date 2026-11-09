@@ -105,6 +105,13 @@ module Lcty
         send_frame(OP_PING, data.b)
       end
 
+      # Drop the connection at once, without a close frame: for a peer that stopped reading, whose sender may be stuck in
+      # a write holding the write lock. Closing the socket makes that write and the reader raise IOError.
+      def abort
+        @closed = true
+        @sock.close rescue nil
+      end
+
       # Send a close frame (once) and stop reading
       def close(code = 1000)
         @write_lock.synchronize do

@@ -73,6 +73,21 @@ sees the notifications in version order and with no gaps.
   and listens from there.)
 - A page that sees another `<boot>` than the one it knew has missed changes it cannot get back (the server keeps no
   history across a restart) and reads everything again.
+
+## Locks
+
+Both locks are write locks: they decide whether a write goes through, and never hold up reading or sending.
+
+- **`lcty-cmd` is an optimistic lock.** It is checked only at the last step of a write: a write to a conversation whose
+  last element is an `lcty-cmd` is refused (`2`), except removing that `lcty-cmd`. Nothing else waits for it: the
+  conversation can still be read (its file, `c.list`, the notifications), and a page that wants to write looks, tries,
+  and handles the refusal.
+- **The server serialises writes, not communication.** Inside one short critical section it writes a change, gives it
+  the next version and queues its notification for every connection that receives it. Each connection has its own
+  queue and its own thread that sends from it, responses included, so the messages of one connection keep their order
+  (a page gets the notification of its own change before the response). A page that stops reading holds up nobody: when
+  its queue grows past a limit (1024 messages in the prototype), its connection is dropped, and the page reconnects and
+  reads again.
 - The version says nothing about a single file. A page that needs to know whether its own copy of a file is current
   asks for that (planned, see [Open points](#open-points)).
 
@@ -84,7 +99,11 @@ session starts.
 
 - **`initialize`** is the first request on a WebSocket. Its params carry the page's capabilities
   (`{"capabilities": {"receives": [method names]}}`); its result carries the server's (`receives`, the methods the
-  server takes), with the protocol name and the global version.
+  server takes), with the protocol name, the global version and the page's `actorId`.
+- **`actorId` is assigned by the server.** `initialize` returns a new UUID for the connection, the same for its whole
+  life, and every notification of a change names the actor that made it (`actorId`; `null` for a change sent with
+  `POST`). A page tells its own changes from those of other tabs by it: for its own, the notification arrives before
+  the response, and the page applies the change once. It identifies a connection, not a person (there is one user).
 - **An end sends only what the other end declared it receives.** The server sends a page no notification before
   `initialize`, and afterwards only those the page listed. A method the receiver did not declare is answered with
   `-32601`. A page that wants no notifications (a worker that only reads, say) declares none.
@@ -107,9 +126,9 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   names the last element as the page knows it (`null` before the first one). A new kind of element gets a method of its
   own, so each one has its own rules and its own entry in a page's capabilities.
 - **Notifications** (`c.created`, `c.appended`, `c.unappended`) announce every change, the one the receiving page made
-  included, with the new `version` in their params. `c.appended` carries the element as written, as
-  `{tag, attrs, innerHTML}`. A page applies a notification only when its `after` (or `id`) matches what it holds;
-  otherwise it reads the conversation again.
+  included, with the new `version` and the `actorId` of the change in their params. `c.appended` carries the element
+  as written, as `{tag, attrs, innerHTML}`. A page applies a notification only when its `after` (or `id`) matches what
+  it holds; otherwise it reads the conversation again.
 
 **Sending a request again is safe.** When a response is lost and the page sends the same `c.append.*` again, the second
 one fails with `1` and `data.last` is the id of the page's own element: the first one succeeded. An id is made by the

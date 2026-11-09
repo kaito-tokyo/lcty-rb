@@ -28,7 +28,8 @@ methods:
     summary: Start a session and exchange capabilities
     description: >-
       The first request on a connection. The page says which methods it receives; the answer says which methods the
-      server receives and the current global version. Until then the server sends the page no notification.
+      server receives, the current global version, and the actorId assigned to this connection. Until then the server
+      sends the page no notification.
     paramStructure: by-name
     params:
       - name: protocol
@@ -41,13 +42,20 @@ methods:
       name: session
       schema:
         type: object
-        required: [protocol, version, capabilities]
+        required: [protocol, version, actorId, capabilities]
         properties:
           protocol:
             type: string
             const: lcty-rpc-prototype
           version:
             $ref: "#/components/schemas/Version"
+          actorId:
+            description: >-
+              The actor this connection is: every notification of a change it makes carries this id. The same for the
+              whole connection; null over POST, which has no connection.
+            oneOf:
+              - $ref: "#/components/schemas/ActorId"
+              - type: "null"
           capabilities:
             $ref: "#/components/schemas/Capabilities"
 
@@ -299,6 +307,13 @@ methods:
         required: true
         schema:
           $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
 
   - name: c.appended
     x-receiver: page
@@ -324,6 +339,13 @@ methods:
         required: true
         schema:
           $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
 
   - name: c.unappended
     x-receiver: page
@@ -342,6 +364,13 @@ methods:
         required: true
         schema:
           $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
 
 components:
   schemas:
@@ -355,6 +384,10 @@ components:
           items:
             type: string
           uniqueItems: true
+    ActorId:
+      description: The id of a connection, assigned by the server in initialize
+      type: string
+      format: uuid
     Version:
       description: The global version, "<boot>.<seq>"
       type: string

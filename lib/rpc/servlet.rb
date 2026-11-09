@@ -35,20 +35,60 @@ module Lcty
     DOC_PATH = File.expand_path('../../docs/specs/LCTYSP-0012_rpc-protocol.openrpc.yml', __dir__)
     DOC = YAML.safe_load(File.read(DOC_PATH)).freeze
 
-    # One open WebSocket and the methods its page receives (empty until initialize)
+    # One open WebSocket: the methods its page receives (empty until initialize), the actorId initialize assigned it,
+    # and its own queue of messages to send. A thread of its own sends them in order, so a page that stops reading holds
+    # up nobody else: when its queue grows past QUEUE_MAX, the connection is closed and the page reconnects.
     class Peer
+      QUEUE_MAX = 1024 # messages waiting to be sent
+
       attr_reader :conn
-      attr_accessor :receives
+      attr_accessor :receives, :actor_id
 
       def initialize(conn)
         @conn = conn
         @receives = Set.new
+        @actor_id = nil
+        @queue = Queue.new
+        @sender = Thread.new { send_loop }
+      end
+
+      # Queue a message to send; never waits. Responses and notifications go through the same queue, so they keep the
+      # order in which they were produced.
+      def push(text)
+        return if @queue.closed?
+        if @queue.size >= QUEUE_MAX
+          abort # too far behind: dropping the connection makes the page reconnect and read again
+          return
+        end
+        @queue << text
+      end
+
+      # Stop sending when the session ends: what is queued is still sent, then the sender thread ends
+      def finish
+        @queue.close
+        @sender.join(5)
+      end
+
+      # Drop the connection at once (never waits: the sender may be stuck in a write)
+      def abort
+        @queue.close
+        @conn.abort
+      end
+
+      private
+
+      def send_loop
+        while (text = @queue.pop)
+          @conn.send_text(text)
+        end
+      rescue IOError, SystemCallError
+        @queue.close
       end
     end
 
-    # The open connections and the global version. A change runs inside commit, which numbers it and sends its
-    # notification to every connection that receives it before the next change starts, so notifications arrive in
-    # version order.
+    # The open connections and the global version. The lock is a write lock: a change runs inside commit, which writes
+    # it, numbers it and queues its notification for every connection that receives it before the next change starts,
+    # so notifications are queued in version order. Sending happens outside the lock, on each connection's own thread.
     class Hub
       def initialize
         @boot = SecureRandom.hex(4)
@@ -69,14 +109,16 @@ module Lcty
         @lock.synchronize { @conns.delete(conn) }
       end
 
-      # Run the change (the block returns [method, params] of its notification) and notify every connection
-      def commit
+      # Run the change (the block returns [method, params] of its notification) and notify every connection. The
+      # notification names the actor that made the change (the actorId of its connection; nil for POST).
+      def commit(peer)
         @lock.synchronize do
           method, params = yield
           @seq += 1
           version = "#{@boot}.#{@seq}"
-          msg = JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params.merge('version' => version))
-          @conns.each { |peer| peer.conn.send_text(msg) rescue nil if peer.receives.include?(method) }
+          params = params.merge('version' => version, 'actorId' => peer&.actor_id)
+          msg = JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params)
+          @conns.each { |c| c.push(msg) if c.receives.include?(method) }
           version
         end
       end
@@ -91,16 +133,19 @@ module Lcty
         unless receives.is_a?(Array) && receives.all? { |m| m.is_a?(String) }
           raise Error.new(INVALID_PARAMS, 'capabilities.receives must be an array of method names')
         end
-        peer.receives = Set.new(receives) if peer
-        { 'protocol' => 'lcty-rpc-prototype', 'version' => HUB.version,
+        if peer
+          peer.receives = Set.new(receives)
+          peer.actor_id ||= SecureRandom.uuid # one per connection, kept if initialize is sent again
+        end
+        { 'protocol' => 'lcty-rpc-prototype', 'version' => HUB.version, 'actorId' => peer&.actor_id,
           'capabilities' => { 'receives' => METHODS.keys } }
       end,
 
       'rpc.discover' => ->(_p, _peer) { DOC },
 
-      'c.create' => lambda do |p, _peer|
+      'c.create' => lambda do |p, peer|
         cid = p['cid']
-        version = HUB.commit do
+        version = HUB.commit(peer) do
           ConvStore.create(cid, created_at: p['createdAt'], title: p['title'], lang: p['lang'],
                                 title_max_size: p['titleMaxSize'], lcty_version: p['lctyVersion'])
           ['c.created', { 'cid' => cid }]
@@ -109,13 +154,13 @@ module Lcty
       end,
 
       # Append one element, one method per element: {cid, after, attrs, innerHTML} (no innerHTML for the lcty-cmd)
-      'c.append.msg' => ->(p, _peer) { Rpc.append(p, 'lcty-msg', p['innerHTML']) },
-      'c.append.thinking' => ->(p, _peer) { Rpc.append(p, 'lcty-thinking', p['innerHTML']) },
-      'c.append.cmd' => ->(p, _peer) { Rpc.append(p, 'lcty-cmd', '') },
+      'c.append.msg' => ->(p, peer) { Rpc.append(p, peer, 'lcty-msg', p['innerHTML']) },
+      'c.append.thinking' => ->(p, peer) { Rpc.append(p, peer, 'lcty-thinking', p['innerHTML']) },
+      'c.append.cmd' => ->(p, peer) { Rpc.append(p, peer, 'lcty-cmd', '') },
 
       # Remove the last element: {cid, id}
-      'c.unappend' => lambda do |p, _peer|
-        version = HUB.commit do
+      'c.unappend' => lambda do |p, peer|
+        version = HUB.commit(peer) do
           ConvStore.remove(p['cid'], p['id'])
           ['c.unappended', { 'cid' => p['cid'], 'id' => p['id'] }]
         end
@@ -130,9 +175,9 @@ module Lcty
     module_function
 
     # Append one element of tag after the element named, and announce it as c.appended with the element as written
-    def append(p, tag, inner)
+    def append(p, peer, tag, inner)
       attrs = nil
-      version = HUB.commit do
+      version = HUB.commit(peer) do
         attrs = ConvStore.append(p['cid'], p['after'], tag, p['attrs'], inner)
         ['c.appended', { 'cid' => p['cid'], 'after' => p['after'],
                          'element' => { 'tag' => tag, 'attrs' => attrs, 'innerHTML' => inner.to_s } }]
@@ -216,7 +261,7 @@ module Lcty
             type, data = msg
             next conn.close(1003) unless type == :text
             out = Rpc.handle(data, peer)
-            conn.send_text(out) if out
+            peer.push(out) if out # after the notifications this request queued
           end
         rescue WebSocket::ProtocolError
           conn.close(1002)
@@ -224,6 +269,7 @@ module Lcty
           nil
         ensure
           HUB.remove(peer)
+          peer.finish
           conn.close
         end
       end
