@@ -41,8 +41,12 @@ class RpcTest < Lcty::Scenarios
   class Page
     attr_reader :log
 
-    def initialize(port, origin: ORIGIN, answer: nil, read: true)
-      @sock = TCPSocket.new('127.0.0.1', port)
+    # rcvbuf: the size of the receive buffer, set before connecting (after connecting, Linux keeps the window it
+    # offered), for a page that stops reading
+    def initialize(port, origin: ORIGIN, answer: nil, read: true, rcvbuf: nil)
+      @sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
+      @sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, rcvbuf) if rcvbuf
+      @sock.connect(Socket.sockaddr_in(port, '127.0.0.1'))
       @write = Mutex.new
       @inbox = Queue.new
       @log = [] # every message from the server, in order
@@ -590,8 +594,7 @@ class RpcTest < Lcty::Scenarios
     stalled = cid = times = nil
     step('Given a page that receives every notification, follows a conversation and never reads') do
       Rpc::Peer.queue_max = 8
-      stalled = page(read: false)
-      stalled.instance_variable_get(:@sock).setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, 4096)
+      stalled = page(read: false, rcvbuf: 4096)
       cid = create
       stalled.send_text(JSON.generate('jsonrpc' => '2.0', 'id' => 1, 'method' => 'initialize',
                                       'params' => { 'capabilities' => { 'receives' => NOTES } }))
@@ -600,7 +603,7 @@ class RpcTest < Lcty::Scenarios
       sleep 0.2
     end
     step('When more changes are made than its queue holds') do
-      big = 'あ' * 100_000
+      big = 'あ' * 350_000 # about 1 MB: 20 of them are more than the kernel buffers (a few MB on Linux) take
       last = nil
       times = Array.new(20) do
         a = sys_attrs(big)
