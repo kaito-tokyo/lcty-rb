@@ -311,6 +311,17 @@ class ServletsTest < Lcty::Scenarios
     end
   end
 
+  scenario 'A licence file of REUSE is 404' do
+    background
+    res = nil
+    step('Given the files "x.wasm" and "x.wasm.license" in the public folder') do
+      write(PUB, 'x.wasm', 'w')
+      write(PUB, 'x.wasm.license', 'licence')
+    end
+    step('When /pub/x.wasm.license is requested') { res = get('/pub/x.wasm.license') }
+    step('Then the status is 404') { assert_equal '404', res.code }
+  end
+
   [
     ['"/js/../js/x.js"', '/js/../js/x.js'],
     ['"/js//x.js"', '/js//x.js'],

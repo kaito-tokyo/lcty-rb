@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # LCTYSP-0012: RPC protocol
 
 - Status: Draft (prototype at `/v1/rpc`; nothing uses it yet)
-- Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md) (the conversation file this protocol writes),
+- Related: [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file this protocol writes),
   [LCTYSP-0006](LCTYSP-0006_http-api.md) (the HTTP API it is to replace for changes),
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the browser's copies it keeps up to date)
 - Methods: [LCTYSP-0012_rpc-protocol.openrpc.yml](LCTYSP-0012_rpc-protocol.openrpc.yml) (OpenRPC, the source of the
@@ -22,9 +22,8 @@ JSON-RPC 2.0. A page keeps a WebSocket open to it: it sends requests and gets th
 notification of every change to every connection that receives it, numbered by a global version. The same requests can
 also be sent one by one with `POST`, for tools and tests. Reading everything at once stays plain `GET`.
 
-The prototype writes conversations in the format of the [revision draft of
-LCTYSP-0003](LCTYSP-0003_conversation-file.md#revision-draft-lcty-msg) into a directory of its own, `c-next/` of the
-data directory, so it never touches the real conversations.
+The prototype writes conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) into a
+directory of its own, `c-next/` of the data directory, so it never touches the real conversations.
 
 ## Transports
 
@@ -123,8 +122,9 @@ session starts.
 
 The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this section gives the rules a list cannot.
 
-- **Conversations** (`c.create`, `c.append.*`, `c.unappend`) follow the two operations of the [revision draft of
-  LCTYSP-0003](LCTYSP-0003_conversation-file.md#writing): appending one element at the end and removing the last one.
+- **Conversations** (`c.create`, `c.append.*`, `c.unappend`) follow the two operations of
+  [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md#writing): appending one element at the end and removing the
+  last one.
 - **There is one append method per element:** `c.append.msg` (`lcty-msg`), `c.append.thinking` (`lcty-thinking`) and
   `c.append.cmd` (`lcty-cmd`, the lock). The method names the element, so its params are only `cid`, `after`, `attrs`
   (the attributes as an object, in their one order) and `innerHTML` (the presentation; none for `lcty-cmd`). `after`

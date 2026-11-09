@@ -14,8 +14,9 @@ Feature: LCTYSP-3018 The servlets of the site
   conversation files <id>.html, T the tag files NNNNN-<part>.html), a redirect to the directory for the path without
   its slash, and, for every name that starts with lcty.v1, a redirect to the same name in ../lcty.v1/ that a browser
   keeps for a day. PublicDirectoryServlet serves the files below a directory, and never a path with an empty part, a
-  part that starts with "." or a NUL. In the steps the servlets are mounted on one WEBrick server, with
-  Lcty::Servlets::MIME_TYPES, over temporary folders; C at /base/c and T at /base/t, so the site is under /base/.
+  part that starts with "." or a NUL, nor a licence file of REUSE (a name that ends with .license). In the steps the
+  servlets are mounted on one WEBrick server, with Lcty::Servlets::MIME_TYPES, over temporary folders; C at /base/c
+  and T at /base/t, so the site is under /base/.
 
   Background:
     Given the servlets mounted on a WEBrick server over temporary folders
@@ -171,6 +172,11 @@ Feature: LCTYSP-3018 The servlets of the site
       | /pub/%2Ehidden  |
       | /pub/sub        |
       | /pub/no-such.js |
+
+  Scenario: A licence file of REUSE is 404
+    Given the files "x.wasm" and "x.wasm.license" in the public folder
+    When /pub/x.wasm.license is requested
+    Then the status is 404
 
   # WEBrick resolves .. and // in the path of a request (after decoding %2E and %2F) before a servlet sees it, so these
   # paths are given to the servlet directly

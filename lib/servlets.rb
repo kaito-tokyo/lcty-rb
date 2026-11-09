@@ -149,6 +149,7 @@ module Lcty::Servlets
       rel = 'index.html' if rel.empty?
       parts = rel.split('/', -1)
       raise WEBrick::HTTPStatus::NotFound if parts.any? { |p| p.empty? || p.start_with?('.') || p.include?("\0") }
+      raise WEBrick::HTTPStatus::NotFound if parts.last.end_with?('.license') # REUSE metadata, not part of the site
 
       StaticFileServlet.new(@server, File.join(@dir_from_pwd, *parts)).do_GET(req, res)
     end

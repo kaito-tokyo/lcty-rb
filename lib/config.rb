@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Server settings (LCTYSP-0010): only the environment variables PORT, LCTY_HOST and LCTY_DATA_DIR; everything else is a
-# browser setting.
+# Server settings (LCTYSP-0010): only environment variables. This file reads PORT, LCTY_HOST and LCTY_DATA_DIR (lcty.rb
+# reads LCTY_BASE_URL, lib/rpc/servlet.rb LCTY_ALLOWED_ORIGIN); everything else is a browser setting.
 
 module Chatty
   ROOT = File.expand_path('..', __dir__)

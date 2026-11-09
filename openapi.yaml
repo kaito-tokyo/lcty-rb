@@ -1,0 +1,273 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Every path the site answers, in five sections (tags). Only paths and methods for now: what the bodies hold is in
+# docs/specs (LCTYSP-0006 for /v1/). The paths are relative to LCTY_BASE_URL (the server below). WEBrick answers HEAD
+# wherever GET is answered.
+
+openapi: 3.1.0
+info:
+  title: lcty-rb
+  version: "1"
+servers:
+  - url: /
+    description: The root of the site, LCTY_BASE_URL ("/" when it is unset)
+tags:
+  - name: Conversations
+    description: /c/, the conversation files and the new conversation page (Lcty::Servlets::C)
+  - name: Tags
+    description: /t/, the tag files and the tag reorder page (Lcty::Servlets::T)
+  - name: Lcty.v1
+    description: /lcty.v1/, the explicit list Lcty::LCTY_V1_FILES; every other name is 404
+  - name: API
+    description: /v1/, the HTTP API (Chatty::V1::Servlet)
+  - name: App
+    description: The rest of public/ (Lcty::Servlets::PublicDirectoryServlet)
+
+paths:
+  # ---- Conversations ----
+
+  /c:
+    get:
+      tags: [Conversations]
+      summary: 302 to c/, with the query
+  /c/:
+    get:
+      tags: [Conversations]
+      summary: The new conversation page (public/c/index.html)
+  /c/index.html:
+    get:
+      tags: [Conversations]
+      summary: The new conversation page (public/c/index.html)
+  /c/index.js:
+    get:
+      tags: [Conversations]
+      summary: The module entry of the new conversation page (public/c/index.js)
+  /c/{cid}.html:
+    get:
+      tags: [Conversations]
+      summary: A conversation file of data/c/, untouched
+      parameters:
+        - $ref: "#/components/parameters/cid"
+  /c/{v1name}:
+    get:
+      tags: [Conversations]
+      summary: 302 to ../lcty.v1/{v1name}, kept for a day (Cache-Control max-age=86400)
+      parameters:
+        - $ref: "#/components/parameters/v1name"
+
+  # ---- Tags ----
+
+  /t:
+    get:
+      tags: [Tags]
+      summary: 302 to t/, with the query
+  /t/:
+    get:
+      tags: [Tags]
+      summary: The tag reorder page (public/t/index.html)
+  /t/index.html:
+    get:
+      tags: [Tags]
+      summary: The tag reorder page (public/t/index.html)
+  /t/index.js:
+    get:
+      tags: [Tags]
+      summary: The module entry of the tag reorder page (public/t/index.js)
+  /t/tag-file.js:
+    get:
+      tags: [Tags]
+      summary: The module entry of a tag file (public/t/tag-file.js)
+  /t/{tagfile}:
+    get:
+      tags: [Tags]
+      summary: A tag file of data/t/, untouched
+      parameters:
+        - name: tagfile
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9]{5}-[^/\\:]+\.html$'
+            maxLength: 255
+  /t/{v1name}:
+    get:
+      tags: [Tags]
+      summary: 302 to ../lcty.v1/{v1name}, kept for a day (Cache-Control max-age=86400)
+      parameters:
+        - $ref: "#/components/parameters/v1name"
+
+  # ---- Lcty.v1 ----
+
+  /lcty.v1/lcty.v1.cjs:
+    get:
+      tags: [Lcty.v1]
+      summary: public/lcty.v1/lcty.v1.cjs
+  /lcty.v1/lcty.v1.lang-ja.cjs:
+    get:
+      tags: [Lcty.v1]
+      summary: public/lcty.v1/lcty.v1.lang-ja.cjs
+  /lcty.v1/lcty.v1.css:
+    get:
+      tags: [Lcty.v1]
+      summary: public/lcty.v1/lcty.v1.css (also the name of version 1)
+  /lcty.v1/lcty.v1.async.mjs:
+    get:
+      tags: [Lcty.v1]
+      summary: public/lcty.v1/lcty.v1.async.mjs
+  /lcty.v1/lcty.v1.c.worker.cjs:
+    get:
+      tags: [Lcty.v1]
+      summary: public/lcty.v1/lcty.v1.c.worker.cjs
+  /lcty.v1/lcty.v1.t.worker.cjs:
+    get:
+      tags: [Lcty.v1]
+      summary: public/lcty.v1/lcty.v1.t.worker.cjs
+  /lcty.v1/lcty.v1.js:
+    get:
+      tags: [Lcty.v1]
+      summary: The name of version 1 of public/lcty.v1/lcty.v1.cjs
+  /lcty.v1/lcty.v1.lang-ja.js:
+    get:
+      tags: [Lcty.v1]
+      summary: The name of version 1 of public/lcty.v1/lcty.v1.lang-ja.cjs
+  /lcty.v1/lcty.v1.module.js:
+    get:
+      tags: [Lcty.v1]
+      summary: The name of version 1 of public/lcty.v1/lcty.v1.async.mjs
+
+  # ---- API ----
+
+  /v1/defaults.json:
+    get:
+      tags: [API]
+      summary: The default settings (LCTYSP-0010)
+  /v1/meta-all.json:
+    get:
+      tags: [API]
+      summary: The meta of every conversation, newest first
+  /v1/tags:
+    get:
+      tags: [API]
+      summary: Every tag, with the ETag of the set
+    put:
+      tags: [API]
+      summary: Replace every tag (If-Match required)
+  /v1/conversations:
+    get:
+      tags: [API]
+      summary: Every conversation, newest first
+    post:
+      tags: [API]
+      summary: Create a conversation
+  /v1/conversations/{cid}:
+    get:
+      tags: [API]
+      summary: A conversation as JSON
+      parameters:
+        - $ref: "#/components/parameters/cid"
+    delete:
+      tags: [API]
+      summary: Delete a conversation
+      parameters:
+        - $ref: "#/components/parameters/cid"
+  /v1/conversations/{cid}/lines:
+    post:
+      tags: [API]
+      summary: Append lines
+      parameters:
+        - $ref: "#/components/parameters/cid"
+  /v1/conversations/{cid}/pop:
+    post:
+      tags: [API]
+      summary: Delete the messages from an index
+      parameters:
+        - $ref: "#/components/parameters/cid"
+  /v1/search:
+    post:
+      tags: [API]
+      summary: Full-text search
+  /v1/snippets:
+    post:
+      tags: [API]
+      summary: Snippets of messages
+  /v1/vectors/pending:
+    get:
+      tags: [API]
+      summary: The messages that have no vector yet
+  /v1/vectors:
+    put:
+      tags: [API]
+      summary: Store vectors
+  /v1/vectors.eg2_264.dat:
+    get:
+      tags: [API]
+      summary: The vector binary of the default embedding model (LCTYSP-0008)
+  /v1/vectors.eg2_264.idx:
+    get:
+      tags: [API]
+      summary: The index of the vector binary (LCTYSP-0008)
+  /v1/rpc:
+    get:
+      tags: [API]
+      summary: The RPC protocol over a WebSocket (LCTYSP-0012); 426 without Upgrade, 403 for an Origin not allowed
+    post:
+      tags: [API]
+      summary: One JSON-RPC request or a batch, without notifications (LCTYSP-0012)
+
+  # ---- App ----
+
+  /:
+    get:
+      tags: [App]
+      summary: public/index.html, which moves to c/ (meta refresh, without the query)
+  /index.html:
+    get:
+      tags: [App]
+      summary: public/index.html
+  /fuzzy_search.worker.js:
+    get:
+      tags: [App]
+      summary: The semantic search worker
+  /bdot264.wasm:
+    get:
+      tags: [App]
+      summary: The kernel of the semantic search worker
+  /bdot264.wat:
+    get:
+      tags: [App]
+      summary: The source of bdot264.wasm
+  /js/{module}:
+    get:
+      tags: [App]
+      summary: A module of public/js/ (the subfolders api/, llm/, pages/, search/ and ui/ included)
+      parameters:
+        - name: module
+          in: path
+          required: true
+          description:
+            A path below public/js/, which may have slashes; written as one parameter since a path
+            parameter cannot span segments
+          schema:
+            type: string
+            pattern: '^[a-z0-9-]+(/[a-z0-9-]+)*\.js$'
+
+components:
+  parameters:
+    cid:
+      name: cid
+      in: path
+      required: true
+      description: The id of a conversation (as lib/config.rb)
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{1,80}$"
+    v1name:
+      name: v1name
+      in: path
+      required: true
+      description: A name that starts with lcty.v1 (no slash); C and T do not check it against the list of /lcty.v1/
+      schema:
+        type: string
+        pattern: '^lcty\.v1[^/]*$'
