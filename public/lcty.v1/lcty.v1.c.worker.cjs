@@ -2,16 +2,15 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// lcty.v1.c.worker.cjs: the browser's copy of every conversation's meta (IndexedDB "lcty_c", LCTYSP-0010), an RPC
+// lcty.v1.c.worker.cjs: the browser's copy of every conversation's meta (IndexedDB "lcty_v1_c", LCTYSP-0010), an RPC
 // server that runs as a Worker or as a SharedWorker. The messages, the database and why it works this way are in
 // lcty.v1.c.worker.d.cts.
 
 "use strict";
 
-const DB_NAME = "lcty_c";
+const DB_NAME = "lcty_v1_c";
 const DB_VERSION = 1; // raised when what is stored changes
 const STORE = "c_meta";
-const OLD_DB_NAME = "lcty";
 
 /** The URL of the API (v1/) that a message names as its endpoint, checked (lcty.v1.c.worker.d.cts). */
 /*export*/ function endpointOf(endpoint) {
@@ -71,15 +70,6 @@ const OLD_DB_NAME = "lcty";
 	});
 }
 
-function deleteOldDb() {
-	return new Promise((resolve) => {
-		const req = indexedDB.deleteDatabase(OLD_DB_NAME);
-		req.onsuccess = () => resolve();
-		req.onerror = () => resolve(); // the copy is in place: an old database left behind is only space
-		req.onblocked = () => resolve();
-	});
-}
-
 /*export*/ async function syncMeta(v1) {
 	const response = await fetch(new URL("meta-all.json", v1));
 	if (!response.ok)
@@ -107,7 +97,6 @@ function deleteOldDb() {
 	} finally {
 		db.close();
 	}
-	await deleteOldDb();
 }
 
 // Newest first by updated_at_hint, then by id (it starts with the creation time): the same order as the server and

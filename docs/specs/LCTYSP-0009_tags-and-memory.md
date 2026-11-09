@@ -314,7 +314,7 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
 Tags are handled in the browser the way the conversation meta is (`c_meta`,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
 
-- **IndexedDB `lcty_t`, stores `t_full` and `t_set`** (derived; they can be dropped at any time): a copy of
+- **IndexedDB `lcty_v1_t`, stores `t_full` and `t_set`** (derived; they can be dropped at any time): a copy of
   `GET /v1/tags`, every tag in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full"
   as opposed to `c_meta`'s head lines only: a tag file is small and every reader needs all of it.
   - **`t_full` is row-oriented, like `c_meta`:** one row per tag file, the tag as `GET /v1/tags` gives it, with the key
@@ -327,22 +327,25 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
     and the ETag; `get` reads both), so the rows and the ETag are always the same set.
   - Version 1 held the set as one record `"set"`, `{tags, etag}`, in `t_full` with out-of-line keys. Since the copy is
     derived, an upgrade drops every store and recreates them empty, and the next `get` syncs; nothing is converted.
-- **One database per resource:** `lcty_c` for what is derived from `c/` (store `c_meta`) and `lcty_t` for what is
-  derived from `t/` (stores `t_full` and `t_set`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the data
-  directory. The database before the split, `lcty`, became `lcty_c`; since it is derived, it was not converted:
-  `lcty.v1.c.worker.cjs` fills `lcty_c` at the next sync and then deletes the old `lcty` (`indexedDB.deleteDatabase`; a
-  deletion blocked by a connection of a page still running older code is not waited for, and the next sync tries
-  again).
+- **One database per resource:** `lcty_v1_c` for what is derived from `c/` (store `c_meta`) and `lcty_v1_t` for what
+  is derived from `t/` (stores `t_full` and `t_set`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the
+  data directory.
   - Each database has exactly one piece of code that opens it with a version and defines its schema
-    (`lcty.v1.c.worker.cjs` for `lcty_c`, `lcty.v1.t.worker.cjs` for `lcty_t`). The workers have no imports, so a
-    shared database would mean the same version and schema written in two places, and one worker's upgrade could be
-    blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never need
-    to be read in one transaction.
+    (`lcty.v1.c.worker.cjs` for `lcty_v1_c`, `lcty.v1.t.worker.cjs` for `lcty_v1_t`). The workers have no imports,
+    so a shared database would mean the same version and schema written in two places, and one worker's upgrade could
+    be blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never
+    need to be read in one transaction.
   - **The same pattern for both:** each worker is also the only code that opens its database, readers included.
     `lcty.v1.c.worker.cjs` has the operations `sync_meta` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
     [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)); `js/api/meta-db.js` and `lcty.v1.cjs` read `c_meta` through it.
+- **The name carries the version of the files:** `lcty_v1_<resource>` is opened only by the `lcty.v1` workers. The
+  files of another version open databases of their own (`lcty_v2_c`, …) and fill them from the server; they never
+  read, convert or delete those of another version, which is what the new name is for. Pages of two versions can run
+  side by side without one blocking the other's upgrade. Within a version, a change of what is stored raises the
+  database's own version, and the upgrade drops the stores and recreates them empty (nothing is converted either).
+  The databases before this rule (`lcty`, `lcty_c` and `lcty_t`) are left as they are.
 - **Every asynchronous operation on the tags is one worker:** `lcty.v1.t.worker.cjs`, a classic worker script with no
-  imports like `lcty.v1.c.worker.cjs`, and the only code that opens `lcty_t` (readers included). `js/api/lcty-t.js`
+  imports like `lcty.v1.c.worker.cjs`, and the only code that opens `lcty_v1_t` (readers included). `js/api/lcty-t.js`
   starts one per call.
 - **The workers are RPC servers that run as a `Worker` or as a `SharedWorker` alike:** both `lcty.v1.c.worker.cjs` and
   `lcty.v1.t.worker.cjs` set the global `onmessage` (which a `Worker` uses) and `onconnect` (which a `SharedWorker` uses,

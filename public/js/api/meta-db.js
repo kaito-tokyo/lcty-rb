@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The browser's copy of every conversation's meta (IndexedDB "lcty_c", store "c_meta", LCTYSP-0010). Every operation on
+// The browser's copy of every conversation's meta (IndexedDB "lcty_v1_c", store "c_meta", LCTYSP-0010). Every operation on
 // it starts one worker, lcty.v1/lcty.v1.c.worker.cjs of the site, posts it one message ({id, op: "sync_meta"} or {id,
 // op: "get"}, with the site's v1/ as the endpoint) and gets its answer, {id, result} or {id, errorType, ...}; the
 // worker is the only code that opens the database (LCTYSP-0009). A sync (sync_meta) fetches GET v1/meta-all.json and

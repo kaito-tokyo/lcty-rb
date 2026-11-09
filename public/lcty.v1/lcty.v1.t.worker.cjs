@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// lcty.v1.t.worker.cjs: the tags in the browser (IndexedDB "lcty_t", LCTYSP-0009), an RPC server that runs as a Worker
+// lcty.v1.t.worker.cjs: the tags in the browser (IndexedDB "lcty_v1_t", LCTYSP-0009), an RPC server that runs as a Worker
 // or as a SharedWorker. The messages, the database and why it works this way are in lcty.v1.t.worker.d.cts.
 
 "use strict";
 
-const DB_NAME = "lcty_t";
+const DB_NAME = "lcty_v1_t";
 const DB_VERSION = 2; // raised when what is stored changes
 const TAGS = "t_full";
 const SET = "t_set";

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The tags in the browser (LCTYSP-0009): every call starts one worker, lcty.v1/lcty.v1.t.worker.cjs of the site, posts
-// it one operation and resolves to its answer. The worker keeps the browser's copy of GET /v1/tags (IndexedDB "lcty_t",
+// it one operation and resolves to its answer. The worker keeps the browser's copy of GET /v1/tags (IndexedDB "lcty_v1_t",
 // store "t_full") and sends the requests that change the tags, syncing the copy after them; this module never opens the
 // database itself.
 //

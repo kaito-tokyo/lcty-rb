@@ -8,7 +8,7 @@
 Feature: LCTYSP-1010 The browser's copy of the meta
 
   The module keeps the browser's copy of every conversation's meta, the store "c_meta" of the IndexedDB database
-  "lcty_c". A sync posts {"id": n, "op": "sync_meta"} to the worker /lcty.v1.c.worker.cjs (LCTYSP-1001), which replaces
+  "lcty_v1_c". A sync posts {"id": n, "op": "sync_meta"} to the worker /lcty.v1.c.worker.cjs (LCTYSP-1001), which replaces
   the store with GET /v1/meta-all.json; then the module calls the listeners of onMetaDbChange. requestMetaDbSync()
   syncs when the browser is idle (the pages call it on loading the list and after sending a change),
   forceSyncMetaDb() syncs at once (every page when it is shown, and the sidebar's refresh button), and readMetaDb()
@@ -20,17 +20,10 @@ Feature: LCTYSP-1010 The browser's copy of the meta
     And GET /v1/meta-all.json is answered by the test
 
   Scenario: Reading before any sync finds no copy
-    Given there is no database "lcty_c"
+    Given there is no database "lcty_v1_c"
     When readMetaDb() reads the copy
     Then it returns no items and stale true
-    And there is still no database "lcty_c"
-
-  Scenario: Reading does not read the old database lcty
-    Given the database "lcty" is at version 5 with the store "c_meta" holding the conversation "a"
-    And there is no database "lcty_c"
-    When readMetaDb() reads the copy
-    Then it returns no items and stale true
-    And there is still no database "lcty_c"
+    And there is still no database "lcty_v1_c"
 
   Scenario: Reading returns the copy newest first
     Given "c_meta" holds the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00
@@ -40,10 +33,10 @@ Feature: LCTYSP-1010 The browser's copy of the meta
   Scenario: Reading leaves no connection open
     Given "c_meta" holds the conversation "a"
     When readMetaDb() reads the copy
-    Then the database "lcty_c" can be opened at version 2 without being blocked
+    Then the database "lcty_v1_c" can be opened at version 2 without being blocked
 
   Scenario: A forced sync syncs at once
-    Given there is no database "lcty_c"
+    Given there is no database "lcty_v1_c"
     And GET /v1/meta-all.json returns the conversations "a" and "b"
     And a listener is registered with onMetaDbChange
     When forceSyncMetaDb() is called

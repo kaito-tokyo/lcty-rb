@@ -53,18 +53,18 @@ the following. The rule on `_` is unchanged.
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out             |
 | `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
 
-In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned by `lcty.v1.c.worker.cjs`, below) and
-`lcty_t` (stores `t_full` and `t_set`, owned by `lcty.v1.t.worker.cjs`), a full copy of the tags, one row per tag
+In the browser, IndexedDB is split by resource: `lcty_v1_c` (store `c_meta`, owned by `lcty.v1.c.worker.cjs`, below) and
+`lcty_v1_t` (stores `t_full` and `t_set`, owned by `lcty.v1.t.worker.cjs`), a full copy of the tags, one row per tag
 file, with the set's `ETag`
-([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). The database before the split,
-`lcty`, is deleted by `lcty.v1.c.worker.cjs` after a sync, not converted.
+([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). The names carry the version of the
+files: another version opens databases of its own, and nothing converts or deletes those of another version.
 
 - SQLite files use WAL mode. To back up `tags.sqlite`, copy `tags.sqlite-wal` with it or run `PRAGMA wal_checkpoint`
   first.
 
 ### In the browser
 
-- **IndexedDB `lcty_c`** (derived; it can be dropped at any time; version 1):
+- **IndexedDB `lcty_v1_c`** (derived; it can be dropped at any time; version 1):
   - store `c_meta` (key `id`): a copy of `GET /v1/meta-all.json`, the meta of every conversation read from its head lines
     ([LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0006](LCTYSP-0006_http-api.md)). It holds `setup_tags` (the
     tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
