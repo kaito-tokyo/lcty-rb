@@ -89,6 +89,8 @@ module Lcty
 
   def self.run
     Chatty.open_data
+    Rpc.index = Chatty::INDEX # c_recordcount of /v1/rpc lives in _index.sqlite with every other cache
+    Rpc::ConvStore.fill_record_counts
     publish_offline
     s = WEBrick::HTTPServer.new(
       BindAddress: Chatty::BIND,

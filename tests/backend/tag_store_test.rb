@@ -34,6 +34,10 @@ class TagStoreTest < Lcty::Scenarios
   end
 
   def path
+    File.join(@dir, 'lcty_t.sqlite')
+  end
+
+  def former
     File.join(@dir, 'tags.sqlite')
   end
 
@@ -135,9 +139,43 @@ class TagStoreTest < Lcty::Scenarios
 
   scenario 'A store of a newer format is refused' do
     step('Given a tags file of format 4') { with_db { |db| db.execute('PRAGMA user_version = 4') } }
-    step('Then opening it fails with "tags.sqlite has format 4, newer than this version (3); it cannot be opened"') do
+    step('Then opening it fails with "lcty_t.sqlite has format 4, newer than this version (3); it cannot be opened"') do
       e = assert_raises(RuntimeError) { new_store }
-      assert_equal 'tags.sqlite has format 4, newer than this version (3); it cannot be opened', e.message
+      assert_equal 'lcty_t.sqlite has format 4, newer than this version (3); it cannot be opened', e.message
+    end
+  end
+
+  # ---- The file of the layout before ----
+
+  scenario 'tags.sqlite is renamed to lcty_t.sqlite at startup, keeping its tags and its format' do
+    renamed = nil
+    step('Given a tags.sqlite with the conversation "c1" tagged "ruby", still in its WAL, and no lcty_t.sqlite') do
+      old = TagStore.new(former)
+      old.set_conversation_tags('c1', ['ruby'])
+      assert File.exist?("#{former}-wal")
+    end
+    step('When TagStore.rename_former renames it') { renamed = TagStore.rename_former(former, path) }
+    step('Then it returns true, and tags.sqlite, its -wal and its -shm are gone') do
+      assert renamed
+      assert_equal [false] * 3, [former, "#{former}-wal", "#{former}-shm"].map { |f| File.exist?(f) }
+    end
+    step('And lcty_t.sqlite has format 3 and the current tags of "c1" are "ruby"') do
+      assert_format 3
+      assert_equal ['ruby'], new_store.conversation_tags('c1')
+    end
+  end
+
+  scenario 'tags.sqlite is left as it is when lcty_t.sqlite exists' do
+    renamed = nil
+    step('Given a tags.sqlite with "c1" tagged "old" and a lcty_t.sqlite with "c1" tagged "new"') do
+      TagStore.new(former).set_conversation_tags('c1', ['old'])
+      new_store.set_conversation_tags('c1', ['new'])
+    end
+    step('When TagStore.rename_former is called') { renamed = TagStore.rename_former(former, path) }
+    step('Then it returns false, tags.sqlite is still there and the current tags of "c1" are "new"') do
+      refute renamed
+      assert File.exist?(former)
+      assert_equal ['new'], new_store.conversation_tags('c1')
     end
   end
 end

@@ -57,9 +57,12 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 
 - `c/<id>.html`: one file per conversation. Opened through the server (`/c/<id>.html`) it shows as the conversation.
 - `t/NNNNN-<name>.html`: one file per tag (its name, prompt and memory); `NNNNN` is the order, changed on `/t/`.
-- `tags.sqlite`: the tags of conversations changed after they were created. Tag definitions and memory kept there by
-  an older version are dropped when it starts (they are not converted; define the tags again).
-- Files starting with `_` are derived (the search index, the vectors) and are rebuilt when deleted.
+- `lcty_t.sqlite`: the tags of conversations changed after they were created (an older version's `tags.sqlite` is
+  renamed to it when the server starts). Tag definitions and memory kept there by an older version are dropped when it
+  starts (they are not converted; define the tags again).
+- `lcty_fuzzy_search.sqlite`: the vectors of semantic search. They are derived, but only the browser can make them
+  again (it does so while a page is open), so they are kept.
+- Files starting with `_` are derived (the search index) and are made anew at every start.
 
 Back up everything that does not start with `_`:
 

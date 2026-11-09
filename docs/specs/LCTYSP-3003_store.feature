@@ -8,7 +8,7 @@
 Feature: LCTYSP-3003 Storing conversations and their tags
 
   Chatty::Store keeps every conversation as a file data/c/<id>.html and the changed tags of conversations in
-  data/tags.sqlite (tag definitions and memory are tag files, LCTYSP-3014). Tags are references to tag files, checked
+  data/lcty_t.sqlite (tag definitions and memory are tag files, LCTYSP-3014). Tags are references to tag files, checked
   mechanically. A conversation is created once with its meta, then only appended to; the title is
   overwritten in its slot, and one call of pop may remove at most the last turn. Every line of a request is checked
   before anything is written, and a bad request is an HttpError with the status and message the API returns. Whole

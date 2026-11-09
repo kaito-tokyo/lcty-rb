@@ -8,8 +8,11 @@
 
 Feature: LCTYSP-3007 Vector DB
 
-  Chatty::V1::VectorDB keeps the vectors of the rounds of a search index in its table vectors, one row per embedding
-  model and round part, in _index.sqlite, the one file of every cache that may be lost. VectorDB#pending lists the
+  Chatty::V1::VectorDB keeps the vectors of the rounds of a search index in the table vectors, one row per embedding
+  model and round part, of lcty_fuzzy_search.sqlite, attached to the index's connection. Only the browser can make the
+  vectors again, so the file is kept when the index is discarded at every start, has a format of its own (PRAGMA
+  user_version) and refuses a newer one; the vectors of an index of the layout before are carried over into it once.
+  VectorDB#pending lists the
   rounds without vectors, newest first. VectorDB#put registers a registration vector binary (768 dims) for the
   revisions the caller embedded, L2-normalizes each vector and keeps its first 256 dimensions renormalized; ids whose
   round changed meanwhile are dropped as stale. VectorDB#export builds in memory, on every call, the distribution of the
@@ -44,7 +47,7 @@ Feature: LCTYSP-3007 Vector DB
     Given a round with a vector registered for the model "a"
     Then the round is not pending for the model "a"
     But it is pending for the model "b"
-    And the data directory holds no file but _index.sqlite
+    And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite
 
   Scenario: Many models are all served
     Given a round with a vector registered for the model "m0"
@@ -112,7 +115,7 @@ Feature: LCTYSP-3007 Vector DB
   Scenario Outline: An invalid model name is a 400
     When VectorDB#pending lists the rounds of the model <model>
     Then it raises an HttpError 400 saying "invalid model name: <model>"
-    And the data directory holds no file but _index.sqlite
+    And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite
 
     Examples:
       | model                    |
@@ -142,7 +145,7 @@ Feature: LCTYSP-3007 Vector DB
     When VectorDB#export builds the distribution of the model "m"
     Then the .dat has 3 rows of 1,056 bytes and the .idx 3 ids of 16 bytes
     And the rows are the two parts of the 10:00 round, then the 11:00 round
-    And the data directory holds no file but _index.sqlite
+    And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite
 
   Scenario: Export of a model without vectors is empty
     When VectorDB#export builds the distribution of the model "empty"
@@ -190,7 +193,7 @@ Feature: LCTYSP-3007 Vector DB
   Scenario Outline: Garbage collection of an invalid model name does nothing
     When VectorDB#gc collects the model <model>
     Then it returns 0
-    And the data directory holds no file but _index.sqlite
+    And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite
 
     Examples:
       | model  |
@@ -207,4 +210,24 @@ Feature: LCTYSP-3007 Vector DB
   Scenario: Garbage collection at startup deletes the cache files of the former layout
     Given the files _vectors.m.sqlite, _vectors.m.sqlite-wal, _vectors.eg2_264.dat, _vectors.eg2_264.idx and _vectors.m.256.bin in the data directory
     When VectorDB#gc_all collects the data directory
-    Then those files are gone and the data directory holds no file but _index.sqlite
+    Then those files are gone and the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite
+
+  # ---- lcty_fuzzy_search.sqlite ----
+
+  Scenario: The vectors are kept in lcty_fuzzy_search.sqlite when the index is discarded, as at every start
+    Given a round with a vector of the model "m"
+    When the index is discarded and opened anew with a new VectorDB, and the round is synced again
+    Then the round is not pending for the model "m"
+    And lcty_fuzzy_search.sqlite has format 1
+
+  Scenario: The vectors of an index of the layout before are carried over into a new lcty_fuzzy_search.sqlite
+    Given an index file of the layout before, with a vector of the model "m" in its table vectors, and no lcty_fuzzy_search.sqlite
+    When VectorDB.carry_over is called with it
+    Then it returns 1, and lcty_fuzzy_search.sqlite has format 1 and that vector
+    And calling it again carries over nothing, since the file exists
+
+  Scenario: A lcty_fuzzy_search.sqlite of a newer format is refused and kept
+    Given a lcty_fuzzy_search.sqlite of format 2
+    When a VectorDB is opened on it
+    Then it fails with "lcty_fuzzy_search.sqlite has format 2, newer than this version (1); it cannot be opened"
+    And the file still has format 2

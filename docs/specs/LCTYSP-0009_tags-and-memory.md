@@ -56,15 +56,15 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 
 - The tags at start are `<lcty-c>`'s `data-setup-tags`, written once when the conversation is created;
   `lcty-setup`'s `data-instructions` holds the system prompt actually sent. The two are not guaranteed to correspond (tags are a hint).
-- **Changing tags later does not touch the conversation file.** The new tags are kept in `tags.sqlite` (table
+- **Changing tags later does not touch the conversation file.** The new tags are kept in `lcty_t.sqlite` (table
   `conversation_tags`: the conversation id, the tags as a JSON array in the order given, and when they were set). The
   current tags are that row, or `data-setup-tags` when the tags were never changed
   ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). Deleting a conversation deletes its row. Tag names need not be
   defined (an undefined one shows as such), and renaming a tag definition does not rename it in conversations.
 - The page sends a change as a `tags` line (`POST /v1/conversations/:id/lines`), which the server stores in
-  `tags.sqlite` instead of appending it; the search index (`conv_tags`) follows it.
+  `lcty_t.sqlite` instead of appending it; the search index (`conv_tags`) follows it.
 - **For now the header shows the tags at creation** (`data-setup-tags`), also after a change; the current tags live in
-  `tags.sqlite`, and the sidebar and search use them ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
+  `lcty_t.sqlite`, and the sidebar and search use them ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 - Not adopted: appending an `lcty-tags` line to the file on each change. Tags are a hint for search and memory, not
   part of the record of the conversation, and keeping them out of the file keeps the file append-only for messages.
 - A fork inherits its source's instructions and current tags ([LCTYSP-0004](LCTYSP-0004_editing.md)).
@@ -107,7 +107,8 @@ and `memory` of `tags.sqlite`; that design is in git.
 
 Scope: tag definitions (name, prompt, order) and memory, and how conversations refer to tags
 ([below](#conversations-refer-to-tags-by-the-file-name-part)). The current tags of conversations stay in
-`conversation_tags` in `tags.sqlite` ([below](#tagssqlite-only-conversation_tags-remains-no-conversion)).
+`conversation_tags` in `lcty_t.sqlite`, formerly `tags.sqlite`
+([below](#tagssqlite-only-conversation_tags-remains-no-conversion)).
 
 ### Tag files
 
@@ -471,7 +472,8 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   reads or writes them; a migration (`PRAGMA user_version`) drops them. Existing tag definitions and memory are not
   carried over to `t/`: tags start empty and are defined again in the tag editor.
 - **`conversation_tags` stays in `tags.sqlite`,** which then holds only that table: the current tags of each
-  conversation after a change, as before.
+  conversation after a change, as before. The file is now `lcty_t.sqlite`: the server renames `tags.sqlite` to it at
+  startup, its format kept ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)).
 - **Existing references are not converted** either. `data-setup-tags` in existing conversation files and existing rows
   of `conversation_tags` keep the display names they were written with. Where such a name equals the part of a new
   tag (lowercase names without the escaped symbols, such as `ruby`), it refers to that tag; otherwise it shows as an

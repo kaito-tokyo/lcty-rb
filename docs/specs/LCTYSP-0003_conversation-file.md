@@ -72,7 +72,7 @@ conversation page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
   when the conversation is created, and never change (line 4 is never rewritten):
   - `id`: `c-` followed by the conversation id (see the id prefixes below);
   - `data-setup-tags`: the tags the conversation was created with (space separated, omitted when empty). **Tag
-    changes are not written to the file:** they are kept in `tags.sqlite`, and the current tags are those, or these
+    changes are not written to the file:** they are kept in `lcty_t.sqlite`, and the current tags are those, or these
     when the tags were never changed ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md));
   - `data-created-at`: when the conversation was created.
 

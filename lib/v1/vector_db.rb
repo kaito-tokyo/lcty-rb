@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# The vector DB (persistent format, LCTYSP-0008): the table vectors of the search index, data/_index.sqlite, which holds
-# every cache that may be lost (LCTYSP-0010), so vectors join its rounds (chunks) on the same connection.
+# The vector DB (persistent format, LCTYSP-0008): data/lcty_fuzzy_search.sqlite, attached to the search index's
+# connection as fz so vectors join its rounds (chunks). Only the browser can make the vectors again, so unlike the
+# index, which is made anew at every start, this file is kept and migrated by its PRAGMA user_version (LCTYSP-0015).
 #
 #   vectors     One row per model and round part. vec = 768 dims (as registered), vec256 = its first 256 dims
 #               renormalized (uniquely derived from vec). Both are Float32 BLOBs, L2-normalized. Stale when rev differs
@@ -28,16 +29,56 @@ module Chatty
       FORMER_FILES = %w[_vectors.*.sqlite _vectors.*.sqlite-wal _vectors.*.sqlite-shm _vectors.eg2_264.dat
                         _vectors.eg2_264.idx _vectors.*.256.rows _vectors.*.256.ids _vectors.*.256.bin].freeze
 
-      # index: the SearchIndex, which owns the connection, its mutex and the tables chunks and vectors.
+      FILE = 'lcty_fuzzy_search.sqlite'
+      SCHEMA_VERSION = 1 # PRAGMA user_version of FILE
+      COLUMNS = %w[model msg_id part rev vec vec256].freeze
+
+      # index: the SearchIndex, which owns the connection, its mutex and the table chunks. dir: the data directory,
+      # which holds FILE.
       def initialize(index, dir)
         @db = index.db
         @mutex = index.mutex
         @dir = dir
+        @db.execute('ATTACH DATABASE ? AS fz', [File.join(dir, FILE)])
+        @db.execute('PRAGMA fz.journal_mode = WAL')
+        self.class.migrate(@db, 'fz')
+      end
+
+      # Bring the schema schema (an attached name, or main) of db to SCHEMA_VERSION. A file of a newer version, which
+      # a newer server wrote, is refused: its vectors are kept for that server.
+      def self.migrate(db, schema)
+        version = db.get_first_value("PRAGMA #{schema}.user_version").to_i
+        return if version == SCHEMA_VERSION
+        raise "#{FILE} has format #{version}, newer than this version (#{SCHEMA_VERSION}); it cannot be opened" if version > SCHEMA_VERSION
+        db.transaction do
+          db.execute(<<~SQL)
+            CREATE TABLE IF NOT EXISTS #{schema}.vectors (
+              model TEXT NOT NULL, msg_id TEXT NOT NULL, part INTEGER NOT NULL, rev TEXT NOT NULL, vec BLOB NOT NULL,
+              vec256 BLOB NOT NULL, PRIMARY KEY (model, msg_id, part))
+          SQL
+          db.execute("PRAGMA #{schema}.user_version = #{SCHEMA_VERSION}")
+        end
+      end
+
+      # At startup, before the index is discarded: when dir has no FILE yet and the index of the layout before
+      # (old_index, whose table vectors had these columns) does, its vectors are carried over into a new FILE, so the
+      # browser need not embed everything again. Returns the number carried over.
+      def self.carry_over(old_index, dir)
+        path = File.join(dir, FILE)
+        return 0 if File.exist?(path) || !File.exist?(old_index)
+        old = SQLite3::Database.new(old_index)
+        return 0 unless (COLUMNS - old.execute('PRAGMA table_info(vectors)').map { |c| c[1] }).empty?
+        old.execute('ATTACH DATABASE ? AS fz', [path])
+        migrate(old, 'fz')
+        old.execute("INSERT INTO fz.vectors (#{COLUMNS.join(', ')}) SELECT #{COLUMNS.join(', ')} FROM main.vectors")
+        old.changes
+      ensure
+        old&.close
       end
 
       # At startup: garbage-collect the vectors of every model, and delete the files of the former layout.
       def gc_all
-        models = @mutex.synchronize { @db.execute('SELECT DISTINCT model FROM vectors').map(&:first) }
+        models = @mutex.synchronize { @db.execute('SELECT DISTINCT model FROM fz.vectors').map(&:first) }
         models.each { |m| gc(m) }
         FORMER_FILES.flat_map { |g| Dir.glob(File.join(@dir, g)) }.uniq.each { |f| File.delete(f) }
       end
@@ -49,7 +90,7 @@ module Chatty
         return 0 unless model.is_a?(String) && MODEL_RE.match?(model)
         @mutex.synchronize do
           @db.execute(<<~SQL, [model])
-            DELETE FROM vectors WHERE model = ? AND NOT EXISTS (
+            DELETE FROM fz.vectors WHERE model = ? AND NOT EXISTS (
               SELECT 1 FROM chunks c WHERE c.msg_id = vectors.msg_id AND c.part = vectors.part AND c.rev = vectors.rev)
           SQL
           n = @db.changes
@@ -64,7 +105,7 @@ module Chatty
         @mutex.synchronize do
           rows = @db.execute(<<~SQL, [model, limit])
             SELECT c.msg_id, c.rev FROM chunks c
-            WHERE c.part = 0 AND NOT EXISTS (SELECT 1 FROM vectors v WHERE v.model = ? AND v.msg_id = c.msg_id AND v.rev = c.rev)
+            WHERE c.part = 0 AND NOT EXISTS (SELECT 1 FROM fz.vectors v WHERE v.model = ? AND v.msg_id = c.msg_id AND v.rev = c.rev)
             ORDER BY c.at DESC LIMIT ?
           SQL
           rows.map do |id, rev|
@@ -95,9 +136,9 @@ module Chatty
                 stale << id
                 next
               end
-              @db.execute('DELETE FROM vectors WHERE model = ? AND msg_id = ?', [model, id])
+              @db.execute('DELETE FROM fz.vectors WHERE model = ? AND msg_id = ?', [model, id])
               list.each_with_index do |(v, v256), part|
-                @db.execute('INSERT INTO vectors (model, msg_id, part, rev, vec, vec256) VALUES (?, ?, ?, ?, ?, ?)',
+                @db.execute('INSERT INTO fz.vectors (model, msg_id, part, rev, vec, vec256) VALUES (?, ?, ?, ?, ?, ?)',
                             [model, id, part, rev, SQLite3::Blob.new(v), SQLite3::Blob.new(v256)])
               end
               accepted << id
@@ -125,7 +166,7 @@ module Chatty
         pad = ("\0" * ROW_PAD).b
         @mutex.synchronize do
           @db.execute(<<~SQL, [model]) do |id, vec|
-            SELECT v.msg_id, v.vec256 FROM vectors v
+            SELECT v.msg_id, v.vec256 FROM fz.vectors v
             JOIN chunks c ON c.msg_id = v.msg_id AND c.part = v.part AND c.rev = v.rev
             WHERE v.model = ?
             ORDER BY c.at, v.msg_id, v.part

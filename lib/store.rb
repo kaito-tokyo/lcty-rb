@@ -4,7 +4,7 @@
 
 # -*- encoding: utf-8 -*-
 # Storage (LCTYSP-0003, LCTYSP-0004, LCTYSP-0009): conversation files in data/c/, tag files in data/t/ (TagFiles) and
-# the current tags of conversations in data/tags.sqlite (TagStore).
+# the current tags of conversations in data/lcty_t.sqlite (TagStore).
 # open_data opens every store and brings the derived data (search index, vector DB) in line with the files.
 
 require 'json'
@@ -23,7 +23,7 @@ module Chatty
   module Store
     module_function
 
-    APPENDABLE = %w[message title tags].freeze # tags lines go to tags.sqlite, not to the file (LCTYSP-0009)
+    APPENDABLE = %w[message title tags].freeze # tags lines go to lcty_t.sqlite, not to the file (LCTYSP-0009)
     # A new conversation may also end with a command tag (send: generate a reply at once. LCTYSP-0004)
     CREATABLE = %w[message title cmd].freeze # the tags at creation are meta.tags
 
@@ -134,7 +134,7 @@ module Chatty
       raise HttpError.new(400, 'tags must be an array of unique tag references') unless ok
     end
 
-    # Current tags: tags.sqlite when they were changed after creation, else the tags at creation (data-setup-tags.
+    # Current tags: lcty_t.sqlite when they were changed after creation, else the tags at creation (data-setup-tags.
     # LCTYSP-0009). Tag changes are not written to the conversation file.
     def current_tags(entries)
       meta = ConvHtml.current_meta(entries)
@@ -250,7 +250,7 @@ module Chatty
 
     # The meta of every conversation, newest first, from its head lines only (lines 1 to 4: the header, the title slot and
     # <lcty-c>. LCTYSP-0003): they hold what a list needs, so the rest of each file is not read (GET /v1/meta-all.json).
-    # setup_tags are the tags at creation; later changes are in tags.sqlite, which tags_hint reflects.
+    # setup_tags are the tags at creation; later changes are in lcty_t.sqlite, which tags_hint reflects.
     # updated_at_hint is only a hint (the file's mtime, which copying, syncing or editing by hand changes too), and so is
     # tags_hint and messages_hint, the current tags and the number of messages as recorded in the search index (derived;
     # LCTYSP-0007).
@@ -316,10 +316,15 @@ module Chatty
 
   end
 
-  # At startup: open the stores (TAG_FILES, TAGS, INDEX, VECTORS), sync the index with the files, garbage-collect
-  # vectors and delete the cache files of the former layout.
+  # At startup: bring the files of the layout before to this one (tags.sqlite renamed to lcty_t.sqlite, the vectors of
+  # the old _index.sqlite carried over to lcty_fuzzy_search.sqlite), discard _index.sqlite, open the stores (TAG_FILES,
+  # TAGS, INDEX, VECTORS), fill the index from the files, garbage-collect vectors and delete the cache files of the
+  # former layout (LCTYSP-0015).
   def self.open_data
     FileUtils.mkdir_p(CONV_DIR)
+    TagStore.rename_former(FORMER_TAGS_DB_PATH, TAGS_DB_PATH)
+    V1::VectorDB.carry_over(INDEX_PATH, DATA_DIR)
+    SearchIndex.discard(INDEX_PATH)
     const_set(:TAG_FILES, TagFiles.new(TAG_DIR, TAG_LOCK_PATH))
     const_set(:TAGS, TagStore.new(TAGS_DB_PATH))
     const_set(:INDEX, SearchIndex.new(INDEX_PATH))

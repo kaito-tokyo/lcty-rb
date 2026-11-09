@@ -114,16 +114,20 @@ class VectorDBTest < Lcty::Scenarios
   end
 
   def stored(model, id)
-    @index.db.execute('SELECT vec FROM vectors WHERE model = ? AND msg_id = ? ORDER BY part', [model, id]).map(&:first)
+    @index.db.execute('SELECT vec FROM fz.vectors WHERE model = ? AND msg_id = ? ORDER BY part', [model, id]).map(&:first)
   end
 
   def stored_ids(model)
-    @index.db.execute('SELECT DISTINCT msg_id FROM vectors WHERE model = ? ORDER BY msg_id', [model]).map(&:first)
+    @index.db.execute('SELECT DISTINCT msg_id FROM fz.vectors WHERE model = ? ORDER BY msg_id', [model]).map(&:first)
   end
 
-  # The files of the data directory that are not the search index (_index.sqlite and its WAL)
+  def fuzzy_path
+    File.join(@dir, 'lcty_fuzzy_search.sqlite')
+  end
+
+  # The files of the data directory that are neither the search index nor the vectors (with their WAL)
   def other_files
-    Dir.children(@dir).reject { |f| f.start_with?('_index.sqlite') }.sort
+    Dir.children(@dir).reject { |f| f.start_with?('_index.sqlite', 'lcty_fuzzy_search.sqlite') }.sort
   end
 
   # The error the block raises (nil when it raises none)
@@ -197,7 +201,7 @@ class VectorDBTest < Lcty::Scenarios
     end
     step('Then the round is not pending for the model "a"') { assert_equal [], pending_ids('a') }
     step('But it is pending for the model "b"') { assert_equal [round['id']], pending_ids('b') }
-    step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
+    step('And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite') { assert_equal [], other_files }
   end
 
   scenario 'Many models are all served' do
@@ -343,7 +347,7 @@ class VectorDBTest < Lcty::Scenarios
       step("Then it raises an HttpError 400 saying \"invalid model name: #{label}\"") do
         assert_http_error(400, "invalid model name: #{model.inspect}", error)
       end
-      step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
+      step('And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite') { assert_equal [], other_files }
     end
   end
 
@@ -403,7 +407,7 @@ class VectorDBTest < Lcty::Scenarios
       assert_equal row_of(unit(2)) + row_of(unit(3)) + row_of(unit(1)), dat
       assert_equal [long['id'], long['id'], short['id']], idx_ids
     end
-    step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
+    step('And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite') { assert_equal [], other_files }
   end
 
   scenario 'Export of a model without vectors is empty' do
@@ -513,7 +517,7 @@ class VectorDBTest < Lcty::Scenarios
       n = nil
       step("When VectorDB#gc collects the model #{label}") { n = @vdb.gc(model) }
       step('Then it returns 0') { assert_equal 0, n }
-      step('And the data directory holds no file but _index.sqlite') { assert_equal [], other_files }
+      step('And the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite') { assert_equal [], other_files }
     end
   end
 
@@ -542,9 +546,79 @@ class VectorDBTest < Lcty::Scenarios
       former.each { |f| File.binwrite(File.join(@dir, f), 'old') }
     end
     step('When VectorDB#gc_all collects the data directory') { @vdb.gc_all }
-    step('Then those files are gone and the data directory holds no file but _index.sqlite') do
+    step('Then those files are gone and the data directory holds no file but _index.sqlite and lcty_fuzzy_search.sqlite') do
       assert_equal [], other_files
       assert File.exist?(File.join(@dir, '_index.sqlite'))
+    end
+  end
+
+  # ---- lcty_fuzzy_search.sqlite ----
+
+  scenario 'The vectors are kept in lcty_fuzzy_search.sqlite when the index is discarded, as at every start' do
+    round = vdb = index = nil
+    step('Given a round with a vector of the model "m"') do
+      round = add_round
+      put_round(round)
+    end
+    step('When the index is discarded and opened anew with a new VectorDB, and the round is synced again') do
+      @index.db.close
+      Chatty::SearchIndex.discard(File.join(@dir, '_index.sqlite'))
+      index = open_index
+      vdb = VectorDB.new(index, @dir)
+      change_round(round, user: round['user'], index: index)
+    end
+    step('Then the round is not pending for the model "m"') { assert_equal [], vdb.pending('m', 16) }
+    step('And lcty_fuzzy_search.sqlite has format 1') do
+      assert_equal 1, index.db.get_first_value('PRAGMA fz.user_version')
+    end
+  end
+
+  scenario 'The vectors of an index of the layout before are carried over into a new lcty_fuzzy_search.sqlite' do
+    old = n = nil
+    step('Given an index file of the layout before, with a vector of the model "m" in its table vectors, and no lcty_fuzzy_search.sqlite') do
+      old = File.join(@dir, 'old_index.sqlite')
+      db = SQLite3::Database.new(old)
+      db.execute('CREATE TABLE vectors (model TEXT, msg_id TEXT, part INTEGER, rev TEXT, vec BLOB, vec256 BLOB)')
+      db.execute("INSERT INTO vectors VALUES ('m', 'u1', 0, 'r', x'01', x'02')")
+      db.close
+      @index.db.close
+      Dir.glob("#{fuzzy_path}*").each { |f| File.delete(f) }
+    end
+    step('When VectorDB.carry_over is called with it') { n = VectorDB.carry_over(old, @dir) }
+    step('Then it returns 1, and lcty_fuzzy_search.sqlite has format 1 and that vector') do
+      assert_equal 1, n
+      db = SQLite3::Database.new(fuzzy_path)
+      assert_equal 1, db.get_first_value('PRAGMA user_version')
+      assert_equal [['m', 'u1', 0, 'r']], db.execute('SELECT model, msg_id, part, rev FROM vectors')
+      db.close
+    end
+    step('And calling it again carries over nothing, since the file exists') { assert_equal 0, VectorDB.carry_over(old, @dir) }
+  end
+
+  scenario 'A lcty_fuzzy_search.sqlite of a newer format is refused and kept' do
+    error = nil
+    step('Given a lcty_fuzzy_search.sqlite of format 2') do
+      @index.db.close
+      Dir.glob("#{fuzzy_path}*").each { |f| File.delete(f) }
+      db = SQLite3::Database.new(fuzzy_path)
+      db.execute('PRAGMA user_version = 2')
+      db.close
+    end
+    step('When a VectorDB is opened on it') do
+      error = begin
+        VectorDB.new(open_index, @dir)
+        nil
+      rescue RuntimeError => e
+        e
+      end
+    end
+    step('Then it fails with "lcty_fuzzy_search.sqlite has format 2, newer than this version (1); it cannot be opened"') do
+      assert_equal 'lcty_fuzzy_search.sqlite has format 2, newer than this version (1); it cannot be opened', error&.message
+    end
+    step('And the file still has format 2') do
+      db = SQLite3::Database.new(fuzzy_path)
+      assert_equal 2, db.get_first_value('PRAGMA user_version')
+      db.close
     end
   end
 end

@@ -9,9 +9,10 @@
 Feature: LCTYSP-3005 The tag store
 
   Chatty::TagStore keeps the current tags of conversations, the tags a conversation was given after it was created, in a
-  SQLite file, the source of truth. The tags are references (file-name parts of tag files), stored as given. A file of an
-  older format is migrated, never rebuilt: format 3 drops the tables of tag definitions and memory without conversion
-  and keeps conversation_tags. A newer format is refused.
+  SQLite file, lcty_t.sqlite, the source of truth. The tags are references (file-name parts of tag files), stored as
+  given. A file of an older format is migrated, never rebuilt: format 3 drops the tables of tag definitions and memory
+  without conversion and keeps conversation_tags. A newer format is refused. The file of the layout before, tags.sqlite,
+  is renamed to lcty_t.sqlite at startup, its format kept.
 
   Scenario: A conversation has no current tags until they are set
     Given a new tag store
@@ -52,4 +53,17 @@ Feature: LCTYSP-3005 The tag store
 
   Scenario: A store of a newer format is refused
     Given a tags file of format 4
-    Then opening it fails with "tags.sqlite has format 4, newer than this version (3); it cannot be opened"
+    Then opening it fails with "lcty_t.sqlite has format 4, newer than this version (3); it cannot be opened"
+
+  # ---- The file of the layout before ----
+
+  Scenario: tags.sqlite is renamed to lcty_t.sqlite at startup, keeping its tags and its format
+    Given a tags.sqlite with the conversation "c1" tagged "ruby", still in its WAL, and no lcty_t.sqlite
+    When TagStore.rename_former renames it
+    Then it returns true, and tags.sqlite, its -wal and its -shm are gone
+    And lcty_t.sqlite has format 3 and the current tags of "c1" are "ruby"
+
+  Scenario: tags.sqlite is left as it is when lcty_t.sqlite exists
+    Given a tags.sqlite with "c1" tagged "old" and a lcty_t.sqlite with "c1" tagged "new"
+    When TagStore.rename_former is called
+    Then it returns false, tags.sqlite is still there and the current tags of "c1" are "new"

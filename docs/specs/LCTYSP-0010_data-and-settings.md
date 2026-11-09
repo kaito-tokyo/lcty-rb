@@ -31,17 +31,23 @@ source of truth at startup or by the browser. Everything else is source-of-truth
   - Backups only need files that do not start with `_` (for example `rsync -a --exclude='_*' data/ backup/`).
   - When the index misbehaves or its format changes, delete the `_` files and restart.
 
-**Rule: every cache that may be lost is a table of one file, `_index.sqlite`.** No other cache file is added: a new
-cache is a table there, and what the server sends that is built from it (the distribution vector binary, say) is built
-in memory on request and never written to disk. Deleting `_index.sqlite` (with its `-wal` and `-shm`) clears every
-cache at once. At startup the server deletes the cache files of the former layout (`_vectors.*`).
+**Rule: what the server can make again from the files alone is one file, `_index.sqlite`, discarded and made anew at
+every start.** No other such cache file is added: a new one is a table there, and what the server sends that is built
+from it is built in memory on request and never written to disk. It has no schema version and is never migrated.
 
-| File                               | Kind                                                                                                                             | Rebuilt by                                                                                                                                                                                          |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `c/*.html`                         | Source (conversations; same layout as the URL `/c/<id>.html`)                                                                    | —                                                                                                                                                                                                   |
-| `c/lcty.v1.js`, `c/lcty.v1.css`    | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                                                                                                                                   |
-| `tags.sqlite`                      | Source (the tags of conversations changed after creation; tag definitions and memory are `t/`, below)                            | —                                                                                                                                                                                                   |
-| `_index.sqlite` (+ `-wal`, `-shm`) | Derived (every cache: rounds and FTS, and the vectors of every embedding model)                                                  | Rounds rebuilt from the conversation files at startup ([LCTYSP-0007](LCTYSP-0007_search.md)); vectors re-embedded by the browser while a page is open ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) |
+**Rule: the SQLite files are cut as the browser's IndexedDB databases are,** one per resource, each with one integer
+version, `PRAGMA user_version`, brought up by code at startup; a newer one is refused
+([LCTYSP-0015](LCTYSP-0015_schema-versions.md)). At startup the server also renames `tags.sqlite` to `lcty_t.sqlite`,
+carries the vectors of the old `_index.sqlite` over to `lcty_fuzzy_search.sqlite` once, and deletes the cache files of
+the layout before that (`_vectors.*`).
+
+| File                                          | Kind                                                                                                                             | Rebuilt by                                                                                                                                             |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `c/*.html`                                    | Source (conversations; same layout as the URL `/c/<id>.html`)                                                                    | —                                                                                                                                                      |
+| `c/lcty.v1.js`, `c/lcty.v1.css`               | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                                                                                      |
+| `lcty_t.sqlite`                               | Source (the tags of conversations changed after creation; tag definitions and memory are `t/`, below)                            | —                                                                                                                                                      |
+| `lcty_fuzzy_search.sqlite` (+ `-wal`, `-shm`) | The vectors of every embedding model: derived, but only the browser can make them again, so they are kept and backed up          | Re-embedded by the browser while a page is open, when lost ([LCTYSP-0008](LCTYSP-0008_vector-binary.md))                                               |
+| `_index.sqlite` (+ `-wal`, `-shm`)            | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
 
 ### Tag files
 
@@ -54,7 +60,7 @@ the following. The rule on `_` is unchanged.
 | `t/NNNNN-<file-name part>.html`           | Source (one file per tag: display name, operation policies, prompt and memory; rewritten whole, via a temporary file whose name starts with `.` and a rename)          |
 | `lcty.v1.*`, `c/lcty.v1.*`, `t/lcty.v1.*` | Source (a copy of the assets in every directory that holds HTML, so each file loads them by name alone; published at startup, rewritten only when changed)             |
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out             |
-| `tags.sqlite`                             | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
+| `lcty_t.sqlite`                           | Source, but only `conversation_tags` (the tags of conversations changed after creation). The `tags` and `memory` tables are dropped by a migration, without conversion |
 
 In the browser, IndexedDB is split by resource: `lcty_v1_c` (store `c_meta`, owned by `lcty.v1.c.worker.cjs`, below) and
 `lcty_v1_t` (stores `t_full` and `t_set`, owned by `lcty.v1.t.worker.cjs`), a full copy of the tags, one row per tag
@@ -62,8 +68,8 @@ file, with the set's `ETag`
 ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). The names carry the version of the
 files: another version opens databases of its own, and nothing converts or deletes those of another version.
 
-- SQLite files use WAL mode. To back up `tags.sqlite`, copy `tags.sqlite-wal` with it or run `PRAGMA wal_checkpoint`
-  first.
+- SQLite files use WAL mode. To back up `lcty_t.sqlite` or `lcty_fuzzy_search.sqlite`, copy its `-wal` with it or run
+  `PRAGMA wal_checkpoint` first.
 
 ### In the browser
 

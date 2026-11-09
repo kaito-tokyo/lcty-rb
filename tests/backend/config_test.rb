@@ -20,7 +20,7 @@ class ConfigTest < Lcty::Scenarios
   REPO_ROOT = File.expand_path('../..', __dir__)
   SETTINGS = %w[PORT LCTY_HOST LCTY_DATA_DIR XDG_DATA_HOME].freeze
   CONSTANTS = %w[ROOT PUBLIC_DIR XDG_DATA_HOME DEFAULT_DATA_DIR DATA_DIR CONV_DIR TAG_DIR TAG_LOCK_PATH TAGS_DB_PATH
-                 INDEX_PATH PORT BIND BIND_URL_HOST].freeze
+                 FORMER_TAGS_DB_PATH INDEX_PATH PORT BIND BIND_URL_HOST].freeze
   # Prints the constants of lib/config.rb and the platform of the process as JSON
   SCRIPT = "require #{CONFIG.dump}; require 'json'; " \
            "puts JSON.generate(Hash[#{CONSTANTS.inspect}.map { |n| [n, Chatty.const_get(n)] }]" \
@@ -120,11 +120,12 @@ class ConfigTest < Lcty::Scenarios
     end
     step('When lib/config.rb is loaded') { c = load_config }
     step('Then DATA_DIR is that path') { assert_equal dir, c['DATA_DIR'] }
-    step('And CONV_DIR is its "c", TAG_DIR its "t", TAG_LOCK_PATH its "t.lock", TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"') do
+    step('And CONV_DIR is its "c", TAG_DIR its "t", TAG_LOCK_PATH its "t.lock", TAGS_DB_PATH its "lcty_t.sqlite", FORMER_TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"') do
       assert_equal File.join(dir, 'c'), c['CONV_DIR']
       assert_equal File.join(dir, 't'), c['TAG_DIR']
       assert_equal File.join(dir, 't.lock'), c['TAG_LOCK_PATH']
-      assert_equal File.join(dir, 'tags.sqlite'), c['TAGS_DB_PATH']
+      assert_equal File.join(dir, 'lcty_t.sqlite'), c['TAGS_DB_PATH']
+      assert_equal File.join(dir, 'tags.sqlite'), c['FORMER_TAGS_DB_PATH']
       assert_equal File.join(dir, '_index.sqlite'), c['INDEX_PATH']
     end
   end

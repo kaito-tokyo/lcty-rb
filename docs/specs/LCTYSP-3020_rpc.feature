@@ -167,6 +167,21 @@ Feature: LCTYSP-3020 The RPC protocol
     Then the page gets c_recordcount records of 0, 1, 2, 3 and 2
     And the file has as many lines as the last count and 4
 
+  # ---- The cache of the counts ----
+
+  Scenario: The count is cached in _index.sqlite whenever the file is written
+    When a conversation is created, a system message and a user message are appended, and the user message is unappended
+    Then the cached count is 0 after creating it, 2 after the appends and 1 after unappending
+
+  Scenario: A conversation the cache has no count for has an unknown count
+    Given a conversation with a system message whose cached count is removed
+    Then its cached count is unknown, not read from the file
+
+  Scenario: At startup the cache is filled from the files
+    Given a conversation with no element and one with two, and a cache that holds neither but a count for a conversation that does not exist
+    When the cache is filled as at startup
+    Then it holds 0 and 2 for the two conversations and nothing for the other
+
   Scenario: A notification names the actor that made the change
     Given two pages following a conversation
     When the first appends an element

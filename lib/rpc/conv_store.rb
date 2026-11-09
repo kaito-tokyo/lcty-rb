@@ -37,6 +37,12 @@ module Lcty
     NOT_FOUND = 4 # no such conversation
     EXISTS = 5 # the conversation already exists
 
+    class << self
+      # The search index (Chatty::SearchIndex) whose file, _index.sqlite, caches the number of elements of every
+      # conversation (c_recordcount, LCTYSP-0014). The server sets it at startup, the tests to one of their own.
+      attr_accessor :index
+    end
+
     module ConvStore
       module_function
 
@@ -86,7 +92,10 @@ module Lcty
                %(<title id="__#{title_max_size}">#{slot}#{Chatty::ConvHtml::SLOT_END}\n) +
                %(<lcty-c id="c-#{cid}" data-created-at="#{created_at}" />\n)
         FileUtils.mkdir_p(DIR)
-        File.open(path(cid), File::WRONLY | File::CREAT | File::EXCL) { |f| f.write(head) }
+        File.open(path(cid), File::WRONLY | File::CREAT | File::EXCL) do |f|
+          f.write(head)
+          Rpc.index.put_record_count(cid, 0)
+        end
         nil
       rescue Errno::EEXIST
         raise Error.new(EXISTS, 'the conversation exists', 'cid' => cid)
@@ -94,7 +103,7 @@ module Lcty
 
       # Append one element after the element whose id is after (nil: the file has no element yet). Returns the
       # attributes written (with the integrity filled in when the placeholder was sent) and the number of elements the
-      # file holds now, counted while it is still locked.
+      # file holds now, counted and cached while it is still locked.
       def append(cid, after, tag, attrs, inner)
         attrs = check(tag, attrs, inner)
         line = build(tag, attrs, inner)
@@ -105,29 +114,52 @@ module Lcty
           f.seek(0, IO::SEEK_END)
           f.write(line + "\n")
           f.flush
-          record_count(f)
+          record_count(f, cid)
         end
         [attrs, count]
       end
 
-      # Remove the last element, which must have the id given. Returns the number of elements the file holds now.
+      # Remove the last element, which must have the id given. Returns the number of elements the file holds now, counted
+      # and cached while it is still locked.
       def remove(cid, id)
         locked(cid) do |f|
           last = last_element(f)
           raise Error.new(CONFLICT, 'the last element is not the one named', 'last' => last && last[:id]) if last.nil? || last[:id] != id
           f.truncate(last[:offset])
           f.flush
-          record_count(f)
+          record_count(f, cid)
         end
       end
 
       # The number of elements of an open file, every one but lcty-c (LCTYSP-0014): each element is one line and line 4
-      # is the last of the head, so it is the number of lines less 4. Only lines are counted; nothing is parsed.
-      def record_count(f)
+      # is the last of the head, so it is the number of lines less 4. Only lines are counted; nothing is parsed. The
+      # count of a file just written is cached in c_recordcount of _index.sqlite before the file is unlocked, so the
+      # cache never holds the count of a file being written.
+      def record_count(f, cid = nil)
         f.rewind
         n = 0
         f.each_line { n += 1 }
-        n - HEAD_LINES
+        n -= HEAD_LINES
+        Rpc.index.put_record_count(cid, n) if cid
+        n
+      end
+
+      # The cached number of elements of a conversation, or nil (unknown) when the cache has none. Never read from the
+      # file.
+      def cached_record_count(cid)
+        path(cid) # checks the id
+        Rpc.index.record_count(cid)
+      end
+
+      # At startup: fill the cache with the count of every conversation, replacing what it held. The names come from the
+      # file system in the encoding of DIR (binary when it comes from an environment variable with no locale), and the
+      # sqlite3 gem binds a binary string as a BLOB, which never equals the TEXT of a cid, so they are made UTF-8 (an id
+      # is ASCII).
+      def fill_record_counts
+        counts = Dir.glob(File.join(DIR, '*.html')).map { |f| File.basename(f, '.html').dup.force_encoding(Encoding::UTF_8) }
+                    .select { |cid| Chatty::ID_RE.match?(cid) }
+                    .map { |cid| [cid, File.open(path(cid), 'r') { |f| f.flock(File::LOCK_SH); record_count(f) }] }
+        Rpc.index.replace_record_counts(counts.to_h)
       end
 
       # What the list of conversations shows of one, the row of c_meta in the browser (LCTYSP-0014): {cid, lang, title,

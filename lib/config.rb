@@ -24,8 +24,11 @@ module Chatty
   CONV_DIR = File.join(DATA_DIR, 'c') # Same layout as the URL /c/<id>.html (LCTYSP-0003)
   TAG_DIR = File.join(DATA_DIR, 't') # Source of truth: one HTML file per tag (LCTYSP-0009)
   TAG_LOCK_PATH = File.join(DATA_DIR, 't.lock') # Holds no data: flock is taken on it for t/
-  TAGS_DB_PATH = File.join(DATA_DIR, 'tags.sqlite') # Source of truth (the current tags of conversations)
-  # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-0010)
+  # One SQLite file per resource, cut as the browser's IndexedDB databases are (LCTYSP-0015)
+  TAGS_DB_PATH = File.join(DATA_DIR, 'lcty_t.sqlite') # Source of truth (the current tags of conversations)
+  FORMER_TAGS_DB_PATH = File.join(DATA_DIR, 'tags.sqlite') # Renamed to TAGS_DB_PATH at startup
+  # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-0010); _index.sqlite is
+  # discarded and made anew at every start
   INDEX_PATH = File.join(DATA_DIR, '_index.sqlite')
   PORT = Integer(ENV['PORT'].to_s.empty? ? 45280 : ENV['PORT'])
   BIND = ENV['LCTY_HOST'].to_s.empty? ? '127.0.0.1' : ENV['LCTY_HOST'] # The address to listen on

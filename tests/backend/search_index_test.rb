@@ -468,26 +468,26 @@ class SearchIndexTest < Lcty::Scenarios
     end
   end
 
-  scenario 'An index of another schema version is rebuilt' do
+  scenario 'An index is discarded, with its WAL, and opened anew empty, as at every start' do
     index = nil
-    step('Given an index file of schema version 3 with a chunks table and a vectors table of another shape') do
-      db = SQLite3::Database.new(path)
-      db.execute('CREATE TABLE chunks (old TEXT)')
-      db.execute("INSERT INTO chunks VALUES ('stale')")
-      db.execute('CREATE TABLE vectors (msg_id TEXT, part INTEGER, rev TEXT, vec BLOB, vec256 BLOB)')
-      db.execute("INSERT INTO vectors VALUES ('u1', 0, 'r', x'00', x'00')")
-      db.execute('PRAGMA user_version = 3')
-      db.close
+    step('Given an index with a synced round about "medlars" and a cached count, closed') do
+      first = new_index
+      first.sync('c1', round('u1', 'medlars', 'ok'))
+      first.put_record_count('rpc-1', 3)
+      first.db.close
     end
-    step('When it is opened') { index = new_index }
-    step('Then it has schema version 4') { assert_equal 4, index.db.get_first_value('PRAGMA user_version') }
-    step('And a round about "quinces" can be synced and found') do
-      index.sync('c1', round('u1', 'quinces', 'ok'))
-      assert_equal ['u1'], ids_of(index.keyword_search('quinces'))
+    step('When SearchIndex.discard is called on its file') { SearchIndex.discard(path) }
+    step('Then the file, its -wal and its -shm are gone') do
+      assert_equal [false] * 3, [path, "#{path}-wal", "#{path}-shm"].map { |f| File.exist?(f) }
     end
-    step('And its vectors table has a model column and no row') do
-      assert_includes index.db.execute('PRAGMA table_info(vectors)').map { |c| c[1] }, 'model'
-      assert_equal 0, index.db.get_first_value('SELECT COUNT(*) FROM vectors')
+    step('When it is opened again') { index = new_index }
+    step('Then a keyword search for "medlars" finds nothing, and the count of "rpc-1" is unknown') do
+      assert_equal [], ids_of(index.keyword_search('medlars'))
+      assert_nil index.record_count('rpc-1')
+    end
+    step('And it has no table vectors and no schema version') do
+      assert_nil index.db.get_first_value("SELECT 1 FROM sqlite_master WHERE name = 'vectors'")
+      assert_equal 0, index.db.get_first_value('PRAGMA user_version')
     end
   end
 end
