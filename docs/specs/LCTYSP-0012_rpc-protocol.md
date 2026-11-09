@@ -170,7 +170,9 @@ not holding it. When none holds it, the page asks the user whether to run it aga
 
 `c.list` returns the meta of every conversation, the same fields as a `c_meta` record, with the version it was read
 at, taken together, so a page fills its list from it and follows the `c_meta` records from that version; after reconnecting it
-reads it again. The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
+reads it again. `c.recordcount.list` does the same for the counts of elements: every row of the server's cache
+(`{cid, count}`, ordered by `cid`) with its version, so a page fills `c_recordcount` from it and follows the
+`c_recordcount` records; a conversation the cache has no count for is not among them, and its count is unknown. The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
 /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the version they were read at, read before
 the data so that the data is at least that new. The page then listens from that version; a notification it already holds

@@ -322,6 +322,27 @@ methods:
             items:
               $ref: "#/components/schemas/Meta"
 
+  - name: c.recordcount.list
+    x-receiver: server
+    summary: Every cached count of elements, by cid
+    description: >-
+      What a page reads to fill its c_recordcount (LCTYSP-0014), and again after reconnecting: every row of the server's
+      cache, ordered by cid. A conversation the cache has no count for is not among them, and its count is unknown. The
+      version is taken together with the rows, so the page follows the c_recordcount records of c.batch.updated from it.
+    params: []
+    result:
+      name: counts
+      schema:
+        type: object
+        required: [version, items]
+        properties:
+          version:
+            $ref: "#/components/schemas/Version"
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/RecordCount"
+
   - name: c.update.title
     x-receiver: server
     summary: Change the title of a conversation
@@ -459,6 +480,17 @@ components:
           $ref: "#/components/schemas/Time"
         createdAt:
           $ref: "#/components/schemas/Time"
+    RecordCount:
+      description: The number of elements of a conversation, a row of c_recordcount in the browser (LCTYSP-0014)
+      type: object
+      required: [cid, count]
+      properties:
+        cid:
+          $ref: "#/components/schemas/Cid"
+        count:
+          description: The number of elements of the file, every one but lcty-c (its lines less 4)
+          type: integer
+          minimum: 0
     Record:
       description: >-
         One change to one copy in the browser: store names the copy (LCTYSP-0014), op what is done to it, row what it
@@ -481,15 +513,7 @@ components:
             op:
               const: put
             row:
-              type: object
-              required: [cid, count]
-              properties:
-                cid:
-                  $ref: "#/components/schemas/Cid"
-                count:
-                  description: The number of elements of the file, every one but lcty-c
-                  type: integer
-                  minimum: 0
+              $ref: "#/components/schemas/RecordCount"
         - type: object
           required: [store, op, row]
           properties:

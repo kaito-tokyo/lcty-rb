@@ -182,6 +182,13 @@ Feature: LCTYSP-3020 The RPC protocol
     When the cache is filled as at startup
     Then it holds 0 and 2 for the two conversations and nothing for the other
 
+  Scenario: c.recordcount.list returns every cached count with the version
+    Given a conversation with no element, one with two, and one with a system message whose cached count is removed
+    When c.recordcount.list is called
+    Then the items are rows of only cid and count, ordered by cid, with 0 and 2 for the first two
+    And the conversation whose count is not cached is not among them
+    And the version is that of the last change
+
   Scenario: A notification names the actor that made the change
     Given two pages following a conversation
     When the first appends an element

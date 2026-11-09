@@ -143,6 +143,11 @@ module Chatty
       @mutex.synchronize { @db.get_first_value('SELECT count FROM c_recordcount WHERE cid = ?', [cid]) }
     end
 
+    # Every cached count, {cid => count}, ordered by cid
+    def record_counts
+      @mutex.synchronize { @db.execute('SELECT cid, count FROM c_recordcount ORDER BY cid').to_h }
+    end
+
     # Cache the number of elements of a conversation of /v1/rpc
     def put_record_count(cid, count)
       @mutex.synchronize do
