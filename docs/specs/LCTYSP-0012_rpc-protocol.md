@@ -129,6 +129,18 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   included, with the new `version` and the `actorId` of the change in their params. `c.appended` carries the element
   as written, as `{tag, attrs, innerHTML}`. A page applies a notification only when its `after` (or `id`) matches what
   it holds; otherwise it reads the conversation again.
+- **A page follows one conversation.** `c.appended` and `c.unappended` go only to the connections that follow their
+  conversation, set by `c.subscribe {cid, last}`; a page shows one conversation, so a connection follows at most one,
+  and a new `c.subscribe` replaces the old one (`cid: null` follows none). `c.created`, which the list of conversations
+  needs, still goes to every connection that receives it.
+- **`c.meta.updated` keeps lists up to date.** Every change of a conversation (creating it, appending, unappending)
+  also sends `c.meta.updated` with only what a list shows of it: `cid`, `lang`, `title` and `updatedAt`. It goes to
+  every connection that receives it, whatever it follows, and shares the version of the change it comes with: one
+  change, one version, one or more notifications.
+- **Subscribing checks the page against the server.** `last` is the id of the last element the page holds. The result
+  gives the last id of the conversation now and whether the page's is it (`current`), together with the version from
+  which the notifications of this conversation follow, all taken in one step with no change in between. A page that is
+  not current reads the conversation again; one that is current has missed nothing since it loaded the file.
 
 **Sending a request again is safe.** When a response is lost and the page sends the same `c.append.*` again, the second
 one fails with `1` and `data.last` is the id of the page's own element: the first one succeeded. An id is made by the
@@ -147,16 +159,17 @@ version; a notification it already holds is recognised by its ids and ignored.
 
 ## Open points
 
-- **Notifications carry whole elements.** A long reply is sent to every connection in full. Whether notifications
-  carry only ids, and pages fetch what they need, is undecided.
+- **Notifications carry whole elements.** A long reply is sent in full to every connection following the conversation.
+  Whether notifications carry only ids, and pages fetch what they need, is undecided.
 - **The title.** Changing a title overwrites the slot in the middle of the file, which the last id cannot guard. Its
   method and how it is guarded are undecided.
 - **`data-at`.** The prototype accepts any ISO 8601 time with an offset; whether one form (UTC with milliseconds, or
   local time) is required is undecided.
 - **Conflict or locked first.** When the last element is an `lcty-cmd` and the request names another `after`, the
   prototype answers `1`, not `2`. Which is checked first is undecided.
-- **Checking a page against the server** at `initialize` (the path of the page and the state of what it shows), so
-  that a page opened before a change knows it is stale.
+- **Checking more than the last id.** `c.subscribe` compares only the last element. Whether a hash of the page's whole
+  content (the skeleton of the integrity check) is needed is undecided, as is the check for pages other than a
+  conversation.
 - **The methods of tags, settings and vectors**, the timings and usage kept in a database, and the full reads above.
 - **Many tabs.** Each tab keeps its own WebSocket; whether one connection is shared (a SharedWorker) is left until the
   number of connections matters.

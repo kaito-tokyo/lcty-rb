@@ -13,6 +13,7 @@ require 'base64'
 require 'digest'
 require 'fileutils'
 require 'nokogiri'
+require 'time'
 require_relative '../config'
 require_relative '../conv_html'
 
@@ -116,6 +117,25 @@ module Lcty
           f.flush
         end
         nil
+      end
+
+      # What the list of conversations shows of one: {cid, lang, title, updatedAt}, from lines 1 and 3 and the file's
+      # modification time
+      def meta(cid)
+        head = File.foreach(path(cid)).first(3)
+        { 'cid' => cid, 'lang' => head[0].to_s[/<html lang="([^"]*)"/, 1],
+          'title' => Chatty::ConvHtml.slot_title(head[2].to_s.chomp),
+          'updatedAt' => File.mtime(path(cid)).utc.iso8601(3) }
+      end
+
+      # The id of the last element of the file (nil when it has none yet)
+      def last_id(cid)
+        File.open(path(cid), 'r') do |f|
+          f.flock(File::LOCK_SH)
+          last_element(f)&.dig(:id)
+        end
+      rescue Errno::ENOENT
+        raise Error.new(NOT_FOUND, 'no such conversation', 'cid' => cid)
       end
 
       # The elements of the file: [{tag, id}] (for the prototype's tests)

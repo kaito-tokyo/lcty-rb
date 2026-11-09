@@ -42,12 +42,13 @@ module Lcty
       QUEUE_MAX = 1024 # messages waiting to be sent
 
       attr_reader :conn
-      attr_accessor :receives, :actor_id
+      attr_accessor :receives, :actor_id, :subscription
 
       def initialize(conn)
         @conn = conn
         @receives = Set.new
         @actor_id = nil
+        @subscription = nil # the one conversation (cid) whose elements this page follows
         @queue = Queue.new
         @sender = Thread.new { send_loop }
       end
@@ -111,18 +112,37 @@ module Lcty
 
       # Run the change (the block returns [method, params] of its notification) and notify every connection. The
       # notification names the actor that made the change (the actorId of its connection; nil for POST).
+      # Follow the elements of one conversation (nil: none), replacing what the connection followed. Done under the
+      # lock, so the last id and the version returned are those right before the first notification it will get.
+      def subscribe(peer, cid)
+        @lock.synchronize do
+          last = cid && ConvStore.last_id(cid)
+          peer.subscription = cid
+          [last, "#{@boot}.#{@seq}"]
+        end
+      end
+
+      # The block returns the notifications of the change, [[method, params], ...]; they share its version.
       def commit(peer)
         @lock.synchronize do
-          method, params = yield
+          notes = yield
           @seq += 1
           version = "#{@boot}.#{@seq}"
-          params = params.merge('version' => version, 'actorId' => peer&.actor_id)
-          msg = JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params)
-          @conns.each { |c| c.push(msg) if c.receives.include?(method) }
+          notes.each do |method, params|
+            params = params.merge('version' => version, 'actorId' => peer&.actor_id)
+            msg = JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params)
+            scoped = SUBSCRIBED.include?(method)
+            @conns.each do |c|
+              c.push(msg) if c.receives.include?(method) && (!scoped || c.subscription == params['cid'])
+            end
+          end
           version
         end
       end
     end
+
+    # The notifications that go only to the connections following their conversation (c.subscribe)
+    SUBSCRIBED = %w[c.appended c.unappended].freeze
 
     HUB = Hub.new
 
@@ -148,7 +168,7 @@ module Lcty
         version = HUB.commit(peer) do
           ConvStore.create(cid, created_at: p['createdAt'], title: p['title'], lang: p['lang'],
                                 title_max_size: p['titleMaxSize'], lcty_version: p['lctyVersion'])
-          ['c.created', { 'cid' => cid }]
+          [['c.created', { 'cid' => cid }], ['c.meta.updated', ConvStore.meta(cid)]]
         end
         { 'version' => version }
       end,
@@ -162,9 +182,19 @@ module Lcty
       'c.unappend' => lambda do |p, peer|
         version = HUB.commit(peer) do
           ConvStore.remove(p['cid'], p['id'])
-          ['c.unappended', { 'cid' => p['cid'], 'id' => p['id'] }]
+          [['c.unappended', { 'cid' => p['cid'], 'id' => p['id'] }], ['c.meta.updated', ConvStore.meta(p['cid'])]]
         end
         { 'version' => version }
+      end,
+
+      # Follow one conversation: {cid, last}. last is the id of the last element the page holds; the result says
+      # whether it is still the last one (stale: the page reads the conversation again).
+      'c.subscribe' => lambda do |p, peer|
+        raise Error.new(INVALID_PARAMS, 'c.subscribe needs a WebSocket session') unless peer
+        cid = p['cid']
+        ConvStore.path(cid) if cid # checks the id
+        last, version = HUB.subscribe(peer, cid)
+        { 'version' => version, 'last' => last, 'current' => cid.nil? || last == p['last'] }
       end,
 
       'c.list' => lambda do |p, _peer|
@@ -179,8 +209,9 @@ module Lcty
       attrs = nil
       version = HUB.commit(peer) do
         attrs = ConvStore.append(p['cid'], p['after'], tag, p['attrs'], inner)
-        ['c.appended', { 'cid' => p['cid'], 'after' => p['after'],
-                         'element' => { 'tag' => tag, 'attrs' => attrs, 'innerHTML' => inner.to_s } }]
+        [['c.appended', { 'cid' => p['cid'], 'after' => p['after'],
+                          'element' => { 'tag' => tag, 'attrs' => attrs, 'innerHTML' => inner.to_s } }],
+         ['c.meta.updated', ConvStore.meta(p['cid'])]]
       end
       { 'version' => version, 'attrs' => attrs }
     end

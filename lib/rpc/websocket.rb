@@ -130,9 +130,13 @@ module Lcty
         b0, b1 = head.bytes
         raise ProtocolError, 'reserved bits set' if b0 & 0x70 != 0
         raise ProtocolError, 'a client frame must be masked' if b1 & 0x80 == 0
-        len = b1 & 0x7F
-        len = @sock.read(2).unpack1('n') if len == 126
-        len = @sock.read(8).unpack1('Q>') if len == 127
+        # The 7-bit length, or 126 / 127 for a 16-bit / 64-bit length that follows (decided on the 7 bits alone: a
+        # 16-bit length of 127 is a length, not a marker)
+        len = case b1 & 0x7F
+              when 126 then @sock.read(2).unpack1('n')
+              when 127 then @sock.read(8).unpack1('Q>')
+              else b1 & 0x7F
+              end
         opcode = b0 & 0x0F
         raise ProtocolError, 'control frame too large' if opcode >= 0x8 && len > 125
         raise ProtocolError, 'frame too large' if len > MAX_MESSAGE

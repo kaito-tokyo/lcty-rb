@@ -262,6 +262,48 @@ methods:
       - $ref: "#/components/errors/Conflict"
       - $ref: "#/components/errors/NotFound"
 
+  - name: c.subscribe
+    x-receiver: server
+    summary: Follow the elements of one conversation, replacing what the connection followed
+    description: >-
+      A page follows one conversation at a time: c.appended and c.unappended are sent only to the connections that
+      follow their conversation. cid null stops following. The result tells whether the page's last element is still
+      the last one; when it is not, the page reads the conversation again. WebSocket only.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/Cid"
+            - type: "null"
+      - name: last
+        required: true
+        description: The id of the last element the page holds (null when it holds none)
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ElementId"
+            - type: "null"
+    result:
+      name: subscription
+      schema:
+        type: object
+        required: [version, last, current]
+        properties:
+          version:
+            description: The version right before the first notification this subscription gets
+            $ref: "#/components/schemas/Version"
+          last:
+            description: The id of the last element of the conversation now (null when it has none)
+            oneOf:
+              - $ref: "#/components/schemas/ElementId"
+              - type: "null"
+          current:
+            description: Whether the page's last element is the last one now
+            type: boolean
+    errors:
+      - $ref: "#/components/errors/NotFound"
+
   - name: c.list
     x-receiver: server
     summary: The elements of a file, by tag and id (prototype only, for tests)
@@ -315,8 +357,46 @@ methods:
             - $ref: "#/components/schemas/ActorId"
             - type: "null"
 
+  - name: c.meta.updated
+    x-receiver: page
+    summary: What the list of conversations shows of one changed (created, appended, unappended)
+    description: >-
+      Sent to every connection that receives it, whatever it follows, with the same version as the change it comes
+      with.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: lang
+        required: true
+        schema:
+          type: string
+      - name: title
+        required: true
+        schema:
+          type: string
+      - name: updatedAt
+        required: true
+        description: When the file was last changed
+        schema:
+          $ref: "#/components/schemas/Time"
+      - name: version
+        required: true
+        schema:
+          $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
+
   - name: c.appended
     x-receiver: page
+    description: Sent only to the connections that follow the conversation (c.subscribe)
     summary: An element was appended
     paramStructure: by-name
     params:
@@ -349,6 +429,7 @@ methods:
 
   - name: c.unappended
     x-receiver: page
+    description: Sent only to the connections that follow the conversation (c.subscribe)
     summary: The last element was removed
     paramStructure: by-name
     params:
