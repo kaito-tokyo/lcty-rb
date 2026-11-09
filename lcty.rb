@@ -26,6 +26,7 @@ require_relative 'lib/config'
 require_relative 'lib/store'
 require_relative 'lib/v1/servlet'
 require_relative 'lib/servlets'
+require_relative 'lib/rpc/servlet'
 
 module Lcty
   # The path the site is served under: LCTY_BASE_URL, starting and ending with "/" ("/" when it is unset or empty)
@@ -76,6 +77,7 @@ module Lcty
   # Mount every servlet of the site on server, under base (LCTY_BASE_URL)
   def self.mount_all(server, base = BASE_URL)
     server.mount "#{base}v1", Chatty::V1::Servlet
+    server.mount "#{base}v1/rpc", Rpc::Servlet # prototype (JSON-RPC 2.0 over WebSocket or POST)
     server.mount "#{base}c", Servlets::C, Chatty::CONV_DIR
     server.mount "#{base}t", Servlets::T, Chatty::TAG_DIR
     LCTY_V1_FILES.each { |name, path| server.mount "#{base}lcty.v1/#{name}", Servlets::StaticFileServlet, path }

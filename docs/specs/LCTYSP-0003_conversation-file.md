@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # LCTYSP-0003: Conversation file
 
 - Status: Accepted; revision drafted ([Revision draft: `lcty-msg`](#revision-draft-lcty-msg), not implemented)
-- Related: [LCTYSP-0004](LCTYSP-0004_editing.md), [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md)
+- Related: [LCTYSP-0004](LCTYSP-0004_editing.md), [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)
 - Implementation: `lib/conv_html.rb`, `lib/store.rb`
 
 ## Summary
@@ -238,8 +238,11 @@ come; the sections above record the current format. Open points are listed at th
 <lcty-msg data-role="model" id="msg-m-…" data-at="2026-11-05T10:10:37+09:00" data-content-integrity="sha384-…" data-content="ブラウザのクライアントサイド…"><article><p>ブラウザのクライアントサイド…</p></article></lcty-msg>
 ```
 
-Lines 1 to 4 keep the head of today's format, except that `lcty-c` no longer has `data-setup-tags`. Every line from
-line 5 on is one of the elements below.
+Lines 1 to 4 keep the layout of today's head, and the page creating the conversation chooses what they hold: the
+language (`lang` of line 1, and the language file line 2 loads, `lcty.<version>.lang-<lang>.js`; none for `en`, whose
+texts are built into `lcty.<version>.js`), the version of the
+`lcty.*` files line 2 loads (`v1` today), and the size of the title slot on line 3 (its id, `__<size>`). Line 4 is
+`<lcty-c id="c-<id>" data-created-at="…" />`. Every line from line 5 on is one of the elements below.
 
 ### `lcty-msg`
 
@@ -340,7 +343,7 @@ still read as well as it can be.
 Existing files are converted once to this format. `lcty-setup` becomes a `system` `lcty-msg` without `data-tag`;
 messages with `data-role` `user` and `assistant` become `user` and `model`; `data-thinking` becomes an `lcty-thinking`
 before its reply; `data-timings`, `data-usage` and `data-client` move to the database; `data-inherited` and
-`data-setup-tags` are dropped; `div.user-text` becomes `<article>`; `data-content-integrity` is computed. The ids get
+the tags on line 4 are dropped; `div.user-text` becomes `<article>`; `data-content-integrity` is computed. The ids get
 the new prefixes, and links to the old ids (`#c-msg-…`) are not kept.
 
 ### Open points

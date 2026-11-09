@@ -1,0 +1,626 @@
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# The methods of the RPC protocol (LCTYSP-0012), as an OpenRPC document written in YAML so that it can hold comments.
+# This file is the source: the server reads it at startup and answers rpc.discover with it as JSON. The rules that a
+# method list cannot say (the global version, the order of notifications, Origin, sending again, finishing a reply) are
+# in LCTYSP-0012_rpc-protocol.md.
+#
+# Both ends speak the same protocol. Which methods an end receives is not fixed here: each end declares it in
+# initialize (capabilities.receives), and the other end sends only those. x-receiver says which end usually receives a
+# method: "server" for what a page calls, "page" for the notifications the server sends.
+
+openrpc: "1.3.2"
+info:
+  title: lcty-rb RPC
+  version: "0.1.0" # prototype
+  description: JSON-RPC 2.0 at /v1/rpc, over a WebSocket or POST (LCTYSP-0012)
+servers:
+  - name: site
+    url: /v1/rpc # relative to LCTY_BASE_URL
+
+methods:
+  # ---- Session ----
+
+  - name: initialize
+    x-receiver: server
+    summary: Start a session and exchange capabilities
+    description: >-
+      The first request on a connection. The page says which methods it receives; the answer says which methods the
+      server receives, the current global version, and the actorId assigned to this connection. Until then the server
+      sends the page no notification.
+    paramStructure: by-name
+    params:
+      - name: protocol
+        schema:
+          type: string
+      - name: capabilities
+        schema:
+          $ref: "#/components/schemas/Capabilities"
+    result:
+      name: session
+      schema:
+        type: object
+        required: [protocol, version, actorId, capabilities]
+        properties:
+          protocol:
+            type: string
+            const: lcty-rpc-prototype
+          version:
+            $ref: "#/components/schemas/Version"
+          actorId:
+            description: >-
+              The actor this connection is: every notification of a change it makes carries this id. The same for the
+              whole connection; null over POST, which has no connection.
+            oneOf:
+              - $ref: "#/components/schemas/ActorId"
+              - type: "null"
+          capabilities:
+            $ref: "#/components/schemas/Capabilities"
+
+  - name: rpc.discover
+    x-receiver: server
+    summary: This document, as JSON (OpenRPC service discovery)
+    params: []
+    result:
+      name: document
+      schema:
+        type: object
+
+  # ---- Conversations (LCTYSP-0003, revision draft) ----
+
+  - name: c.create
+    x-receiver: server
+    summary: Create a conversation file (lines 1 to 4)
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: createdAt
+        required: true
+        schema:
+          $ref: "#/components/schemas/Time"
+      - name: title
+        required: true
+        description: The server fits it into the slot (LCTYSP-0003)
+        schema:
+          type: string
+      - name: lang
+        required: true
+        description: >-
+          <html lang> of line 1, and the language file line 2 loads (lcty.<version>.lang-<lang>.js). For en no
+          language file is loaded: English is built into lcty.<version>.js.
+        schema:
+          type: string
+          pattern: "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+      - name: titleMaxSize
+        required: true
+        description: The bytes of the title slot on line 3 (written into its id, __<size>)
+        schema:
+          type: integer
+          minimum: 16
+          maximum: 4096
+      - name: lctyVersion
+        required: true
+        description: The version of the lcty.* files the head loads (lcty.<version>.js, …)
+        schema:
+          type: string
+          enum: [v1]
+    result:
+      name: change
+      schema:
+        $ref: "#/components/schemas/Change"
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/Exists"
+
+  - name: c.append.msg
+    x-receiver: server
+    summary: Append one lcty-msg after the element named
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: after
+        required: true
+        description: The id of the last element as the page knows it; null for the first element
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ElementId"
+            - type: "null"
+      - name: attrs
+        required: true
+        description: data-role, id, data-at, data-template, data-tag, data-content-integrity, data-content or data-content-base64, in that order
+        schema:
+          $ref: "#/components/schemas/Attrs"
+      - name: innerHTML
+        required: true
+        description: The presentation, one <article>
+        schema:
+          type: string
+    result:
+      name: written
+      schema:
+        allOf:
+          - $ref: "#/components/schemas/Change"
+          - type: object
+            required: [attrs]
+            properties:
+              attrs:
+                description: The attributes written, with data-content-integrity filled in for the placeholder
+                $ref: "#/components/schemas/Attrs"
+    errors:
+      - $ref: "#/components/errors/Conflict"
+      - $ref: "#/components/errors/Locked"
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.append.thinking
+    x-receiver: server
+    summary: Append one lcty-thinking after the element named
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: after
+        required: true
+        description: The id of the last element as the page knows it; null for the first element
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ElementId"
+            - type: "null"
+      - name: attrs
+        required: true
+        description: id, data-at, data-content-integrity, data-content or data-content-base64, in that order
+        schema:
+          $ref: "#/components/schemas/Attrs"
+      - name: innerHTML
+        required: true
+        description: The presentation, one <article>
+        schema:
+          type: string
+    result:
+      name: written
+      schema:
+        allOf:
+          - $ref: "#/components/schemas/Change"
+          - type: object
+            required: [attrs]
+            properties:
+              attrs:
+                description: The attributes written, with data-content-integrity filled in for the placeholder
+                $ref: "#/components/schemas/Attrs"
+    errors:
+      - $ref: "#/components/errors/Conflict"
+      - $ref: "#/components/errors/Locked"
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.append.cmd
+    x-receiver: server
+    summary: Append the lcty-cmd, the lock of the conversation (it has no presentation)
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: after
+        required: true
+        description: The id of the last element as the page knows it; null for the first element
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ElementId"
+            - type: "null"
+      - name: attrs
+        required: true
+        description: id, data-op, data-at, data-error, in that order
+        schema:
+          $ref: "#/components/schemas/Attrs"
+    result:
+      name: written
+      schema:
+        allOf:
+          - $ref: "#/components/schemas/Change"
+          - type: object
+            required: [attrs]
+            properties:
+              attrs:
+                description: The attributes written, with data-content-integrity filled in for the placeholder
+                $ref: "#/components/schemas/Attrs"
+    errors:
+      - $ref: "#/components/errors/Conflict"
+      - $ref: "#/components/errors/Locked"
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.unappend
+    x-receiver: server
+    summary: Remove the last element, which must have the id given
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: id
+        required: true
+        schema:
+          $ref: "#/components/schemas/ElementId"
+    result:
+      name: change
+      schema:
+        $ref: "#/components/schemas/Change"
+    errors:
+      - $ref: "#/components/errors/Conflict"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.subscribe
+    x-receiver: server
+    summary: Follow the elements of one conversation, replacing what the connection followed
+    description: >-
+      A page follows one conversation at a time: c.appended and c.unappended are sent only to the connections that
+      follow their conversation. cid null stops following. The result tells whether the page's last element is still
+      the last one; when it is not, the page reads the conversation again. WebSocket only.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/Cid"
+            - type: "null"
+      - name: last
+        required: true
+        description: The id of the last element the page holds (null when it holds none)
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ElementId"
+            - type: "null"
+    result:
+      name: subscription
+      schema:
+        type: object
+        required: [version, last, current]
+        properties:
+          version:
+            description: The version right before the first notification this subscription gets
+            $ref: "#/components/schemas/Version"
+          last:
+            description: The id of the last element of the conversation now (null when it has none)
+            oneOf:
+              - $ref: "#/components/schemas/ElementId"
+              - type: "null"
+          current:
+            description: Whether the page's last element is the last one now
+            type: boolean
+    errors:
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.list
+    x-receiver: server
+    summary: The meta of every conversation, newest first
+    description: >-
+      What a page reads to fill its list of conversations, and again after reconnecting. The version is taken together
+      with the list, so the page follows c.meta.updated from it.
+    params: []
+    result:
+      name: listing
+      schema:
+        type: object
+        required: [version, items]
+        properties:
+          version:
+            $ref: "#/components/schemas/Version"
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/Meta"
+
+  - name: c.update.title
+    x-receiver: server
+    summary: Change the title of a conversation
+    description: >-
+      The server fits the title into the slot (LCTYSP-0003) and answers the title as written. The slot is in the middle
+      of the file, so no id guards it: the last title written wins. Allowed while an lcty-cmd holds the conversation.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: title
+        required: true
+        schema:
+          type: string
+    result:
+      name: written
+      schema:
+        allOf:
+          - $ref: "#/components/schemas/Change"
+          - type: object
+            required: [title]
+            properties:
+              title:
+                description: The title as written into the slot
+                type: string
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.cmd.held
+    x-receiver: server
+    summary: Whether some connected page holds the lcty-cmd
+    description: >-
+      The server keeps no record of who holds an lcty-cmd: it asks every other connected page that receives
+      c.cmd.holds and waits for their answers (2 s in the prototype). A page that does not answer in time counts as not
+      holding it. When none holds it, the page asks the user whether to run it again or remove it.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: id
+        required: true
+        schema:
+          $ref: "#/components/schemas/ElementId"
+    result:
+      name: holder
+      schema:
+        type: object
+        required: [held, actorId]
+        properties:
+          held:
+            type: boolean
+          actorId:
+            description: The actor of the page that holds it, or null
+            oneOf:
+              - $ref: "#/components/schemas/ActorId"
+              - type: "null"
+    errors:
+      - $ref: "#/components/errors/NotFound"
+
+  # ---- Requests the server sends (with an id: the page answers) ----
+
+  - name: c.cmd.holds
+    x-receiver: page
+    summary: Whether this page holds the lcty-cmd (asked for c.cmd.held)
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: id
+        required: true
+        schema:
+          $ref: "#/components/schemas/ElementId"
+    result:
+      name: answer
+      schema:
+        type: object
+        required: [holds]
+        properties:
+          holds:
+            type: boolean
+
+  # ---- Notifications the server sends (no result: always sent without an id) ----
+
+  - name: c.created
+    x-receiver: page
+    summary: A conversation was created
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: version
+        required: true
+        schema:
+          $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
+
+  - name: c.meta.updated
+    x-receiver: page
+    summary: What the list of conversations shows of one changed (created, appended, unappended)
+    description: >-
+      Sent to every connection that receives it, whatever it follows, with the same version as the change it comes
+      with.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: lang
+        required: true
+        schema:
+          type: string
+      - name: title
+        required: true
+        schema:
+          type: string
+      - name: updatedAt
+        required: true
+        description: When the file was last changed
+        schema:
+          $ref: "#/components/schemas/Time"
+      - name: version
+        required: true
+        schema:
+          $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
+
+  - name: c.appended
+    x-receiver: page
+    description: Sent only to the connections that follow the conversation (c.subscribe)
+    summary: An element was appended
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: after
+        required: true
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ElementId"
+            - type: "null"
+      - name: element
+        required: true
+        description: The element as written
+        schema:
+          $ref: "#/components/schemas/Element"
+      - name: version
+        required: true
+        schema:
+          $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
+
+  - name: c.unappended
+    x-receiver: page
+    description: Sent only to the connections that follow the conversation (c.subscribe)
+    summary: The last element was removed
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: id
+        required: true
+        schema:
+          $ref: "#/components/schemas/ElementId"
+      - name: version
+        required: true
+        schema:
+          $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: The actor that made the change (its connection's actorId); null when it came over POST
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
+
+components:
+  schemas:
+    Meta:
+      description: What the list of conversations shows of one
+      type: object
+      required: [cid, lang, title, updatedAt]
+      properties:
+        cid:
+          $ref: "#/components/schemas/Cid"
+        lang:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          $ref: "#/components/schemas/Time"
+    Capabilities:
+      type: object
+      required: [receives]
+      properties:
+        receives:
+          description: The names of the methods this end receives
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+    ActorId:
+      description: The id of a connection, assigned by the server in initialize
+      type: string
+      format: uuid
+    Version:
+      description: The global version, "<boot>.<seq>"
+      type: string
+      pattern: "^[0-9a-f]+\\.[0-9]+$"
+    Change:
+      type: object
+      required: [version]
+      properties:
+        version:
+          $ref: "#/components/schemas/Version"
+    Cid:
+      type: string
+      pattern: "^[A-Za-z0-9_-]{1,80}$"
+    Time:
+      type: string
+      pattern: "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(\\.\\d+)?(Z|[+-]\\d\\d:\\d\\d)$"
+    ElementId:
+      description: A prefix (sys-, mem-, msg-u-, msg-m-, think-, cmd-) and a UUIDv7
+      type: string
+      pattern: "^(sys|mem|msg-u|msg-m|think|cmd)-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    Attrs:
+      description: The attributes of an element, in their one order (LCTYSP-0003)
+      type: object
+      additionalProperties:
+        type: string
+    Element:
+      type: object
+      required: [tag, attrs, innerHTML]
+      properties:
+        tag:
+          type: string
+          enum: [lcty-msg, lcty-thinking, lcty-cmd]
+        attrs:
+          $ref: "#/components/schemas/Attrs"
+        innerHTML:
+          description: The presentation, one <article> (empty for lcty-cmd)
+          type: string
+  errors:
+    Conflict:
+      code: 1
+      message: the last element is not the one named
+      data:
+        type: object
+        properties:
+          last:
+            description: The id of the last element, or null
+            type: [string, "null"]
+    Locked:
+      code: 2
+      message: the conversation is locked by an lcty-cmd
+      data:
+        type: object
+        properties:
+          last:
+            type: string
+    Invalid:
+      code: 3
+      message: the element breaks a rule of the format
+    NotFound:
+      code: 4
+      message: no such conversation
+    Exists:
+      code: 5
+      message: the conversation exists
