@@ -54,6 +54,21 @@ the version they were last brought to, so that an older answer never overwrites 
   whichever tab answers last. No SharedWorker or lock between tabs is needed. A transaction cannot wait for the network,
   so the worker fetches first and checks the version when it writes.
 
+## The rows of `c_meta`
+
+- **A row is the meta, as `c.list` and `c.meta.updated` give it:** `{cid, lang, title, titleTypeId, updatedAt,
+  createdAt}`, with the key `cid`. Nothing is added or renamed on the way, so the worker stores what it receives.
+  - `cid`: the id of the conversation, its file name.
+  - `lang`: `lang` of line 1.
+  - `title`: the title in the slot of line 3.
+  - `titleTypeId`: the id of `<title>` on line 3 as it is (`__` and the size of the slot,
+    [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)).
+  - `updatedAt`: when the file was last changed (its modification time), which orders the list.
+  - `createdAt`: `data-created-at` of line 4.
+- **Today's rows** (`id`, `title`, `created_at`, `updated_at_hint`, `setup_tags`, `tags_hint`, `messages_hint`, from
+  `GET /v1/meta-all.json`) are replaced by these when the pages use `/v1/rpc`; the database's version is raised and
+  the store recreated, nothing converted ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
+
 ## Starting
 
 When the connection is open and `initialize` has answered:
@@ -89,10 +104,9 @@ When the connection is open and `initialize` has answered:
 
 ## Open points
 
-- **The rows of `c_meta`:** the meta of `c.list` is `cid`, `lang`, `title` and `updatedAt`; today's rows also hold the
-  tags and the number of messages (`tags_hint`, `messages_hint`) from the search index. Whether the sidebar keeps them,
-  and where the tags of conversations come from in the browser (the tag database is their source of truth), is
-  undecided.
+- **The tags and the number of messages of a conversation** (today's `tags_hint` and `messages_hint`, from the search
+  index) are not in the meta: where the sidebar gets them in the browser is undecided (the tag database is the source
+  of truth of the tags, so `lcty_v1_t` is the likely place).
 - **Tags, settings and vectors** have no RPC methods yet, so `lcty_v1_t` keeps its sync of today until they do.
 - **The upgrade of the databases** for the store `sync` (a new version of `lcty_v1_c` and `lcty_v1_t`).
 - **Reloading the conversation** when the page is stale: whether a whole reload of the page, or the elements read again

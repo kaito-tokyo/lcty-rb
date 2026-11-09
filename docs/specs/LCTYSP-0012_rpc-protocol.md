@@ -143,7 +143,8 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   and a new `c.subscribe` replaces the old one (`cid: null` follows none). `c.created`, which the list of conversations
   needs, still goes to every connection that receives it.
 - **`c.meta.updated` keeps lists up to date.** Every change of a conversation (creating it, appending, unappending)
-  also sends `c.meta.updated` with only what a list shows of it: `cid`, `lang`, `title` and `updatedAt`. It goes to
+  also sends `c.meta.updated` with only what a list shows of it, the meta: `cid`, `lang`, `title`, `titleTypeId` (the
+  id of `<title>`), `updatedAt` and `createdAt`. It goes to
   every connection that receives it, whatever it follows, and shares the version of the change it comes with: one
   change, one version, one or more notifications.
 - **Subscribing checks the page against the server.** `last` is the id of the last element the page holds. The result
@@ -168,7 +169,7 @@ not holding it. When none holds it, the page asks the user whether to run it aga
 
 ## Reading everything
 
-`c.list` returns the meta of every conversation (`cid`, `lang`, `title`, `updatedAt`) with the version it was read at,
+`c.list` returns the meta of every conversation, the same fields as `c.meta.updated`, with the version it was read at,
 taken together, so a page fills its list from it and follows `c.meta.updated` from that version; after reconnecting it
 reads it again. The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
 /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,

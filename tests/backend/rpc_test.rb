@@ -277,16 +277,17 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
-  scenario 'c.meta.updated goes to every page with cid, lang, title and updatedAt' do
+  scenario 'c.meta.updated goes to every page with the meta of the conversation' do
     pg = cid = nil
     step('Given a page following nothing') { pg = page; pg.initialize_session }
     step('When a conversation is created') { cid = create(lang: 'en', title: 'Hello') }
-    step('Then the page gets c.meta.updated with only cid, lang, title, updatedAt, version and actorId') do
+    step('Then the page gets c.meta.updated with only cid, lang, title, titleTypeId, updatedAt, createdAt, version and actorId') do
       settle
       m = pg.notes('c.meta.updated').find { |n| n['params']['cid'] == cid }
       assert m
-      assert_equal %w[actorId cid lang title updatedAt version], m['params'].keys.sort
-      assert_equal %w[en Hello], [m['params']['lang'], m['params']['title']]
+      assert_equal %w[actorId cid createdAt lang title titleTypeId updatedAt version], m['params'].keys.sort
+      assert_equal ['en', 'Hello', '__64', '2026-11-09T12:00:00+09:00'],
+                   m['params'].values_at('lang', 'title', 'titleTypeId', 'createdAt')
     end
   end
 
@@ -329,12 +330,15 @@ class RpcTest < Lcty::Scenarios
 
   scenario 'c.list returns the meta of every conversation with the version' do
     c1 = c2 = r = nil
-    step('Given two conversations') { c1 = create(title: 'one'); c2 = create(lang: 'en', title: 'two') }
+    step('Given two conversations') { c1 = create(title: 'one'); c2 = create(lang: 'en', size: 128, title: 'two') }
     step('When c.list is called') { r = rpc('c.list')['result'] }
-    step('Then the items hold both with their cid, lang, title and updatedAt') do
+    step('Then the items hold both with their cid, lang, title, titleTypeId, updatedAt and createdAt') do
       assert_match(/\A\h+\.\d+\z/, r['version'])
       items = r['items'].select { |m| [c1, c2].include?(m['cid']) }.sort_by { |m| [c1, c2].index(m['cid']) }
-      assert_equal [[c1, 'ja', 'one'], [c2, 'en', 'two']], items.map { |m| [m['cid'], m['lang'], m['title']] }
+      assert_equal [%w[cid lang title titleTypeId updatedAt createdAt]] * 2, items.map(&:keys)
+      at = '2026-11-09T12:00:00+09:00'
+      assert_equal [[c1, 'ja', 'one', '__64', at], [c2, 'en', 'two', '__128', at]],
+                   items.map { |m| m.values_at('cid', 'lang', 'title', 'titleTypeId', 'createdAt') }
       assert(items.all? { |m| m['updatedAt'].match?(/\A\d{4}-\d\d-\d\dT/) })
     end
   end

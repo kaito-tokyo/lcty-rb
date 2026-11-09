@@ -455,9 +455,19 @@ methods:
         required: true
         schema:
           type: string
+      - name: titleTypeId
+        required: true
+        description: The id of <title> as it is in the file ("__" and the size of the title slot, LCTYSP-0013)
+        schema:
+          type: string
       - name: updatedAt
         required: true
         description: When the file was last changed
+        schema:
+          $ref: "#/components/schemas/Time"
+      - name: createdAt
+        required: true
+        description: data-created-at of the conversation (line 4), as c.create wrote it
         schema:
           $ref: "#/components/schemas/Time"
       - name: version
@@ -534,9 +544,9 @@ methods:
 components:
   schemas:
     Meta:
-      description: What the list of conversations shows of one
+      description: What the list of conversations shows of one, and a row of c_meta in the browser (LCTYSP-0014)
       type: object
-      required: [cid, lang, title, updatedAt]
+      required: [cid, lang, title, titleTypeId, updatedAt, createdAt]
       properties:
         cid:
           $ref: "#/components/schemas/Cid"
@@ -544,7 +554,12 @@ components:
           type: string
         title:
           type: string
+        titleTypeId:
+          description: The id of <title> as it is in the file ("__" and the size of the title slot, LCTYSP-0013)
+          type: string
         updatedAt:
+          $ref: "#/components/schemas/Time"
+        createdAt:
           $ref: "#/components/schemas/Time"
     Capabilities:
       type: object

@@ -119,13 +119,16 @@ module Lcty
         nil
       end
 
-      # What the list of conversations shows of one: {cid, lang, title, updatedAt}, from lines 1 and 3 and the file's
-      # modification time
+      # What the list of conversations shows of one, the row of c_meta in the browser (LCTYSP-0014): {cid, lang, title,
+      # titleTypeId, updatedAt, createdAt}, from lines 1, 3 and 4 and the file's modification time. titleTypeId is the id
+      # of <title> as it is ("__" and the size of the slot).
       def meta(cid)
-        head = File.foreach(path(cid)).first(3)
+        head = File.foreach(path(cid)).first(4)
         { 'cid' => cid, 'lang' => head[0].to_s[/<html lang="([^"]*)"/, 1],
           'title' => Chatty::ConvHtml.slot_title(head[2].to_s.chomp),
-          'updatedAt' => File.mtime(path(cid)).utc.iso8601(3) }
+          'titleTypeId' => head[2].to_s[/\A<title id="([^"]*)"/, 1],
+          'updatedAt' => File.mtime(path(cid)).utc.iso8601(3),
+          'createdAt' => head[3].to_s[/\A<lcty-c [^>]*data-created-at="([^"]*)"/, 1] }
       end
 
       # The id of the last element of the file (nil when it has none yet)

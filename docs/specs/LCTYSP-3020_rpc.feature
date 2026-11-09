@@ -147,10 +147,10 @@ Feature: LCTYSP-3020 The RPC protocol
     When a page subscribes holding nothing, and again holding the system message
     Then the first answer is not current and the second is current
 
-  Scenario: c.meta.updated goes to every page with cid, lang, title and updatedAt
+  Scenario: c.meta.updated goes to every page with the meta of the conversation
     Given a page following nothing
     When a conversation is created
-    Then the page gets c.meta.updated with only cid, lang, title, updatedAt, version and actorId
+    Then the page gets c.meta.updated with only cid, lang, title, titleTypeId, updatedAt, createdAt, version and actorId
 
   Scenario: A notification names the actor that made the change
     Given two pages following a conversation
@@ -167,7 +167,7 @@ Feature: LCTYSP-3020 The RPC protocol
   Scenario: c.list returns the meta of every conversation with the version
     Given two conversations
     When c.list is called
-    Then the items hold both with their cid, lang, title and updatedAt
+    Then the items hold both with their cid, lang, title, titleTypeId, updatedAt and createdAt
 
   Scenario: c.update.title fits the title into the slot and notifies c.meta.updated
     Given a conversation with a title slot of 32 bytes, and a page receiving c.meta.updated
