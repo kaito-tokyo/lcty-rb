@@ -349,21 +349,21 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And the search box holds its field search, a search field with the placeholder "Search chats", and its field searchStatus
 
   Scenario: The sidebar's list is filled from IndexedDB
-    Given the database "lcty_v1_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta"
+    Given the database "lcty_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta"
     When a <lcty-sidebar> is put into the body
     Then its list shows "c", "b" and "a", in that order
     And the item "a" shows its tags_hint as tags and its messages_hint as the count
 
   Scenario: The sidebar names its list's tags from the browser's copy of the tags
-    Given "t_full" of the database "lcty_v1_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"
+    Given "t_full" of the database "lcty_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"
     When a <lcty-sidebar> is put into the body
     Then its list's data-tag-defs becomes "c~23 ruby" and data-tag-names "C# Ruby"
 
   Scenario: The sidebar never creates the database
-    Given there is no database "lcty_v1_c"
+    Given there is no database "lcty_c"
     When a <lcty-sidebar> is put into the body
     Then its list is empty
-    And there is still no database "lcty_v1_c"
+    And there is still no database "lcty_c"
 
   # ---- Languages ----
 

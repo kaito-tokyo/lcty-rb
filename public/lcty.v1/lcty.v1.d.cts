@@ -289,8 +289,8 @@ declare class LctyConvListElement extends HTMLElement {
  * __search-status / __list, and lcty-button (--primary) on the links.
  *
  * When it is in the document it fills its list from the browser's copy of every conversation's meta, before any module
- * has loaded: IndexedDB "lcty_v1_c" (store "c_meta"; only read, never created). It also sets its list's data-tag-defs and
- * data-tag-names from IndexedDB "lcty_v1_t" (store "t_full", through /lcty.v1/lcty.v1.t.worker.cjs). Named lcty-sidebar
+ * has loaded: IndexedDB "lcty_c" (store "c_meta"; only read, never created). It also sets its list's data-tag-defs and
+ * data-tag-names from IndexedDB "lcty_t" (store "t_full", through /lcty.v1/lcty.v1.t.worker.cjs). Named lcty-sidebar
  * for cross-document view transitions (lcty.v1.css).
  */
 declare class LctySidebarElement extends HTMLElement {

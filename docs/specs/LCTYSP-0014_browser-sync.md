@@ -59,7 +59,7 @@ the version they were last brought to, so that an older answer never overwrites 
 
 ## The version of a copy
 
-- **Each database records the version it holds:** `lcty_v1_c` and `lcty_v1_t` get a store `sync` with one row,
+- **Each database records the version it holds:** `lcty_c` and `lcty_t` get a store `sync` with one row,
   `{boot, seq}`, the global version (`<boot>.<seq>`, [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md#the-global-version)) of
   the last data written into the database.
 - **A write is applied only when it is newer, in the same transaction:** the worker opens one read-write transaction
@@ -91,10 +91,10 @@ the version they were last brought to, so that an older answer never overwrites 
 
 ## What the sidebar shows besides the meta
 
-- **The tags of a conversation come from `lcty_v1_t`:** the tag database is their source of truth, so the browser's
+- **The tags of a conversation come from `lcty_t`:** the tag database is their source of truth, so the browser's
   copy of it holds them too, and the sidebar reads them from there with the display names of the tags. `c_meta` holds
   none.
-- **The number of messages is a store of its own in `lcty_v1_c`: `c_recordcount`.** It is a resource of `c/`, so it
+- **The number of messages is a store of its own in `lcty_c`: `c_recordcount`.** It is a resource of `c/`, so it
   belongs in the database of `c/`; but it costs more than the meta (counting reads the whole file, where the meta needs
   only the head lines and the modification time), so it is kept apart from `c_meta` and can be read, updated or left
   stale on its own. A row is one conversation's count, keyed by `cid`, under the same version rule as every other
@@ -117,7 +117,7 @@ the version they were last brought to, so that an older answer never overwrites 
 ## Upgrading the databases
 
 While lcty-rb is being developed, the databases are upgraded roughly: adding `sync` and `c_recordcount`, or changing
-any store, raises the version of `lcty_v1_c` or `lcty_v1_t`, and the upgrade drops every store and recreates them
+any store, raises the version of `lcty_c` or `lcty_t`, and the upgrade drops every store and recreates them
 empty; the next read fills them from the server. Nothing is converted, and no care is taken for pages of older code
 still open (they are closed by `versionchange` and read again when reloaded). Everything in them is a copy.
 
@@ -125,7 +125,7 @@ still open (they are closed by `versionchange` and read again when reloaded). Ev
 
 When the connection is open and `initialize` has answered:
 
-1. **The list:** `c.list` answers the meta of every conversation with its version; the worker of `lcty_v1_c` replaces
+1. **The list:** `c.list` answers the meta of every conversation with its version; the worker of `lcty_c` replaces
    `c_meta` with it under the rule above. The sidebar shows the list from `c_meta`.
 2. **The conversation shown** (the conversation page only): `c.subscribe` with its `cid` and the id of the last element
    in the document. When the answer is not `current`, the conversation is [out of sync](#out-of-sync); when it is,
@@ -137,7 +137,7 @@ When the connection is open and `initialize` has answered:
 
 ## Applying notifications
 
-- **The `c_meta` and `c_recordcount` records** of a `c.batch.updated` are written by the worker of `lcty_v1_c` in one
+- **The `c_meta` and `c_recordcount` records** of a `c.batch.updated` are written by the worker of `lcty_c` in one
   transaction under the version rule, and the sidebar is redrawn from them.
 - **The `c_html` records** of the conversation shown are applied to the document when their `after` (or `id`) is the
   document's last element; otherwise the conversation is [out of sync](#out-of-sync). Those of its own `actorId` are
@@ -172,10 +172,10 @@ is not the page's own resend.
 
 ## Open points
 
-- **The store of the conversations' tags in `lcty_v1_t`:** its name and rows, and the RPC methods that fill it.
+- **The store of the conversations' tags in `lcty_t`:** its name and rows, and the RPC methods that fill it.
 - **Reading every `c_recordcount`:** changes come as `c.batch.updated` records; the method that reads them all at
   start (with `c.list`, or one of its own) is undecided.
-- **Tags, settings and vectors** have no RPC methods yet, so `lcty_v1_t` keeps its sync of today until they do.
+- **Tags, settings and vectors** have no RPC methods yet, so `lcty_t` keeps its sync of today until they do.
 - **Protecting the user's data before the reload:** what the user has in the page and the server does not (an unsent
   message in the composer, say) must not be lost when the user reloads an out-of-sync page; how it is kept is to be
   discussed.

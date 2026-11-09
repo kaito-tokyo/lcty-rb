@@ -582,7 +582,7 @@
 
 	#filled = false;
 
-	// The display names of the list's tags, for the first paint too: the browser's copy of the tags (IndexedDB "lcty_v1_t",
+	// The display names of the list's tags, for the first paint too: the browser's copy of the tags (IndexedDB "lcty_t",
 	// store "t_full") through the worker that alone opens it (lcty.v1.t.worker.cjs, operation "get", which fetches
 	// GET /v1/tags first when there is no copy yet; LCTYSP-0009), found from the page's URL like lcty.v1.c.worker.cjs
 	// below.
@@ -623,7 +623,7 @@
 	}
 
 	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
-	// before any module has loaded (LCTYSP-0010): from IndexedDB ("lcty_v1_c", store "c_meta"), asynchronously, through the
+	// before any module has loaded (LCTYSP-0010): from IndexedDB ("lcty_c", store "c_meta"), asynchronously, through the
 	// worker that alone opens it (lcty.v1.c.worker.cjs, operation "get", which never creates the database; LCTYSP-0009). The worker is
 	// found from the page's URL: every page is one directory below the root of the site (LCTYSP-0005). Opened directly
 	// (file://) no worker can start, and the list stays empty. A module that has already shown its own items wins.
