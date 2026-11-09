@@ -13,8 +13,8 @@ SPDX-License-Identifier: Apache-2.0
   [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file),
   [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) and [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the copies and
   their workers)
-- Implementation: none yet; what the pages rely on from the server is tested by
-  [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)
+- Implementation: none in the pages yet; the server sends `c.batch.updated` (`lib/rpc/servlet.rb`), and what the pages
+  rely on from it is tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature) and [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)
 
 ## Summary
 
@@ -30,12 +30,32 @@ the version they were last brought to, so that an older answer never overwrites 
   directly (`file://`) has no module running and opens nothing.
 - **Not a SharedWorker:** the pages are separate documents, so a SharedWorker would end with each page of a tab that is
   left, and WebSocket connections are not limited like HTTP/1.1 connections to one host. One per tab is simpler.
-- **What each page receives:** every page `c.meta.updated` (the sidebar's list); the conversation page also
-  `c.appended` and `c.unappended` (it follows its conversation), and `c.cmd.holds` (it runs commands).
+- **What each page receives:** every page `c.batch.updated` ([below](#one-notification-for-every-change-of-c)): the
+  sidebar's list from its `c_meta` and `c_recordcount` records, and on the conversation page also the `c_html` records
+  of the conversation it follows. The conversation page also receives `c.cmd.holds` (it runs commands).
 - **The `actorId`** that `initialize` returns is kept for the life of the connection. A notification with the page's own
   `actorId` is of its own change, which it has applied already when it sent it or applies once from the response.
 - **Reconnecting:** when the connection closes, the page opens a new one, waiting longer each time it fails (from 1 s up
   to 30 s), and starts again from [Starting](#starting). It does not try to replay what it missed.
+
+## One notification for every change of `c/`
+
+- **`c.batch.updated` is the one interface for every change of `c/`.** It replaces the notifications of
+  [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md#methods) (`c.created`, `c.meta.updated`, `c.appended` and
+  `c.unappended`). A method per kind of update said nothing a record cannot say, and a
+  change touches several copies at once; a new kind of update adds a store, not a method.
+- **One change, one version, one notification:** its params are `{version, actorId, records}`, the version and the
+  actor of the change, and the records of every copy it changes, in the order they are applied.
+- **A record is `{store, op, row}`,** where `store` names the browser's copy it changes:
+  - `c_meta`, `op` `put`: `row` is the meta of the conversation (creating it, appending, unappending, changing the
+    title).
+  - `c_recordcount`, `op` `put`: `row` is `{cid, count}` (creating it, appending, unappending).
+  - `c_html`, the document of the conversation: `op` `append` with `row` `{cid, after, tag, attrs, innerHTML}`, the
+    element as written; `op` `unappend` with `row` `{cid, id}`.
+- **Each connection gets the records it follows:** `c_html` records go only to the connections that follow their
+  conversation (`c.subscribe`), the others to every connection that receives `c.batch.updated`. The server leaves out
+  the records a connection does not get, and sends it nothing when none is left. A page declares `c.batch.updated`
+  alone in `receives`.
 
 ## The version of a copy
 
@@ -56,7 +76,7 @@ the version they were last brought to, so that an older answer never overwrites 
 
 ## The rows of `c_meta`
 
-- **A row is the meta, as `c.list` and `c.meta.updated` give it:** `{cid, lang, title, titleTypeId, updatedAt,
+- **A row is the meta, as `c.list` and the `c_meta` records of `c.batch.updated` give it:** `{cid, lang, title, titleTypeId, updatedAt,
   createdAt}`, with the key `cid`. Nothing is added or renamed on the way, so the worker stores what it receives.
   - `cid`: the id of the conversation, its file name.
   - `lang`: `lang` of line 1.
@@ -69,6 +89,38 @@ the version they were last brought to, so that an older answer never overwrites 
   `GET /v1/meta-all.json`) are replaced by these when the pages use `/v1/rpc`; the database's version is raised and
   the store recreated, nothing converted ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
 
+## What the sidebar shows besides the meta
+
+- **The tags of a conversation come from `lcty_v1_t`:** the tag database is their source of truth, so the browser's
+  copy of it holds them too, and the sidebar reads them from there with the display names of the tags. `c_meta` holds
+  none.
+- **The number of messages is a store of its own in `lcty_v1_c`: `c_recordcount`.** It is a resource of `c/`, so it
+  belongs in the database of `c/`; but it costs more than the meta (counting reads the whole file, where the meta needs
+  only the head lines and the modification time), so it is kept apart from `c_meta` and can be read, updated or left
+  stale on its own. A row is one conversation's count, keyed by `cid`, under the same version rule as every other
+  store.
+- **What `c_recordcount` counts:** every element of the file but `lcty-c`, whatever its kind (`lcty-msg`, `lcty-cmd`
+  and the others of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)). Every element is one line and line 4,
+  `<lcty-c … />`, is the last of the head, so the count is the number of lines of the file less 4; the server counts
+  lines and parses none.
+- **The server counts when it writes the file and caches the count in `_index.sqlite`:** creating a conversation, and
+  appending or unappending an element, store the file's new count in a table of its own there,
+  `c_recordcount (cid TEXT PRIMARY KEY, count INTEGER NOT NULL)`, while the conversation's write is still in progress,
+  so a count is never read from a file being written. The count is answered from this table, never from the file: a
+  conversation the table has no row for has its count answered as unknown (`null`), and the sidebar shows no number
+  for it. The table is derived data like the rest of `_index.sqlite` ([LCTYSP-0007](LCTYSP-0007_search.md)) and is
+  filled at startup by counting the lines of the files. Today's `conv_stats` (the number of messages behind
+  `messages_hint`) goes with `messages_hint`.
+- **Today's `tags_hint` and `messages_hint`** (from the search index, in the rows of `GET /v1/meta-all.json`) go with
+  today's rows.
+
+## Upgrading the databases
+
+While lcty-rb is being developed, the databases are upgraded roughly: adding `sync` and `c_recordcount`, or changing
+any store, raises the version of `lcty_v1_c` or `lcty_v1_t`, and the upgrade drops every store and recreates them
+empty; the next read fills them from the server. Nothing is converted, and no care is taken for pages of older code
+still open (they are closed by `versionchange` and read again when reloaded). Everything in them is a copy.
+
 ## Starting
 
 When the connection is open and `initialize` has answered:
@@ -76,38 +128,56 @@ When the connection is open and `initialize` has answered:
 1. **The list:** `c.list` answers the meta of every conversation with its version; the worker of `lcty_v1_c` replaces
    `c_meta` with it under the rule above. The sidebar shows the list from `c_meta`.
 2. **The conversation shown** (the conversation page only): `c.subscribe` with its `cid` and the id of the last element
-   in the document. When the answer is not `current`, the page reloads the conversation file; when it is, nothing was
-   missed since the file was loaded, and the notifications of the conversation follow from the version answered.
+   in the document. When the answer is not `current`, the conversation is [out of sync](#out-of-sync); when it is,
+   nothing was missed since the file was loaded, and the notifications of the conversation follow from the version
+   answered.
 3. **A lock found at the end:** when the last element is an `lcty-cmd` the page did not start, it calls `c.cmd.held`.
    When a page holds it, it shows that a reply is being made in another tab; when none does, it asks the user whether
    to run it again or remove it ([LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md#lcty-cmd)).
 
 ## Applying notifications
 
-- **`c.meta.updated`** is written into `c_meta` by its worker under the version rule, and the sidebar is redrawn from
-  `c_meta`.
-- **`c.appended` and `c.unappended`** of the conversation shown are applied to the document when their `after` (or
-  `id`) is the document's last element; otherwise the page reloads the conversation file. Those of its own `actorId` are
+- **The `c_meta` and `c_recordcount` records** of a `c.batch.updated` are written by the worker of `lcty_v1_c` in one
+  transaction under the version rule, and the sidebar is redrawn from them.
+- **The `c_html` records** of the conversation shown are applied to the document when their `after` (or `id`) is the
+  document's last element; otherwise the conversation is [out of sync](#out-of-sync). Those of its own `actorId` are
   skipped when already applied.
 - **`c.cmd.holds`** is answered `{holds: true}` while the page runs that `lcty-cmd`, `{holds: false}` otherwise, at
   once: the page that asked waits only a short time.
+
+## Out of sync
+
+A copy is out of sync when the page finds that it no longer follows the server: `c.subscribe` answers not `current`, a
+`c_html` record does not follow the document's last element, or a write is refused with error `1` that
+is not the page's own resend.
+
+- **Changes to that resource are refused in the page:** the page sends no more writes for it (appending, unappending,
+  the title, commands), stops applying its notifications, and shows an error that asks the user to reload the page.
+  What it shows stays as it is until then, and other resources are not affected (the sidebar keeps its list).
+- **Reloading the page is the only way back,** and only the user does it: the page never reloads itself, nor reads
+  the conversation again and patches the document in place. A page that patches what it has could get it wrong
+  without anyone seeing; a reload starts from the file as the server has it.
+- **Except where it is trivial:** a copy that is replaced as a whole whenever it is read, such as `c_meta` from
+  `c.list` after reconnecting, needs no user. Any other recovery has to be argued as trivial in this spec first.
 
 ## Writing
 
 - **The page writes over its connection** with the methods of [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md), naming as
   `after` the last element of its document.
 - **Error `1` (conflict):** another tab wrote first. When `data.last` is the id of the element the page just sent, its
-  earlier request went through (a resend); otherwise the page reloads the conversation and the user tries again.
+  earlier request went through (a resend); otherwise the conversation is [out of sync](#out-of-sync).
 - **Error `2` (locked):** a reply is being made; the page does as in step 3 of [Starting](#starting).
 - **Workers without a WebSocket** never write; they read with `GET` (the planned `GET /v1/lcty_c_meta.json` and
   `GET /v1/lcty_t_full.json`, which carry `Lcty-Version`) and write into their database under the same rule.
 
 ## Open points
 
-- **The tags and the number of messages of a conversation** (today's `tags_hint` and `messages_hint`, from the search
-  index) are not in the meta: where the sidebar gets them in the browser is undecided (the tag database is the source
-  of truth of the tags, so `lcty_v1_t` is the likely place).
+- **The store of the conversations' tags in `lcty_v1_t`:** its name and rows, and the RPC methods that fill it.
+- **Reading every `c_recordcount`:** changes come as `c.batch.updated` records; the method that reads them all at
+  start (with `c.list`, or one of its own) is undecided.
+- **The cache of `c_recordcount` in `_index.sqlite`** is not built yet: the prototype counts the lines when it writes
+  and sends the count in `c.batch.updated`, and keeps it nowhere.
 - **Tags, settings and vectors** have no RPC methods yet, so `lcty_v1_t` keeps its sync of today until they do.
-- **The upgrade of the databases** for the store `sync` (a new version of `lcty_v1_c` and `lcty_v1_t`).
-- **Reloading the conversation** when the page is stale: whether a whole reload of the page, or the elements read again
-  and replaced in place.
+- **Protecting the user's data before the reload:** what the user has in the page and the server does not (an unsent
+  message in the composer, say) must not be lost when the user reloads an out-of-sync page; how it is kept is to be
+  discussed.

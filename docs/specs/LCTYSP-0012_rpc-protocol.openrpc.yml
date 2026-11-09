@@ -264,8 +264,8 @@ methods:
     x-receiver: server
     summary: Follow the elements of one conversation, replacing what the connection followed
     description: >-
-      A page follows one conversation at a time: c.appended and c.unappended are sent only to the connections that
-      follow their conversation. cid null stops following. The result tells whether the page's last element is still
+      A page follows one conversation at a time: the c_html records of c.batch.updated are sent only to the
+      connections that follow their conversation. cid null stops following. The result tells whether the page's last element is still
       the last one; when it is not, the page reads the conversation again. WebSocket only.
     paramStructure: by-name
     params:
@@ -307,7 +307,7 @@ methods:
     summary: The meta of every conversation, newest first
     description: >-
       What a page reads to fill its list of conversations, and again after reconnecting. The version is taken together
-      with the list, so the page follows c.meta.updated from it.
+      with the list, so the page follows the c_meta records of c.batch.updated from it.
     params: []
     result:
       name: listing
@@ -412,60 +412,16 @@ methods:
 
   # ---- Notifications the server sends (no result: always sent without an id) ----
 
-  - name: c.created
+  - name: c.batch.updated
     x-receiver: page
-    summary: A conversation was created
-    paramStructure: by-name
-    params:
-      - name: cid
-        required: true
-        schema:
-          $ref: "#/components/schemas/Cid"
-      - name: version
-        required: true
-        schema:
-          $ref: "#/components/schemas/Version"
-      - name: actorId
-        required: true
-        description: The actor that made the change (its connection's actorId)
-        schema:
-          $ref: "#/components/schemas/ActorId"
-
-  - name: c.meta.updated
-    x-receiver: page
-    summary: What the list of conversations shows of one changed (created, appended, unappended)
+    summary: A change of c/, as the records of every copy it changes
     description: >-
-      Sent to every connection that receives it, whatever it follows, with the same version as the change it comes
-      with.
+      The one notification of every change of c/ (LCTYSP-0014): one change, one version, one c.batch.updated. Its
+      records are in the order they are applied. c_html records are sent only to the connections that follow their
+      conversation (c.subscribe), the others to every connection that receives c.batch.updated; a connection left with
+      no record gets nothing.
     paramStructure: by-name
     params:
-      - name: cid
-        required: true
-        schema:
-          $ref: "#/components/schemas/Cid"
-      - name: lang
-        required: true
-        schema:
-          type: string
-      - name: title
-        required: true
-        schema:
-          type: string
-      - name: titleTypeId
-        required: true
-        description: The id of <title> as it is in the file ("__" and the size of the title slot, LCTYSP-0013)
-        schema:
-          type: string
-      - name: updatedAt
-        required: true
-        description: When the file was last changed
-        schema:
-          $ref: "#/components/schemas/Time"
-      - name: createdAt
-        required: true
-        description: data-created-at of the conversation (line 4), as c.create wrote it
-        schema:
-          $ref: "#/components/schemas/Time"
       - name: version
         required: true
         schema:
@@ -475,61 +431,13 @@ methods:
         description: The actor that made the change (its connection's actorId)
         schema:
           $ref: "#/components/schemas/ActorId"
-
-  - name: c.appended
-    x-receiver: page
-    description: Sent only to the connections that follow the conversation (c.subscribe)
-    summary: An element was appended
-    paramStructure: by-name
-    params:
-      - name: cid
+      - name: records
         required: true
         schema:
-          $ref: "#/components/schemas/Cid"
-      - name: after
-        required: true
-        schema:
-          oneOf:
-            - $ref: "#/components/schemas/ElementId"
-            - type: "null"
-      - name: element
-        required: true
-        description: The element as written
-        schema:
-          $ref: "#/components/schemas/Element"
-      - name: version
-        required: true
-        schema:
-          $ref: "#/components/schemas/Version"
-      - name: actorId
-        required: true
-        description: The actor that made the change (its connection's actorId)
-        schema:
-          $ref: "#/components/schemas/ActorId"
-
-  - name: c.unappended
-    x-receiver: page
-    description: Sent only to the connections that follow the conversation (c.subscribe)
-    summary: The last element was removed
-    paramStructure: by-name
-    params:
-      - name: cid
-        required: true
-        schema:
-          $ref: "#/components/schemas/Cid"
-      - name: id
-        required: true
-        schema:
-          $ref: "#/components/schemas/ElementId"
-      - name: version
-        required: true
-        schema:
-          $ref: "#/components/schemas/Version"
-      - name: actorId
-        required: true
-        description: The actor that made the change (its connection's actorId)
-        schema:
-          $ref: "#/components/schemas/ActorId"
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Record"
 
 components:
   schemas:
@@ -551,6 +459,72 @@ components:
           $ref: "#/components/schemas/Time"
         createdAt:
           $ref: "#/components/schemas/Time"
+    Record:
+      description: >-
+        One change to one copy in the browser: store names the copy (LCTYSP-0014), op what is done to it, row what it
+        is done with
+      oneOf:
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: c_meta
+            op:
+              const: put
+            row:
+              $ref: "#/components/schemas/Meta"
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: c_recordcount
+            op:
+              const: put
+            row:
+              type: object
+              required: [cid, count]
+              properties:
+                cid:
+                  $ref: "#/components/schemas/Cid"
+                count:
+                  description: The number of elements of the file, every one but lcty-c
+                  type: integer
+                  minimum: 0
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: c_html
+            op:
+              const: append
+            row:
+              description: The element as written, and the element it was appended after
+              allOf:
+                - $ref: "#/components/schemas/Element"
+                - type: object
+                  required: [cid, after]
+                  properties:
+                    cid:
+                      $ref: "#/components/schemas/Cid"
+                    after:
+                      oneOf:
+                        - $ref: "#/components/schemas/ElementId"
+                        - type: "null"
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: c_html
+            op:
+              const: unappend
+            row:
+              type: object
+              required: [cid, id]
+              properties:
+                cid:
+                  $ref: "#/components/schemas/Cid"
+                id:
+                  $ref: "#/components/schemas/ElementId"
     Capabilities:
       type: object
       required: [receives]

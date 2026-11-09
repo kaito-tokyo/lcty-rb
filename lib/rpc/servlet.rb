@@ -145,8 +145,6 @@ module Lcty
         @lock.synchronize { @conns.delete(conn) }
       end
 
-      # Run the change (the block returns [method, params] of its notification) and notify every connection. The
-      # notification names the actor that made the change (the actorId of its connection).
       # Follow the elements of one conversation (nil: none), replacing what the connection followed. Done under the
       # lock, so the last id and the version returned are those right before the first notification it will get.
       def subscribe(peer, cid)
@@ -157,27 +155,33 @@ module Lcty
         end
       end
 
-      # The block returns the notifications of the change, [[method, params], ...]; they share its version.
+      # Run the change and announce it as one c.batch.updated (LCTYSP-0014). The block returns the records of the
+      # change, [{store, op, row}, ...], in the order they are applied; they share its version and name the actor that
+      # made it. Records of the stores in SUBSCRIBED go only to the connections following their conversation; a
+      # connection left with no record gets nothing.
       def commit(peer)
         @lock.synchronize do
-          notes = yield
+          records = yield
           @seq += 1
           version = "#{@boot}.#{@seq}"
-          notes.each do |method, params|
-            params = params.merge('version' => version, 'actorId' => peer.actor_id)
-            msg = JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params)
-            scoped = SUBSCRIBED.include?(method)
-            @conns.each do |c|
-              c.push(msg) if c.receives.include?(method) && (!scoped || c.subscription == params['cid'])
-            end
+          msgs = {}
+          @conns.each do |c|
+            next unless c.receives.include?(BATCH)
+            mine = records.reject { |r| SUBSCRIBED.include?(r['store']) && c.subscription != r['row']['cid'] }
+            next if mine.empty?
+            c.push(msgs[mine] ||= JSON.generate('jsonrpc' => '2.0', 'method' => BATCH, 'params' => {
+                                                       'version' => version, 'actorId' => peer.actor_id, 'records' => mine
+                                                     }))
           end
           version
         end
       end
     end
 
-    # The notifications that go only to the connections following their conversation (c.subscribe)
-    SUBSCRIBED = %w[c.appended c.unappended].freeze
+    # The one notification of every change of c/
+    BATCH = 'c.batch.updated'
+    # The stores whose records go only to the connections following their conversation (c.subscribe)
+    SUBSCRIBED = %w[c_html].freeze
 
     HUB = Hub.new
     class << self
@@ -205,7 +209,7 @@ module Lcty
         version = HUB.commit(peer) do
           ConvStore.create(cid, created_at: p['createdAt'], title: p['title'], lang: p['lang'],
                                 title_max_size: p['titleMaxSize'], lcty_version: p['lctyVersion'])
-          [['c.created', { 'cid' => cid }], ['c.meta.updated', ConvStore.meta(cid)]]
+          [Rpc.meta_record(cid), Rpc.count_record(cid, 0)]
         end
         { 'version' => version }
       end,
@@ -218,8 +222,9 @@ module Lcty
       # Remove the last element: {cid, id}
       'c.unappend' => lambda do |p, peer|
         version = HUB.commit(peer) do
-          ConvStore.remove(p['cid'], p['id'])
-          [['c.unappended', { 'cid' => p['cid'], 'id' => p['id'] }], ['c.meta.updated', ConvStore.meta(p['cid'])]]
+          count = ConvStore.remove(p['cid'], p['id'])
+          [{ 'store' => 'c_html', 'op' => 'unappend', 'row' => { 'cid' => p['cid'], 'id' => p['id'] } },
+           Rpc.meta_record(p['cid']), Rpc.count_record(p['cid'], count)]
         end
         { 'version' => version }
       end,
@@ -274,7 +279,7 @@ module Lcty
         title = nil
         version = HUB.commit(peer) do
           title = ConvStore.update_title(p['cid'], p['title'])
-          [['c.meta.updated', ConvStore.meta(p['cid'])]]
+          [Rpc.meta_record(p['cid'])]
         end
         { 'version' => version, 'title' => title }
       end
@@ -282,16 +287,26 @@ module Lcty
 
     module_function
 
-    # Append one element of tag after the element named, and announce it as c.appended with the element as written
+    # Append one element of tag after the element named, and announce it with a c_html record of the element as written
     def append(p, peer, tag, inner)
       attrs = nil
       version = HUB.commit(peer) do
-        attrs = ConvStore.append(p['cid'], p['after'], tag, p['attrs'], inner)
-        [['c.appended', { 'cid' => p['cid'], 'after' => p['after'],
-                          'element' => { 'tag' => tag, 'attrs' => attrs, 'innerHTML' => inner.to_s } }],
-         ['c.meta.updated', ConvStore.meta(p['cid'])]]
+        attrs, count = ConvStore.append(p['cid'], p['after'], tag, p['attrs'], inner)
+        [{ 'store' => 'c_html', 'op' => 'append',
+           'row' => { 'cid' => p['cid'], 'after' => p['after'], 'tag' => tag, 'attrs' => attrs, 'innerHTML' => inner.to_s } },
+         meta_record(p['cid']), count_record(p['cid'], count)]
       end
       { 'version' => version, 'attrs' => attrs }
+    end
+
+    # The record of a conversation's meta, the row of c_meta
+    def meta_record(cid)
+      { 'store' => 'c_meta', 'op' => 'put', 'row' => ConvStore.meta(cid) }
+    end
+
+    # The record of a conversation's number of elements, the row of c_recordcount
+    def count_record(cid, count)
+      { 'store' => 'c_recordcount', 'op' => 'put', 'row' => { 'cid' => cid, 'count' => count } }
     end
 
     # The response to one decoded request (a Hash), or nil for a notification

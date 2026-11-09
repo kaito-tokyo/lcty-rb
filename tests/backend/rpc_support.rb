@@ -21,7 +21,7 @@ require 'rpc/servlet'
 module RpcSupport
   Rpc = Lcty::Rpc
   ORIGIN = 'http://allowed.test'
-  NOTES = %w[c.created c.meta.updated c.appended c.unappended].freeze
+  NOTES = %w[c.batch.updated].freeze
 
   def self.port
     @port ||= begin
@@ -105,6 +105,14 @@ module RpcSupport
 
     def notes(method = nil)
       @log.select { |m| m.key?('method') && !m.key?('id') && (method.nil? || m['method'] == method) }
+    end
+
+    # The records of every c.batch.updated received, in order, each with the version and actorId of its batch:
+    # {store, op, row, version, actorId}. store and op narrow them.
+    def records(store = nil, op = nil)
+      notes('c.batch.updated').flat_map do |m|
+        m['params']['records'].map { |r| r.merge(m['params'].slice('version', 'actorId')) }
+      end.select { |r| (store.nil? || r['store'] == store) && (op.nil? || r['op'] == op) }
     end
 
     def close

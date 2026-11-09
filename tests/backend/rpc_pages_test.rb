@@ -32,7 +32,7 @@ class RpcPagesTest < Lcty::Scenarios
 
   # Whether the server still has a connection with the actorId
   def connected?(actor_id)
-    Rpc::HUB.receivers('c.meta.updated').any? { |c| c.actor_id == actor_id }
+    Rpc::HUB.receivers('c.batch.updated').any? { |c| c.actor_id == actor_id }
   end
 
   # Of the responses to the writes that raced, the one written and the ones refused
@@ -97,7 +97,7 @@ class RpcPagesTest < Lcty::Scenarios
     step('Given three pages, each with a conversation of its own, and two pages that only watch') do
       cids = Array.new(3) { create }
       writers = Array.new(3) { session }
-      watchers = Array.new(2) { session(%w[c.meta.updated]) }
+      watchers = Array.new(2) { session }
     end
     step('When the three append ten elements each to their conversations at once') do
       versions = at_once(writers.zip(cids)) do |pg, cid|
@@ -111,10 +111,10 @@ class RpcPagesTest < Lcty::Scenarios
       end.flatten
     end
     seen = nil
-    step('Then each watching page gets thirty c.meta.updated with increasing versions') do
-      mine = ->(pg) { pg.notes('c.meta.updated').select { |m| cids.include?(m['params']['cid']) } }
+    step('Then each watching page gets thirty c_meta records with increasing versions') do
+      mine = ->(pg) { pg.records('c_meta').select { |r| cids.include?(r['row']['cid']) } }
       wait_until { watchers.all? { |pg| mine.call(pg).size >= 30 } }
-      seen = watchers.map { |pg| mine.call(pg).map { |m| [m['params']['cid'], m['params']['version']] } }
+      seen = watchers.map { |pg| mine.call(pg).map { |r| [r['row']['cid'], r['version']] } }
       seen.each do |list|
         assert_equal 30, list.size
         seqs = list.map { |_, v| seq(v) }
@@ -147,16 +147,16 @@ class RpcPagesTest < Lcty::Scenarios
        unappend(cid, u2['id'], via: writer)].each { |r| assert_nil r['error'] }
     end
     held = []
-    step('Then each c.appended names as after the last element the following page holds, and each c.unappended its last element') do
-      kinds = %w[c.appended c.unappended]
-      notes = -> { follower.notes.select { |m| kinds.include?(m['method']) && m['params']['cid'] == cid } }
-      wait_until { notes.call.size >= 7 }
-      notes.call.each do |m|
-        if m['method'] == 'c.appended'
-          assert held.last == m['params']['after'], "after #{m['params']['after'].inspect}, holding #{held.last.inspect}"
-          held << m['params']['element']['attrs']['id']
+    step('Then each c_html append names as after the last element the following page holds, and each unappend its last element') do
+      recs = -> { follower.records('c_html').select { |r| r['row']['cid'] == cid } }
+      wait_until { recs.call.size >= 7 }
+      recs.call.each do |r|
+        row = r['row']
+        if r['op'] == 'append'
+          assert held.last == row['after'], "after #{row['after'].inspect}, holding #{held.last.inspect}"
+          held << row['attrs']['id']
         else
-          assert_equal held.last, m['params']['id']
+          assert_equal held.last, row['id']
           held.pop
         end
       end
@@ -189,13 +189,14 @@ class RpcPagesTest < Lcty::Scenarios
       writer.join
     end
     notes = nil
-    step('Then the first c.appended it gets names as after the last id c.subscribe answered, and each next one the one before') do
+    step('Then the first c_html append it gets names as after the last id c.subscribe answered, and each next one the one before') do
       final = element_ids(cid).last
-      wait_until { follower.notes('c.appended').any? { |m| m['params']['element']['attrs']['id'] == final } }
-      notes = follower.notes('c.appended').map { |m| m['params'] }
+      appends = -> { follower.records('c_html', 'append') }
+      wait_until { appends.call.any? { |r| r['row']['attrs']['id'] == final } }
+      notes = appends.call.map { |r| r['row'].merge('version' => r['version']) }
       assert_operator notes.size, :>=, 10
       afters = notes.map { |n| n['after'] }
-      ids = notes.map { |n| n['element']['attrs']['id'] }
+      ids = notes.map { |n| n['attrs']['id'] }
       assert_equal [sub['last']] + ids[0...-1], afters
     end
     step('And every one has a version after that of c.subscribe') do
@@ -203,7 +204,7 @@ class RpcPagesTest < Lcty::Scenarios
     end
     step('And the file up to that last id, followed by the elements notified, is the whole file') do
       all = element_ids(cid)
-      assert_equal all, all[0..all.index(sub['last'])] + notes.map { |n| n['element']['attrs']['id'] }
+      assert_equal all, all[0..all.index(sub['last'])] + notes.map { |n| n['attrs']['id'] }
     end
   end
 
@@ -224,13 +225,13 @@ class RpcPagesTest < Lcty::Scenarios
       follow(pg, nil)
       append(c2, a2['id'], sys_attrs)
     end
-    step("Then it gets c.appended of the second conversation's first element only") do
-      wait_until { pg.notes('c.meta.updated').count { |m| [c1, c2].include?(m['params']['cid']) } >= 3 }
+    step("Then it gets the c_html record of the second conversation's first element only") do
+      wait_until { pg.records('c_meta').count { |r| [c1, c2].include?(r['row']['cid']) } >= 3 }
       settle
-      assert_equal [[c2, a2['id']]], pg.notes('c.appended').map { |m| [m['params']['cid'], m['params']['element']['attrs']['id']] }
+      assert_equal [[c2, a2['id']]], pg.records('c_html').map { |r| [r['row']['cid'], r['row']['attrs']['id']] }
     end
-    step('And it gets c.meta.updated of all three') do
-      assert_equal [c1, c2, c2], pg.notes('c.meta.updated').map { |m| m['params']['cid'] }.select { |c| [c1, c2].include?(c) }
+    step('And it gets the c_meta records of all three') do
+      assert_equal [c1, c2, c2], pg.records('c_meta').map { |r| r['row']['cid'] }.select { |c| [c1, c2].include?(c) }
     end
   end
 
@@ -245,10 +246,12 @@ class RpcPagesTest < Lcty::Scenarios
     step('When the page that receives nothing appends a message') do
       assert_nil append(cid, nil, sys_attrs, via: deaf)['error']
     end
-    step('Then the following page gets c.appended and c.meta.updated with the actorId of the writing page') do
-      wait_until { pg.notes('c.appended').any? && pg.notes('c.meta.updated').any? { |m| m['params']['cid'] == cid } }
-      got = pg.notes.select { |m| m['params']['cid'] == cid }.map { |m| [m['method'], m['params']['actorId']] }
-      assert_equal [['c.appended', actor(deaf)], ['c.meta.updated', actor(deaf)]], got
+    step('Then the following page gets its c_html, c_meta and c_recordcount records with the actorId of the writing page') do
+      mine = -> { pg.notes('c.batch.updated').map { |m| m['params'] }.select { |b| b['records'].any? { |r| r['row']['cid'] == cid } } }
+      wait_until { mine.call.any? }
+      settle
+      got = mine.call.map { |b| [b['records'].map { |r| r['store'] }, b['actorId']] }
+      assert_equal [[%w[c_html c_meta c_recordcount], actor(deaf)]], got
       assert_empty deaf.notes
     end
   end
@@ -280,12 +283,10 @@ class RpcPagesTest < Lcty::Scenarios
       assert_nil unappend(cid, c['id'], via: holder)['error']
       assert_nil append(cid, u['id'], m, via: holder)['error']
     end
-    step('Then the other page gets c.unappended of the lcty-cmd and then c.appended of the model message') do
-      kinds = %w[c.appended c.unappended]
-      wait_until { other.notes.count { |n| kinds.include?(n['method']) } >= 2 }
-      got = other.notes.select { |n| kinds.include?(n['method']) }
-                 .map { |n| [n['method'], n['params']['id'] || n['params']['element']['attrs']['id']] }
-      assert_equal [['c.unappended', c['id']], ['c.appended', m['id']]], got
+    step('Then the other page gets the c_html records unappending the lcty-cmd and then appending the model message') do
+      wait_until { other.records('c_html').size >= 2 }
+      got = other.records('c_html').map { |r| [r['op'], r['row']['id'] || r['row']['attrs']['id']] }
+      assert_equal [['unappend', c['id']], ['append', m['id']]], got
     end
     step('And its user message after the model message is written') do
       assert_nil append(cid, m['id'], user_attrs, via: other)['error']
@@ -348,8 +349,8 @@ class RpcPagesTest < Lcty::Scenarios
       gone.close
       assert_nil append(cid, nil, sys_attrs)['error']
     end
-    step('Then the two others get c.appended') do
-      wait_until { pages.all? { |pg| pg.notes('c.appended').size == 1 } }
+    step('Then the two others get the c_html record') do
+      wait_until { pages.all? { |pg| pg.records('c_html').size == 1 } }
     end
     step('And the server no longer counts the closed page among its connections') do
       wait_until { !connected?(actor(gone)) }
@@ -392,23 +393,23 @@ class RpcPagesTest < Lcty::Scenarios
     step('Given a conversation, two pages and a page that watches') do
       cid = create
       writers = Array.new(2) { session }
-      watcher = session(%w[c.meta.updated])
+      watcher = session
     end
     step('When the two pages each change the title ten times at once') do
       at_once(writers.each_with_index.to_a) do |pg, i|
         10.times { |n| assert_nil pg.call('c.update.title', 'cid' => cid, 'title' => "page #{i} #{n}")['error'] }
       end
     end
-    step('Then the watching page gets twenty c.meta.updated of the conversation') do
-      mine = -> { watcher.notes('c.meta.updated').select { |m| m['params']['cid'] == cid } }
+    step('Then the watching page gets twenty c_meta records of the conversation') do
+      mine = -> { watcher.records('c_meta').select { |r| r['row']['cid'] == cid } }
       wait_until { mine.call.size >= 20 }
       notes = mine.call
       assert_equal 20, notes.size
     end
     step('And the title of the one with the last version is the title c.list answers') do
-      last = notes.max_by { |m| seq(m['params']['version']) }
+      last = notes.max_by { |r| seq(r['version']) }
       listed = rpc('c.list')['result']['items'].find { |m| m['cid'] == cid }
-      assert_equal last['params']['title'], listed['title']
+      assert_equal last['row']['title'], listed['title']
     end
   end
 end

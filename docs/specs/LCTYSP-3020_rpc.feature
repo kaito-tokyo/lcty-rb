@@ -11,8 +11,9 @@ Feature: LCTYSP-3020 The RPC protocol
   /v1/rpc speaks JSON-RPC 2.0 over a WebSocket, and nothing else: a page always has one. A page declares in initialize the methods it receives and gets
   an actorId for its connection. Conversations change only at their end: one element appended after the element named,
   or the last element removed; an lcty-cmd at the end refuses every other write. Every change gets the next global
-  version and its notifications: c.appended and c.unappended go only to the connections that follow the conversation
-  (c.subscribe), c.meta.updated to every connection that receives it. In the steps the servlet is mounted at /v1/rpc
+  version and one c.batch.updated with a record of every copy it changes: its c_html records go only to the connections
+  that follow the conversation (c.subscribe), its c_meta and c_recordcount records to every connection that receives
+  it. In the steps the servlet is mounted at /v1/rpc
   of a WEBrick server on 127.0.0.1, the allowed origin is http://allowed.test, and the conversations are written to
   c-next/ of the tests' data directory. "A page" is a WebSocket client that sends Origin http://allowed.test; a step
   that names no page sends its request through a page of the test's own that receives no notification.
@@ -141,27 +142,40 @@ Feature: LCTYSP-3020 The RPC protocol
   Scenario: Element notifications go only to the page following the conversation
     Given two conversations and two pages, each following one of them
     When an element is appended to each conversation
-    Then each page gets c.appended of its own conversation only
+    Then each page gets the c_html records of its own conversation only
 
   Scenario: c.subscribe tells whether the page's last element is still the last one
     Given a conversation with a system message
     When a page subscribes holding nothing, and again holding the system message
     Then the first answer is not current and the second is current
 
-  Scenario: c.meta.updated goes to every page with the meta of the conversation
+  Scenario: A c_meta record goes to every page with the meta of the conversation
     Given a page following nothing
     When a conversation is created
-    Then the page gets c.meta.updated with only cid, lang, title, titleTypeId, updatedAt, createdAt, version and actorId
+    Then the page gets a c.batch.updated with only version, actorId and records
+    And its c_meta record has a row of only cid, lang, title, titleTypeId, updatedAt and createdAt
+
+  Scenario: One change is one c.batch.updated, without the c_html records for a page that does not follow
+    Given a page following a conversation and a page following nothing
+    When an element is appended to the conversation
+    Then the following page gets one c.batch.updated with a c_html, a c_meta and a c_recordcount record
+    And the other gets one with the same version and only the c_meta and c_recordcount records
+
+  Scenario: c_recordcount counts every element but lcty-c
+    Given a page following nothing
+    When a conversation is created, a system message, a user message and an lcty-cmd are appended, and the lcty-cmd is unappended
+    Then the page gets c_recordcount records of 0, 1, 2, 3 and 2
+    And the file has as many lines as the last count and 4
 
   Scenario: A notification names the actor that made the change
     Given two pages following a conversation
     When the first appends an element
-    Then both get c.appended with the actorId of the first
+    Then both get a c_html record with the actorId of the first
 
   Scenario: The notification of a page's own change comes before its response
     Given a page following a conversation
     When it appends an element
-    Then it gets c.appended before the response
+    Then it gets c.batch.updated before the response
 
   # ---- Lists and titles ----
 
@@ -170,8 +184,8 @@ Feature: LCTYSP-3020 The RPC protocol
     When c.list is called
     Then the items hold both with their cid, lang, title, titleTypeId, updatedAt and createdAt
 
-  Scenario: c.update.title fits the title into the slot and notifies c.meta.updated
-    Given a conversation with a title slot of 32 bytes, and a page receiving c.meta.updated
+  Scenario: c.update.title fits the title into the slot and sends a c_meta record
+    Given a conversation with a title slot of 32 bytes, and a page receiving c.batch.updated
     When its title is changed to a longer one
     Then the result and the notification have the title cut to the slot
 

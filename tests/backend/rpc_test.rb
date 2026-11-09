@@ -256,10 +256,10 @@ class RpcTest < Lcty::Scenarios
       append(c1, nil, sys_attrs)
       append(c2, nil, sys_attrs)
     end
-    step('Then each page gets c.appended of its own conversation only') do
+    step('Then each page gets the c_html records of its own conversation only') do
       settle
-      assert_equal [c1], p1.notes('c.appended').map { |m| m['params']['cid'] }
-      assert_equal [c2], p2.notes('c.appended').map { |m| m['params']['cid'] }
+      assert_equal [c1], p1.records('c_html').map { |r| r['row']['cid'] }
+      assert_equal [c2], p2.records('c_html').map { |r| r['row']['cid'] }
     end
   end
 
@@ -278,18 +278,61 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
-  scenario 'c.meta.updated goes to every page with the meta of the conversation' do
+  scenario 'A c_meta record goes to every page with the meta of the conversation' do
     pg = cid = nil
     step('Given a page following nothing') { pg = page; pg.initialize_session }
     step('When a conversation is created') { cid = create(lang: 'en', title: 'Hello') }
-    step('Then the page gets c.meta.updated with only cid, lang, title, titleTypeId, updatedAt, createdAt, version and actorId') do
+    step('Then the page gets a c.batch.updated with only version, actorId and records') do
       settle
-      m = pg.notes('c.meta.updated').find { |n| n['params']['cid'] == cid }
-      assert m
-      assert_equal %w[actorId cid createdAt lang title titleTypeId updatedAt version], m['params'].keys.sort
-      assert_equal ['en', 'Hello', '__64', '2026-11-09T12:00:00+09:00'],
-                   m['params'].values_at('lang', 'title', 'titleTypeId', 'createdAt')
+      batch = pg.notes('c.batch.updated').find { |n| n['params']['records'].any? { |r| r['row']['cid'] == cid } }
+      assert batch
+      assert_equal %w[actorId records version], batch['params'].keys.sort
     end
+    step('And its c_meta record has a row of only cid, lang, title, titleTypeId, updatedAt and createdAt') do
+      r = pg.records('c_meta', 'put').find { |x| x['row']['cid'] == cid }
+      assert_equal %w[cid lang title titleTypeId updatedAt createdAt], r['row'].keys
+      assert_equal ['en', 'Hello', '__64', '2026-11-09T12:00:00+09:00'],
+                   r['row'].values_at('lang', 'title', 'titleTypeId', 'createdAt')
+    end
+  end
+
+  scenario 'One change is one c.batch.updated, without the c_html records for a page that does not follow' do
+    cid = follower = other = nil
+    step('Given a page following a conversation and a page following nothing') do
+      cid = create
+      follower = page
+      other = page
+      follower.initialize_session
+      other.initialize_session
+      follower.call('c.subscribe', 'cid' => cid, 'last' => nil)
+    end
+    step('When an element is appended to the conversation') { assert_nil append(cid, nil, sys_attrs)['error'] }
+    step('Then the following page gets one c.batch.updated with a c_html, a c_meta and a c_recordcount record') do
+      settle
+      assert_equal [%w[c_html c_meta c_recordcount]], follower.notes('c.batch.updated').map { |m| m['params']['records'].map { |r| r['store'] } }
+    end
+    step('And the other gets one with the same version and only the c_meta and c_recordcount records') do
+      assert_equal [%w[c_meta c_recordcount]], other.notes('c.batch.updated').map { |m| m['params']['records'].map { |r| r['store'] } }
+      assert_equal follower.notes.map { |m| m['params']['version'] }, other.notes.map { |m| m['params']['version'] }
+    end
+  end
+
+  scenario 'c_recordcount counts every element but lcty-c' do
+    pg = cid = nil
+    step('Given a page following nothing') { pg = page; pg.initialize_session }
+    step('When a conversation is created, a system message, a user message and an lcty-cmd are appended, and the lcty-cmd is unappended') do
+      cid = create
+      s = sys_attrs
+      u = user_attrs
+      c = cmd_attrs
+      [append(cid, nil, s), append(cid, s['id'], u), append_cmd(cid, u['id'], c), unappend(cid, c['id'])]
+        .each { |r| assert_nil r['error'] }
+    end
+    step('Then the page gets c_recordcount records of 0, 1, 2, 3 and 2') do
+      settle
+      assert_equal [0, 1, 2, 3, 2], pg.records('c_recordcount', 'put').select { |r| r['row']['cid'] == cid }.map { |r| r['row']['count'] }
+    end
+    step('And the file has as many lines as the last count and 4') { assert_equal 2 + 4, file_lines(cid).size }
   end
 
   scenario 'A notification names the actor that made the change' do
@@ -303,10 +346,10 @@ class RpcTest < Lcty::Scenarios
       [a, b].each { |pg| pg.call('c.subscribe', 'cid' => cid, 'last' => nil) }
     end
     step('When the first appends an element') { assert_nil append(cid, nil, sys_attrs, via: a)['error'] }
-    step('Then both get c.appended with the actorId of the first') do
+    step('Then both get a c_html record with the actorId of the first') do
       settle
-      assert_equal [me], a.notes('c.appended').map { |m| m['params']['actorId'] }
-      assert_equal [me], b.notes('c.appended').map { |m| m['params']['actorId'] }
+      assert_equal [me], a.records('c_html').map { |r| r['actorId'] }
+      assert_equal [me], b.records('c_html').map { |r| r['actorId'] }
     end
   end
 
@@ -319,9 +362,9 @@ class RpcTest < Lcty::Scenarios
       pg.call('c.subscribe', 'cid' => cid, 'last' => nil)
     end
     step('When it appends an element') { append(cid, nil, sys_attrs, via: pg) }
-    step('Then it gets c.appended before the response') do
+    step('Then it gets c.batch.updated before the response') do
       kinds = pg.log.map { |m| m['method'] || 'response' }
-      i_note = kinds.index('c.appended')
+      i_note = kinds.index('c.batch.updated')
       i_resp = kinds.rindex('response')
       assert i_note && i_note < i_resp, kinds.inspect
     end
@@ -344,10 +387,10 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
-  scenario 'c.update.title fits the title into the slot and notifies c.meta.updated' do
+  scenario 'c.update.title fits the title into the slot and sends a c_meta record' do
     cid = pg = r = nil
     long = 'a much longer title that cannot fit'
-    step('Given a conversation with a title slot of 32 bytes, and a page receiving c.meta.updated') do
+    step('Given a conversation with a title slot of 32 bytes, and a page receiving c.batch.updated') do
       cid = create(size: 32)
       pg = page
       pg.initialize_session
@@ -357,8 +400,8 @@ class RpcTest < Lcty::Scenarios
       settle
       assert_operator r['title'].bytesize + '</title><!--'.bytesize, :<=, 32
       assert long.start_with?(r['title'])
-      note = pg.notes('c.meta.updated').reverse.find { |n| n['params']['cid'] == cid }
-      assert_equal r['title'], note['params']['title']
+      note = pg.records('c_meta').reverse.find { |n| n['row']['cid'] == cid }
+      assert_equal r['title'], note['row']['title']
     end
   end
 
