@@ -19,7 +19,8 @@ server over a SQLite FTS5 index, with semantic search, which runs in the browser
 ## The index
 
 - **The index is derived data** in `data/_index.sqlite` and can always be rebuilt from the conversation files
-  ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
+  ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)); it is discarded and made anew at every start
+  ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)).
 - It uses the sqlite3 gem bundled with `/usr/bin/ruby` (1.3.13, SQLite 3.54). FTS5 and the trigram tokenizer are
   available. Extension loading is disabled (`OMIT_LOAD_EXTENSION`), so vector extensions such as sqlite-vec cannot be
   used. Only APIs that exist in that gem version are used (`Database#execute`, `#transaction`, `SQLite3::Blob`).
@@ -46,10 +47,13 @@ CREATE TABLE chunks (
 CREATE INDEX chunks_conv ON chunks(conv_id);
 CREATE VIRTUAL TABLE chunks_fts USING fts5(text, tokenize='trigram');   -- rowid = chunks.rowid, NFKC + lowercase
 CREATE TABLE conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (conv_id, tag));
+CREATE TABLE c_recordcount (cid TEXT PRIMARY KEY, count INTEGER NOT NULL);  -- conversations of /v1/rpc (LCTYSP-0014)
 ```
 
-- The schema version is `PRAGMA user_version`. When it changes, the tables are dropped and rebuilt (derived data).
-- Vectors live in a separate database per model ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)).
+- **No schema version:** the file is discarded at every start (`SearchIndex.discard`) and the tables are made anew,
+  so a change to them needs no migration; the full sync fills them.
+- The vectors are `lcty_fuzzy_search.sqlite`, attached to the same connection
+  ([LCTYSP-0008](LCTYSP-0008_vector-binary.md#vector-db)).
 
 ## Keyword search (server)
 

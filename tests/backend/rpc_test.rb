@@ -335,6 +335,54 @@ class RpcTest < Lcty::Scenarios
     step('And the file has as many lines as the last count and 4') { assert_equal 2 + 4, file_lines(cid).size }
   end
 
+  # ---- The cache of the counts ----
+
+  scenario 'The count is cached in _index.sqlite whenever the file is written' do
+    cid = s = u = nil
+    seen = []
+    step('When a conversation is created, a system message and a user message are appended, and the user message is unappended') do
+      cid = create
+      seen << Rpc::ConvStore.cached_record_count(cid)
+      s = sys_attrs
+      u = user_attrs
+      append(cid, nil, s)
+      append(cid, s['id'], u)
+      seen << Rpc::ConvStore.cached_record_count(cid)
+      unappend(cid, u['id'])
+      seen << Rpc::ConvStore.cached_record_count(cid)
+    end
+    step('Then the cached count is 0 after creating it, 2 after the appends and 1 after unappending') do
+      assert_equal [0, 2, 1], seen
+    end
+  end
+
+  scenario 'A conversation the cache has no count for has an unknown count' do
+    cid = nil
+    step('Given a conversation with a system message whose cached count is removed') do
+      cid = create
+      append(cid, nil, sys_attrs)
+      Rpc.index.db.execute('DELETE FROM c_recordcount WHERE cid = ?', [cid])
+    end
+    step('Then its cached count is unknown, not read from the file') { assert_nil Rpc::ConvStore.cached_record_count(cid) }
+  end
+
+  scenario 'At startup the cache is filled from the files' do
+    empty = two = nil
+    step('Given a conversation with no element and one with two, and a cache that holds neither but a count for a conversation that does not exist') do
+      empty = create
+      two = create
+      s = sys_attrs
+      append(two, nil, s)
+      append(two, s['id'], user_attrs)
+      Rpc.index.replace_record_counts('no-such-conversation' => 7)
+    end
+    step('When the cache is filled as at startup') { Rpc::ConvStore.fill_record_counts }
+    step('Then it holds 0 and 2 for the two conversations and nothing for the other') do
+      assert_equal [0, 2], [empty, two].map { |c| Rpc::ConvStore.cached_record_count(c) }
+      assert_nil Rpc.index.record_count('no-such-conversation')
+    end
+  end
+
   scenario 'A notification names the actor that made the change' do
     cid = a = b = me = nil
     step('Given two pages following a conversation') do

@@ -26,9 +26,8 @@ the browser scans with hand-written WebAssembly SIMD.
   memory from the vector DB on every request and never written to disk.
   The name says what the rows are: `eg2` the embedding model (embeddinggemma-2, the default), `264` the row layout of
   the kernel `bdot264` (256 floats and 32 B of padding). A different default model or row layout gets a new name.
-- **Vector DB**: the persistent format in SQLite, the table `vectors` of `data/_index.sqlite` (derived data, like every
-  cache that may be lost: [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#data-directory)). Only the server reads and
-  writes it.
+- **Vector DB**: the persistent format in SQLite, the table `vectors` of `data/lcty_fuzzy_search.sqlite`. Only the
+  server reads and writes it.
 
 ## Record format
 
@@ -61,10 +60,15 @@ A record is 32 + size bytes (3,104 for registration), a multiple of 16.
 
 ## Vector DB
 
-- One table of `_index.sqlite`, the search index's file, for every embedding model, so it is joined with the rounds on
-  the same connection. A row names its model; model names may contain only `[A-Za-z0-9._-]` (at most 80 characters).
-  The table follows the index's schema version: when that changes, it is dropped with the rest and the browser embeds
-  again.
+- **One file, `data/lcty_fuzzy_search.sqlite`, for every embedding model,** attached to the search index's connection
+  (as `fz`) so it is joined with the rounds. A row names its model; model names may contain only `[A-Za-z0-9._-]` (at
+  most 80 characters).
+- **It is kept, not made anew:** the vectors are derived, but only the browser can make them again, so unlike
+  `_index.sqlite`, which is discarded at every start, this file survives restarts and is backed up (no leading `_`).
+  Its format is its `PRAGMA user_version` (1), brought up by code at startup; a newer one is refused
+  ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)).
+- **Carried over once:** when it does not exist yet and the old `_index.sqlite` has a table `vectors`, its vectors are
+  copied into it before the index is discarded.
 
 ```sql
 CREATE TABLE vectors (
@@ -112,7 +116,7 @@ CREATE TABLE vectors (
 - Every valid vector is included, joined with the
   current rounds on `msg_id`, `part` and `rev`.
 - **The files are built in memory on every request** from the vector DB and never stored: a cache file of its own
-  would break the rule that every cache is a table of `_index.sqlite`
+  would break the rule that what the server can make again is in `_index.sqlite` alone
   ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md#data-directory)). There are no incremental fetches (no `Range`):
   **full sync only.** Deletions and replacements show up in the next build, so no list of invalidated ids is needed.
 - **Both files carry the same `ETag`**, the pair's version (a SHA-256 digest of the two as built), and nothing that

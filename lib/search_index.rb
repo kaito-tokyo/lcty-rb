@@ -10,17 +10,25 @@
 #   chunks_fts  Keyword search (FTS5 trigram; rowid equals chunks.rowid)
 #   conv_tags   Current tags of each conversation (for tag: filtering)
 #   conv_stats  The number of messages of each conversation (all of them, inherited ones included; for lists)
-#   vectors     The vectors of the rounds, per embedding model (lib/v1/vector_db.rb, which shares this connection)
+#   c_recordcount  The number of elements of each conversation of /v1/rpc (LCTYSP-0014), written when the file is
+#               written and filled at startup from the files (lib/rpc/conv_store.rb)
 #
-# Every cache that may be lost is a table of this one file (LCTYSP-0010).
+# Everything here the server makes again from the files alone, so the file has no schema version and is never
+# migrated: at every start it is discarded (SearchIndex.discard) and made anew, and the full sync fills it
+# (LCTYSP-0015). The vectors, which only the browser makes, are lcty_fuzzy_search.sqlite (lib/v1/vector_db.rb),
+# attached to this connection.
 
 require 'sqlite3'
 require 'digest'
 
 module Chatty
   class SearchIndex
-    SCHEMA_VERSION = 4 # 4: the vectors of every model are a table of this file again
     CHUNK_MAX_CHARS = 6000 # Split so each part fits the embedding model's context (8192 tokens)
+
+    # Delete the file of the index with its WAL, as at every start, before it is opened anew
+    def self.discard(path)
+      [path, "#{path}-wal", "#{path}-shm"].each { |f| File.delete(f) if File.exist?(f) }
+    end
 
     # The connection and its mutex are shared with the vector DB (V1::VectorDB), which joins vectors with chunks.
     attr_reader :db, :mutex
@@ -130,6 +138,29 @@ module Chatty
       @mutex.synchronize { @db.execute('SELECT conv_id, messages FROM conv_stats').to_h }
     end
 
+    # The cached number of elements of a conversation of /v1/rpc, or nil when the cache has none (LCTYSP-0014)
+    def record_count(cid)
+      @mutex.synchronize { @db.get_first_value('SELECT count FROM c_recordcount WHERE cid = ?', [cid]) }
+    end
+
+    # Cache the number of elements of a conversation of /v1/rpc
+    def put_record_count(cid, count)
+      @mutex.synchronize do
+        @db.execute('INSERT INTO c_recordcount (cid, count) VALUES (?, ?) ON CONFLICT(cid) DO UPDATE SET count = excluded.count',
+                    [cid, count])
+      end
+    end
+
+    # Replace the whole cache with counts, {cid => count}: the conversations of /v1/rpc as they are at startup
+    def replace_record_counts(counts)
+      @mutex.synchronize do
+        @db.transaction do
+          @db.execute('DELETE FROM c_recordcount')
+          counts.each { |cid, n| @db.execute('INSERT INTO c_recordcount (cid, count) VALUES (?, ?)', [cid, n]) }
+        end
+      end
+    end
+
     # Ids of conversations that have all the tags (LCTYSP-0009)
     def convs_with_tags(tags)
       tags = tags.uniq
@@ -168,10 +199,6 @@ module Chatty
     private
 
     def setup
-      if @db.get_first_value('PRAGMA user_version').to_i != SCHEMA_VERSION
-        # Derived data, so rebuild when the format changes
-        @db.execute_batch('DROP TABLE IF EXISTS vectors; DROP TABLE IF EXISTS chunks_fts; DROP TABLE IF EXISTS chunks; DROP TABLE IF EXISTS conv_tags; DROP TABLE IF EXISTS conv_stats;')
-      end
       @db.execute('PRAGMA journal_mode = WAL')
       @db.execute_batch(<<~SQL)
         CREATE TABLE IF NOT EXISTS chunks (
@@ -182,11 +209,8 @@ module Chatty
         CREATE TABLE IF NOT EXISTS conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (conv_id, tag));
         CREATE INDEX IF NOT EXISTS conv_tags_tag ON conv_tags(tag);
         CREATE TABLE IF NOT EXISTS conv_stats (conv_id TEXT PRIMARY KEY, messages INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS vectors (
-          model TEXT NOT NULL, msg_id TEXT NOT NULL, part INTEGER NOT NULL, rev TEXT NOT NULL, vec BLOB NOT NULL,
-          vec256 BLOB NOT NULL, PRIMARY KEY (model, msg_id, part));
+        CREATE TABLE IF NOT EXISTS c_recordcount (cid TEXT PRIMARY KEY, count INTEGER NOT NULL);
       SQL
-      @db.execute("PRAGMA user_version = #{SCHEMA_VERSION}")
     end
 
     def insert_round(r)

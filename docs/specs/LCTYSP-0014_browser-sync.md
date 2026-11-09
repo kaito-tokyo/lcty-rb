@@ -175,8 +175,6 @@ is not the page's own resend.
 - **The store of the conversations' tags in `lcty_v1_t`:** its name and rows, and the RPC methods that fill it.
 - **Reading every `c_recordcount`:** changes come as `c.batch.updated` records; the method that reads them all at
   start (with `c.list`, or one of its own) is undecided.
-- **The cache of `c_recordcount` in `_index.sqlite`** is not built yet: the prototype counts the lines when it writes
-  and sends the count in `c.batch.updated`, and keeps it nowhere.
 - **Tags, settings and vectors** have no RPC methods yet, so `lcty_v1_t` keeps its sync of today until they do.
 - **Protecting the user's data before the reload:** what the user has in the page and the server does not (an unsent
   message in the composer, say) must not be lost when the user reloads an out-of-sync page; how it is kept is to be

@@ -4,7 +4,8 @@
 
 # -*- encoding: utf-8 -*-
 # What the tests of /v1/rpc share (LCTYSP-3020 and LCTYSP-3022): one WEBrick server on 127.0.0.1 (a free port) with the
-# RPC servlet mounted at /v1/rpc and http://allowed.test as the only allowed origin, "a page" (the WebSocket client
+# RPC servlet mounted at /v1/rpc and http://allowed.test as the only allowed origin, a search index of its own as the
+# cache of the counts (Lcty::Rpc.index), "a page" (the WebSocket client
 # below: a reader thread takes every frame, answers the server's requests when told how, and keeps responses and
 # notifications apart), and the helpers that create conversations and append elements. A test class includes it.
 
@@ -16,6 +17,7 @@ require 'securerandom'
 require 'socket'
 require 'timeout'
 require 'uuid'
+require 'search_index'
 require 'rpc/servlet'
 
 module RpcSupport
@@ -26,6 +28,10 @@ module RpcSupport
   def self.port
     @port ||= begin
       Rpc.allowed_origins = [ORIGIN]
+      # A search index of its own, in a folder of its own, for the cache of the counts (c_recordcount)
+      index_dir = Dir.mktmpdir('lcty-rpc-index-')
+      Rpc.index = Chatty::SearchIndex.new(File.join(index_dir, '_index.sqlite'))
+      Minitest.after_run { FileUtils.rm_rf(index_dir) }
       server = WEBrick::HTTPServer.new(BindAddress: '127.0.0.1', Port: 0, Logger: WEBrick::Log.new(File::NULL),
                                        AccessLog: [], DoNotReverseLookup: true)
       server.mount '/v1/rpc', Rpc::Servlet

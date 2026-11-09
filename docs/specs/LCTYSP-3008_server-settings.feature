@@ -57,7 +57,7 @@ Feature: LCTYSP-3008 Server settings
     Given LCTY_DATA_DIR is an absolute path
     When lib/config.rb is loaded
     Then DATA_DIR is that path
-    And CONV_DIR is its "c", TAG_DIR its "t", TAG_LOCK_PATH its "t.lock", TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"
+    And CONV_DIR is its "c", TAG_DIR its "t", TAG_LOCK_PATH its "t.lock", TAGS_DB_PATH its "lcty_t.sqlite", FORMER_TAGS_DB_PATH its "tags.sqlite" and INDEX_PATH its "_index.sqlite"
 
   Scenario: A relative LCTY_DATA_DIR is resolved against the repository root
     Given LCTY_DATA_DIR is "tmp/lcty-data"

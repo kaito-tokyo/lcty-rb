@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# The tags of each conversation (LCTYSP-0009). Source-of-truth data (the name does not start with _).
+# The tags of each conversation (LCTYSP-0009). Source-of-truth data (the name does not start with _), in
+# data/lcty_t.sqlite, the file of the resource t/ as the browser's lcty_t is its database (LCTYSP-0015); the file of the
+# layout before, data/tags.sqlite, is renamed to it at startup (TagStore.rename_former), its version kept.
 #
 #   conversation_tags  the current tags of a conversation whose tags were changed after it was created (a JSON array of
 #                      references, the file-name parts of tags, in the order given); a conversation without a row has
@@ -22,6 +24,19 @@ require_relative 'config'
 module Chatty
   class TagStore
     SCHEMA_VERSION = 3
+    FILE = 'lcty_t.sqlite'
+
+    # At startup: when former (tags.sqlite) exists and path (lcty_t.sqlite) does not, rename it, after a checkpoint so
+    # its WAL holds nothing, and remove its WAL files. Returns whether it was renamed.
+    def self.rename_former(former, path)
+      return false if File.exist?(path) || !File.exist?(former)
+      db = SQLite3::Database.new(former)
+      db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+      db.close
+      File.rename(former, path)
+      ["#{former}-wal", "#{former}-shm"].each { |f| File.delete(f) if File.exist?(f) }
+      true
+    end
 
     def initialize(path)
       @db = SQLite3::Database.new(path)
@@ -55,7 +70,7 @@ module Chatty
     def migrate
       version = @db.get_first_value('PRAGMA user_version').to_i
       return if version == SCHEMA_VERSION
-      raise "tags.sqlite has format #{version}, newer than this version (#{SCHEMA_VERSION}); it cannot be opened" if version > SCHEMA_VERSION
+      raise "#{FILE} has format #{version}, newer than this version (#{SCHEMA_VERSION}); it cannot be opened" if version > SCHEMA_VERSION
       @db.transaction do
         # Formats 1 and 2 also had the tables tags and memory; format 3 drops them (below)
         @db.execute_batch(<<~SQL)

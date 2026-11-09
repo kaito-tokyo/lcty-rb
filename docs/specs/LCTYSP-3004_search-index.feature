@@ -177,9 +177,10 @@ Feature: LCTYSP-3004 The search index
     When the file is opened again
     Then a keyword search for "persimmons" finds the round
 
-  Scenario: An index of another schema version is rebuilt
-    Given an index file of schema version 3 with a chunks table and a vectors table of another shape
-    When it is opened
-    Then it has schema version 4
-    And a round about "quinces" can be synced and found
-    And its vectors table has a model column and no row
+  Scenario: An index is discarded, with its WAL, and opened anew empty, as at every start
+    Given an index with a synced round about "medlars" and a cached count, closed
+    When SearchIndex.discard is called on its file
+    Then the file, its -wal and its -shm are gone
+    When it is opened again
+    Then a keyword search for "medlars" finds nothing, and the count of "rpc-1" is unknown
+    And it has no table vectors and no schema version
