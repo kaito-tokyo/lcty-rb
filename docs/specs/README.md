@@ -72,6 +72,7 @@ for the backend ones).
 | [LCTYSP-3016](LCTYSP-3016_file-types.feature)                 | The types of the files served                 | `tests/backend/file_types_test.rb`                           |
 | [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)              | The servlets of the site                      | `tests/backend/servlets_test.rb`                             |
 | [LCTYSP-3019](LCTYSP-3019_entry-point.feature)                | The entry point                               | `tests/backend/lcty_test.rb`                                 |
+| [LCTYSP-3020](LCTYSP-3020_rpc.feature)                        | The RPC protocol                              | `tests/backend/rpc_test.rb`                                  |
 
 ## Number ranges
 

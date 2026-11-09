@@ -138,10 +138,31 @@ module Lcty
         raise Error.new(NOT_FOUND, 'no such conversation', 'cid' => cid)
       end
 
-      # The elements of the file: [{tag, id}] (for the prototype's tests)
-      def list(cid)
-        raise Error.new(NOT_FOUND, 'no such conversation', 'cid' => cid) unless File.exist?(path(cid))
-        File.foreach(path(cid)).drop(HEAD_LINES).map { |l| (m = LAST_LINE_RE.match(l)) && { 'tag' => m[1], 'id' => m[2] } }.compact
+      # The meta of every conversation, newest first by updatedAt: what the list of conversations shows
+      def list_meta
+        Dir.glob(File.join(DIR, '*.html')).map { |f| File.basename(f, '.html') }
+           .select { |cid| Chatty::ID_RE.match?(cid) }
+           .map { |cid| meta(cid) }
+           .sort_by { |m| [m['updatedAt'], m['cid']] }.reverse
+      end
+
+      # Overwrite the title slot on line 3 in place with title, fitted into the slot by the server as today
+      # (LCTYSP-0003). Returns the title as written. The slot is in the middle of the file, so no id guards it: the last
+      # title written wins, which is enough for a value that is shown and never sent to the model.
+      def update_title(cid, title)
+        raise Error.new(INVALID, 'title must be a string') unless title.is_a?(String)
+        locked(cid) do |f|
+          f.rewind
+          offset = f.gets.bytesize + f.gets.bytesize # lines 1 and 2
+          line = f.gets.to_s.chomp
+          start, size = Chatty::ConvHtml.slot_range(line)
+          raise Error.new(INVALID, 'the file has no title slot') unless start
+          slot = Chatty::ConvHtml.title_slot(title, size)
+          f.seek(offset + start)
+          f.write(slot)
+          f.flush
+          Chatty::ConvHtml.slot_title(line.b.byteslice(0, start) + slot + line.b.byteslice(start + size..).to_s)
+        end
       end
 
       def locked(cid)

@@ -48,6 +48,7 @@ changed.
 | [LCTYSP-3016](LCTYSP-3016_file-types.feature)        | `lcty.rb`: the types of the files served             |
 | [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)     | `lib/servlets.rb`: the servlets of the site          |
 | [LCTYSP-3019](LCTYSP-3019_entry-point.feature)       | `lcty.rb`: the entry point                           |
+| [LCTYSP-3020](LCTYSP-3020_rpc.feature)               | `lib/rpc/`: the RPC protocol at `/v1/rpc`            |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.

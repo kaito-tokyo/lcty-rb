@@ -306,33 +306,111 @@ methods:
 
   - name: c.list
     x-receiver: server
-    summary: The elements of a file, by tag and id (prototype only, for tests)
+    summary: The meta of every conversation, newest first
+    description: >-
+      What a page reads to fill its list of conversations, and again after reconnecting. The version is taken together
+      with the list, so the page follows c.meta.updated from it.
+    params: []
+    result:
+      name: listing
+      schema:
+        type: object
+        required: [version, items]
+        properties:
+          version:
+            $ref: "#/components/schemas/Version"
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/Meta"
+
+  - name: c.update.title
+    x-receiver: server
+    summary: Change the title of a conversation
+    description: >-
+      The server fits the title into the slot (LCTYSP-0003) and answers the title as written. The slot is in the middle
+      of the file, so no id guards it: the last title written wins. Allowed while an lcty-cmd holds the conversation.
     paramStructure: by-name
     params:
       - name: cid
         required: true
         schema:
           $ref: "#/components/schemas/Cid"
+      - name: title
+        required: true
+        schema:
+          type: string
     result:
-      name: listing
+      name: written
+      schema:
+        allOf:
+          - $ref: "#/components/schemas/Change"
+          - type: object
+            required: [title]
+            properties:
+              title:
+                description: The title as written into the slot
+                type: string
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.cmd.held
+    x-receiver: server
+    summary: Whether some connected page holds the lcty-cmd
+    description: >-
+      The server keeps no record of who holds an lcty-cmd: it asks every other connected page that receives
+      c.cmd.holds and waits for their answers (2 s in the prototype). A page that does not answer in time counts as not
+      holding it. When none holds it, the page asks the user whether to run it again or remove it.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: id
+        required: true
+        schema:
+          $ref: "#/components/schemas/ElementId"
+    result:
+      name: holder
       schema:
         type: object
-        required: [version, elements]
+        required: [held, actorId]
         properties:
-          version:
-            $ref: "#/components/schemas/Version"
-          elements:
-            type: array
-            items:
-              type: object
-              required: [tag, id]
-              properties:
-                tag:
-                  type: string
-                id:
-                  $ref: "#/components/schemas/ElementId"
+          held:
+            type: boolean
+          actorId:
+            description: The actor of the page that holds it, or null
+            oneOf:
+              - $ref: "#/components/schemas/ActorId"
+              - type: "null"
     errors:
       - $ref: "#/components/errors/NotFound"
+
+  # ---- Requests the server sends (with an id: the page answers) ----
+
+  - name: c.cmd.holds
+    x-receiver: page
+    summary: Whether this page holds the lcty-cmd (asked for c.cmd.held)
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: id
+        required: true
+        schema:
+          $ref: "#/components/schemas/ElementId"
+    result:
+      name: answer
+      schema:
+        type: object
+        required: [holds]
+        properties:
+          holds:
+            type: boolean
 
   # ---- Notifications the server sends (no result: always sent without an id) ----
 
@@ -455,6 +533,19 @@ methods:
 
 components:
   schemas:
+    Meta:
+      description: What the list of conversations shows of one
+      type: object
+      required: [cid, lang, title, updatedAt]
+      properties:
+        cid:
+          $ref: "#/components/schemas/Cid"
+        lang:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          $ref: "#/components/schemas/Time"
     Capabilities:
       type: object
       required: [receives]

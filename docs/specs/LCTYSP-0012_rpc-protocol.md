@@ -12,7 +12,8 @@ SPDX-License-Identifier: Apache-2.0
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the browser's copies it keeps up to date)
 - Methods: [LCTYSP-0012_rpc-protocol.openrpc.yml](LCTYSP-0012_rpc-protocol.openrpc.yml) (OpenRPC, the source of the
   method list)
-- Implementation: `lib/rpc/websocket.rb`, `lib/rpc/servlet.rb`, `lib/rpc/conv_store.rb`
+- Implementation: `lib/rpc/websocket.rb`, `lib/rpc/servlet.rb`, `lib/rpc/conv_store.rb`; tested by
+  [LCTYSP-3020](LCTYSP-3020_rpc.feature)
 
 ## Summary
 
@@ -34,11 +35,15 @@ data directory, so it never touches the real conversations.
   the JSON-RPC response (`200`), or `204` when nothing is to be answered (only notifications were sent). No
   notification of other changes comes back this way.
 - **Anything else** at `/v1/rpc` is refused: a `GET` without `Upgrade` gets `426`, a `POST` of another type `415`.
-- **Origin.** A request whose `Origin` names another host and port than the request's `Host` is refused with `403`, for
-  the WebSocket handshake and for `POST` alike. A request without `Origin` is accepted: it does not come from a page,
-  and no page can make a browser send it. WebSocket is not covered by CORS, so without this check any page on the web
-  could write to the user's conversations through the user's browser. `POST` takes only `application/json` for the same
-  reason: a page of another site can send `text/plain` without asking the server first.
+- **Origin.** A request whose `Origin` is not one of the allowed origins is refused with `403`, for the WebSocket
+  handshake and for `POST` alike. The allowed origins are `LCTY_ALLOWED_ORIGIN` (origins separated by commas or
+  spaces, such as `http://192.168.1.10:45280`), or else the server's own address (`http://<LCTY_HOST>:<PORT>`, and
+  `http://localhost:<PORT>` when it listens on `127.0.0.1`). A request without `Origin` is accepted: it does not come
+  from a page, and no page can make a browser send it. WebSocket is not covered by CORS, so without this check any page
+  on the web could write to the user's conversations through the user's browser. Comparing `Origin` with `Host` is not
+  enough: after DNS rebinding a page of another site reaches this server under its own name, and the browser sends that
+  name in both. `POST` takes only `application/json` for the same reason: a page of another site can send `text/plain`
+  without asking the server first.
 - **Size.** One message, after its fragments are joined, is at most 64 MiB.
 - **Ping.** The server answers a ping with a pong. Keeping an idle connection alive is the page's choice.
 
@@ -129,6 +134,9 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   included, with the new `version` and the `actorId` of the change in their params. `c.appended` carries the element
   as written, as `{tag, attrs, innerHTML}`. A page applies a notification only when its `after` (or `id`) matches what
   it holds; otherwise it reads the conversation again.
+- **The title** is changed with `c.update.title`, which the server fits into the slot and answers as written. The slot
+  is in the middle of the file, so no id guards it: the last title written wins, which is enough for a value that is
+  only shown. It is allowed while an `lcty-cmd` holds the conversation, and sends `c.meta.updated`.
 - **A page follows one conversation.** `c.appended` and `c.unappended` go only to the connections that follow their
   conversation, set by `c.subscribe {cid, last}`; a page shows one conversation, so a connection follows at most one,
   and a new `c.subscribe` replaces the old one (`cid: null` follows none). `c.created`, which the list of conversations
@@ -149,20 +157,28 @@ page, so it knows its own.
 **A finished reply** is written by removing the `lcty-cmd` and then appending the elements one by one. Each step names
 the last id it expects, so a tab that acted in between makes the next step fail instead of mixing the two.
 
+## Who holds an `lcty-cmd`
+
+The holder of an `lcty-cmd` is the page that runs it, and only that page knows: it is volatile, and the server keeps
+no record of it. A page that finds an `lcty-cmd` it did not start sends `c.cmd.held`; the server asks every other
+connected page that receives `c.cmd.holds` (a request from the server, which the page answers) and answers whether one
+of them holds it, and its `actorId`. A page that does not answer within a short time (2 s in the prototype) counts as
+not holding it. When none holds it, the page asks the user whether to run it again or remove it.
+
 ## Reading everything
 
-Reading a whole store is not a method of `/v1/rpc` alone: it is also plain `GET`, so that a worker that keeps no
-WebSocket can read it (planned: `GET /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and
-the store of the browser's copy, [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the
-version they were read at, read before the data so that the data is at least that new. The page then listens from that
-version; a notification it already holds is recognised by its ids and ignored.
+`c.list` returns the meta of every conversation (`cid`, `lang`, `title`, `updatedAt`) with the version it was read at,
+taken together, so a page fills its list from it and follows `c.meta.updated` from that version; after reconnecting it
+reads it again. The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
+/v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,
+[LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the version they were read at, read before
+the data so that the data is at least that new. The page then listens from that version; a notification it already holds
+is recognised by its ids and ignored.
 
 ## Open points
 
 - **Notifications carry whole elements.** A long reply is sent in full to every connection following the conversation.
   Whether notifications carry only ids, and pages fetch what they need, is undecided.
-- **The title.** Changing a title overwrites the slot in the middle of the file, which the last id cannot guard. Its
-  method and how it is guarded are undecided.
 - **`data-at`.** The prototype accepts any ISO 8601 time with an offset; whether one form (UTC with milliseconds, or
   local time) is required is undecided.
 - **Conflict or locked first.** When the last element is an `lcty-cmd` and the request names another `after`, the
@@ -170,6 +186,6 @@ version; a notification it already holds is recognised by its ids and ignored.
 - **Checking more than the last id.** `c.subscribe` compares only the last element. Whether a hash of the page's whole
   content (the skeleton of the integrity check) is needed is undecided, as is the check for pages other than a
   conversation.
-- **The methods of tags, settings and vectors**, the timings and usage kept in a database, and the full reads above.
+- **The methods of tags, settings and vectors**, the timings and usage kept in a database, and the `GET` reads above.
 - **Many tabs.** Each tab keeps its own WebSocket; whether one connection is shared (a SharedWorker) is left until the
   number of connections matters.

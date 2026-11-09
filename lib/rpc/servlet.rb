@@ -37,9 +37,12 @@ module Lcty
 
     # One open WebSocket: the methods its page receives (empty until initialize), the actorId initialize assigned it,
     # and its own queue of messages to send. A thread of its own sends them in order, so a page that stops reading holds
-    # up nobody else: when its queue grows past QUEUE_MAX, the connection is closed and the page reconnects.
+    # up nobody else: when its queue grows past Peer.queue_max, the connection is closed and the page reconnects.
     class Peer
-      QUEUE_MAX = 1024 # messages waiting to be sent
+      class << self
+        attr_accessor :queue_max # messages waiting to be sent before the connection is dropped
+      end
+      self.queue_max = 1024
 
       attr_reader :conn
       attr_accessor :receives, :actor_id, :subscription
@@ -51,13 +54,16 @@ module Lcty
         @subscription = nil # the one conversation (cid) whose elements this page follows
         @queue = Queue.new
         @sender = Thread.new { send_loop }
+        @ask_lock = Mutex.new
+        @asked = 0
+        @waiting = {}
       end
 
       # Queue a message to send; never waits. Responses and notifications go through the same queue, so they keep the
       # order in which they were produced.
       def push(text)
         return if @queue.closed?
-        if @queue.size >= QUEUE_MAX
+        if @queue.size >= Peer.queue_max
           abort # too far behind: dropping the connection makes the page reconnect and read again
           return
         end
@@ -74,6 +80,24 @@ module Lcty
       def abort
         @queue.close
         @conn.abort
+      end
+
+      # Send the page a request; the block gets the result (or nil for an error) when the response comes. Responses
+      # that never come are the caller's to give up on.
+      def ask(method, params, &on_result)
+        id = nil
+        @ask_lock.synchronize do
+          @asked += 1
+          id = "s#{@asked}" # the server's ids are strings, so they never look like the page's
+          @waiting[id] = on_result
+        end
+        push(JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params, 'id' => id))
+      end
+
+      # A response the page sent to one of the server's requests
+      def deliver(msg)
+        cb = @ask_lock.synchronize { @waiting.delete(msg['id']) }
+        cb&.call(msg.key?('error') ? nil : msg['result'])
       end
 
       private
@@ -100,6 +124,17 @@ module Lcty
 
       def version
         @lock.synchronize { "#{@boot}.#{@seq}" }
+      end
+
+      # Read under the lock, so that what is read and the version returned belong together: [what the block returns,
+      # version]
+      def read
+        @lock.synchronize { [yield, "#{@boot}.#{@seq}"] }
+      end
+
+      # The open connections that receive method
+      def receivers(method)
+        @lock.synchronize { @conns.select { |c| c.receives.include?(method) } }
       end
 
       def add(conn)
@@ -145,6 +180,10 @@ module Lcty
     SUBSCRIBED = %w[c.appended c.unappended].freeze
 
     HUB = Hub.new
+    class << self
+      attr_accessor :holds_timeout # seconds to wait for the pages' answers to c.cmd.holds
+    end
+    self.holds_timeout = 2.0
 
     # The methods the server receives: name => ->(params, peer) { result }. peer is nil for POST.
     METHODS = {
@@ -197,8 +236,50 @@ module Lcty
         { 'version' => version, 'last' => last, 'current' => cid.nil? || last == p['last'] }
       end,
 
-      'c.list' => lambda do |p, _peer|
-        { 'version' => HUB.version, 'elements' => ConvStore.list(p['cid']) }
+      # Whether some page holds the lcty-cmd: {cid, id}. The server keeps no record of it: it asks every other connected
+      # page that receives c.cmd.holds and waits for their answers (at most Rpc.holds_timeout). A page that does not answer
+      # in time counts as not holding it.
+      'c.cmd.held' => lambda do |p, peer|
+        ConvStore.path(p['cid'])
+        askees = HUB.receivers('c.cmd.holds') - [peer]
+        lock = Mutex.new
+        arrived = ConditionVariable.new
+        answers = []
+        askees.each do |c|
+          c.ask('c.cmd.holds', 'cid' => p['cid'], 'id' => p['id']) do |r|
+            lock.synchronize do
+              answers << [c, r]
+              arrived.signal
+            end
+          end
+        end
+        deadline = Time.now + Rpc.holds_timeout
+        lock.synchronize do
+          loop do
+            holder = answers.find { |_c, r| r.is_a?(Hash) && r['holds'] == true }
+            return { 'held' => true, 'actorId' => holder[0].actor_id } if holder
+            left = deadline - Time.now
+            break if answers.size == askees.size || left <= 0
+            arrived.wait(lock, left) # Ruby 2.6 has no Queue#pop(timeout:)
+          end
+        end
+        { 'held' => false, 'actorId' => nil }
+      end,
+
+      # The meta of every conversation: what a page reads to fill its list, or again after reconnecting
+      'c.list' => lambda do |_p, _peer|
+        items, version = HUB.read { ConvStore.list_meta }
+        { 'version' => version, 'items' => items }
+      end,
+
+      # Change the title: {cid, title}. The server fits it into the slot; the result is the title as written.
+      'c.update.title' => lambda do |p, peer|
+        title = nil
+        version = HUB.commit(peer) do
+          title = ConvStore.update_title(p['cid'], p['title'])
+          [['c.meta.updated', ConvStore.meta(p['cid'])]]
+        end
+        { 'version' => version, 'title' => title }
       end
     }.freeze
 
@@ -237,6 +318,12 @@ module Lcty
       notification ? nil : { 'jsonrpc' => '2.0', 'result' => result, 'id' => req['id'] }
     end
 
+    # Whether a message from a page is a response (to a request of the server) rather than a request
+    def response?(text)
+      msg = JSON.parse(text) rescue nil
+      msg.is_a?(Hash) && !msg.key?('method') && msg.key?('id') && (msg.key?('result') || msg.key?('error'))
+    end
+
     # The response text to a message (a request or a batch), or nil when nothing is to be answered
     def handle(text, peer = nil)
       msg = begin
@@ -258,18 +345,40 @@ module Lcty
       { 'jsonrpc' => '2.0', 'error' => err, 'id' => id }
     end
 
-    # Same origin, or no Origin at all (a client that is not a browser cannot be made to send this on a page's behalf)
+    # The origins whose pages may use /v1/rpc: LCTY_ALLOWED_ORIGIN (origins separated by commas or spaces), or else the
+    # server's own address (and localhost when it listens on 127.0.0.1). Compared with the Origin a browser sends, so a
+    # page of another site cannot get in even when its name resolves to this server (DNS rebinding): comparing Origin
+    # with Host would let it, since the browser sends the attacker's name in both.
+    def self.default_origins
+      env = ENV['LCTY_ALLOWED_ORIGIN'].to_s.split(/[\s,]+/).reject(&:empty?)
+      return env.map { |o| normalize_origin(o) }.compact unless env.empty?
+      own = ["http://#{Chatty::BIND_URL_HOST}:#{Chatty::PORT}"]
+      own << "http://localhost:#{Chatty::PORT}" if Chatty::BIND == '127.0.0.1'
+      own
+    end
+
+    # An origin as browsers send it: scheme://host[:port], lower case, the default port left out
+    def self.normalize_origin(o)
+      uri = URI.parse(o.to_s.strip) rescue nil
+      return nil unless uri&.scheme && uri.host
+      port = uri.port == uri.default_port ? '' : ":#{uri.port}"
+      "#{uri.scheme.downcase}://#{uri.host.downcase}#{port}"
+    end
+
+    class << self
+      attr_writer :allowed_origins
+
+      def allowed_origins
+        @allowed_origins ||= default_origins
+      end
+    end
+
+    # An allowed Origin, or no Origin at all (a client that is not a browser cannot be made to send this on a page's
+    # behalf)
     def origin_ok?(req)
       origin = req['origin']
       return true if origin.nil?
-      uri = URI.parse(origin) rescue nil
-      return false unless uri&.host
-      "#{uri.host}:#{uri.port}" == host_port(req)
-    end
-
-    def host_port(req)
-      host = req['host'].to_s
-      host.include?(':') && !host.end_with?(']') ? host : "#{host}:#{req.port}"
+      Rpc.allowed_origins.include?(Rpc.normalize_origin(origin))
     end
 
     class Servlet < WEBrick::HTTPServlet::AbstractServlet
@@ -291,6 +400,7 @@ module Lcty
           while (msg = conn.read_message)
             type, data = msg
             next conn.close(1003) unless type == :text
+            next peer.deliver(JSON.parse(data)) if Rpc.response?(data) # an answer to one of the server's requests
             out = Rpc.handle(data, peer)
             peer.push(out) if out # after the notifications this request queued
           end
