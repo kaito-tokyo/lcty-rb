@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of /v1/rpc, the RPC protocol (LCTYSP-0012), and of the conversation files it writes (LCTYSP-0013).
-# Each Scenario is a test of the same title in tests/backend/rpc_test.rb, whose steps are the lines below.
+# Each Scenario is a test of the same title in tests/backend/rpc_test.rb, whose steps are the lines below. What several
+# pages at once rely on is LCTYSP-3022.
 
 Feature: LCTYSP-3020 The RPC protocol
 

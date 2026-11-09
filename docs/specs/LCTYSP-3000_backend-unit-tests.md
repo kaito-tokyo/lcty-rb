@@ -49,6 +49,7 @@ changed.
 | [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)     | `lib/servlets.rb`: the servlets of the site          |
 | [LCTYSP-3019](LCTYSP-3019_entry-point.feature)       | `lcty.rb`: the entry point                           |
 | [LCTYSP-3020](LCTYSP-3020_rpc.feature)               | `lib/rpc/`: the RPC protocol at `/v1/rpc`            |
+| [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)         | `lib/rpc/`: several pages over `/v1/rpc` at once     |
 | [LCTYSP-3021](LCTYSP-3021_openapi.feature)           | `openapi.yaml`: every path the site answers          |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
