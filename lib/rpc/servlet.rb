@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# /v1/rpc: JSON-RPC 2.0 (prototype). A WebSocket (GET with Upgrade) carries requests, their responses and the
-# notifications of every change; POST carries one request (or a batch) and its response, for curl and tests. Mounted at
-# /v1/rpc by lcty.rb.
+# /v1/rpc: JSON-RPC 2.0 (prototype) over a WebSocket (GET with Upgrade), which carries requests, their responses and
+# the notifications of every change. There is no other transport: a page always has a WebSocket. Mounted at /v1/rpc by
+# lcty.rb.
 #
 # Every change gets the next number of the global version, "<boot id>.<seq>": the boot id is new at every start, so a
 # client that sees another one knows the server restarted and its history of notifications is gone.
@@ -146,7 +146,7 @@ module Lcty
       end
 
       # Run the change (the block returns [method, params] of its notification) and notify every connection. The
-      # notification names the actor that made the change (the actorId of its connection; nil for POST).
+      # notification names the actor that made the change (the actorId of its connection).
       # Follow the elements of one conversation (nil: none), replacing what the connection followed. Done under the
       # lock, so the last id and the version returned are those right before the first notification it will get.
       def subscribe(peer, cid)
@@ -164,7 +164,7 @@ module Lcty
           @seq += 1
           version = "#{@boot}.#{@seq}"
           notes.each do |method, params|
-            params = params.merge('version' => version, 'actorId' => peer&.actor_id)
+            params = params.merge('version' => version, 'actorId' => peer.actor_id)
             msg = JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params)
             scoped = SUBSCRIBED.include?(method)
             @conns.each do |c|
@@ -185,18 +185,16 @@ module Lcty
     end
     self.holds_timeout = 2.0
 
-    # The methods the server receives: name => ->(params, peer) { result }. peer is nil for POST.
+    # The methods the server receives: name => ->(params, peer) { result }, peer the connection of the request.
     METHODS = {
       'initialize' => lambda do |p, peer|
         receives = p.dig('capabilities', 'receives') || []
         unless receives.is_a?(Array) && receives.all? { |m| m.is_a?(String) }
           raise Error.new(INVALID_PARAMS, 'capabilities.receives must be an array of method names')
         end
-        if peer
-          peer.receives = Set.new(receives)
-          peer.actor_id ||= SecureRandom.uuid # one per connection, kept if initialize is sent again
-        end
-        { 'protocol' => 'lcty-rpc-prototype', 'version' => HUB.version, 'actorId' => peer&.actor_id,
+        peer.receives = Set.new(receives)
+        peer.actor_id ||= SecureRandom.uuid # one per connection, kept if initialize is sent again
+        { 'protocol' => 'lcty-rpc-prototype', 'version' => HUB.version, 'actorId' => peer.actor_id,
           'capabilities' => { 'receives' => METHODS.keys } }
       end,
 
@@ -229,7 +227,6 @@ module Lcty
       # Follow one conversation: {cid, last}. last is the id of the last element the page holds; the result says
       # whether it is still the last one (stale: the page reads the conversation again).
       'c.subscribe' => lambda do |p, peer|
-        raise Error.new(INVALID_PARAMS, 'c.subscribe needs a WebSocket session') unless peer
         cid = p['cid']
         ConvStore.path(cid) if cid # checks the id
         last, version = HUB.subscribe(peer, cid)
@@ -298,7 +295,7 @@ module Lcty
     end
 
     # The response to one decoded request (a Hash), or nil for a notification
-    def call(req, peer = nil)
+    def call(req, peer)
       unless req.is_a?(Hash) && req['jsonrpc'] == '2.0' && req['method'].is_a?(String) &&
              (!req.key?('params') || req['params'].is_a?(Hash))
         return error_response(req.is_a?(Hash) ? req['id'] : nil, INVALID_REQUEST, 'invalid request')
@@ -325,7 +322,7 @@ module Lcty
     end
 
     # The response text to a message (a request or a batch), or nil when nothing is to be answered
-    def handle(text, peer = nil)
+    def handle(text, peer)
       msg = begin
         JSON.parse(text)
       rescue JSON::ParserError
@@ -387,7 +384,7 @@ module Lcty
         unless WebSocket.upgrade?(req)
           res.status = 426
           res['Upgrade'] = 'websocket'
-          res.body = 'open a WebSocket, or POST a request'
+          res.body = 'open a WebSocket'
           return
         end
         conn = WebSocket.accept(req)
@@ -412,23 +409,6 @@ module Lcty
           HUB.remove(peer)
           peer.finish
           conn.close
-        end
-      end
-
-      # A request in the body. Only application/json, so that a page of another site cannot send it as a simple request.
-      def do_POST(req, res)
-        raise WEBrick::HTTPStatus::Forbidden, 'cross-origin' unless Rpc.origin_ok?(req)
-        unless req.content_type.to_s.split(';').first.to_s.strip.casecmp?('application/json')
-          raise WEBrick::HTTPStatus::UnsupportedMediaType, 'application/json only'
-        end
-        out = Rpc.handle(req.body.to_s.force_encoding(Encoding::UTF_8))
-        res['Cache-Control'] = 'no-store'
-        res['Lcty-Version'] = HUB.version
-        if out
-          res.content_type = 'application/json; charset=utf-8'
-          res.body = out
-        else
-          res.status = 204
         end
       end
     end

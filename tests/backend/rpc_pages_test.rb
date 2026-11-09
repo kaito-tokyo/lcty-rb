@@ -234,18 +234,22 @@ class RpcPagesTest < Lcty::Scenarios
     end
   end
 
-  scenario 'A change made over POST reaches the pages with no actorId' do
-    cid = pg = nil
-    step('Given a conversation and a page following it') do
+  scenario 'A page that receives nothing still writes, and the others get its actorId' do
+    cid = pg = deaf = nil
+    step('Given a conversation, a page following it and a page that receives no notification') do
       cid = create
       pg = session
       follow(pg, cid)
+      deaf = session([])
     end
-    step('When a message is appended over POST') { assert_nil append(cid, nil, sys_attrs)['error'] }
-    step('Then the page gets c.appended and c.meta.updated with actorId null') do
+    step('When the page that receives nothing appends a message') do
+      assert_nil append(cid, nil, sys_attrs, via: deaf)['error']
+    end
+    step('Then the following page gets c.appended and c.meta.updated with the actorId of the writing page') do
       wait_until { pg.notes('c.appended').any? && pg.notes('c.meta.updated').any? { |m| m['params']['cid'] == cid } }
       got = pg.notes.select { |m| m['params']['cid'] == cid }.map { |m| [m['method'], m['params']['actorId']] }
-      assert_equal [['c.appended', nil], ['c.meta.updated', nil]], got
+      assert_equal [['c.appended', actor(deaf)], ['c.meta.updated', actor(deaf)]], got
+      assert_empty deaf.notes
     end
   end
 

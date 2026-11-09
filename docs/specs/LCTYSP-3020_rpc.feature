@@ -8,26 +8,28 @@
 
 Feature: LCTYSP-3020 The RPC protocol
 
-  /v1/rpc speaks JSON-RPC 2.0 over a WebSocket or POST. A page declares in initialize the methods it receives and gets
+  /v1/rpc speaks JSON-RPC 2.0 over a WebSocket, and nothing else: a page always has one. A page declares in initialize the methods it receives and gets
   an actorId for its connection. Conversations change only at their end: one element appended after the element named,
   or the last element removed; an lcty-cmd at the end refuses every other write. Every change gets the next global
   version and its notifications: c.appended and c.unappended go only to the connections that follow the conversation
   (c.subscribe), c.meta.updated to every connection that receives it. In the steps the servlet is mounted at /v1/rpc
   of a WEBrick server on 127.0.0.1, the allowed origin is http://allowed.test, and the conversations are written to
-  c-next/ of the tests' data directory. "A page" is a WebSocket client that sends Origin http://allowed.test.
+  c-next/ of the tests' data directory. "A page" is a WebSocket client that sends Origin http://allowed.test; a step
+  that names no page sends its request through a page of the test's own that receives no notification.
 
   Background:
     Given the RPC servlet mounted on a WEBrick server
 
   # ---- Transports ----
 
-  Scenario: A request over POST is answered without a session
-    When initialize is sent with POST
-    Then the result has the protocol, the version and the actorId null
+  Scenario: initialize answers the protocol, the version and the connection's actorId
+    Given a page
+    When it sends initialize
+    Then the result has the protocol, the version and an actorId that is a UUID
 
-  Scenario: POST takes only application/json
-    When a request is sent with POST as text/plain
-    Then the status is 415
+  Scenario: POST is not a transport
+    When a request is sent with POST
+    Then the status is 405
 
   Scenario Outline: A request of an origin that is not allowed is refused
     When a request is sent <how> with Origin <origin>
@@ -35,7 +37,6 @@ Feature: LCTYSP-3020 The RPC protocol
 
     Examples:
       | how             | origin                    |
-      | with POST       | "http://evil.example"     |
       | as a WebSocket  | "http://evil.example"     |
       | as a WebSocket  | "http://allowed.test:1"   |
 

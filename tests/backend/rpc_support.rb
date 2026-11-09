@@ -161,15 +161,15 @@ module RpcSupport
     Page.new(port, **opts).tap { |p| @pages << p }
   end
 
-  def post(method, params = {}, content_type: 'application/json', origin: nil)
-    headers = { 'Content-Type' => content_type }
-    headers['Origin'] = origin if origin
-    Net::HTTP.post(URI("http://127.0.0.1:#{port}/v1/rpc"),
-                   JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params, 'id' => 1), headers)
+  # A request from the test itself, over a page of its own that receives no notification (one per test)
+  def rpc(method, params = {})
+    @rpc_page ||= page.tap { |pg| pg.initialize_session([]) }
+    @rpc_page.call(method, params)
   end
 
-  def rpc(method, params = {})
-    JSON.parse(post(method, params).body)
+  # The actorId of the page rpc sends through
+  def rpc_actor
+    rpc('initialize', 'capabilities' => { 'receives' => [] })['result']['actorId']
   end
 
   def new_cid

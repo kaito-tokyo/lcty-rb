@@ -15,29 +15,30 @@ class RpcTest < Lcty::Scenarios
 
   # ---- Transports ----
 
-  scenario 'A request over POST is answered without a session' do
-    r = nil
-    step('When initialize is sent with POST') { r = rpc('initialize') }
-    step('Then the result has the protocol, the version and the actorId null') do
-      assert_equal 'lcty-rpc-prototype', r['result']['protocol']
-      assert_match(/\A\h+\.\d+\z/, r['result']['version'])
-      assert_nil r['result']['actorId']
+  scenario "initialize answers the protocol, the version and the connection's actorId" do
+    pg = r = nil
+    step('Given a page') { pg = page }
+    step('When it sends initialize') { r = pg.initialize_session }
+    step('Then the result has the protocol, the version and an actorId that is a UUID') do
+      assert_equal 'lcty-rpc-prototype', r['protocol']
+      assert_match(/\A\h+\.\d+\z/, r['version'])
+      assert_match(/\A\h{8}-\h{4}-\h{4}-\h{4}-\h{12}\z/, r['actorId'])
     end
   end
 
-  scenario 'POST takes only application/json' do
+  scenario 'POST is not a transport' do
     res = nil
-    step('When a request is sent with POST as text/plain') { res = post('initialize', {}, content_type: 'text/plain') }
-    step('Then the status is 415') { assert_equal '415', res.code }
+    step('When a request is sent with POST') do
+      body = JSON.generate('jsonrpc' => '2.0', 'method' => 'initialize', 'id' => 1)
+      res = Net::HTTP.post(URI("http://127.0.0.1:#{port}/v1/rpc"), body, 'Content-Type' => 'application/json')
+    end
+    step('Then the status is 405') { assert_equal '405', res.code }
   end
 
-  [['with POST', 'http://evil.example'], ['as a WebSocket', 'http://evil.example'],
-   ['as a WebSocket', 'http://allowed.test:1']].each do |how, origin|
+  [['as a WebSocket', 'http://evil.example'], ['as a WebSocket', 'http://allowed.test:1']].each do |how, origin|
     scenario "A request of an origin that is not allowed is refused (#{how}, #{origin})" do
       status = nil
-      step("When a request is sent #{how} with Origin \"#{origin}\"") do
-        status = how == 'with POST' ? post('initialize', {}, origin: origin).code : Page.status_of(port, origin)
-      end
+      step("When a request is sent #{how} with Origin \"#{origin}\"") { status = Page.status_of(port, origin) }
       step('Then the status is 403') { assert_equal '403', status }
     end
   end

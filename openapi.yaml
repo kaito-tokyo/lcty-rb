@@ -211,10 +211,7 @@ paths:
   /v1/rpc:
     get:
       tags: [API]
-      summary: The RPC protocol over a WebSocket (LCTYSP-0012); 426 without Upgrade, 403 for an Origin not allowed
-    post:
-      tags: [API]
-      summary: One JSON-RPC request or a batch, without notifications (LCTYSP-0012)
+      summary: The RPC protocol over a WebSocket, its only transport (LCTYSP-0012); 426 without Upgrade
 
   # ---- App ----
 

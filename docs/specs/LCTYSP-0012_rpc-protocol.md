@@ -20,8 +20,8 @@ SPDX-License-Identifier: Apache-2.0
 
 `/v1/rpc` is the one place where the data of the server changes and where every change is announced. Messages are
 JSON-RPC 2.0. A page keeps a WebSocket open to it: it sends requests and gets their responses, and the server sends a
-notification of every change to every connection that receives it, numbered by a global version. The same requests can
-also be sent one by one with `POST`, for tools and tests. Reading everything at once stays plain `GET`.
+notification of every change to every connection that receives it, numbered by a global version. The WebSocket is the
+only transport: a page always has one, and so do tools and tests. Reading everything at once stays plain `GET`.
 
 The prototype writes conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) into a
 directory of its own, `c-next/` of the data directory, so it never touches the real conversations.
@@ -31,19 +31,16 @@ directory of its own, `c-next/` of the data directory, so it never touches the r
 - **WebSocket:** `GET /v1/rpc` with `Upgrade: websocket` opens a WebSocket (RFC 6455, version 13). Every message is
   one text message holding one JSON-RPC message or one batch; a binary message closes the connection (1003). Both
   sides may send at any time: the page sends requests, the server sends responses and notifications.
-- **POST:** `POST /v1/rpc` with `Content-Type: application/json` holds one request or one batch, and the response is
-  the JSON-RPC response (`200`), or `204` when nothing is to be answered (only notifications were sent). No
-  notification of other changes comes back this way.
-- **Anything else** at `/v1/rpc` is refused: a `GET` without `Upgrade` gets `426`, a `POST` of another type `415`.
-- **Origin.** A request whose `Origin` is not one of the allowed origins is refused with `403`, for the WebSocket
-  handshake and for `POST` alike. The allowed origins are `LCTY_ALLOWED_ORIGIN` (origins separated by commas or
+- **Anything else** at `/v1/rpc` is refused: a `GET` without `Upgrade` gets `426`, and every other method `405`. There
+  is no `POST`: a second transport would need the same checks again and would have no session (no `actorId`, no
+  notifications, no `c.subscribe`), and every client has a WebSocket.
+- **Origin.** A WebSocket handshake whose `Origin` is not one of the allowed origins is refused with `403`. The allowed origins are `LCTY_ALLOWED_ORIGIN` (origins separated by commas or
   spaces, such as `http://192.168.1.10:45280`), or else the server's own address (`http://<LCTY_HOST>:<PORT>`, and
   `http://localhost:<PORT>` when it listens on `127.0.0.1`). A request without `Origin` is accepted: it does not come
   from a page, and no page can make a browser send it. WebSocket is not covered by CORS, so without this check any page
   on the web could write to the user's conversations through the user's browser. Comparing `Origin` with `Host` is not
   enough: after DNS rebinding a page of another site reaches this server under its own name, and the browser sends that
-  name in both. `POST` takes only `application/json` for the same reason: a page of another site can send `text/plain`
-  without asking the server first.
+  name in both.
 - **Size.** One message, after its fragments are joined, is at most 64 MiB.
 - **Ping.** The server answers a ping with a pong. Keeping an idle connection alive is the page's choice.
 
@@ -73,9 +70,8 @@ Every change gets the next number of one version shared by all data: `"<boot>.<s
 server starts; `<seq>` counts the changes since. Changes are numbered and announced one at a time, so every connection
 sees the notifications in version order and with no gaps.
 
-- `initialize` returns the current version, and `POST /v1/rpc` returns it in the `Lcty-Version` header. (Every other
-  response of `/v1/` is to carry the header too: a page that reads everything with `GET` learns which version it read,
-  and listens from there.)
+- `initialize` returns the current version. (Every response of `/v1/` is to carry it in the `Lcty-Version` header
+  too: a page that reads everything with `GET` learns which version it read, and listens from there.)
 - A page that sees another `<boot>` than the one it knew has missed changes it cannot get back (the server keeps no
   history across a restart) and reads everything again.
 
@@ -106,14 +102,12 @@ session starts.
   (`{"capabilities": {"receives": [method names]}}`); its result carries the server's (`receives`, the methods the
   server takes), with the protocol name, the global version and the page's `actorId`.
 - **`actorId` is assigned by the server.** `initialize` returns a new UUID for the connection, the same for its whole
-  life, and every notification of a change names the actor that made it (`actorId`; `null` for a change sent with
-  `POST`). A page tells its own changes from those of other tabs by it: for its own, the notification arrives before
+  life, and every notification of a change names the actor that made it (`actorId`). A page tells its own changes from those of other tabs by it: for its own, the notification arrives before
   the response, and the page applies the change once. It identifies a connection, not a person (there is one user).
 - **An end sends only what the other end declared it receives.** The server sends a page no notification before
   `initialize`, and afterwards only those the page listed. A method the receiver did not declare is answered with
   `-32601`. A page that wants no notifications (a worker that only reads, say) declares none.
 - **Capabilities are fixed for the session.** To change them, the page opens a new connection.
-- **`POST` has no session:** it may call the methods the server receives, and gets no notification.
 - **`rpc.discover`** returns the [OpenRPC](https://spec.open-rpc.org/) document of the protocol. Its source is
   [LCTYSP-0012_rpc-protocol.openrpc.yml](LCTYSP-0012_rpc-protocol.openrpc.yml), YAML so that it can hold comments; the
   server reads it at startup, and no JSON copy is kept in the repository. Every method, its params, its result and its

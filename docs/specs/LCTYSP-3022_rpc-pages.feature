@@ -16,8 +16,9 @@ Feature: LCTYSP-3022 Several pages over /v1/rpc
   found by asking the pages that are connected, so a page that leaves takes its lock claims with it. A page that comes
   back reads again: a new actorId, c.list and c.subscribe tell it what changed. In the steps the servlet is mounted at
   /v1/rpc of a WEBrick server on 127.0.0.1, as in LCTYSP-3020; "a page" is a WebSocket client that sends Origin
-  http://allowed.test and receives c.created, c.meta.updated, c.appended and c.unappended; "at once" means one thread
-  per page, all released together.
+  http://allowed.test and receives c.created, c.meta.updated, c.appended and c.unappended; a step that names no page
+  sends its request through a page of the test's own that receives nothing; "at once" means one thread per page, all
+  released together.
 
   Background:
     Given the RPC servlet mounted on a WEBrick server
@@ -63,10 +64,10 @@ Feature: LCTYSP-3022 Several pages over /v1/rpc
     Then it gets c.appended of the second conversation's first element only
     And it gets c.meta.updated of all three
 
-  Scenario: A change made over POST reaches the pages with no actorId
-    Given a conversation and a page following it
-    When a message is appended over POST
-    Then the page gets c.appended and c.meta.updated with actorId null
+  Scenario: A page that receives nothing still writes, and the others get its actorId
+    Given a conversation, a page following it and a page that receives no notification
+    When the page that receives nothing appends a message
+    Then the following page gets c.appended and c.meta.updated with the actorId of the writing page
 
   # ---- The lcty-cmd between pages ----
 
