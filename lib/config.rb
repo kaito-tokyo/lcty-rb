@@ -5,10 +5,12 @@
 # -*- encoding: utf-8 -*-
 # Server settings (LCTYSP-0010). Two are environment variables only: LCTY_DATA_DIR, where the data directory is, and
 # the port (LCTY_PORT, else PORT; without either lcty.rb takes the first free port from 45280). The others are options
-# of lcty.rb (--host, --base-url, --allowed-origin), written one per line in server_settings.txt of the data directory
-# or given on the command line; an environment variable that is set and not empty overrides the file (LCTY_HOST,
-# LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN), and the command line overrides both. Everything else is a browser setting.
+# of lcty.rb (--bind-ip, --base-url, --allowed-origin), written one per line in server_settings.txt of the data
+# directory or given on the command line; an environment variable that is set and not empty overrides the file with
+# one value (LCTY_BIND_IP, LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN: the environment is for starting quickly), and the
+# command line overrides both. Everything else is a browser setting.
 
+require 'ipaddr'
 require 'optparse'
 
 module Chatty
@@ -77,21 +79,25 @@ module Chatty
 
   # ---- The other settings: server_settings.txt, the environment and the command line ----
 
-  # Source of truth (no leading _): the options of lcty.rb, one per line (`--host=0.0.0.0`, or the option and its value
-  # separated by spaces), as they would be written on the command line; blank lines and lines starting with # are
+  # Source of truth (no leading _): the options of lcty.rb, one per line (`--bind-ip=0.0.0.0`, or the option and its
+  # value separated by spaces), as they would be written on the command line; blank lines and lines starting with # are
   # left out. A missing file means every default; nothing is created.
   SETTINGS_PATH = File.join(DATA_DIR, 'server_settings.txt')
   # Each setting and the environment variable that overrides the file
-  SETTING_ENV = { host: 'LCTY_HOST', base_url: 'LCTY_BASE_URL', allowed_origins: 'LCTY_ALLOWED_ORIGIN' }.freeze
-  SETTING_DEFAULTS = { host: '127.0.0.1', base_url: '/', allowed_origins: nil }.freeze
+  SETTING_ENV = { bind_ips: 'LCTY_BIND_IP', base_url: 'LCTY_BASE_URL', allowed_origins: 'LCTY_ALLOWED_ORIGIN' }.freeze
+  # The settings that take several values (once per option); their environment variable takes one only, since the
+  # environment is for starting the server quickly, and more are given as options (LCTYSP-0010)
+  SETTING_LISTS = %i[bind_ips allowed_origins].freeze
+  SETTING_DEFAULTS = { bind_ips: ['127.0.0.1'].freeze, base_url: '/', allowed_origins: nil }.freeze
+  OPTION_OF = { bind_ips: '--bind-ip', allowed_origins: '--allowed-origin' }.freeze
 
   # The options of lcty.rb, the same for the file and the command line; what they set goes into into
   def self.option_parser(into)
     OptionParser.new do |o|
       o.banner = 'usage: lcty.rb [options] [convert]'
-      o.on('--host=ADDRESS', 'the address to listen on (default 127.0.0.1)') do |v|
-        raise SettingsError, 'the host must not be empty' if v.empty?
-        into[:host] = v
+      o.on('--bind-ip=ADDRESS', 'an IP address to listen on, once per address (default 127.0.0.1)') do |v|
+        raise SettingsError, "not an IP address to listen on: #{v.inspect}" unless ip_address?(v)
+        (into[:bind_ips] ||= []) << v
       end
       o.on('--base-url=PATH', 'the path the site is served under (default /)') { |v| into[:base_url] = v }
       o.on('--allowed-origin=ORIGIN', 'an origin whose pages may use /v1/rpc, once per origin (default: the ' \
@@ -100,7 +106,18 @@ module Chatty
       o.on('--port=PORT', 'not an option: set LCTY_PORT or PORT') do
         raise SettingsError, 'the port is not an option; set LCTY_PORT or PORT'
       end
+      # The data directory holds server_settings.txt, so it is said before any option is read (LCTYSP-0010)
+      o.on('--data-dir=DIR', 'not an option: set LCTY_DATA_DIR') do
+        raise SettingsError, 'the data directory is not an option; set LCTY_DATA_DIR'
+      end
     end
+  end
+
+  # Whether s is one IPv4 or IPv6 address, written as an address (no prefix length, no brackets, no host name)
+  def self.ip_address?(s)
+    !s.include?('/') && IPAddr.new(s) && true
+  rescue IPAddr::Error
+    false
   end
 
   # What the options args set, {setting => value}; args loses the options it had and keeps the other arguments. An
@@ -123,13 +140,19 @@ module Chatty
     end
   end
 
-  # What the environment variables set when they are set and not empty; LCTY_ALLOWED_ORIGIN separates its origins by
-  # commas or spaces
+  # What the environment variables set when they are set and not empty, one value each: LCTY_BIND_IP one address,
+  # LCTY_ALLOWED_ORIGIN one origin. A value with a comma or whitespace in it is refused, so a list is never taken apart
+  # one way here and another way elsewhere.
   def self.env_settings
     SETTING_ENV.each_with_object({}) do |(key, var), set|
       v = ENV[var].to_s
       next if v.empty?
-      set[key] = key == :allowed_origins ? v.split(/[\s,]+/).reject(&:empty?) : v
+      next set[key] = v unless SETTING_LISTS.include?(key)
+      if v.match?(/[\s,]/)
+        raise SettingsError, "#{var}: one value only; give more with #{OPTION_OF[key]} in server_settings.txt"
+      end
+      raise SettingsError, "#{var}: not an IP address to listen on: #{v.inspect}" if key == :bind_ips && !ip_address?(v)
+      set[key] = [v]
     end
   end
 
@@ -140,19 +163,20 @@ module Chatty
   def self.configure(argv = [])
     file = parse_options(file_args(SETTINGS_PATH), SETTINGS_PATH)
     command_line = parse_options(argv, 'the command line')
-    @settings = SETTING_DEFAULTS.merge(file).merge(env_settings).merge(command_line).freeze
+    s = SETTING_DEFAULTS.merge(file).merge(env_settings).merge(command_line)
+    @settings = s.merge(bind_ips: s[:bind_ips].uniq.freeze).freeze # an address given twice is listened on once
     argv
   end
 
   class << self
-    # The address to listen on
-    def bind
-      @settings[:host]
+    # The IP addresses to listen on, at one port, in the order given
+    def bind_ips
+      @settings[:bind_ips]
     end
 
-    # The address as written in a URL (an IPv6 address in brackets)
-    def bind_url_host
-      bind.include?(':') ? "[#{bind}]" : bind
+    # An address as written in a URL (an IPv6 address in brackets)
+    def url_host(ip)
+      ip.include?(':') ? "[#{ip}]" : ip
     end
 
     # The path the site is served under, as written (lcty.rb makes it start and end with /)

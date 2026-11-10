@@ -12,28 +12,31 @@ Feature: LCTYSP-3008 Server settings
   Support on macOS and Windows, $XDG_DATA_HOME or ~/.local/share elsewhere), and LCTY_PORT, else PORT, the port; without
   either PORT is nil and lcty.rb takes the first free port of PORTS_TRIED, 45280 to 45379 (LCTYSP-3019). A port that is
   not an integer from 1 to 65535 stops the server. The other settings are the options of lcty.rb, parsed by one
-  OptionParser: --host, --base-url and --allowed-origin (once per origin). Chatty.configure(argv) takes them from
-  server_settings.txt of the data directory (one option per line, blank lines and # comments left out), then from the
-  environment variables that are set and not empty (LCTY_HOST, LCTY_BASE_URL and LCTY_ALLOWED_ORIGIN), then from argv,
-  each replacing the ones before, and returns the other arguments; lib/config.rb runs it with no argv when it is
-  loaded. Without any a setting takes its default: the address 127.0.0.1 (Chatty.bind), the base URL "/"
-  (Chatty.base_url) and the server's own origins (Chatty.allowed_origins nil). An option that is not one, lacks its
-  value, is --port or gives an empty host stops the server, named after the file or the command line. A relative LCTY_DATA_DIR is resolved against the repository root, and the conversations,
+  OptionParser: --bind-ip and --allowed-origin (each once per value) and --base-url. Chatty.configure(argv) takes them
+  from server_settings.txt of the data directory (one option per line, blank lines and # comments left out), then from
+  the environment variables that are set and not empty (LCTY_BIND_IP, LCTY_BASE_URL and LCTY_ALLOWED_ORIGIN, one value
+  each: the environment is for starting quickly, and a value with a comma or whitespace stops the server), then from
+  argv, each replacing the ones before, and returns the other arguments; lib/config.rb runs it with no argv when it is loaded. Without any a setting takes its default: the
+  address 127.0.0.1 (Chatty.bind_ips, the IP addresses to listen on, an address given twice listed once), the base URL
+  "/" (Chatty.base_url) and the server's own origins (Chatty.allowed_origins nil). An option that is not one (the --host of before
+  among them), lacks its value or is --port or --data-dir (LCTY_DATA_DIR is an environment variable only, since the
+  data directory holds the file), or an address to listen on that is not an IP address, stops the server,
+  named after the file, the variable or the command line. Chatty.url_host writes an address as a URL does. A relative LCTY_DATA_DIR is resolved against the repository root, and the conversations,
   the tag files and their lock, the tags of conversations and the search index live at fixed places in the data
   directory. It also defines the patterns of ids and tag references, and HttpError, the error that carries an HTTP status. Each setting is read in a new Ruby process that
   loads lib/config.rb with only the given environment.
 
   Scenario: Without settings the port is left to lcty.rb and the address is 127.0.0.1
-    Given LCTY_PORT, PORT and LCTY_HOST are unset
+    Given LCTY_PORT, PORT and LCTY_BIND_IP are unset
     When lib/config.rb is loaded
     Then PORT is nil and PORTS_TRIED is 45280 to 45379
-    And Chatty.bind and Chatty.bind_url_host are "127.0.0.1"
+    And Chatty.bind_ips is ["127.0.0.1"]
 
   Scenario: Empty settings count as unset
-    Given LCTY_PORT, PORT and LCTY_HOST are empty
+    Given LCTY_PORT, PORT and LCTY_BIND_IP are empty
     When lib/config.rb is loaded
     Then PORT is nil
-    And Chatty.bind is "127.0.0.1"
+    And Chatty.bind_ips is ["127.0.0.1"]
 
   Scenario: PORT sets the port
     Given PORT is "8080"
@@ -57,47 +60,55 @@ Feature: LCTYSP-3008 Server settings
       | 0     |
       | 70000 |
 
-  Scenario: LCTY_HOST sets the address to listen on
-    Given LCTY_HOST is "0.0.0.0"
+  Scenario: LCTY_BIND_IP sets the one address to listen on
+    Given LCTY_BIND_IP is "::1"
     When lib/config.rb is loaded
-    Then Chatty.bind and Chatty.bind_url_host are "0.0.0.0"
+    Then Chatty.bind_ips is ["::1"]
+
+  Scenario Outline: An environment variable takes one value only
+    Given <variable> is "<value>"
+    When lib/config.rb is loaded
+    Then loading fails with the SettingsError "<variable>: one value only; give more with <option> in server_settings.txt"
+
+    Examples:
+      | variable            | value                       | option           |
+      | LCTY_BIND_IP        | 0.0.0.0, ::1                | --bind-ip        |
+      | LCTY_ALLOWED_ORIGIN | http://a.test http://b.test | --allowed-origin |
+
+  Scenario: LCTY_BIND_IP that is not an IP address stops the server
+    Given LCTY_BIND_IP is "localhost"
+    When lib/config.rb is loaded
+    Then loading fails with the SettingsError "LCTY_BIND_IP: not an IP address to listen on: "localhost""
 
   Scenario: An IPv6 address is written in brackets in URLs
-    Given LCTY_HOST is "::1"
-    When lib/config.rb is loaded
-    Then Chatty.bind is "::1"
-    And Chatty.bind_url_host is "[::1]"
-
-  Scenario: A host name is written in URLs as it is
-    Given LCTY_HOST is "localhost"
-    When lib/config.rb is loaded
-    Then Chatty.bind_url_host is "localhost"
+    When Chatty.url_host is given "::1" and "127.0.0.1"
+    Then it returns "[::1]" and "127.0.0.1"
 
   # ---- server_settings.txt of the data directory, and the command line ----
 
-  Scenario: The settings file of the data directory sets the address, the base URL and the allowed origins
-    Given a data directory whose server_settings.txt has the lines "# a comment", "", "--host=0.0.0.0", "--base-url /lcty/", "--allowed-origin=http://a.test:8080" and "--allowed-origin=http://b.test:8080"
+  Scenario: The settings file of the data directory sets the addresses, the base URL and the allowed origins
+    Given a data directory whose server_settings.txt has the lines "# a comment", "", "--bind-ip=0.0.0.0", "--bind-ip ::1", "--bind-ip=0.0.0.0", "--base-url /lcty/", "--allowed-origin=http://a.test:8080" and "--allowed-origin=http://b.test:8080"
     When lib/config.rb is loaded
-    Then Chatty.bind is "0.0.0.0", Chatty.base_url is "/lcty/" and Chatty.allowed_origins is ["http://a.test:8080", "http://b.test:8080"]
+    Then Chatty.bind_ips is ["0.0.0.0", "::1"], Chatty.base_url is "/lcty/" and Chatty.allowed_origins is ["http://a.test:8080", "http://b.test:8080"]
     And SETTINGS_PATH is its "server_settings.txt"
 
   Scenario: Without a settings file every setting takes its default, and server_settings.json is not read
     Given a data directory with a server_settings.json of {"host": "0.0.0.0"} and no server_settings.txt
     When lib/config.rb is loaded
-    Then Chatty.bind is "127.0.0.1", Chatty.base_url is "/" and Chatty.allowed_origins is nil
+    Then Chatty.bind_ips is ["127.0.0.1"], Chatty.base_url is "/" and Chatty.allowed_origins is nil
     And no server_settings.txt has been created
 
   Scenario: An environment variable that is set and not empty overrides the file
-    Given a data directory whose server_settings.txt has the lines "--host=0.0.0.0", "--base-url=/lcty/" and "--allowed-origin=http://a.test:8080"
-    And LCTY_HOST is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test, http://c.test"
+    Given a data directory whose server_settings.txt has the lines "--bind-ip=0.0.0.0", "--base-url=/lcty/" and "--allowed-origin=http://a.test:8080"
+    And LCTY_BIND_IP is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test"
     When lib/config.rb is loaded
-    Then Chatty.bind is "0.0.0.0", Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test", "http://c.test"]
+    Then Chatty.bind_ips is ["0.0.0.0"], Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test"]
 
   Scenario: The command line overrides the environment and the file, and the other arguments are returned
-    Given a data directory whose server_settings.txt has the lines "--host=0.0.0.0" and "--allowed-origin=http://a.test:8080"
-    And LCTY_HOST is "::1"
-    When Chatty.configure is given "--host=10.0.0.1", "convert" and "--allowed-origin=http://c.test"
-    Then Chatty.bind is "10.0.0.1" and Chatty.allowed_origins is ["http://c.test"]
+    Given a data directory whose server_settings.txt has the lines "--bind-ip=0.0.0.0" and "--allowed-origin=http://a.test:8080"
+    And LCTY_BIND_IP is "::1"
+    When Chatty.configure is given "--bind-ip=10.0.0.1", "convert" and "--allowed-origin=http://c.test"
+    Then Chatty.bind_ips is ["10.0.0.1"] and Chatty.allowed_origins is ["http://c.test"]
     And it returns "convert"
 
   Scenario Outline: A settings file that cannot be used stops the server
@@ -106,12 +117,16 @@ Feature: LCTYSP-3008 Server settings
     Then loading fails with a SettingsError that starts with the path of the file and "<message>"
 
     Examples:
-      | line         | message                                          |
-      | --prot=1     | invalid option: --prot=1                         |
-      | --host       | missing argument: --host                         |
-      | host=1       | not an option: host=1                            |
-      | --port=8080  | the port is not an option; set LCTY_PORT or PORT |
-      | --host=      | the host must not be empty                       |
+      | line                | message                                          |
+      | --prot=1            | invalid option: --prot=1                         |
+      | --host=0.0.0.0      | invalid option: --host=0.0.0.0                   |
+      | --bind-ip           | missing argument: --bind-ip                      |
+      | bind-ip=1           | not an option: bind-ip=1                         |
+      | --port=8080         | the port is not an option; set LCTY_PORT or PORT |
+      | --data-dir=/tmp/x   | the data directory is not an option; set LCTY_DATA_DIR |
+      | --bind-ip=          | not an IP address to listen on: ""               |
+      | --bind-ip=localhost | not an IP address to listen on: "localhost"      |
+      | --bind-ip=10.0.0.0/8 | not an IP address to listen on: "10.0.0.0/8"    |
 
   Scenario: An option of the command line that is not one stops the server
     Given a data directory without server_settings.txt

@@ -83,7 +83,8 @@ Two principles drive the design:
 
 ## Security
 
-- Listens on `127.0.0.1` by default; `LCTY_HOST` names another address ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
+- Listens on `127.0.0.1` by default; `--bind-ip` (or `LCTY_BIND_IP`) names other addresses, one or more
+  ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
   There is no authentication, so an address other than loopback makes the conversations readable and writable by
   anyone who can reach it.
 - Requests are not checked: there is no `Host` / `Origin` check and no headers are added to every response. The server

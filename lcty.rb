@@ -10,12 +10,12 @@
 #
 #   /usr/bin/ruby lcty.rb                            # => http://127.0.0.1:45280, or the next free port up to 45379
 #   LCTY_PORT=8080 /usr/bin/ruby lcty.rb             # => http://127.0.0.1:8080 (that port only; PORT if unset)
-#   /usr/bin/ruby lcty.rb --host=192.168.1.10        # => http://192.168.1.10:45280 (that address only)
+#   /usr/bin/ruby lcty.rb --bind-ip=127.0.0.1 --bind-ip=192.168.1.10   # => both addresses, at one port
 #   /usr/bin/ruby lcty.rb --base-url=/lcty/          # => the site under /lcty/
 #   /usr/bin/ruby lcty.rb --help                     # => every option
 #
 # The port is an environment variable only (LCTY_PORT, else PORT), and LCTY_DATA_DIR says where the data directory is.
-# The options can also be written one per line in server_settings.txt of the data directory; LCTY_HOST, LCTY_BASE_URL
+# The options can also be written one per line in server_settings.txt of the data directory; LCTY_BIND_IP, LCTY_BASE_URL
 # and LCTY_ALLOWED_ORIGIN override the file, and the command line overrides both (LCTYSP-0010).
 #
 # Start it in the root of the repository: the files of the site are found from the working directory (public/…). This
@@ -103,19 +103,30 @@ module Lcty
   # No port to listen on: the one asked for is taken, or every one tried is
   class PortError < StandardError; end
 
-  # A WEBrick server listening on Chatty.bind at the port asked for (LCTY_PORT or PORT), or else at the first free one
-  # of ports, in order (LCTYSP-0010); Chatty.port is set to it. A port asked for that is taken is not replaced by
-  # another: the pages, bookmarks and allowed origins name it. Raises PortError when there is none.
-  def self.listen(asked = Chatty::PORT, ports = Chatty::PORTS_TRIED)
+  # A WEBrick server listening on every address of ips (Chatty.bind_ips) at one port: the port asked for (LCTY_PORT or
+  # PORT), or else the first one of ports, in order, that is free on every address (LCTYSP-0010); Chatty.port is set
+  # to it. A port asked for that is taken is not replaced by another: the pages, bookmarks and allowed origins name it.
+  # Raises PortError when there is none, and at once for an address that is not one of this machine.
+  def self.listen(asked = Chatty::PORT, ports = Chatty::PORTS_TRIED, ips = Chatty.bind_ips)
     (asked ? [asked] : ports).each do |port|
       server = WEBrick::HTTPServer.new(
-        BindAddress: Chatty.bind,
+        DoNotListen: true, # every address is listened on below, at the same port
         Port: port,
         MimeTypes: Servlets::MIME_TYPES,
         Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN),
         AccessLog: [],
         DoNotReverseLookup: true
       )
+      begin
+        ips.each do |ip|
+          server.listen(ip, port)
+        rescue Errno::EADDRNOTAVAIL
+          raise PortError, "cannot listen on #{ip}: it is not an address of this machine (--bind-ip)"
+        end
+      rescue StandardError
+        server.listeners.each(&:close) # a port taken on one address is tried on none of them
+        raise
+      end
       Chatty.port = port
       return server
     rescue Errno::EADDRINUSE
@@ -140,7 +151,8 @@ module Lcty
     end
     mount_all(s)
     %w[INT TERM].each { |sig| trap(sig) { s.shutdown } }
-    $stderr.puts "lcty-rb: http://#{Chatty.bind_url_host}:#{Chatty.port}#{base_url}  (data: #{Chatty::DATA_DIR})"
+    urls = Chatty.bind_ips.map { |ip| "http://#{Chatty.url_host(ip)}:#{Chatty.port}#{base_url}" }
+    $stderr.puts "lcty-rb: #{urls.join(' ')}  (data: #{Chatty::DATA_DIR})"
     # A page opened from another origin cannot use /v1/rpc (LCTYSP-0012): say which ones can
     $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (--allowed-origin)"
     settings = File.exist?(Chatty::SETTINGS_PATH) ? Chatty::SETTINGS_PATH : "none (#{Chatty::SETTINGS_PATH} does not exist)"

@@ -18,13 +18,13 @@ require 'rbconfig'
 class ConfigTest < Lcty::Scenarios
   CONFIG = File.expand_path('../../lib/config.rb', __dir__)
   REPO_ROOT = File.expand_path('../..', __dir__)
-  SETTINGS = %w[LCTY_PORT PORT LCTY_HOST LCTY_DATA_DIR XDG_DATA_HOME LCTY_BASE_URL LCTY_ALLOWED_ORIGIN
+  SETTINGS = %w[LCTY_PORT PORT LCTY_BIND_IP LCTY_DATA_DIR XDG_DATA_HOME LCTY_BASE_URL LCTY_ALLOWED_ORIGIN
                 LCTY_TEST_ARGS].freeze
   CONSTANTS = %w[ROOT PUBLIC_DIR XDG_DATA_HOME DEFAULT_DATA_DIR DATA_DIR CONV_DIR TAG_DIR TAG_LOCK_PATH TAGS_DB_PATH
                  FORMER_TAGS_DB_PATH INDEX_PATH PORT SETTINGS_PATH].freeze
   # The lines of a server_settings.txt that sets every setting of the file
-  FILE = ['# a comment', '', '--host=0.0.0.0', '--base-url /lcty/', '--allowed-origin=http://a.test:8080',
-          '--allowed-origin=http://b.test:8080'].freeze
+  FILE = ['# a comment', '', '--bind-ip=0.0.0.0', '--bind-ip ::1', '--bind-ip=0.0.0.0', '--base-url /lcty/',
+          '--allowed-origin=http://a.test:8080', '--allowed-origin=http://b.test:8080'].freeze
   # Prints the constants of lib/config.rb (PORTS_TRIED as its first and last port), the settings after
   # Chatty.configure was given the JSON array LCTY_TEST_ARGS (none by default) and what it returned, and the platform of
   # the process, as JSON
@@ -32,7 +32,7 @@ class ConfigTest < Lcty::Scenarios
            "rest = Chatty.configure(JSON.parse(ENV['LCTY_TEST_ARGS'] || '[]')); " \
            "puts JSON.generate(Hash[#{CONSTANTS.inspect}.map { |n| [n, Chatty.const_get(n)] }]" \
            ".merge('PORTS_TRIED' => [Chatty::PORTS_TRIED.first, Chatty::PORTS_TRIED.last], " \
-           "'bind' => Chatty.bind, 'bind_url_host' => Chatty.bind_url_host, 'base_url' => Chatty.base_url, " \
+           "'bind_ips' => Chatty.bind_ips, 'base_url' => Chatty.base_url, " \
            "'allowed_origins' => Chatty.allowed_origins, 'rest' => rest, 'RUBY_PLATFORM' => RUBY_PLATFORM))".freeze
 
   def setup
@@ -65,7 +65,7 @@ class ConfigTest < Lcty::Scenarios
   end
 
   def settings_of(c)
-    c.values_at('bind', 'base_url', 'allowed_origins')
+    c.values_at('bind_ips', 'base_url', 'allowed_origins')
   end
 
   # The lines as the steps quote them: "a", "b" and "c"
@@ -80,26 +80,23 @@ class ConfigTest < Lcty::Scenarios
 
   scenario 'Without settings the port is left to lcty.rb and the address is 127.0.0.1' do
     c = nil
-    step('Given LCTY_PORT, PORT and LCTY_HOST are unset') { @env = {} }
+    step('Given LCTY_PORT, PORT and LCTY_BIND_IP are unset') { @env = {} }
     step('When lib/config.rb is loaded') { c = load_config }
     step('Then PORT is nil and PORTS_TRIED is 45280 to 45379') do
       assert_nil c['PORT']
       assert_equal [45280, 45379], c['PORTS_TRIED']
     end
-    step('And Chatty.bind and Chatty.bind_url_host are "127.0.0.1"') do
-      assert_equal '127.0.0.1', c['bind']
-      assert_equal '127.0.0.1', c['bind_url_host']
-    end
+    step('And Chatty.bind_ips is ["127.0.0.1"]') { assert_equal ['127.0.0.1'], c['bind_ips'] }
   end
 
   scenario 'Empty settings count as unset' do
     c = nil
-    step('Given LCTY_PORT, PORT and LCTY_HOST are empty') do
-      @env = { 'LCTY_PORT' => '', 'PORT' => '', 'LCTY_HOST' => '' }
+    step('Given LCTY_PORT, PORT and LCTY_BIND_IP are empty') do
+      @env = { 'LCTY_PORT' => '', 'PORT' => '', 'LCTY_BIND_IP' => '' }
     end
     step('When lib/config.rb is loaded') { c = load_config }
     step('Then PORT is nil') { assert_nil c['PORT'] }
-    step('And Chatty.bind is "127.0.0.1"') { assert_equal '127.0.0.1', c['bind'] }
+    step('And Chatty.bind_ips is ["127.0.0.1"]') { assert_equal ['127.0.0.1'], c['bind_ips'] }
   end
 
   scenario 'PORT sets the port' do
@@ -128,39 +125,53 @@ class ConfigTest < Lcty::Scenarios
     end
   end
 
-  scenario 'LCTY_HOST sets the address to listen on' do
+  scenario 'LCTY_BIND_IP sets the one address to listen on' do
     c = nil
-    step('Given LCTY_HOST is "0.0.0.0"') { @env = { 'LCTY_HOST' => '0.0.0.0' } }
+    step('Given LCTY_BIND_IP is "::1"') { @env = { 'LCTY_BIND_IP' => '::1' } }
     step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind and Chatty.bind_url_host are "0.0.0.0"') do
-      assert_equal '0.0.0.0', c['bind']
-      assert_equal '0.0.0.0', c['bind_url_host']
+    step('Then Chatty.bind_ips is ["::1"]') { assert_equal ['::1'], c['bind_ips'] }
+  end
+
+  [
+    ['LCTY_BIND_IP', '0.0.0.0, ::1', '--bind-ip'],
+    ['LCTY_ALLOWED_ORIGIN', 'http://a.test http://b.test', '--allowed-origin']
+  ].each do |variable, value, option|
+    scenario "An environment variable takes one value only (#{variable})" do
+      c = nil
+      step("Given #{variable} is \"#{value}\"") { @env = { variable => value } }
+      step('When lib/config.rb is loaded') { c = load_config }
+      message = "#{variable}: one value only; give more with #{option} in server_settings.txt"
+      step("Then loading fails with the SettingsError \"#{message}\"") do
+        refute c[:status].success?
+        assert_includes c[:err], "#{message} (Chatty::SettingsError)"
+      end
+    end
+  end
+
+  scenario 'LCTY_BIND_IP that is not an IP address stops the server' do
+    c = nil
+    step('Given LCTY_BIND_IP is "localhost"') { @env = { 'LCTY_BIND_IP' => 'localhost' } }
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then loading fails with the SettingsError "LCTY_BIND_IP: not an IP address to listen on: "localhost""') do
+      refute c[:status].success?
+      assert_includes c[:err], 'LCTY_BIND_IP: not an IP address to listen on: "localhost" (Chatty::SettingsError)'
     end
   end
 
   scenario 'An IPv6 address is written in brackets in URLs' do
-    c = nil
-    step('Given LCTY_HOST is "::1"') { @env = { 'LCTY_HOST' => '::1' } }
-    step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind is "::1"') { assert_equal '::1', c['bind'] }
-    step('And Chatty.bind_url_host is "[::1]"') { assert_equal '[::1]', c['bind_url_host'] }
-  end
-
-  scenario 'A host name is written in URLs as it is' do
-    c = nil
-    step('Given LCTY_HOST is "localhost"') { @env = { 'LCTY_HOST' => 'localhost' } }
-    step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind_url_host is "localhost"') { assert_equal 'localhost', c['bind_url_host'] }
+    r = nil
+    step('When Chatty.url_host is given "::1" and "127.0.0.1"') { r = ['::1', '127.0.0.1'].map { |ip| Chatty.url_host(ip) } }
+    step('Then it returns "[::1]" and "127.0.0.1"') { assert_equal ['[::1]', '127.0.0.1'], r }
   end
 
   # ---- server_settings.txt of the data directory, and the command line ----
 
-  scenario 'The settings file of the data directory sets the address, the base URL and the allowed origins' do
+  scenario 'The settings file of the data directory sets the addresses, the base URL and the allowed origins' do
     c = nil
     step("Given a data directory whose server_settings.txt has the lines #{quoted(FILE)}") { given_data_dir(FILE) }
     step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind is "0.0.0.0", Chatty.base_url is "/lcty/" and Chatty.allowed_origins is ["http://a.test:8080", "http://b.test:8080"]') do
-      assert_equal ['0.0.0.0', '/lcty/', ['http://a.test:8080', 'http://b.test:8080']], settings_of(c)
+    step('Then Chatty.bind_ips is ["0.0.0.0", "::1"], Chatty.base_url is "/lcty/" and Chatty.allowed_origins is ["http://a.test:8080", "http://b.test:8080"]') do
+      assert_equal [['0.0.0.0', '::1'], '/lcty/', ['http://a.test:8080', 'http://b.test:8080']], settings_of(c)
     end
     step('And SETTINGS_PATH is its "server_settings.txt"') do
       assert_equal File.join(@data, 'server_settings.txt'), c['SETTINGS_PATH']
@@ -173,8 +184,8 @@ class ConfigTest < Lcty::Scenarios
       given_data_dir(['{"host": "0.0.0.0"}'], 'server_settings.json')
     end
     step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind is "127.0.0.1", Chatty.base_url is "/" and Chatty.allowed_origins is nil') do
-      assert_equal ['127.0.0.1', '/', nil], settings_of(c)
+    step('Then Chatty.bind_ips is ["127.0.0.1"], Chatty.base_url is "/" and Chatty.allowed_origins is nil') do
+      assert_equal [['127.0.0.1'], '/', nil], settings_of(c)
     end
     step('And no server_settings.txt has been created') do
       refute File.exist?(File.join(@data, 'server_settings.txt'))
@@ -183,39 +194,43 @@ class ConfigTest < Lcty::Scenarios
 
   scenario 'An environment variable that is set and not empty overrides the file' do
     c = nil
-    lines = ['--host=0.0.0.0', '--base-url=/lcty/', '--allowed-origin=http://a.test:8080']
+    lines = ['--bind-ip=0.0.0.0', '--base-url=/lcty/', '--allowed-origin=http://a.test:8080']
     step("Given a data directory whose server_settings.txt has the lines #{quoted(lines)}") { given_data_dir(lines) }
-    step('And LCTY_HOST is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test, http://c.test"') do
-      @env.merge!('LCTY_HOST' => '', 'LCTY_BASE_URL' => '/x/', 'LCTY_ALLOWED_ORIGIN' => 'http://b.test, http://c.test')
+    step('And LCTY_BIND_IP is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test"') do
+      @env.merge!('LCTY_BIND_IP' => '', 'LCTY_BASE_URL' => '/x/', 'LCTY_ALLOWED_ORIGIN' => 'http://b.test')
     end
     step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind is "0.0.0.0", Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test", "http://c.test"]') do
-      assert_equal ['0.0.0.0', '/x/', ['http://b.test', 'http://c.test']], settings_of(c)
+    step('Then Chatty.bind_ips is ["0.0.0.0"], Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test"]') do
+      assert_equal [['0.0.0.0'], '/x/', ['http://b.test']], settings_of(c)
     end
   end
 
   scenario 'The command line overrides the environment and the file, and the other arguments are returned' do
     c = nil
-    lines = ['--host=0.0.0.0', '--allowed-origin=http://a.test:8080']
-    args = ['--host=10.0.0.1', 'convert', '--allowed-origin=http://c.test']
+    lines = ['--bind-ip=0.0.0.0', '--allowed-origin=http://a.test:8080']
+    args = ['--bind-ip=10.0.0.1', 'convert', '--allowed-origin=http://c.test']
     step("Given a data directory whose server_settings.txt has the lines #{quoted(lines)}") { given_data_dir(lines) }
-    step('And LCTY_HOST is "::1"') { @env['LCTY_HOST'] = '::1' }
+    step('And LCTY_BIND_IP is "::1"') { @env['LCTY_BIND_IP'] = '::1' }
     step("When Chatty.configure is given #{quoted(args)}") do
       @env['LCTY_TEST_ARGS'] = JSON.generate(args)
       c = load_config
     end
-    step('Then Chatty.bind is "10.0.0.1" and Chatty.allowed_origins is ["http://c.test"]') do
-      assert_equal ['10.0.0.1', ['http://c.test']], c.values_at('bind', 'allowed_origins')
+    step('Then Chatty.bind_ips is ["10.0.0.1"] and Chatty.allowed_origins is ["http://c.test"]') do
+      assert_equal [['10.0.0.1'], ['http://c.test']], c.values_at('bind_ips', 'allowed_origins')
     end
     step('And it returns "convert"') { assert_equal ['convert'], c['rest'] }
   end
 
   [
     ['--prot=1', 'invalid option: --prot=1'],
-    ['--host', 'missing argument: --host'],
-    ['host=1', 'not an option: host=1'],
+    ['--host=0.0.0.0', 'invalid option: --host=0.0.0.0'],
+    ['--bind-ip', 'missing argument: --bind-ip'],
+    ['bind-ip=1', 'not an option: bind-ip=1'],
     ['--port=8080', 'the port is not an option; set LCTY_PORT or PORT'],
-    ['--host=', 'the host must not be empty']
+    ['--data-dir=/tmp/x', 'the data directory is not an option; set LCTY_DATA_DIR'],
+    ['--bind-ip=', 'not an IP address to listen on: ""'],
+    ['--bind-ip=localhost', 'not an IP address to listen on: "localhost"'],
+    ['--bind-ip=10.0.0.0/8', 'not an IP address to listen on: "10.0.0.0/8"']
   ].each do |line, message|
     scenario "A settings file that cannot be used stops the server (#{line})" do
       c = nil
