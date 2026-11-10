@@ -3,8 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Server settings (LCTYSP-0010): only environment variables. This file reads PORT, LCTY_HOST and LCTY_DATA_DIR (lcty.rb
-# reads LCTY_BASE_URL, lib/rpc/servlet.rb LCTY_ALLOWED_ORIGIN); everything else is a browser setting.
+# Server settings (LCTYSP-0010). LCTY_DATA_DIR, an environment variable, says where the data directory is; the other
+# settings are in its server_settings.json (port, host, base_url, allowed_origins), and an environment variable that is
+# set and not empty overrides one (PORT, LCTY_HOST, LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN). Everything else is a browser
+# setting. lcty.rb uses BASE_URL_SETTING, lib/rpc/servlet.rb ALLOWED_ORIGINS_SETTING.
+
+require 'json'
 
 module Chatty
   class << self
@@ -45,8 +49,62 @@ module Chatty
   # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-0010); _index.sqlite is
   # discarded and made anew at every start
   INDEX_PATH = File.join(DATA_DIR, '_index.sqlite')
-  PORT = Integer(ENV['PORT'].to_s.empty? ? 45280 : ENV['PORT'])
-  BIND = ENV['LCTY_HOST'].to_s.empty? ? '127.0.0.1' : ENV['LCTY_HOST'] # The address to listen on
+
+  # ---- server_settings.json ----
+
+  # Source of truth (no leading _), read once when this file is loaded. A missing file means every default; nothing is
+  # created.
+  SETTINGS_PATH = File.join(DATA_DIR, 'server_settings.json')
+  # Each key of the file and the environment variable that overrides it
+  SETTING_ENV = {
+    'port' => 'PORT', 'host' => 'LCTY_HOST', 'base_url' => 'LCTY_BASE_URL', 'allowed_origins' => 'LCTY_ALLOWED_ORIGIN'
+  }.freeze
+
+  # A server_settings.json that cannot be used: the server does not start (lcty.rb prints the message)
+  class SettingsError < StandardError; end
+
+  # The settings of the file at path, checked: {} when there is no file. A file that is not JSON, not an object, has a
+  # key that is not a setting or a value of the wrong type raises SettingsError naming the file, so a typo never
+  # passes unseen.
+  def self.read_settings(path)
+    return {} unless File.exist?(path)
+    s = begin
+      JSON.parse(File.read(path, mode: 'r:UTF-8'))
+    rescue JSON::ParserError => e
+      raise SettingsError, "#{path}: not JSON: #{e.message.lines.first.to_s.strip}"
+    end
+    raise SettingsError, "#{path}: must be a JSON object" unless s.is_a?(Hash)
+    unknown = s.keys - SETTING_ENV.keys
+    unless unknown.empty?
+      raise SettingsError, "#{path}: unknown setting #{unknown.map(&:inspect).join(', ')} (known: #{SETTING_ENV.keys.join(', ')})"
+    end
+    bad = lambda { |key, what| raise SettingsError, "#{path}: #{key} must be #{what}" }
+    bad.call('port', 'an integer from 1 to 65535') if s.key?('port') && !(s['port'].is_a?(Integer) && (1..65_535).cover?(s['port']))
+    bad.call('host', 'a non-empty string') if s.key?('host') && !(s['host'].is_a?(String) && !s['host'].empty?)
+    bad.call('base_url', 'a string') if s.key?('base_url') && !s['base_url'].is_a?(String)
+    if s.key?('allowed_origins') &&
+       !(s['allowed_origins'].is_a?(Array) && s['allowed_origins'].all? { |o| o.is_a?(String) && !o.empty? })
+      bad.call('allowed_origins', 'an array of non-empty strings')
+    end
+    s
+  end
+
+  SETTINGS = read_settings(SETTINGS_PATH).freeze
+
+  # The environment variable of key when it is set and not empty, else the file's value (nil when neither has one)
+  def self.setting(key)
+    env = ENV[SETTING_ENV.fetch(key)].to_s
+    env.empty? ? SETTINGS[key] : env
+  end
+
+  PORT = Integer(setting('port') || 45280)
+  BIND = setting('host') || '127.0.0.1' # The address to listen on
+  BASE_URL_SETTING = setting('base_url') || '/' # The path the site is served under, as written (lcty.rb)
+  # The origins whose pages may use /v1/rpc as written, or nil for the server's own (lib/rpc/servlet.rb). In the
+  # environment variable they are separated by commas or spaces
+  ALLOWED_ORIGINS_SETTING = setting('allowed_origins').yield_self do |o|
+    o.is_a?(String) ? o.split(/[\s,]+/).reject(&:empty?) : o
+  end
   BIND_URL_HOST = BIND.include?(':') ? "[#{BIND}]" : BIND # As written in a URL (an IPv6 address in brackets)
   ID_RE = /\A[A-Za-z0-9_-]{1,80}\z/
   # A reference from a conversation to a tag: the file-name part of its tag file (`c~23` for C#), derived by the browser

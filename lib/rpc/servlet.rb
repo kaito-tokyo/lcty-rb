@@ -383,13 +383,14 @@ module Lcty
       { 'jsonrpc' => '2.0', 'error' => err, 'id' => id }
     end
 
-    # The origins whose pages may use /v1/rpc: LCTY_ALLOWED_ORIGIN (origins separated by commas or spaces), or else the
-    # server's own address (and localhost when it listens on 127.0.0.1). Compared with the Origin a browser sends, so a
-    # page of another site cannot get in even when its name resolves to this server (DNS rebinding): comparing Origin
-    # with Host would let it, since the browser sends the attacker's name in both.
+    # The origins whose pages may use /v1/rpc: allowed_origins of server_settings.json or LCTY_ALLOWED_ORIGIN
+    # (Chatty::ALLOWED_ORIGINS_SETTING, LCTYSP-0010), or else the server's own address (and localhost when it listens
+    # on 127.0.0.1). Compared with the Origin a browser sends, so a page of another site cannot get in even when its
+    # name resolves to this server (DNS rebinding): comparing Origin with Host would let it, since the browser sends
+    # the attacker's name in both.
     def self.default_origins
-      env = ENV['LCTY_ALLOWED_ORIGIN'].to_s.split(/[\s,]+/).reject(&:empty?)
-      return env.map { |o| normalize_origin(o) }.compact unless env.empty?
+      set = Chatty::ALLOWED_ORIGINS_SETTING || []
+      return set.map { |o| normalize_origin(o) }.compact unless set.empty?
       own = ["http://#{Chatty::BIND_URL_HOST}:#{Chatty::PORT}"]
       own << "http://localhost:#{Chatty::PORT}" if Chatty::BIND == '127.0.0.1'
       own
@@ -420,11 +421,11 @@ module Lcty
     end
 
     # The line logged when a page's Origin is refused: the Origin as sent (quoted, at most 200 characters, since the page
-    # chose it) and the allowed origins, so that the one to add to LCTY_ALLOWED_ORIGIN can be read from the log. The
-    # page gets only "cross-origin".
+    # chose it) and the allowed origins, so that the one to add to allowed_origins of server_settings.json can be read
+    # from the log. The page gets only "cross-origin".
     def refusal(origin)
       "lcty-rb: /v1/rpc refused the Origin #{origin.to_s[0, 200].inspect}; allowed: " \
-        "#{Rpc.allowed_origins.join(' ')} (add it to LCTY_ALLOWED_ORIGIN)"
+        "#{Rpc.allowed_origins.join(' ')} (add it to allowed_origins in #{Chatty::SETTINGS_PATH})"
     end
 
     class Servlet < WEBrick::HTTPServlet::AbstractServlet

@@ -45,7 +45,7 @@ class RpcTest < Lcty::Scenarios
       step('Then the status is 403') { assert_equal '403', status }
       step("And the server logs that it refused the Origin \"#{origin}\", with the allowed origin \"http://allowed.test\"") do
         assert_includes err, "lcty-rb: /v1/rpc refused the Origin #{origin.inspect}; allowed: http://allowed.test " \
-                             '(add it to LCTY_ALLOWED_ORIGIN)'
+                             "(add it to allowed_origins in #{Chatty::SETTINGS_PATH})"
       end
     end
   end
