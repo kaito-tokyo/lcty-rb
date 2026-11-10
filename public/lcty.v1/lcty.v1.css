@@ -427,9 +427,9 @@ lcty-setup {
 }
 /* before the first message only the title and the buttons show: the system prompt and the tags
    come with the conversation; proposing memory needs tags */
-lcty-c:not(:has(> lcty-message)) > lcty-setup,
-lcty-c:not(:has(> lcty-message))::part(lcty-c__tags),
-lcty-c:not(:has(> lcty-message))::part(lcty-c__propose-memory),
+lcty-c:not(:has(> lcty-message, > lcty-msg)) > lcty-setup,
+lcty-c:not(:has(> lcty-message, > lcty-msg))::part(lcty-c__tags),
+lcty-c:not(:has(> lcty-message, > lcty-msg))::part(lcty-c__propose-memory),
 lcty-c:not([data-setup-tags])::part(lcty-c__propose-memory) {
 	display: none;
 }
@@ -661,55 +661,61 @@ lcty-message::part(lcty-message__thinking-body) {
 	max-height: 50vh;
 	overflow-y: auto;
 }
-/* a <lcty-thinking> child that files written before the view moved into lcty-message may still have */
-lcty-message > lcty-thinking {
-	display: none;
-}
 /* markdown (the reply's <article>) */
-lcty-message > article {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article {
 	display: block;
 	overflow-wrap: anywhere;
 }
 lcty-message.flash .user-text,
-lcty-message.flash > article {
+lcty-message.flash > article,
+lcty-msg.flash > article {
 	animation: flash 1.6s ease-out;
 } /* a search hit opened */
 .md-tail {
 	display: contents;
 }
-lcty-message > article > :first-child,
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article > :first-child,
 .md-tail > :first-child {
 	margin-top: 0;
 }
-lcty-message > article :is(p, ul, ol, blockquote, .codeblock, .table-wrap) {
+:is(lcty-message, lcty-msg[data-role="model"])
+	> article
+	:is(p, ul, ol, blockquote, .codeblock, .table-wrap) {
 	margin: 0.55em 0;
 }
-lcty-message > article :is(h1, h2, h3, h4, h5, h6) {
+:is(lcty-message, lcty-msg[data-role="model"])
+	> article
+	:is(h1, h2, h3, h4, h5, h6) {
 	line-height: 1.35;
 	margin: 1em 0 0.4em;
 }
-lcty-message > article :is(ul, ol) {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article :is(ul, ol) {
 	padding-left: 1.6em;
 }
-lcty-message > article li > :is(ul, ol) {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> article
+	li
+	> :is(ul, ol) {
 	margin: 0.15em 0;
 }
-lcty-message > article blockquote {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article blockquote {
 	border-left: 3px solid var(--border);
 	margin-left: 0;
 	padding-left: 12px;
 	color: var(--fg-dim);
 }
-lcty-message > article hr {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article hr {
 	border: 0;
 	border-top: 1px solid var(--border);
 	margin: 1.2em 0;
 }
-lcty-message > article a {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article a {
 	color: var(--accent);
 }
 /* Suggested next messages (<suggestion-for-user-turn>): a click puts the text into the composer */
-lcty-message > article button.suggestion {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> article
+	button.suggestion {
 	font: inherit;
 	color: var(--accent);
 	background: transparent;
@@ -723,10 +729,15 @@ lcty-message > article button.suggestion {
 	white-space: normal;
 	cursor: pointer;
 }
-lcty-message > article button.suggestion:hover {
+:is(lcty-message, lcty-msg[data-role="model"])
+	> article
+	button.suggestion:hover {
 	background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
-lcty-message > article :not(pre) > code {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> article
+	:not(pre)
+	> code {
 	background: var(--bg-code);
 	border: 1px solid var(--border);
 	border-radius: 5px;
@@ -759,15 +770,77 @@ lcty-message > article :not(pre) > code {
 .table-wrap {
 	overflow-x: auto;
 }
-lcty-message > article table {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article table {
 	border-collapse: collapse;
 }
-lcty-message > article :is(th, td) {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article :is(th, td) {
 	border: 1px solid var(--border);
 	padding: 4px 10px;
 }
-lcty-message > article th {
+:is(lcty-message, lcty-msg:where([data-role="model"])) > article th {
 	background: var(--bg-side);
+}
+
+/* ---- The elements of LCTYSP-0013: <lcty-msg> and <lcty-thinking>, their <article> through a slot; a model's
+   <article> is styled as the markdown of <lcty-message> above ---- */
+lcty-msg,
+lcty-thinking {
+	box-sizing: border-box;
+	display: block;
+	max-width: var(--content-width);
+	width: 100%;
+	margin: 0 auto;
+	padding: 10px 16px;
+}
+/* the thinking before a reply, as the thinking view of <lcty-message> */
+lcty-thinking {
+	padding-bottom: 0;
+}
+/* a <lcty-thinking> child that files written before the view moved into lcty-message may still have */
+lcty-message > lcty-thinking {
+	display: none;
+}
+/* [id]: every <lcty-thinking> of LCTYSP-0013 has one (think-…), and it keeps this rule above the .flash rules */
+lcty-thinking[id] > article {
+	box-sizing: border-box;
+	white-space: pre-wrap;
+	color: var(--fg-dim);
+	border-left: 3px solid var(--border);
+	padding: 2px 0 2px 12px;
+	margin: 4px 0;
+	max-height: 50vh;
+	overflow-y: auto;
+}
+lcty-msg::part(lcty-msg__head) {
+	display: flex;
+	align-items: center;
+	color: var(--fg-dim);
+	min-height: 24px;
+}
+lcty-msg[data-role="user"] > article {
+	background: var(--bg-user);
+	border-radius: var(--radius);
+	padding: 8px 14px;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+/* system and memory: collapsed, as <lcty-setup> */
+lcty-msg:is([data-role="system"], [data-role="memory"]) {
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+lcty-msg::part(lcty-msg__summary),
+lcty-thinking::part(lcty-thinking__summary) {
+	color: var(--fg-dim);
+	cursor: pointer;
+}
+lcty-msg:is([data-role="system"], [data-role="memory"]) > article {
+	white-space: pre-wrap;
+	background: var(--bg-user);
+	padding: 8px 12px;
+	border-radius: 8px;
+	margin: 6px 0 0;
+	font-family: var(--font-mono);
 }
 
 /* ---- <lcty-cmd> (js/ui/lcty-cmd.js): shown only while running, a spinner and a stop button; floats above the

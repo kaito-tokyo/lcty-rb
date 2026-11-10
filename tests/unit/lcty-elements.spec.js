@@ -533,6 +533,71 @@ test("Finishing shows how an incomplete reply ended and its timings", async ({
 	});
 });
 
+for (const [kase, elements, html, answer] of [
+	[
+		"LCTYSP-0003",
+		"an <lcty-setup> and an <lcty-message>",
+		'<lcty-setup data-instructions=""></lcty-setup><lcty-message data-role="user"></lcty-message>',
+		false,
+	],
+	[
+		"messages of 0003 only",
+		"an <lcty-message>",
+		'<lcty-message data-role="user"></lcty-message>',
+		false,
+	],
+	[
+		"LCTYSP-0013",
+		"an <lcty-msg> and an <lcty-thinking>",
+		'<lcty-msg data-role="user"></lcty-msg><lcty-thinking></lcty-thinking>',
+		true,
+	],
+	["no element", "nothing", "", true],
+]) {
+	test(`isLctyMsgFile tells a file of LCTYSP-0013 from one of LCTYSP-0003 (${kase})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await test.step(`Given the container holds ${elements}`, () =>
+			fileMessages(page, html));
+		await test.step(`Then isLctyMsgFile is ${answer}`, async () => {
+			expect(await page.evaluate(() => window.E.isLctyMsgFile(window.c))).toBe(
+				answer,
+			);
+		});
+	});
+}
+
+test("readLctyMsgs reads the user and model messages of a file of LCTYSP-0013", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	const u = "0190f3a1-7c2e-7abc-8def-0123456789ab";
+	const m = "0190f3a1-7c2e-7abc-8def-0123456789ac";
+	const at = "2026-11-10T09:00:00+09:00";
+	await test.step("Given the container holds a system <lcty-msg>, a user one, an <lcty-thinking>, a model one with its text in data-content-base64, and an <lcty-cmd>", () =>
+		fileMessages(
+			page,
+			`<lcty-msg data-role="system" id="sys-${u}" data-content="be brief"><article>be brief</article></lcty-msg>` +
+				`<lcty-msg data-role="user" id="msg-u-${u}" data-at="${at}" data-content="hi"><article>hi</article></lcty-msg>` +
+				`<lcty-thinking id="think-${m}" data-at="${at}" data-content="hmm"><article>hmm</article></lcty-thinking>` +
+				`<lcty-msg data-role="model" id="msg-m-${m}" data-at="${at}" data-content-base64="5pel5pys6Kqe"><article>日本語</article></lcty-msg>` +
+				`<lcty-cmd id="cmd-${m}" data-op="send" data-at="${at}"></lcty-cmd>`,
+		));
+	let msgs;
+	await test.step("When readLctyMsgs reads it", async () => {
+		msgs = await page.evaluate(() => window.E.readLctyMsgs(window.c));
+	});
+	await test.step("Then it returns the user and model messages as id, role, time and content, with the bare ids and model as assistant", () => {
+		expect(msgs).toEqual([
+			{ id: u, role: "user", at, content: "hi" },
+			{ id: m, role: "assistant", at, content: "日本語" },
+		]);
+	});
+});
+
 test("A message of the file is read from its attributes", async ({
 	page,
 	context,

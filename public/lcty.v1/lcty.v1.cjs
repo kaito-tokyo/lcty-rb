@@ -856,6 +856,101 @@
 	}
 }
 
+/** The text an element of LCTYSP-0013 holds: data-content, or data-content-base64 (UTF-8) when it is there; "" when it
+ * cannot be read. */
+/*export*/ function lctyContentOf(el) {
+	const base64 = el.getAttribute("data-content-base64");
+	if (base64 == null) return el.getAttribute("data-content") || "";
+	try {
+		return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+			Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)),
+		);
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * <lcty-msg>: a message of a conversation file of LCTYSP-0013. Its <article>, as written in the file, shows through a
+ * slot. user and model have a head with who wrote it; system and memory are collapsed, as <lcty-setup> is.
+ */
+/*export*/ class LctyMsgElement extends HTMLElement {
+	static observedAttributes = ["data-role", "data-tag"];
+
+	constructor() {
+		super();
+		this.attachShadow({ mode: "open" });
+		this.#build();
+	}
+
+	attributeChangedCallback(_name, old, value) {
+		if (old !== value) this.#build();
+	}
+
+	#build() {
+		const _ = LctyT._;
+		const role = this.getAttribute("data-role");
+		const tag = this.getAttribute("data-tag");
+		const slot = document.createElement("slot");
+		this.who = null;
+		this.details = null;
+		this.summary = null;
+		if (role === "system" || role === "memory") {
+			this.summary = document.createElement("summary");
+			this.summary.setAttribute("part", "lcty-msg__summary");
+			const what =
+				role === "system"
+					? _("systemPrompt", "System prompt")
+					: _("memoryOf", "Memory");
+			this.summary.append(tag ? `${what} · ${tag}` : what);
+			this.details = document.createElement("details");
+			this.details.setAttribute("part", "lcty-msg__details");
+			this.details.append(this.summary, slot);
+			this.shadowRoot.replaceChildren(this.details);
+			return;
+		}
+		this.who = document.createElement("span");
+		this.who.setAttribute("part", "lcty-msg__who");
+		this.who.append(
+			role === "user"
+				? _("user", "You")
+				: role === "model"
+					? _("assistant", "Assistant")
+					: "",
+		);
+		const head = document.createElement("div");
+		head.setAttribute("part", "lcty-msg__head");
+		head.append(this.who);
+		this.shadowRoot.replaceChildren(head, slot);
+	}
+}
+
+/**
+ * <lcty-thinking>: the thinking before a reply in a conversation file of LCTYSP-0013, collapsed, with the number of
+ * characters of its text (data-content or data-content-base64) as the summary. Its <article> shows through a slot.
+ */
+/*export*/ class LctyThinkingElement extends HTMLElement {
+	static observedAttributes = ["data-content", "data-content-base64"];
+
+	constructor() {
+		super();
+		this.summary = document.createElement("summary");
+		this.summary.setAttribute("part", "lcty-thinking__summary");
+		this.details = document.createElement("details");
+		this.details.setAttribute("part", "lcty-thinking__details");
+		this.details.append(this.summary, document.createElement("slot"));
+		this.attachShadow({ mode: "open" }).append(this.details);
+		this.attributeChangedCallback();
+	}
+
+	attributeChangedCallback() {
+		this.summary.textContent = LctyT._(
+			"thinkingDone",
+			"Thinking ({n} characters)",
+		).replace("{n}", lctyContentOf(this).length.toLocaleString());
+	}
+}
+
 /*export*/ class LctyComposerElement extends HTMLElement {
 	constructor() {
 		super();
@@ -1060,6 +1155,8 @@
 	registry.define("lcty-c", LctyCElement);
 	registry.define("lcty-setup", LctySetupElement);
 	registry.define("lcty-message", LctyMessageElement);
+	registry.define("lcty-msg", LctyMsgElement);
+	registry.define("lcty-thinking", LctyThinkingElement);
 	registry.define("lcty-composer", LctyComposerElement);
 	registry.define("lcty-t", LctyTElement);
 }

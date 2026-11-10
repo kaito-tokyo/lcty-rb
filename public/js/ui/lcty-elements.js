@@ -367,6 +367,32 @@ export function readMessages(container) {
 	return messageEls(container).map(messageOf);
 }
 
+/**
+ * Whether the conversation file is in the format of LCTYSP-0013 (lcty-msg): one of LCTYSP-0003 always has an
+ * <lcty-setup>, its first element, so a file without one is of LCTYSP-0013.
+ */
+export function isLctyMsgFile(container) {
+	return !container.querySelector(":scope > lcty-setup, :scope > lcty-message");
+}
+
+/**
+ * The messages of a file of LCTYSP-0013, as readMessages gives those of LCTYSP-0003: the user and model <lcty-msg>
+ * as {id, role, at, content}, with the bare id and model as assistant. system, memory and the other elements are not
+ * messages.
+ */
+export function readLctyMsgs(container) {
+	return [
+		...container.querySelectorAll(
+			':scope > lcty-msg:is([data-role="user"], [data-role="model"])',
+		),
+	].map((el) => ({
+		id: el.id.replace(/^msg-[um]-/, ""),
+		role: el.dataset.role === "model" ? "assistant" : "user",
+		at: el.dataset.at,
+		content: textAttr(el, "data-content") ?? "",
+	}));
+}
+
 // Undo shows only on the last user message (CSS cannot select it, so mark it with an attribute).
 function markLastUser(container) {
 	const users = container.querySelectorAll(

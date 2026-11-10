@@ -11,7 +11,10 @@ SPDX-License-Identifier: Apache-2.0
 - Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md) (the current format, and the rules this one keeps: the head,
   the title slot, characters XML cannot represent, the presentation allowlist),
   [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (the protocol that writes it)
-- Implementation: `lib/rpc/conv_store.rb` (prototype); tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature)
+- Implementation: `lib/rpc/conv_store.rb` (prototype); tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature). The pages
+  show such a file read-only (`<lcty-msg>` and `<lcty-thinking>` of `lcty.v1.cjs`,
+  [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)); tested by [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature)
+  and [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)
 
 ## Principles
 
@@ -201,4 +204,6 @@ the user's data, and the pages of today show and write only the format of LCTYSP
 - The hash that identifies the state of a conversation (for checking a page against the server), decided once this
   format is stable.
 - How an export looks (headings for the roles, how the text of `user` is quoted, separators).
-- How `system` and `memory` are shown on the page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
+- How `system` and `memory` are shown on the page: collapsed for now, under their kind and `data-tag`, as
+  `<lcty-setup>` is ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)); whether they stay so once the pages write
+  them is left open.

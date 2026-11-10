@@ -21,6 +21,9 @@ LctyT.addLang("ja", {
 	setupTags:
 		"タグ（選ぶと、タグのプロンプトとメモリからシステムプロンプトの下書きが入ります）",
 	systemPrompt: "システムプロンプト",
+	memoryOf: "メモリ",
+	lctyMsgReadOnly:
+		"この会話は新しい形式（lcty-msg）です。続きを書くことはまだできません。",
 	none: "（なし）",
 	recompose: "タグから作り直す",
 	setupHint:

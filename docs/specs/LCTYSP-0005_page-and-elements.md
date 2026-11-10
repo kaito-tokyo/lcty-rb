@@ -279,6 +279,8 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
     `__tag`, `__tag-name`, `__meta`.
   - `lcty-message`: `__head`, `__who`, `__actions`, `__action` (`--undo`, `--fork`, `--regenerate`), `__thinking`,
     `__thinking-summary`, `__thinking-body`, `__foot`, `__status`, `__info`, `__timings`.
+  - `lcty-msg`: `__head`, `__who`, `__details`, `__summary`.
+  - `lcty-thinking`: `__details`, `__summary`.
   - `lcty-composer`: `__form`, `__input`, `__buttons`, `__send`, `__stop`.
   - `lcty-cmd`: `__box`, `__spinner`, `__label`, `__stop`.
 - **Nested Shadow DOMs export their parts under their own names.** `<lcty-c>` exports the sidebar's (and its list's)
@@ -308,6 +310,8 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
 | `<lcty-c>`        | The frame of a conversation file (used only under `/c/`): `<lcty-sidebar>`, header, `<slot>`, spacer, composer, memory dialog                                                                   | `sidebar`, `titleInput`, `tags`, `tagList`, `tagPicker`, `proposeMemoryButton`, `deleteButton`, `composer`, `toEndButton`, `dock`, `memoryDialog`                             |
 | `<lcty-setup>`    | The system prompt (a file element, line 5): `<details>` with its text, from `data-instructions` (or `data-instructions-base64`)                                                                 | `text`                                                                                                                                                                        |
 | `<lcty-message>`  | Head (who, action buttons for the role), a reply's thinking (collapsed, from `data-thinking`), `<slot>`, foot                                                                                   | `who`, `undoButton`, `forkButton`, `regenerateButton`, `thinking`, `thinkingSummary`, `thinkingBody` (`null` when the role has none), `foot`, `statusText`, `info`, `timings` |
+| `<lcty-msg>`      | A message of a file of LCTYSP-0013: user and model a head (who) and `<slot>`; system and memory a `<details>` whose summary is the kind and `data-tag`, with the `<slot>`                       | `who` (user and model), `details`, `summary` (system and memory); the others `null`                                                                                           |
+| `<lcty-thinking>` | The thinking before a reply in a file of LCTYSP-0013: `<details>` whose summary is the number of characters of `data-content` (or `data-content-base64`), with the `<slot>`                     | `details`, `summary`                                                                                                                                                          |
 | `<lcty-composer>` | Form (input, send, stop)                                                                                                                                                                        | `form`, `input`, `sendButton`, `stopButton`                                                                                                                                   |
 | `<lcty-cmd>`      | Spinner, label, stop button (shown only while running, floating above the composer through `slot="float"`). **Defined in a module** (`js/ui/lcty-cmd.js`), because a command is behavior itself | `label`, `stopButton`, `run()`, `abort()`                                                                                                                                     |
 
@@ -327,6 +331,23 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   popover in, so doing it after the first paint changes nothing on screen. Where anchor positioning is supported the popover opens just
   above the ⓘ, its implicit anchor (below it when there is no room); elsewhere it is centered, as popovers are by
   default.
+- **The elements of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)** (`lcty-msg`, `lcty-thinking`) show
+  their `<article>` as it is written in the file, through a `<slot>`: the client writes the presentation of every
+  element, so nothing is rendered from `data-content`, and a file opened directly (`file://`) shows the same.
+  - A `user` or `model` `<lcty-msg>` has a head with who wrote it ("You", "Assistant"), and its `<article>` is styled
+    as the user text or as the Markdown of a reply of `<lcty-message>`.
+  - A `system` or `memory` `<lcty-msg>` is collapsed, as `<lcty-setup>` is: its summary is "System prompt" or
+    "Memory", followed by " · " and `data-tag` when it has one.
+  - An `<lcty-thinking>` is collapsed, its summary "Thinking (n characters)", as the thinking of `<lcty-message>`.
+  - Changing `data-role` or `data-tag` rebuilds a `<lcty-msg>`, and changing the text of an `<lcty-thinking>` its
+    summary.
+- **A file of LCTYSP-0013 is read-only for now.** The module tells the format by the absence of `<lcty-setup>` and
+  `<lcty-message>`, which every file of LCTYSP-0003 has. Until the pages write such a file through `/v1/rpc`:
+  - the composer is disabled, with a notice for a placeholder;
+  - the messages get no handlers, and no command runs, so a trailing `<lcty-cmd>` stays an element of the file;
+  - the title, the tags and deleting still work;
+  - the header's chips are the current tags, since the file has no `data-setup-tags`;
+  - a search result scrolls to `#msg-u-<id>`.
 - `<lcty-conv-list>` (the sidebar's conversation list) is defined in `lcty.v1.cjs` like the other elements: it builds
   the items (title, tag chips, date and, when known, the message count) as parts of `<lcty-sidebar>`'s Shadow DOM
   and fires `select` and `tag` (with the name the chip shows). Pages give it items (`show(items, empty)`) and the
@@ -366,7 +387,7 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
     `attributeChangedCallback` for its attribute only.
   - **The system prompt is `<lcty-setup>` itself**, the first of the file's elements: it shows its own text (collapsed)
     through the `<slot>`, so nothing is copied into the frame.
-  - **What shows before the first message is CSS:** `lcty-c:not(:has(> lcty-message))` hides the system prompt, the
+  - **What shows before the first message is CSS:** `lcty-c:not(:has(> lcty-message, > lcty-msg))` hides the system prompt, the
     tags and "propose memory" (which also needs `data-setup-tags`); an empty `lcty-setup` is
     hidden too. No script watches the children.
   - Buttons do nothing until the module has loaded.
