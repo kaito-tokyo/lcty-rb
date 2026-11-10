@@ -50,7 +50,7 @@ the layout before that (`_vectors.*`).
 | `lcty_t.sqlite`                               | Source (the current tags of conversations, `t_has_many_c`; tag definitions and memory are `t/`, below)                           | —                                                                                                                                                      |
 | `lcty_c.sqlite`                               | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `lcty.rb convert`)                   | —                                                                                                                                                      |
 | `server_settings.txt`                         | Source (the options of lcty.rb, one per line; [below](#settings))                                                                |
-| `htdigest`                                    | Source (the users of Digest authentication, as Apache's htdigest writes them; [below](#authentication))                          | —                                                                                                                                                      |
+| `.htdigest`                                   | Source (the users of Digest authentication, as Apache's htdigest writes them; [below](#authentication))                          | —                                                                                                                                                      |
 | `c-former/*.html`                             | Source (every conversation file as it was before `lcty.rb convert` converted it; never deleted)                                  | —                                                                                                                                                      |
 | `lcty_fuzzy_search.sqlite` (+ `-wal`, `-shm`) | The vectors of every embedding model: derived, but only the browser can make them again, so they are kept and backed up          | Re-embedded by the browser while a page is open, when lost ([LCTYSP-0008](LCTYSP-0008_vector-binary.md))                                               |
 | `_index.sqlite` (+ `-wal`, `-shm`)            | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
@@ -192,18 +192,19 @@ browser.
   `lcty-rb: <where>: <what is wrong>` (the path of the file, or "the command line" with the usage) and exits with the
   status 1 ([LCTYSP-3008](LCTYSP-3008_server-settings.feature)).
 - **At startup the server prints** the URL of every address at its port, the data directory, the origins whose pages may use
-  `/v1/rpc`, the settings file it read, or that there is none, and the htdigest file it uses with its realm, or that
+  `/v1/rpc`, the settings file it read, or that there is none, and the `.htdigest` file it uses with its realm, or that
   there is none.
 
 ### Authentication
 
-- **An `htdigest` file in the data directory turns on HTTP Digest authentication;** without one no request needs
-  credentials. There is no option for it: the file is the setting, and it is backed up with the data.
+- **A `.htdigest` file in the data directory turns on HTTP Digest authentication;** without one no request needs
+  credentials. There is no option for it: the file is the setting, and it is backed up with the data. It is named as
+  Apache names it, so it is a hidden file (`ls -a` shows it); it is the one file of the data directory named so.
 - **The file is as Apache's `htdigest` writes it,** one `user:realm:hash` per line (the hash the MD5 of
   `user:realm:password`), for example:
 
   ```bash
-  htdigest -c "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/htdigest" lcty-rb alice
+  htdigest -c "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/.htdigest" lcty-rb alice
   ```
 
   Every line names one realm, the one the browser asks the password for. A file that is not this, holds no user or

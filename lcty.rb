@@ -154,7 +154,7 @@ module Lcty
     raise PortError, "no free port from #{ports.first} to #{ports.last} (set one with LCTY_PORT or PORT)"
   end
 
-  # Digest authentication with the users of path (Chatty::HTDIGEST_PATH, the htdigest of the data directory), or nil when
+  # Digest authentication with the users of path (Chatty::HTDIGEST_PATH, the .htdigest of the data directory), or nil when
   # there is no such file: then no request needs credentials. The file is as Apache's htdigest writes it, one
   # user:realm:hash per line, every line of one realm, which is the realm the browser is asked for (LCTYSP-0010). A file
   # that is not one, holds no user or names two realms raises Chatty::SettingsError: the server does not start

@@ -45,14 +45,14 @@ Feature: LCTYSP-3019 The entry point
     When lcty.rb is run with "--help"
     Then it exits with the status 0 and prints the usage with --bind-ip, --base-url and --allowed-origin
 
-  # Digest authentication (LCTYSP-0010): an htdigest file in the data directory turns it on for every request
-  Scenario: Without an htdigest file no request needs credentials
-    Given a data directory without htdigest
+  # Digest authentication (LCTYSP-0010): a .htdigest file in the data directory turns it on for every request
+  Scenario: Without a .htdigest file no request needs credentials
+    Given a data directory without .htdigest
     When Lcty.digest_auth is called
     Then it returns nil
 
-  Scenario: With an htdigest file every request needs one of its users
-    Given a data directory whose htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
+  Scenario: With a .htdigest file every request needs one of its users
+    Given a data directory whose .htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
     And a server listening with Lcty.digest_auth, the site mounted
     When /c/ is requested without credentials
     Then it is answered 401 with a Digest challenge of the realm "lcty-rb"
@@ -64,15 +64,15 @@ Feature: LCTYSP-3019 The entry point
     Then it is answered 401
 
   Scenario: The WebSocket of /v1/rpc needs the credentials too
-    Given a data directory whose htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
+    Given a data directory whose .htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
     And a server listening with Lcty.digest_auth, the site mounted
     When the WebSocket of /v1/rpc is opened without credentials
     Then the handshake is answered 401
     When it is opened with the Digest response of "alice" and "secret-pass"
     Then the handshake is answered 101
 
-  Scenario Outline: An htdigest file that cannot be used stops the server
-    Given a data directory whose htdigest is <content>
+  Scenario Outline: A .htdigest file that cannot be used stops the server
+    Given a data directory whose .htdigest is <content>
     When Lcty.digest_auth is called
     Then it raises a SettingsError that starts with the path of the file and "<message>"
 

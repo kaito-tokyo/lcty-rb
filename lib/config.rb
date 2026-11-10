@@ -85,8 +85,8 @@ module Chatty
   SETTINGS_PATH = File.join(DATA_DIR, 'server_settings.txt')
   # Source of truth: the users of Digest authentication, as Apache's htdigest writes them (user:realm:MD5 of
   # user:realm:password). When the file is there every request needs one of them; when it is not, none does
-  # (LCTYSP-0010)
-  HTDIGEST_PATH = File.join(DATA_DIR, 'htdigest')
+  # (LCTYSP-0010). Named as Apache names it, a hidden file
+  HTDIGEST_PATH = File.join(DATA_DIR, '.htdigest')
   # Each setting and the environment variable that overrides the file
   SETTING_ENV = { bind_ips: 'LCTY_BIND_IP', base_url: 'LCTY_BASE_URL', allowed_origins: 'LCTY_ALLOWED_ORIGIN' }.freeze
   # The settings that take several values (once per option); their environment variable takes one only, since the
