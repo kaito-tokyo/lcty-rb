@@ -193,15 +193,15 @@ Feature: LCTYSP-1016 The elements of a conversation file
       | model | Assistant |
 
   Scenario Outline: A system or memory message is collapsed under its kind and its tag
-    Given the body holds <lcty-msg data-role="<role>" <tag>data-content="Be brief."><article>Be brief.</article></lcty-msg>
-    Then its Shadow DOM is a closed <details> (part lcty-msg__details), its field details, holding the <summary> "<summary>" (part lcty-msg__summary), its field summary, and a <slot>
+    Given the body holds <lcty-msg <attributes> data-content="Be brief."><article>Be brief.</article></lcty-msg>
+    Then its Shadow DOM is a closed <details> (part lcty-msg__details), its field details, holding the <summary> "<text>" (part lcty-msg__summary), its field summary, and a <slot>
     And its field who is null
 
     Examples:
-      | case               | role   | tag              | summary              |
-      | system without tag | system |                  | System prompt        |
-      | system of a tag    | system | data-tag="ruby"  | System prompt · ruby |
-      | memory of a tag    | memory | data-tag="ruby"  | Memory · ruby        |
+      | case               | attributes                         | text                 |
+      | system without tag | data-role="system"                 | System prompt        |
+      | system of a tag    | data-role="system" data-tag="ruby" | System prompt · ruby |
+      | memory of a tag    | data-role="memory" data-tag="ruby" | Memory · ruby        |
 
   Scenario: Setting the role or the tag rebuilds the message
     Given the body holds <lcty-msg data-role="user"><article>Hi</article></lcty-msg>
@@ -212,10 +212,10 @@ Feature: LCTYSP-1016 The elements of a conversation file
 
   Scenario Outline: A thinking is collapsed under the number of characters of its text
     Given the body holds <lcty-thinking <attributes>><article>…</article></lcty-thinking>
-    Then its Shadow DOM is a closed <details> (part lcty-thinking__details), its field details, holding the <summary> "<summary>" (part lcty-thinking__summary), its field summary, and a <slot>
+    Then its Shadow DOM is a closed <details> (part lcty-thinking__details), its field details, holding the <summary> "<text>" (part lcty-thinking__summary), its field summary, and a <slot>
 
     Examples:
-      | case                   | attributes                                         | summary                 |
+      | case                   | attributes                                         | text                    |
       | data-content           | data-content="abc"                                 | Thinking (3 characters) |
       | base64 over the plain  | data-content="plain" data-content-base64="AW9r"    | Thinking (3 characters) |
       | base64 that is invalid | data-content="plain" data-content-base64="!!!"     | Thinking (0 characters) |

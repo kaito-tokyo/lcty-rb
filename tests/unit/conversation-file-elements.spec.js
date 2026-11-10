@@ -957,10 +957,14 @@ for (const [role, who] of [
 	});
 }
 
-for (const [kase, role, tag, summary] of [
-	["system without tag", "system", "", "System prompt"],
-	["system of a tag", "system", 'data-tag="ruby"', "System prompt · ruby"],
-	["memory of a tag", "memory", 'data-tag="ruby"', "Memory · ruby"],
+for (const [kase, attributes, summary] of [
+	["system without tag", 'data-role="system"', "System prompt"],
+	[
+		"system of a tag",
+		'data-role="system" data-tag="ruby"',
+		"System prompt · ruby",
+	],
+	["memory of a tag", 'data-role="memory" data-tag="ruby"', "Memory · ruby"],
 ]) {
 	test(`A system or memory message is collapsed under its kind and its tag (${kase})`, async ({
 		page,
@@ -969,7 +973,7 @@ for (const [kase, role, tag, summary] of [
 		await background(page, context);
 		await givenBody(
 			page,
-			`<lcty-msg data-role="${role}" ${tag ? `${tag} ` : ""}data-content="Be brief."><article>Be brief.</article></lcty-msg>`,
+			`<lcty-msg ${attributes} data-content="Be brief."><article>Be brief.</article></lcty-msg>`,
 		);
 		let shadow;
 		await test.step(`Then its Shadow DOM is a closed <details> (part lcty-msg__details), its field details, holding the <summary> "${summary}" (part lcty-msg__summary), its field summary, and a <slot>`, async () => {
