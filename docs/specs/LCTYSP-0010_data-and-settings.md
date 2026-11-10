@@ -9,16 +9,17 @@ SPDX-License-Identifier: Apache-2.0
 - Status: Accepted. Keeping the browser's copies up to date is to be superseded by
   [LCTYSP-0014](LCTYSP-0014_browser-sync.md) once the pages use `/v1/rpc`.
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)
-- Implementation: `lib/config.rb` (`LCTY_DATA_DIR` and `server_settings.json`), `lcty.rb` (the base URL),
+- Implementation: `lib/config.rb` (`LCTY_DATA_DIR`, the port, and the options of `server_settings.txt`, the
+  environment and the command line), `lcty.rb` (the base URL, the command line and choosing the port),
   `lib/rpc/servlet.rb` (the allowed origins), `lib/v1/servlet.rb` (`/v1/defaults.json`), `public/js/common.js`, `public/js/ui/settings-dialog.js`, `public/js/api/meta-db.js`, `public/lcty.v1/lcty.v1.c.worker.cjs`
 
 ## Summary
 
 All data lives in the data directory, `~/Library/Application Support/tokyo.kaito.lcty-rb/Data/` by default on macOS
 (`$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data/` elsewhere; `LCTY_DATA_DIR`, below); the specs write it as `data/`. Files whose names start with `_` are derived and can be deleted at any
-time; everything else is the source of truth. The server has only a few settings: `LCTY_DATA_DIR`, an environment
-variable, and the others in `server_settings.json` of the data directory, which environment variables can override;
-every other setting is kept by the browser.
+time; everything else is the source of truth. The server has only a few settings: `LCTY_DATA_DIR` and the port,
+environment variables, and the options of lcty.rb, kept in `server_settings.txt` of the data directory and overridden
+by environment variables and the command line; every other setting is kept by the browser.
 
 ## Data directory
 
@@ -48,7 +49,7 @@ the layout before that (`_vectors.*`).
 | `c/lcty.v1.js`, `c/lcty.v1.css`               | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                                                                                      |
 | `lcty_t.sqlite`                               | Source (the current tags of conversations, `t_has_many_c`; tag definitions and memory are `t/`, below)                           | —                                                                                                                                                      |
 | `lcty_c.sqlite`                               | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `lcty.rb convert`)                   | —                                                                                                                                                      |
-| `server_settings.json`                        | Source (the server's settings but `LCTY_DATA_DIR`; [below](#settings))                                                           | —                                                                                                                                                      |
+| `server_settings.txt`                         | Source (the options of lcty.rb, one per line; [below](#settings))                                                                | —                                                                                                                                                      |
 | `c-former/*.html`                             | Source (every conversation file as it was before `lcty.rb convert` converted it; never deleted)                                  | —                                                                                                                                                      |
 | `lcty_fuzzy_search.sqlite` (+ `-wal`, `-shm`) | The vectors of every embedding model: derived, but only the browser can make them again, so they are kept and backed up          | Re-embedded by the browser while a page is open, when lost ([LCTYSP-0008](LCTYSP-0008_vector-binary.md))                                               |
 | `_index.sqlite` (+ `-wal`, `-shm`)            | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
@@ -129,43 +130,53 @@ own version says what it stores.
 
 ## Settings
 
-**Rule: the server has only a few settings, read at startup, and they live in the data directory. Everything else is a
-browser setting.** The server never talks to the LLM ([LCTYSP-0001](LCTYSP-0001_architecture.md)), so the endpoint, key
-and model names only matter to the browser.
+**Rule: the server has only a few settings, read at startup. Everything else is a browser setting.** The server never
+talks to the LLM ([LCTYSP-0001](LCTYSP-0001_architecture.md)), so the endpoint, key and model names only matter to the
+browser.
 
-- **`LCTY_DATA_DIR`, an environment variable, says where the data directory is.** It is the one setting that cannot be
-  in the data directory. Default: `~/Library/Application Support/tokyo.kaito.lcty-rb/Data` on macOS, and
-  `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data` elsewhere (below).
-- **Every other server setting is in `server_settings.json` of the data directory**, a JSON object:
-  - `port`: the port lcty.rb listens on, an integer from 1 to 65535. Default `45280`.
-  - `host`: the address it listens on, a non-empty string. Default `127.0.0.1`.
-  - `base_url`: the path the site is served under ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)), a string.
-    Default `/`.
-  - `allowed_origins`: the origins whose pages may use `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), an
-    array of non-empty strings. Default: `http://<host>:<port>`, and `http://localhost:<port>` on `127.0.0.1`.
+- **Two settings are environment variables only:**
+  - `LCTY_DATA_DIR` says where the data directory is, so it cannot be kept in it. Default:
+    `~/Library/Application Support/tokyo.kaito.lcty-rb/Data` on macOS, and `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data`
+    elsewhere (below).
+  - The port is `LCTY_PORT`, else `PORT` (an integer from 1 to 65535). Each server of a machine needs a port of its
+    own, so the port is not kept with the data. A port asked for that is taken stops the server (the pages, bookmarks
+    and allowed origins name it). Without either, the server listens on the first free port from 45280 to 45379, and
+    says which.
+- **The others are the options of lcty.rb**, one OptionParser for the command line and the file:
+  - `--host=ADDRESS`: the address it listens on. Default `127.0.0.1`.
+  - `--base-url=PATH`: the path the site is served under ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)). Default
+    `/`.
+  - `--allowed-origin=ORIGIN`: an origin whose pages may use `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)),
+    once per origin. Default: `http://<host>:<port>`, and `http://localhost:<port>` on `127.0.0.1`.
+  - `--help` lists them; `--port` is refused with a pointer to `LCTY_PORT`.
+- **`server_settings.txt` of the data directory** holds the options, one per line, as they would be written on the
+  command line (`--host=0.0.0.0`, or the option and its value separated by spaces). Blank lines and lines starting
+  with `#` are left out; any other line that does not start with `--` is an error.
 
-  ```json
-  {
-    "port": 45280,
-    "host": "127.0.0.1",
-    "allowed_origins": ["http://127.0.0.1:45280", "http://umireon-macbook-pro-2021.local:45280"]
-  }
+  ```
+  # lcty-rb
+  --host=127.0.0.1
+  --allowed-origin=http://127.0.0.1:45280
+  --allowed-origin=http://umireon-macbook-pro-2021.local:45280
   ```
 
 - **Why a file:** a server started by launchd (a LaunchAgent) gets its environment only from its plist, which is
   awkward to edit and to reload. The data directory is where the data already is, and the file is backed up with it.
-  Its name has no leading `_`, so it is source-of-truth data.
-- **An environment variable still overrides the file** when it is set and not empty: `PORT`, `LCTY_HOST`,
-  `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` (origins separated by commas or spaces). The tests and the container of CI
-  set them, and nothing has to be written into a data directory for that. The order is the default, then the file,
-  then the environment variable.
+  Its name has no leading `_`, so it is source-of-truth data. Lines of options, not JSON: the same parser and the
+  same names as the command line, comments, and nothing to quote.
+- **Order:** the default, then the file, then the environment variables that are set and not empty (`LCTY_HOST`,
+  `LCTY_BASE_URL`, and `LCTY_ALLOWED_ORIGIN` with its origins separated by commas or spaces), then the command line,
+  each replacing the ones before (the origins of one source replace those of another; within one they add up). The
+  tests and the container of CI set environment variables, and nothing has to be written into a data directory for
+  that.
 - **The file is read once, when the server starts.** A changed file applies after a restart. When there is no file,
-  every setting takes its default, and nothing is created.
-- **A file that cannot be used stops the server:** one that is not JSON, not an object, has a key that is not a setting
-  (so a typo never passes unseen) or a value of the wrong type. lcty.rb prints `lcty-rb: <path>: <what is wrong>` and
-  exits with the status 1 ([LCTYSP-3008](LCTYSP-3008_server-settings.feature)).
-- **At startup the server prints** the address, the data directory, the origins whose pages may use `/v1/rpc`, and the
-  settings file it read, or that there is none.
+  every setting takes its default, and nothing is created. A `server_settings.json` of an earlier version is not read.
+- **A setting that cannot be used stops the server:** an option that is not one (so a typo never passes unseen), one
+  without its value, `--port`, an empty host, or a port that is not a number. lcty.rb prints
+  `lcty-rb: <where>: <what is wrong>` (the path of the file, or "the command line" with the usage) and exits with the
+  status 1 ([LCTYSP-3008](LCTYSP-3008_server-settings.feature)).
+- **At startup the server prints** the address and port, the data directory, the origins whose pages may use
+  `/v1/rpc`, and the settings file it read, or that there is none.
 
 - **The data directory is outside the repository** by default, in the per-user application data folder (named by the
   reverse-DNS id `tokyo.kaito.lcty-rb`), so a checkout can be moved, cleaned or replaced without touching the data. It

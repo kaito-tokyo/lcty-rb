@@ -44,25 +44,30 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
 
 ## Settings
 
-- Server: the environment variable `LCTY_DATA_DIR` says where the data directory is (default
-  `~/Library/Application Support/tokyo.kaito.lcty-rb/Data` on macOS, `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data`, that
-  is `~/.local/share/…` by default, on Linux). The other settings are in `server_settings.json` of that directory,
-  read when the server starts; without the file every setting takes its default:
+- Server:
+  - `LCTY_DATA_DIR` (an environment variable) says where the data directory is (default
+    `~/Library/Application Support/tokyo.kaito.lcty-rb/Data` on macOS, `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data`,
+    that is `~/.local/share/…` by default, on Linux).
+  - The port is the environment variable `LCTY_PORT`, else `PORT`. Without either the server takes the first free
+    port from 45280 to 45379 and prints it.
+  - The other settings are options of `lcty.rb` (`/usr/bin/ruby lcty.rb --help` lists them), written one per line in
+    `server_settings.txt` of the data directory, read when the server starts:
 
-  ```json
-  {
-    "port": 45280,
-    "host": "127.0.0.1",
-    "base_url": "/",
-    "allowed_origins": ["http://127.0.0.1:45280", "http://localhost:45280"]
-  }
-  ```
+    ```
+    # lcty-rb
+    --host=127.0.0.1
+    --base-url=/
+    --allowed-origin=http://127.0.0.1:45280
+    --allowed-origin=http://umireon-macbook-pro-2021.local:45280
+    ```
 
-  - `port` and `host`: where the server listens (default 45280 on 127.0.0.1).
-  - `base_url`: the path the site is served under.
-  - `allowed_origins`: the origins whose pages may use `/v1/rpc`. Add the URL you open the site with when it is not
-    `127.0.0.1` or `localhost` (a `.local` name, a LAN address); the server logs the Origin it refused.
-  - The environment variables `PORT`, `LCTY_HOST`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override the file.
+    - `--host`: the address to listen on (default 127.0.0.1).
+    - `--base-url`: the path the site is served under (default `/`).
+    - `--allowed-origin`: an origin whose pages may use `/v1/rpc`, once per origin. Add the URL you open the site with
+      when it is not `127.0.0.1` or `localhost` (a `.local` name, a LAN address); the server logs the Origin it
+      refused.
+    - The environment variables `LCTY_HOST`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override the file, and the
+      command line overrides both.
 - Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 

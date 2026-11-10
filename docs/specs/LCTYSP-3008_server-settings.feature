@@ -7,90 +7,116 @@
 
 Feature: LCTYSP-3008 Server settings
 
-  lib/config.rb computes the server's settings once, when it is loaded. LCTY_DATA_DIR, an environment variable, gives
-  the data directory, by default the per-user application data folder (~/Library/Application Support on macOS and
-  Windows, $XDG_DATA_HOME or ~/.local/share elsewhere). The other settings are in server_settings.json of the data
-  directory (port, host, base_url and allowed_origins), and an environment variable that is set and not empty
-  overrides one (PORT, LCTY_HOST, LCTY_BASE_URL and LCTY_ALLOWED_ORIGIN). Without either a setting takes its
-  default: the port 45280, the address 127.0.0.1, the base URL "/" and the server's own origins. A settings file that
-  is not JSON, not an object, or has an unknown key or a value of the wrong type stops the server. A relative LCTY_DATA_DIR is resolved against the repository root, and the conversations,
+  lib/config.rb computes the server's settings once, when it is loaded. Two are environment variables only:
+  LCTY_DATA_DIR gives the data directory, by default the per-user application data folder (~/Library/Application
+  Support on macOS and Windows, $XDG_DATA_HOME or ~/.local/share elsewhere), and LCTY_PORT, else PORT, the port; without
+  either PORT is nil and lcty.rb takes the first free port of PORTS_TRIED, 45280 to 45379 (LCTYSP-3019). A port that is
+  not an integer from 1 to 65535 stops the server. The other settings are the options of lcty.rb, parsed by one
+  OptionParser: --host, --base-url and --allowed-origin (once per origin). Chatty.configure(argv) takes them from
+  server_settings.txt of the data directory (one option per line, blank lines and # comments left out), then from the
+  environment variables that are set and not empty (LCTY_HOST, LCTY_BASE_URL and LCTY_ALLOWED_ORIGIN), then from argv,
+  each replacing the ones before, and returns the other arguments; lib/config.rb runs it with no argv when it is
+  loaded. Without any a setting takes its default: the address 127.0.0.1 (Chatty.bind), the base URL "/"
+  (Chatty.base_url) and the server's own origins (Chatty.allowed_origins nil). An option that is not one, lacks its
+  value, is --port or gives an empty host stops the server, named after the file or the command line. A relative LCTY_DATA_DIR is resolved against the repository root, and the conversations,
   the tag files and their lock, the tags of conversations and the search index live at fixed places in the data
   directory. It also defines the patterns of ids and tag references, and HttpError, the error that carries an HTTP status. Each setting is read in a new Ruby process that
   loads lib/config.rb with only the given environment.
 
-  Scenario: Without settings the server listens on 127.0.0.1:45280
-    Given PORT and LCTY_HOST are unset
+  Scenario: Without settings the port is left to lcty.rb and the address is 127.0.0.1
+    Given LCTY_PORT, PORT and LCTY_HOST are unset
     When lib/config.rb is loaded
-    Then PORT is 45280
-    And BIND and BIND_URL_HOST are "127.0.0.1"
+    Then PORT is nil and PORTS_TRIED is 45280 to 45379
+    And Chatty.bind and Chatty.bind_url_host are "127.0.0.1"
 
   Scenario: Empty settings count as unset
-    Given PORT and LCTY_HOST are empty
+    Given LCTY_PORT, PORT and LCTY_HOST are empty
     When lib/config.rb is loaded
-    Then PORT is 45280
-    And BIND is "127.0.0.1"
+    Then PORT is nil
+    And Chatty.bind is "127.0.0.1"
 
   Scenario: PORT sets the port
     Given PORT is "8080"
     When lib/config.rb is loaded
     Then PORT is the integer 8080
 
-  Scenario: A PORT that is not a number stops the server
-    Given PORT is "http"
+  Scenario: LCTY_PORT sets the port, before PORT
+    Given LCTY_PORT is "8081" and PORT is "8080"
     When lib/config.rb is loaded
-    Then loading fails with an ArgumentError about the invalid value "http"
+    Then PORT is the integer 8081
+
+  Scenario Outline: A port that is not an integer from 1 to 65535 stops the server
+    Given LCTY_PORT is "<value>"
+    When lib/config.rb is loaded
+    Then loading fails with the SettingsError "the port must be an integer from 1 to 65535: "<value>""
+
+    Examples:
+      | value |
+      | http  |
+      | 80.5  |
+      | 0     |
+      | 70000 |
 
   Scenario: LCTY_HOST sets the address to listen on
     Given LCTY_HOST is "0.0.0.0"
     When lib/config.rb is loaded
-    Then BIND and BIND_URL_HOST are "0.0.0.0"
+    Then Chatty.bind and Chatty.bind_url_host are "0.0.0.0"
 
   Scenario: An IPv6 address is written in brackets in URLs
     Given LCTY_HOST is "::1"
     When lib/config.rb is loaded
-    Then BIND is "::1"
-    And BIND_URL_HOST is "[::1]"
+    Then Chatty.bind is "::1"
+    And Chatty.bind_url_host is "[::1]"
 
   Scenario: A host name is written in URLs as it is
     Given LCTY_HOST is "localhost"
     When lib/config.rb is loaded
-    Then BIND_URL_HOST is "localhost"
+    Then Chatty.bind_url_host is "localhost"
 
-  # ---- server_settings.json of the data directory ----
+  # ---- server_settings.txt of the data directory, and the command line ----
 
-  Scenario: The settings file of the data directory sets the port, the address, the base URL and the allowed origins
-    Given a data directory whose server_settings.json is {"port": 8080, "host": "0.0.0.0", "base_url": "/lcty/", "allowed_origins": ["http://a.test:8080"]}
+  Scenario: The settings file of the data directory sets the address, the base URL and the allowed origins
+    Given a data directory whose server_settings.txt has the lines "# a comment", "", "--host=0.0.0.0", "--base-url /lcty/", "--allowed-origin=http://a.test:8080" and "--allowed-origin=http://b.test:8080"
     When lib/config.rb is loaded
-    Then PORT is 8080, BIND is "0.0.0.0", BASE_URL_SETTING is "/lcty/" and ALLOWED_ORIGINS_SETTING is ["http://a.test:8080"]
-    And SETTINGS_PATH is its "server_settings.json"
+    Then Chatty.bind is "0.0.0.0", Chatty.base_url is "/lcty/" and Chatty.allowed_origins is ["http://a.test:8080", "http://b.test:8080"]
+    And SETTINGS_PATH is its "server_settings.txt"
 
-  Scenario: Without a settings file every setting takes its default
-    Given a data directory without server_settings.json
+  Scenario: Without a settings file every setting takes its default, and server_settings.json is not read
+    Given a data directory with a server_settings.json of {"host": "0.0.0.0"} and no server_settings.txt
     When lib/config.rb is loaded
-    Then PORT is 45280, BIND is "127.0.0.1", BASE_URL_SETTING is "/" and ALLOWED_ORIGINS_SETTING is nil
-    And no server_settings.json has been created
+    Then Chatty.bind is "127.0.0.1", Chatty.base_url is "/" and Chatty.allowed_origins is nil
+    And no server_settings.txt has been created
 
   Scenario: An environment variable that is set and not empty overrides the file
-    Given a data directory whose server_settings.json is {"port": 8080, "host": "0.0.0.0", "base_url": "/lcty/", "allowed_origins": ["http://a.test:8080"]}
-    And PORT is "9090", LCTY_HOST is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test, http://c.test"
+    Given a data directory whose server_settings.txt has the lines "--host=0.0.0.0", "--base-url=/lcty/" and "--allowed-origin=http://a.test:8080"
+    And LCTY_HOST is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test, http://c.test"
     When lib/config.rb is loaded
-    Then PORT is 9090, BIND is "0.0.0.0", BASE_URL_SETTING is "/x/" and ALLOWED_ORIGINS_SETTING is ["http://b.test", "http://c.test"]
+    Then Chatty.bind is "0.0.0.0", Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test", "http://c.test"]
+
+  Scenario: The command line overrides the environment and the file, and the other arguments are returned
+    Given a data directory whose server_settings.txt has the lines "--host=0.0.0.0" and "--allowed-origin=http://a.test:8080"
+    And LCTY_HOST is "::1"
+    When Chatty.configure is given "--host=10.0.0.1", "convert" and "--allowed-origin=http://c.test"
+    Then Chatty.bind is "10.0.0.1" and Chatty.allowed_origins is ["http://c.test"]
+    And it returns "convert"
 
   Scenario Outline: A settings file that cannot be used stops the server
-    Given a data directory whose server_settings.json is <content>
+    Given a data directory whose server_settings.txt is the line "<line>"
     When lib/config.rb is loaded
     Then loading fails with a SettingsError that starts with the path of the file and "<message>"
 
     Examples:
-      | content                         | message                                                               |
-      | {port: 1}                       | not JSON:                                                             |
-      | [1, 2]                          | must be a JSON object                                                 |
-      | {"prot": 8080}                  | unknown setting "prot" (known: port, host, base_url, allowed_origins) |
-      | {"port": "8080"}                | port must be an integer from 1 to 65535                               |
-      | {"port": 70000}                 | port must be an integer from 1 to 65535                               |
-      | {"host": ""}                    | host must be a non-empty string                                       |
-      | {"base_url": 1}                 | base_url must be a string                                             |
-      | {"allowed_origins": "http://a"} | allowed_origins must be an array of non-empty strings                 |
+      | line         | message                                          |
+      | --prot=1     | invalid option: --prot=1                         |
+      | --host       | missing argument: --host                         |
+      | host=1       | not an option: host=1                            |
+      | --port=8080  | the port is not an option; set LCTY_PORT or PORT |
+      | --host=      | the host must not be empty                       |
+
+  Scenario: An option of the command line that is not one stops the server
+    Given a data directory without server_settings.txt
+    When Chatty.configure is given "--prot"
+    Then it fails with the SettingsError "the command line: invalid option: --prot"
 
   Scenario: An absolute LCTY_DATA_DIR is the data directory
     Given LCTY_DATA_DIR is an absolute path

@@ -108,8 +108,8 @@ a module imported once the page has loaded attaches every feature without blocki
   a layer around the server.
 - **`lcty.rb` only wires the servlets together** ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)): it opens the data
   (`Chatty.open_data`), copies what a file opened directly needs into the data directory (`Lcty.publish_offline`),
-  builds the WEBrick server and mounts everything under the base URL (`base_url` of `server_settings.json` or
-  `LCTY_BASE_URL`, [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#settings); `Lcty.mount_all`): `v1`, `c`, `t`, each file
+  builds the WEBrick server and mounts everything under the base URL (`--base-url` or `LCTY_BASE_URL`,
+  [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#settings); `Lcty.mount_all`): `v1`, `c`, `t`, each file
   of `lcty.v1/`, the page entries and the rest of `public/`. It is started in the root of the repository: the files of
   the site are found from the working directory. Nothing is gzipped (the server is usually on the same machine). Shared
   parts live in `lib/`: settings (`lib/config.rb`) and storage (`lib/store.rb`).

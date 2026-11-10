@@ -7,8 +7,10 @@
 
 Feature: LCTYSP-3019 The entry point
 
-  lcty.rb wires the servlets of the site together. Lcty::BASE_URL is the path the site is served under, from
-  LCTY_BASE_URL: it always starts and ends with "/", and is "/" when LCTY_BASE_URL is unset or empty. Lcty.mount_all
+  lcty.rb wires the servlets of the site together. Lcty.base_url is the path the site is served under, from the base
+  URL of the settings (--base-url or LCTY_BASE_URL, LCTYSP-3008): it always starts and ends with "/", and is "/" when
+  it is unset or empty. Lcty.main reads the options of its command line (those of server_settings.txt) before the
+  other arguments: none starts the server, "convert" converts the conversation files. Lcty.mount_all
   mounts every servlet under it: the HTTP API at v1, C at c and T at t, each file of /lcty.v1/ under its own name and
   under the names of version 1 (nothing else there), the page entries as they are (they are not bundled) and the rest
   of public/. Lcty.publish_offline copies what a file opened directly reads, lcty.v1.js (the bytes of
@@ -19,7 +21,7 @@ Feature: LCTYSP-3019 The entry point
   Scenario Outline: The base URL always starts and ends with a slash
     Given LCTY_BASE_URL is <value>
     When lcty.rb is loaded
-    Then Lcty::BASE_URL is <base>
+    Then Lcty.base_url is <base>
 
     Examples:
       | value     | base     |
@@ -30,9 +32,35 @@ Feature: LCTYSP-3019 The entry point
       | "/a//b/"  | "/a/b/"  |
 
   Scenario: A settings file that cannot be used stops lcty.rb with its message
-    Given a data directory whose server_settings.json is {"prot": 8080}
+    Given a data directory whose server_settings.txt is the line "--prot=8080"
     When lcty.rb is loaded
     Then it exits with the status 1 and prints "lcty-rb: " and the message of the settings file, without a backtrace
+
+  Scenario: An option of the command line that is not one stops lcty.rb with the usage
+    Given a data directory without server_settings.txt
+    When lcty.rb is run with "--prot"
+    Then it exits with the status 1 and prints "lcty-rb: the command line: invalid option: --prot" and the usage
+
+  Scenario: --help prints every option
+    When lcty.rb is run with "--help"
+    Then it exits with the status 0 and prints the usage with --host, --base-url and --allowed-origin
+
+  # The port is LCTY_PORT or PORT, or else the first free one of Chatty::PORTS_TRIED (LCTYSP-0010)
+  Scenario: Without a port asked for, the server listens on the first free port tried
+    Given two free ports, the first of them taken by another server
+    When Lcty.listen is given no port to ask for and the two ports to try
+    Then it listens on the second port
+    And Chatty.port is the second port
+
+  Scenario: A port asked for that is taken stops the server
+    Given a port taken by another server
+    When Lcty.listen is given that port to ask for
+    Then it raises Lcty::PortError "the port <port> (LCTY_PORT or PORT) is in use"
+
+  Scenario: When every port tried is taken the server stops
+    Given two ports taken by another server
+    When Lcty.listen is given no port to ask for and the two ports to try
+    Then it raises Lcty::PortError "no free port from <first> to <second> (set one with LCTY_PORT or PORT)"
 
   Scenario Outline: Every path of the site is mounted
     Given Lcty.mount_all on a WEBrick server
