@@ -484,6 +484,37 @@ class V1ServletTest < Lcty::Scenarios
     end
   end
 
+  scenario 'Deleting a conversation is announced to the pages' do
+    id = before = nil
+    tag = "gone-#{hex}"
+    changes = []
+    step('Given a conversation whose tags were changed to ["gone"], and the changes announced through Chatty.commit recorded') do
+      id = create([user('hi')])
+      assert_ok http('POST', "/v1/conversations/#{id}/lines", [{ 'type' => 'tags', 'tags' => [tag] }])
+      before = Chatty.committer
+      Chatty.committer = ->(method, &block) { block.call.tap { |rs| changes << [method, rs] } }
+    end
+    begin
+      step('When DELETE /v1/conversations/<id> is requested') { assert_ok http('DELETE', "/v1/conversations/#{id}") }
+      step('Then a c.batch.updated deletes it from c_meta and c_recordcount') do
+        assert_equal ['c.batch.updated', [%w[c_meta delete], %w[c_recordcount delete]]],
+                     [changes[0][0], changes[0][1].map { |r| r.values_at('store', 'op') }]
+        assert(changes[0][1].all? { |r| r['row'] == { 'cid' => id } })
+      end
+      step('And a t.batch.updated deletes its row of t_has_many_c') do
+        assert_equal ['t.batch.updated', [{ 'store' => 't_has_many_c', 'op' => 'delete', 'row' => { 'tag' => tag, 'cid' => id } }]],
+                     changes[1]
+      end
+      step('And deleting it again announces no record') do
+        changes.clear
+        assert_ok http('DELETE', "/v1/conversations/#{id}")
+        assert_equal [[], []], changes.map(&:last)
+      end
+    ensure
+      Chatty.committer = before
+    end
+  end
+
   scenario 'The meta of every conversation is listed newest first' do
     newer = older = list = nil
     setup_tag = "setup-#{hex}"

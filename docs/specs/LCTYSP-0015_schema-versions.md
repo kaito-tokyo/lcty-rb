@@ -38,7 +38,7 @@ sides.
   `lcty_c` for `c/`, `lcty_t.sqlite` and `lcty_t` for `t/`, `lcty_fuzzy_search.sqlite` for the vectors of fuzzy
   (semantic) search. A resource whose data needs migrating has a file of its own, so its version is its own.
 - **Today's files:**
-  - `lcty_t.sqlite`: `conversation_tags`, source data ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
+  - `lcty_t.sqlite`: `t_has_many_c`, source data, version 4 ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
   - `lcty_fuzzy_search.sqlite`: `vectors`, which only the browser can make again
     ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)). It has no leading `_`, so backups keep it.
   - `lcty_c.sqlite`: `message_stats`, source data, version 1: what was measured of a reply (`data-timings`,
@@ -59,7 +59,7 @@ sides.
   table and no history.
 - **A file of a newer version is refused,** as IndexedDB refuses to open a database at a lower version than it has
   (`VersionError`): a newer server wrote it, and its data is kept for that server.
-- **A version is kept across a rename:** `lcty_t.sqlite` keeps the version `tags.sqlite` had (3).
+- **A version is kept across a rename:** `lcty_t.sqlite` keeps the version `tags.sqlite` had (3, then brought to 4).
 
 ## `_index.sqlite`: discarded at every start
 

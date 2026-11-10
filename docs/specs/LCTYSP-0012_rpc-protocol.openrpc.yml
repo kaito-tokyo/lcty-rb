@@ -347,6 +347,28 @@ methods:
             items:
               $ref: "#/components/schemas/RecordCount"
 
+  - name: t.c.list
+    x-receiver: server
+    summary: Which conversations each tag has
+    description: >-
+      What a page reads to fill t_has_many_c of lcty_t (LCTYSP-0014), and again after reconnecting: every row of
+      t_has_many_c in lcty_t.sqlite, one per tag and conversation, each conversation's in the order its tags were given.
+      A conversation with no row has no tags. The version is taken together with the rows, so the page follows the
+      records of t.batch.updated from it.
+    params: []
+    result:
+      name: rows
+      schema:
+        type: object
+        required: [version, items]
+        properties:
+          version:
+            $ref: "#/components/schemas/Version"
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/TagHasC"
+
   - name: c.stats.put
     x-receiver: server
     summary: Record what was measured of a reply
@@ -522,9 +544,11 @@ methods:
           $ref: "#/components/schemas/Version"
       - name: actorId
         required: true
-        description: The actor that made the change (its connection's actorId)
+        description: The actor that made the change (its connection's actorId), or null for a change through the HTTP API
         schema:
-          $ref: "#/components/schemas/ActorId"
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
       - name: records
         required: true
         schema:
@@ -532,6 +556,35 @@ methods:
           minItems: 1
           items:
             $ref: "#/components/schemas/Record"
+
+  - name: t.batch.updated
+    x-receiver: page
+    summary: A change of the tags of conversations, as the records of t_has_many_c
+    description: >-
+      The notification of every change of t_has_many_c (LCTYSP-0014), made today through the HTTP API (POST
+      /v1/conversations/:id/lines with a tags line, and deleting a conversation): one change, one version, one
+      t.batch.updated, sent to every connection that receives it. Its records delete the rows that went and put the rows
+      that came, in that order; a change that changes no row is sent to nobody.
+    paramStructure: by-name
+    params:
+      - name: version
+        required: true
+        schema:
+          $ref: "#/components/schemas/Version"
+      - name: actorId
+        required: true
+        description: Always null today (no tag is written over /v1/rpc yet)
+        schema:
+          oneOf:
+            - $ref: "#/components/schemas/ActorId"
+            - type: "null"
+      - name: records
+        required: true
+        schema:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/TagRecord"
 
 components:
   schemas:
@@ -588,6 +641,20 @@ components:
             row:
               $ref: "#/components/schemas/RecordCount"
         - type: object
+          description: A conversation deleted (through the HTTP API) leaves c_meta and c_recordcount
+          required: [store, op, row]
+          properties:
+            store:
+              enum: [c_meta, c_recordcount]
+            op:
+              const: delete
+            row:
+              type: object
+              required: [cid]
+              properties:
+                cid:
+                  $ref: "#/components/schemas/Cid"
+        - type: object
           required: [store, op, row]
           properties:
             store:
@@ -622,6 +689,27 @@ components:
                   $ref: "#/components/schemas/Cid"
                 id:
                   $ref: "#/components/schemas/ElementId"
+    TagHasC:
+      description: That a tag has a conversation, a row of t_has_many_c (LCTYSP-0014)
+      type: object
+      required: [tag, cid]
+      properties:
+        tag:
+          description: A reference to a tag, the file-name part of its tag file, which need not exist (LCTYSP-0009)
+          type: string
+        cid:
+          $ref: "#/components/schemas/Cid"
+    TagRecord:
+      description: One change to t_has_many_c, a row put or deleted
+      type: object
+      required: [store, op, row]
+      properties:
+        store:
+          const: t_has_many_c
+        op:
+          enum: [put, delete]
+        row:
+          $ref: "#/components/schemas/TagHasC"
     Capabilities:
       type: object
       required: [receives]

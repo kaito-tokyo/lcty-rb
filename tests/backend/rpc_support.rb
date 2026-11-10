@@ -18,6 +18,7 @@ require 'socket'
 require 'timeout'
 require 'uuid'
 require 'search_index'
+require 'tag_store'
 require 'rpc/servlet'
 
 module RpcSupport
@@ -33,6 +34,9 @@ module RpcSupport
       Rpc.index = Chatty::SearchIndex.new(File.join(index_dir, '_index.sqlite'))
       # and a CStore of its own for c.stats.put and c.stats.list
       Rpc.c_store = Chatty::CStore.new(File.join(index_dir, 'lcty_c.sqlite'))
+      # a tag store of its own for t.c.list, whose changes are announced over /v1/rpc as lcty.rb has them
+      Rpc.tags = Chatty::TagStore.new(File.join(index_dir, 'lcty_t.sqlite'))
+      Chatty.committer = ->(method, &block) { Rpc::HUB.commit(nil, method, &block) }
       Minitest.after_run { FileUtils.rm_rf(index_dir) }
       server = WEBrick::HTTPServer.new(BindAddress: '127.0.0.1', Port: 0, Logger: WEBrick::Log.new(File::NULL),
                                        AccessLog: [], DoNotReverseLookup: true)

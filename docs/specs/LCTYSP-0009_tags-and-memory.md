@@ -56,11 +56,20 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 
 - The tags at start are `<lcty-c>`'s `data-setup-tags`, written once when the conversation is created;
   `lcty-setup`'s `data-instructions` holds the system prompt actually sent. The two are not guaranteed to correspond (tags are a hint).
-- **Changing tags later does not touch the conversation file.** The new tags are kept in `lcty_t.sqlite` (table
-  `conversation_tags`: the conversation id, the tags as a JSON array in the order given, and when they were set). The
-  current tags are that row, or `data-setup-tags` when the tags were never changed
-  ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)). Deleting a conversation deletes its row. Tag names need not be
-  defined (an undefined one shows as such), and renaming a tag definition does not rename it in conversations.
+- **Changing tags later does not touch the conversation file.** The new tags are kept in `lcty_t.sqlite`, table
+  `t_has_many_c`: which conversations each tag has, one row per tag and conversation (`tag`, `cid`, and `at`, when the
+  conversation's tags were set), each conversation's rows in the order its tags were given. The current tags are those
+  rows; a conversation with none has no tags, except a file of [LCTYSP-0003](LCTYSP-0003_conversation-file.md) not yet
+  converted, which then has `data-setup-tags` (a conversation of
+  [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) has its tags only here, written when it is created).
+  Deleting a conversation deletes its rows. Tag names need not be defined (an undefined one shows as such), and
+  renaming a tag definition does not rename it in conversations.
+  - Format 4 of `lcty_t.sqlite` replaced `conversation_tags` (the tags as a JSON array per conversation) with
+    `t_has_many_c`, converting its rows. A row of `conversation_tags` with no tags becomes no row, so an unconverted
+    file of LCTYSP-0003 whose tags had been removed shows `data-setup-tags` again (and `lcty.rb convert` gives it
+    those).
+  - Every change of the rows is announced to the pages as one `t.batch.updated`, and `t.c.list` of `/v1/rpc` reads
+    them all ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
 - The page sends a change as a `tags` line (`POST /v1/conversations/:id/lines`), which the server stores in
   `lcty_t.sqlite` instead of appending it; the search index (`conv_tags`) follows it.
 - **For now the header shows the tags at creation** (`data-setup-tags`), also after a change; the current tags live in
@@ -107,8 +116,8 @@ and `memory` of `tags.sqlite`; that design is in git.
 
 Scope: tag definitions (name, prompt, order) and memory, and how conversations refer to tags
 ([below](#conversations-refer-to-tags-by-the-file-name-part)). The current tags of conversations stay in
-`conversation_tags` in `lcty_t.sqlite`, formerly `tags.sqlite`
-([below](#tagssqlite-only-conversation_tags-remains-no-conversion)).
+`lcty_t.sqlite`, formerly `tags.sqlite` ([below](#tagssqlite-only-conversation_tags-remains-no-conversion)), now in
+`t_has_many_c`.
 
 ### Tag files
 
@@ -475,7 +484,8 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   carried over to `t/`: tags start empty and are defined again in the tag editor.
 - **`conversation_tags` stays in `tags.sqlite`,** which then holds only that table: the current tags of each
   conversation after a change, as before. The file is now `lcty_t.sqlite`: the server renames `tags.sqlite` to it at
-  startup, its format kept ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)).
+  startup, its format kept ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)). Format 4 later replaced the table with
+  `t_has_many_c` ([above](#the-tags-of-a-conversation)).
 - **Existing references are not converted** either. `data-setup-tags` in existing conversation files and existing rows
   of `conversation_tags` keep the display names they were written with. Where such a name equals the part of a new
   tag (lowercase names without the escaped symbols, such as `ruby`), it refers to that tag; otherwise it shows as an

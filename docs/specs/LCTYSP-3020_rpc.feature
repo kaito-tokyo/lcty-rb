@@ -238,6 +238,21 @@ Feature: LCTYSP-3020 The RPC protocol
     When c.list is called
     Then the items hold both with their cid, lang, title, titleTypeId, updatedAt and createdAt
 
+  # ---- The tags of conversations ----
+
+  Scenario: t.c.list returns which conversations each tag has with the version
+    Given two conversations, the first tagged "z" and "a" and the second "a" in the tag store
+    When t.c.list is called
+    Then the items hold z of the first, a of the first and a of the second in that order, each only tag and cid
+    And the version is that of the last change
+
+  Scenario: A change of the tags made outside /v1/rpc is one t.batch.updated with no actor
+    Given a page receiving t.batch.updated and one receiving only c.batch.updated
+    When the tags of a conversation are set to "a" and "b" in the tag store, then to "b"
+    Then the first page gets two t.batch.updated with only version, actorId and records, the actorId null
+    And their records put a and b, then delete a, and the second has the larger version
+    And the other page gets no t.batch.updated
+
   Scenario: c.update.title fits the title into the slot and sends a c_meta record
     Given a conversation with a title slot of 32 bytes, and a page receiving c.batch.updated
     When its title is changed to a longer one

@@ -7,6 +7,18 @@
 # reads LCTY_BASE_URL, lib/rpc/servlet.rb LCTY_ALLOWED_ORIGIN); everything else is a browser setting.
 
 module Chatty
+  class << self
+    # Announces a change made outside /v1/rpc (the HTTP API): ->(method) { records }, set by lcty.rb to the hub of
+    # lib/rpc/servlet.rb, which runs the block under its lock and sends its records as one method notification with
+    # the next version (LCTYSP-0014). Unset (the tests, `lcty.rb convert`), the block only runs.
+    attr_accessor :committer
+
+    # Run the change in the block, which returns its records [{store, op, row}, ...], and announce it as method
+    def commit(method, &block)
+      committer ? committer.call(method, &block) : block.call
+    end
+  end
+
   ROOT = File.expand_path('..', __dir__)
   PUBLIC_DIR = File.join(ROOT, 'public')
   # Default: the per-user application data folder, outside the repository (LCTYSP-0010). On macOS (and, for now, Windows)
