@@ -644,6 +644,52 @@ class RpcTest < Lcty::Scenarios
     step('Then the result is not held once the time to answer is over') { assert_equal [false, nil], [r['held'], r['actorId']] }
   end
 
+  # ---- The server stopping ----
+
+  # The connections of the hub (pages of earlier tests are closed by their teardown and leave it soon)
+  def hub_conns
+    Rpc::HUB.instance_variable_get(:@conns).to_a
+  end
+
+  # The hub's answer to close_all with the grace, and the seconds it took
+  def close_all(grace)
+    wait_until(5, 'pages of earlier tests are still connected') { hub_conns.size == @pages.size }
+    t = Time.now
+    [Rpc::HUB.close_all(grace), Time.now - t]
+  end
+
+  scenario 'When the server stops every page gets a close frame of 1001 and is let go' do
+    pages = n = took = nil
+    step('Given two pages that close their end when the server closes, and a grace of 2 seconds') do
+      pages = [page(answer_close: true), page(answer_close: true)]
+    end
+    step('When the hub closes every connection') { n, took = close_all(2.0) }
+    step('Then it answers 2, well before the grace is over') do
+      assert_equal 2, n
+      assert_operator took, :<, 1.5
+    end
+    step('And both pages got a close frame with the code 1001') do
+      wait_until { pages.all?(&:close_code) }
+      assert_equal [1001, 1001], pages.map(&:close_code)
+    end
+    step('And neither is a connection of the hub any more') { wait_until { hub_conns.empty? } }
+  end
+
+  scenario 'A page that keeps its connection open is dropped after the grace' do
+    pg = n = took = nil
+    step('Given a page that never closes its end, and a grace of 0.3 seconds') { pg = page }
+    step('When the hub closes every connection') { n, took = close_all(0.3) }
+    step('Then it answers 1 once the grace is over') do
+      assert_equal 1, n
+      assert_operator took, :>=, 0.3
+    end
+    step('And the page got a close frame with the code 1001, and its connection is closed') do
+      wait_until { pg.close_code }
+      assert_equal 1001, pg.close_code
+      wait_until { hub_conns.empty? }
+    end
+  end
+
   # ---- Pages that stop reading ----
 
   scenario 'A page that stops reading is dropped without holding up the others' do

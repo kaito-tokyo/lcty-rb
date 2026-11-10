@@ -50,10 +50,14 @@ module RpcSupport
   # A WebSocket client of /v1/rpc
   class Page
     attr_reader :log
+    # The code of the close frame the server sent (nil until one came)
+    attr_reader :close_code
 
     # rcvbuf: the size of the receive buffer, set before connecting (after connecting, Linux keeps the window it
-    # offered), for a page that stops reading
-    def initialize(port, origin: ORIGIN, answer: nil, read: true, rcvbuf: nil)
+    # offered), for a page that stops reading. answer_close: close the socket when the server's close frame comes, as a
+    # browser does
+    def initialize(port, origin: ORIGIN, answer: nil, read: true, rcvbuf: nil, answer_close: false)
+      @answer_close = answer_close
       @sock = Socket.new(Socket::AF_INET, Socket::SOCK_STREAM)
       @sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_RCVBUF, rcvbuf) if rcvbuf
       @sock.connect(Socket.sockaddr_in(port, '127.0.0.1'))
@@ -143,7 +147,11 @@ module RpcSupport
               else b1 & 0x7F
               end
         payload = len.zero? ? '' : @sock.read(len)
-        break if (b0 & 0x0F) == 0x8 # close
+        if (b0 & 0x0F) == 0x8 # close: its code is kept, and a page that answers closes its end
+          @close_code = payload.bytesize >= 2 ? payload.byteslice(0, 2).unpack1('n') : nil
+          @sock.close if @answer_close
+          break
+        end
         msg = JSON.parse(payload.force_encoding(Encoding::UTF_8))
         @log << msg
         if msg.key?('method') && msg.key?('id') # a request of the server

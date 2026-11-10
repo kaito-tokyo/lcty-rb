@@ -145,6 +145,20 @@ module Lcty
         @lock.synchronize { @conns.delete(conn) }
       end
 
+      # The server is stopping (LCTYSP-0012): every connection gets a close frame with 1001 (going away), and one still
+      # open after grace seconds is dropped. WEBrick waits for the thread of every request before it stops, and a
+      # connection's thread reads until the page closes it, so without this a page left open kept the server running.
+      # Each close frame is sent on a thread of its own: a sender stuck writing to a page that stopped reading holds
+      # the write lock, and dropping needs no lock.
+      def close_all(grace = Rpc.close_grace)
+        peers = @lock.synchronize { @conns.to_a }
+        peers.each { |p| Thread.new { p.conn.close(1001) } }
+        deadline = Time.now + grace
+        sleep 0.05 while Time.now < deadline && peers.any? { |p| @lock.synchronize { @conns.include?(p) } }
+        peers.each(&:abort)
+        peers.size
+      end
+
       # Follow the elements of one conversation (nil: none), replacing what the connection followed. Done under the
       # lock, so the last id and the version returned are those right before the first notification it will get.
       def subscribe(peer, cid)
@@ -187,8 +201,10 @@ module Lcty
     HUB = Hub.new
     class << self
       attr_accessor :holds_timeout # seconds to wait for the pages' answers to c.cmd.holds
+      attr_accessor :close_grace # seconds a page has to close its connection when the server stops
     end
     self.holds_timeout = 2.0
+    self.close_grace = 1.0
 
     # The methods the server receives: name => ->(params, peer) { result }, peer the connection of the request.
     METHODS = {

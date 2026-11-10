@@ -45,6 +45,18 @@ Feature: LCTYSP-3019 The entry point
     When lcty.rb is run with "--help"
     Then it exits with the status 0 and prints the usage with --bind-ip, --base-url and --allowed-origin
 
+  # WEBrick waits for the thread of every request, and a /v1/rpc connection's thread reads until the page closes it
+  Scenario Outline: The server stops on a signal while a page keeps /v1/rpc open
+    Given lcty.rb is running, with a page connected to /v1/rpc that never closes its end
+    When the server is sent <signal>
+    Then it exits with the status 0 within 5 seconds
+    And the page got a close frame with the code 1001
+
+    Examples:
+      | signal |
+      | INT    |
+      | TERM   |
+
   # The port is LCTY_PORT or PORT, or else the first free one of Chatty::PORTS_TRIED (LCTYSP-0010)
   Scenario: Without a port asked for, the server listens on the first free port tried
     Given two free ports, the first of them taken by another server
