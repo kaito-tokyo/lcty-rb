@@ -151,8 +151,11 @@ export async function withRpc(fn) {
 	let n = 0;
 	ws.onmessage = (e) => {
 		const m = JSON.parse(e.data);
-		pending.get(m.id)?.(m);
+		if (typeof m.id !== "number") return; // a notification or a request of the server: these tests receive none
+		const settle = pending.get(m.id);
+		if (typeof settle !== "function") return;
 		pending.delete(m.id);
+		settle(m);
 	};
 	await new Promise((resolve, reject) => {
 		ws.onopen = resolve;
