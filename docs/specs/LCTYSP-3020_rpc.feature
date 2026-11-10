@@ -15,7 +15,7 @@ Feature: LCTYSP-3020 The RPC protocol
   that follow the conversation (c.subscribe), its c_meta and c_recordcount records to every connection that receives
   it. In the steps the servlet is mounted at /v1/rpc
   of a WEBrick server on 127.0.0.1, the allowed origin is http://allowed.test, and the conversations are written to
-  c-next/ of the tests' data directory. "A page" is a WebSocket client that sends Origin http://allowed.test; a step
+  c/ of the tests' data directory, with a search index and an lcty_c.sqlite of the tests' own. "A page" is a WebSocket client that sends Origin http://allowed.test; a step
   that names no page sends its request through a page of the test's own that receives no notification.
 
   Background:
@@ -136,6 +136,38 @@ Feature: LCTYSP-3020 The RPC protocol
     Given a conversation with two messages
     When c.unappend names the first one
     Then the error is 1, and c.unappend of the second removes it
+
+  Scenario: A conversation of LCTYSP-0003 is never written but its title
+    Given a conversation file of LCTYSP-0003 in c/ with a user message
+    When a message is appended to it and its last element is unappended
+    Then both are refused with error 6 and the file has not changed
+    And c.update.title still changes its title
+
+  Scenario: A user or model message brings the search index up to date
+    Given a conversation
+    When a user message and a model message are appended
+    Then the search index finds the round by a word of the reply
+    When the model message is unappended
+    Then the search index no longer finds it
+
+  # ---- What was measured of a reply ----
+
+  Scenario: c.stats.put records what was measured of a reply and c.stats.list returns it
+    Given a conversation
+    When c.stats.put records timings and usage for a model message
+    Then c.stats.list returns them for its id, with client null
+    And c.stats.put again replaces them
+
+  Scenario Outline: c.stats.put refuses a bad request
+    Given a conversation
+    When c.stats.put is called with <params>
+    Then the error is <code>
+
+    Examples:
+      | what                        | params                                   | code |
+      | an id that is not a reply   | the id of a user message                 | 3    |
+      | timings that are not object | timings that are a string                | 3    |
+      | an unknown conversation     | a cid with no file                       | 4    |
 
   # ---- Following a conversation ----
 

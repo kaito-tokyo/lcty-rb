@@ -8,7 +8,7 @@
 #
 #   message_stats  what was measured of a reply, which LCTYSP-0013 moved out of the file: the id of its element
 #                  (msg-m-…), the conversation, and data-timings, data-usage and data-client as they were (JSON text,
-#                  NULL when absent). Written by `lcty.rb convert`.
+#                  NULL when absent). Written by `lcty.rb convert` and by c.stats.put of /v1/rpc.
 #
 # The version is PRAGMA user_version (LCTYSP-0015): a newer one is refused, an older one migrated step by step.
 
@@ -47,6 +47,14 @@ module Chatty
       end
       return nil unless row
       { 'cid' => row[0] }.merge(STATS.zip(row[1..]).map { |k, v| [k, v && JSON.parse(v)] }.to_h)
+    end
+
+    # What was measured of every reply of conversation cid: [{id, timings, usage, client}], ordered by id
+    def stats_of(cid)
+      rows = @mutex.synchronize do
+        @db.execute('SELECT id, timings, usage, client FROM message_stats WHERE cid = ? ORDER BY id', [cid])
+      end
+      rows.map { |id, *values| { 'id' => id }.merge(STATS.zip(values).map { |k, v| [k, v && JSON.parse(v)] }.to_h) }
     end
 
     def close

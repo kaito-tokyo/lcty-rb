@@ -60,9 +60,9 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 - `lcty_t.sqlite`: the tags of conversations changed after they were created (an older version's `tags.sqlite` is
   renamed to it when the server starts). Tag definitions and memory kept there by an older version are dropped when it
   starts (they are not converted; define the tags again).
-- `lcty_c.sqlite` and `c-former/`: made by `lcty.rb convert` (below). `lcty_c.sqlite` holds the timings, usage and
-  client of the replies of converted conversations; `c-former/` keeps every conversation file as it was before the
-  conversion.
+- `lcty_c.sqlite`: the timings, usage and client of the replies of conversations in the new format (`lcty-msg`),
+  written by the server and by `lcty.rb convert` (below).
+- `c-former/`: every conversation file as it was before `lcty.rb convert` converted it.
 - `lcty_fuzzy_search.sqlite`: the vectors of semantic search. They are derived, but only the browser can make them
   again (it does so while a page is open), so they are kept.
 - Files starting with `_` are derived (the search index) and are made anew at every start.

@@ -90,6 +90,8 @@ module Lcty
   def self.run
     Chatty.open_data
     Rpc.index = Chatty::INDEX # c_recordcount of /v1/rpc lives in _index.sqlite with every other cache
+    Rpc.tags = Chatty::TAGS # the tags the index records with the rounds /v1/rpc writes
+    Rpc.c_store = Chatty::C_STORE # c.stats.put and c.stats.list
     Rpc::ConvStore.fill_record_counts
     publish_offline
     s = WEBrick::HTTPServer.new(

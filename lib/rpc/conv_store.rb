@@ -3,11 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Conversation files in the format of LCTYSP-0013 (prototype). They live in their own directory,
-# c-next/ of the data directory (or LCTY_RPC_DIR), so the prototype never touches the real conversations.
+# Conversation files in the format of LCTYSP-0013 (prototype), in c/ of the data directory with every other
+# conversation (or LCTY_RPC_DIR). A file of LCTYSP-0003 there, not converted yet (lcty.rb convert), is read but never
+# written: appending to it and removing from it are refused (FORMER); its title slot is still overwritten.
 #
 # A file changes only at its end, one line at a time: append one element after a named id, or remove the last element.
-# Both look only at the last line. Every line from line 5 on is one element.
+# Both look only at the last line. Every line from line 5 on is one element. Every write also brings the search index
+# up to date with the file (LCTYSP-0007), as the HTTP API does for the files it writes.
 
 require 'base64'
 require 'digest'
@@ -15,6 +17,7 @@ require 'fileutils'
 require 'nokogiri'
 require 'time'
 require_relative '../config'
+require_relative '../c_store'
 require_relative '../conv_html'
 
 module Lcty
@@ -36,17 +39,24 @@ module Lcty
     INVALID = 3 # the element breaks a rule of the format
     NOT_FOUND = 4 # no such conversation
     EXISTS = 5 # the conversation already exists
+    FORMER = 6 # the conversation is in the format of LCTYSP-0003, not converted yet
 
     class << self
       # The search index (Chatty::SearchIndex) whose file, _index.sqlite, caches the number of elements of every
-      # conversation (c_recordcount, LCTYSP-0014). The server sets it at startup, the tests to one of their own.
+      # conversation (c_recordcount, LCTYSP-0014) and indexes its rounds. The server sets it at startup, the tests to
+      # one of their own.
       attr_accessor :index
+      # The tags of the conversations (Chatty::TagStore, lcty_t.sqlite), which the search index records with the
+      # rounds; nil (no tags) in the tests that set none
+      attr_accessor :tags
+      # What was measured of the replies (Chatty::CStore, lcty_c.sqlite): c.stats.put and c.stats.list
+      attr_accessor :c_store
     end
 
     module ConvStore
       module_function
 
-      DIR = File.expand_path(ENV['LCTY_RPC_DIR'].to_s.empty? ? File.join(Chatty::DATA_DIR, 'c-next') : ENV['LCTY_RPC_DIR'])
+      DIR = File.expand_path(ENV['LCTY_RPC_DIR'].to_s.empty? ? Chatty::CONV_DIR : ENV['LCTY_RPC_DIR'])
       HEAD_LINES = 4
 
       UUID = '[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
@@ -95,6 +105,7 @@ module Lcty
         File.open(path(cid), File::WRONLY | File::CREAT | File::EXCL) do |f|
           f.write(head)
           Rpc.index.put_record_count(cid, 0)
+          Rpc.index.sync(cid, [], tags_of(cid))
         end
         nil
       rescue Errno::EEXIST
@@ -108,13 +119,14 @@ module Lcty
         attrs = check(tag, attrs, inner)
         line = build(tag, attrs, inner)
         count = locked(cid) do |f|
+          refuse_former!(f, cid)
           last = last_element(f)
           raise Error.new(CONFLICT, 'the last element is not the one named', 'last' => last && last[:id]) if last&.dig(:id) != after
           raise Error.new(LOCKED, 'the conversation is locked by an lcty-cmd', 'last' => last[:id]) if last && last[:tag] == 'lcty-cmd'
           f.seek(0, IO::SEEK_END)
           f.write(line + "\n")
           f.flush
-          record_count(f, cid)
+          written(f, cid, tag == 'lcty-msg' && %w[user model].include?(attrs['data-role']))
         end
         [attrs, count]
       end
@@ -123,12 +135,62 @@ module Lcty
       # and cached while it is still locked.
       def remove(cid, id)
         locked(cid) do |f|
+          refuse_former!(f, cid)
           last = last_element(f)
           raise Error.new(CONFLICT, 'the last element is not the one named', 'last' => last && last[:id]) if last.nil? || last[:id] != id
           f.truncate(last[:offset])
           f.flush
-          record_count(f, cid)
+          written(f, cid, last[:tag] == 'lcty-msg' && last[:id].start_with?('msg-u-', 'msg-m-'))
         end
+      end
+
+      # A file of LCTYSP-0003 is never written here (FORMER): its head is the one before 2026-11-07, or line 5 is the
+      # lcty-setup or an lcty-message. Only the head and line 5 are read.
+      def refuse_former!(f, cid)
+        f.rewind
+        lines = Array.new(HEAD_LINES + 1) { f.gets.to_s }
+        return unless Chatty::ConvHtml.legacy?(lines[0]) || lines[HEAD_LINES].start_with?('<lcty-setup', '<lcty-message')
+        raise Error.new(FORMER, 'the conversation is in the format of LCTYSP-0003; convert it with lcty.rb convert',
+                        'cid' => cid)
+      end
+
+      # After a write, while the file is still locked: its number of elements, cached, and, when a user or model message
+      # was appended or removed (message), the search index brought up to date with its messages (the rounds of user
+      # and model, LCTYSP-0007). The other elements change no round, so the file is not parsed for them. Returns the
+      # number.
+      def written(f, cid, message)
+        count = record_count(f, cid)
+        return count unless message
+        f.rewind
+        text = f.read.force_encoding(Encoding::UTF_8)
+        messages = Chatty::ConvHtml.decode(text, "#{cid}.html").map(&:first).select { |o| o['type'] == 'message' }
+        Rpc.index.sync(cid, messages, tags_of(cid))
+        count
+      end
+
+      # The current tags of a conversation of LCTYSP-0013: those of lcty_t.sqlite (its file holds none)
+      def tags_of(cid)
+        Rpc.tags&.conversation_tags(cid) || []
+      end
+
+      # What was measured of a reply: {cid, id, timings, usage, client}, the id that of its model lcty-msg (msg-m-…),
+      # the others objects, or absent or null when not measured. Kept in lcty_c.sqlite (Rpc.c_store), not in the file,
+      # so it may be written before or after the reply; the conversation must exist.
+      def put_stats(p)
+        raise Error.new(INVALID, "the id must be msg-m- and a UUIDv7: #{p['id'].inspect}") unless /\Amsg-m-#{UUID}\z/.match?(p['id'].to_s)
+        stats = Chatty::CStore::STATS.map { |k| [k, p[k]] }.to_h
+        unless stats.values.all? { |v| v.nil? || v.is_a?(Hash) }
+          raise Error.new(INVALID, "#{Chatty::CStore::STATS.join(', ')} must be objects or null")
+        end
+        raise Error.new(NOT_FOUND, 'no such conversation', 'cid' => p['cid']) unless File.exist?(path(p['cid']))
+        Rpc.c_store.put_message_stats(p['id'], p['cid'], stats)
+        nil
+      end
+
+      # What was measured of every reply of a conversation: [{id, timings, usage, client}], ordered by id
+      def list_stats(cid)
+        raise Error.new(NOT_FOUND, 'no such conversation', 'cid' => cid) unless File.exist?(path(cid))
+        Rpc.c_store.stats_of(cid)
       end
 
       # The number of elements of an open file, every one but lcty-c (LCTYSP-0014): each element is one line and line 4
