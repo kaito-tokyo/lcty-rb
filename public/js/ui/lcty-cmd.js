@@ -14,7 +14,10 @@
 //     the last element, so an interrupted creation resumes; or
 //   - only in memory (sending, regenerating): it runs now, and nothing is left to resume after the page closes.
 // A command followed by other elements (its result) has already run and stays hidden. Unknown operations do nothing.
-// The state is an attribute in the DOM only (never saved): running / done / aborted / failed / unknown.
+// The state is an attribute in the DOM only (never saved): running / done / aborted / failed / unknown. A command that
+// has a state already, or a data-error (a failed one of LCTYSP-0013, written so), never runs: the page decides what it
+// shows (stale: a lock nobody holds; held: one another tab holds; failed), with the label, and "Retry" and "Remove"
+// (retryButton, removeButton), which the page wires, shown for failed and stale.
 import { tr } from "../i18n.js";
 
 const ops = { __proto__: null }; // op name → async (cmd, controller) => void
@@ -44,6 +47,16 @@ function cmdElementClass() {
 				tr("stop", "Stop"),
 			);
 			this.stopButton.onclick = () => this.abort();
+			this.retryButton = h(
+				"button",
+				{ type: "button", part: "lcty-cmd__retry lcty-button" },
+				tr("retry", "Retry"),
+			);
+			this.removeButton = h(
+				"button",
+				{ type: "button", part: "lcty-cmd__remove lcty-button" },
+				tr("remove", "Remove"),
+			);
 			this.attachShadow({ mode: "open" }).append(
 				h(
 					"div",
@@ -51,12 +64,21 @@ function cmdElementClass() {
 					h("span", { class: "spinner", part: "lcty-cmd__spinner" }),
 					this.label,
 					this.stopButton,
+					this.retryButton,
+					this.removeButton,
 				),
 			);
 		}
 
 		connectedCallback() {
-			if (this.#ran) return;
+			if (this.#ran || this.hasAttribute("state")) return;
+			if (this.hasAttribute("data-error")) {
+				this.setAttribute("state", "failed");
+				this.label.textContent = tr("cmdFailed", "Stopped: {error}", {
+					error: this.dataset.error,
+				});
+				return;
+			}
 			const parent = this.parentElement;
 			if (parent?.localName !== "lcty-c" || parent.lastElementChild !== this) {
 				this.setAttribute("state", "done"); // already followed by its result

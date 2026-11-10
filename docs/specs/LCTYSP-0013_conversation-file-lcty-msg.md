@@ -124,12 +124,15 @@ works as a lock held by the file.
 - **It is only ever the last element, and there is at most one.** While the last element is an `lcty-cmd`, nothing
   can be appended; the only operation allowed is removing that `lcty-cmd`. An `lcty-cmd` can be appended only when the
   last element is not one. Both rules are checked on the last line alone.
-- **It holds what is being built as its children, and its children are never written to the file.** A message being
-  generated (an `lcty-msg` among them) is shown inside it. When the work is done, the page removes the `lcty-cmd` and
+- **What is being built is never written to the file.** A message being generated is shown with it: the pages show it
+  as a draft just after the `lcty-cmd`, marked `data-draft` ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). When
+  the work is done, the page removes the `lcty-cmd` and
   appends the finished elements one by one.
 - **Attributes:** `id` (`cmd-` and a UUIDv7), `data-op` (the operation), `data-at`, and `data-error` when the work
-  failed. A failed `lcty-cmd` stays as the last element with `data-error` until it is removed; the rest of how a failure
-  is recorded is left to the page.
+  failed. A failed `lcty-cmd` stays as the last element with `data-error` until it is removed. A reply that is stopped
+  or fails is recorded so: the page removes its `lcty-cmd` and appends one with the same `data-op` and the error (or
+  "Stopped") as `data-error`; what had been generated is dropped. The user then retries (removes it and takes the lock
+  again) or removes it ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 - **A lock nobody holds** (its page was closed or crashed) is found when a page sees an `lcty-cmd` it did not start
   as the last element. The page asks the user whether to run it again or remove it.
 - Its other contents are designed later.
@@ -200,7 +203,6 @@ the user's data, and the pages of today show and write only the format of LCTYSP
 ## Open points
 
 - The forms of `lcty-tool`, and the contents of `lcty-cmd` beyond the attributes above.
-- How a stopped reply is recorded beyond `data-error`, and how an `incomplete` reply of today is converted.
 - The hash that identifies the state of a conversation (for checking a page against the server), decided once this
   format is stable.
 - How an export looks (headings for the roles, how the text of `user` is quoted, separators).

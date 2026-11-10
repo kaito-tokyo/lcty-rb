@@ -229,6 +229,11 @@ Feature: LCTYSP-3002 Conversation files as HTML
     And the system message is a system line, the thinking a thinking line and the lcty-cmd a cmd line with its bare id
     And the meta has no tags
 
+  Scenario: The instructions of a file in the lcty-msg format are its system messages without a tag
+    Given a file in the lcty-msg format with the system messages "a", "b" of the tag "ruby" and "c", and a memory
+    When ConvHtml.decode reads it
+    Then the meta's instructions are "a", a blank line and "c"
+
   Scenario Outline: ConvHtml.lcty_msg? tells the lcty-msg format from the one before
     Given <file>
     Then ConvHtml.lcty_msg? is <answer>

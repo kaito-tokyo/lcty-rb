@@ -3,19 +3,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // New conversation (/, the top page. LCTYSP-0004, LCTYSP-0005). Plain HTML (the creation card in public/index.html) plus
-// the interactive components <lcty-sidebar> and <lcty-composer>. Sending decides the conversation id, creates the file (meta, tags, title and
-// the first message; for a fork also the inherited messages), ending with the command tag <lcty-cmd data-op="send">, and
-// moves to /c/<id>.html, which generates the reply because the file ends with that command.
+// the interactive components <lcty-sidebar> and <lcty-composer>. Sending decides the conversation id, creates the file
+// through /v1/rpc in the format of LCTYSP-0013 (the head, the system prompt, for a fork the messages it copies, and the
+// first message), ending with an <lcty-cmd data-op="send">, and moves to /c/<id>.html, which generates the reply because
+// this tab made that command.
 // With ?fork=<id>&at=<n> it forks; ?q=… puts a query into the sidebar's search box.
 
 import { getTags } from "../api/lcty-t.js";
-import { createConversation, getConversation, toLine } from "../api/storage.js";
+import { connectRpc } from "../api/rpc.js";
+import { appendLines, getConversation } from "../api/storage.js";
 import {
 	appIndexer,
 	convUrl,
 	loadSettings,
 	newConvId,
-	newMsgId,
 	nowIso,
 	showToast,
 } from "../common.js";
@@ -28,7 +29,15 @@ import {
 	setComposerBusy,
 	setComposerValue,
 } from "../ui/lcty-elements.js";
+import {
+	cmdAttrs,
+	msgAttrs,
+	replyArticle,
+	userArticle,
+} from "../ui/lcty-msg.js";
 import { initSidebar } from "../ui/sidebar.js";
+
+const TITLE_MAX_SIZE = 512; // bytes of the title slot, as the files of LCTYSP-0003 have (LCTYSP-0013)
 
 /** Starts /: called once by the page's entry (public/index.js). */
 export function initNewPage() {
@@ -178,29 +187,69 @@ export function initNewPage() {
 
 	// ---- Sending: decide the id, create the file, move to the conversation page ----
 
+	// The conversation is created through /v1/rpc in the format of LCTYSP-0013 (LCTYSP-0012): c.create writes the head,
+	// then the system prompt, the messages of a fork (with new ids: a fork shares none, LCTYSP-0013) and the user
+	// message are appended one by one, and last the lcty-cmd send, which this tab's conversation page runs as its own
+	// (sessionStorage lcty.run.<id>). The tags at creation go to lcty_t.sqlite (the HTTP API's tags line).
+	async function create(id, title, text, at) {
+		const rpc = connectRpc();
+		try {
+			await rpc.call("c.create", {
+				cid: id,
+				createdAt: at,
+				title,
+				lang: document.documentElement.lang || "en",
+				titleMaxSize: TITLE_MAX_SIZE,
+				lctyVersion: "v1",
+			});
+			let after = null;
+			const append = async (method, attrs, innerHTML) => {
+				await rpc.call(method, { cid: id, after, attrs, innerHTML });
+				after = attrs.id;
+			};
+			const instructions = form.instructions.value;
+			if (instructions)
+				await append(
+					"c.append.msg",
+					msgAttrs("system", instructions),
+					replyArticle(instructions),
+				);
+			for (const m of state.fork?.messages ?? []) {
+				const role = m.role === "assistant" ? "model" : "user";
+				await append(
+					"c.append.msg",
+					msgAttrs(role, m.content, { at: m.at || at }),
+					role === "user" ? userArticle(m.content) : replyArticle(m.content),
+				);
+			}
+			await append(
+				"c.append.msg",
+				msgAttrs("user", text, { at }),
+				userArticle(text),
+			);
+			const cmd = cmdAttrs("send", at);
+			await rpc.call("c.append.cmd", { cid: id, after, attrs: cmd });
+			try {
+				sessionStorage.setItem(`lcty.run.${id}`, cmd.id);
+			} catch {}
+		} finally {
+			rpc.close();
+		}
+		if (state.tags.length)
+			await appendLines(id, [{ type: "tags", tags: state.tags, at }]);
+	}
+
 	async function send(text) {
 		if (state.sending) return;
 		state.sending = true;
 		setComposerBusy(composer, true);
 		const id = newConvId();
 		const at = nowIso();
-		const meta = {
-			id,
-			created_at: at,
-			instructions: form.instructions.value,
-			tags: state.tags,
-		};
 		const title = state.fork
 			? state.fork.title
 			: text.trim().split("\n")[0].slice(0, 30);
-		const lines = [
-			{ type: "title", title, at },
-			...(state.fork ? state.fork.messages.map(toLine) : []),
-			toLine({ id: newMsgId(), role: "user", content: text, at }),
-			{ type: "cmd", op: "send", at }, // command tag: generate the reply on the conversation page (LCTYSP-0004)
-		];
 		try {
-			await createConversation(meta, lines);
+			await create(id, title, text, at);
 			location.href = convUrl(id);
 		} catch (e) {
 			showToast(

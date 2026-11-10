@@ -411,7 +411,11 @@ function shadowOf(page) {
 				e.getAttribute("type"),
 				e.textContent,
 			]),
-			fields: cmd.label === inner[1] && cmd.stopButton === inner[2],
+			fields:
+				cmd.label === inner[1] &&
+				cmd.stopButton === inner[2] &&
+				cmd.retryButton === inner[3] &&
+				cmd.removeButton === inner[4],
 		};
 	});
 }
@@ -426,7 +430,7 @@ test("A command shows a spinner, a label and a stop button in its Shadow DOM", a
 	await test.step("When a <lcty-cmd> is created", async () => {
 		shadow = await shadowOf(page);
 	});
-	await test.step('Then its Shadow DOM is a box holding a spinner, the label "Generating…" and the button "Stop"', () => {
+	await test.step('Then its Shadow DOM is a box holding a spinner, the label "Generating…" and the buttons "Stop", "Retry" and "Remove"', () => {
 		expect(shadow.roots).toBe(1);
 		expect(shadow.box.slice(0, 2)).toEqual(["div", "cmd-box"]);
 		expect(
@@ -435,17 +439,21 @@ test("A command shows a spinner, a label and a stop button in its Shadow DOM", a
 			["span", "spinner", null, ""],
 			["span", "", null, "Generating…"],
 			["button", "", "button", "Stop"],
+			["button", "", "button", "Retry"],
+			["button", "", "button", "Remove"],
 		]);
 	});
-	await test.step('And they have the parts lcty-cmd__box, lcty-cmd__spinner, lcty-cmd__label and "lcty-cmd__stop lcty-button"', () => {
+	await test.step('And they have the parts lcty-cmd__box, lcty-cmd__spinner, lcty-cmd__label, "lcty-cmd__stop lcty-button", "lcty-cmd__retry lcty-button" and "lcty-cmd__remove lcty-button"', () => {
 		expect([shadow.box[2], ...shadow.inner.map((e) => e[2])]).toEqual([
 			"lcty-cmd__box",
 			"lcty-cmd__spinner",
 			"lcty-cmd__label",
 			"lcty-cmd__stop lcty-button",
+			"lcty-cmd__retry lcty-button",
+			"lcty-cmd__remove lcty-button",
 		]);
 	});
-	await test.step("And its fields label and stopButton are the label and the button", () => {
+	await test.step("And its fields label, stopButton, retryButton and removeButton are the label and the buttons", () => {
 		expect(shadow.fields).toBe(true);
 	});
 });
@@ -473,7 +481,52 @@ test("A command's texts follow the page's language", async ({
 	await test.step("When a <lcty-cmd> is created", async () => {
 		shadow = await shadowOf(page);
 	});
-	await test.step('Then its label reads "生成中…" and its button "停止"', () => {
-		expect(shadow.inner.map((e) => e[4])).toEqual(["", "生成中…", "停止"]);
+	await test.step('Then its label reads "生成中…" and its buttons "停止", "やり直す" and "削除"', () => {
+		expect(shadow.inner.map((e) => e[4])).toEqual([
+			"",
+			"生成中…",
+			"停止",
+			"やり直す",
+			"削除",
+		]);
+	});
+});
+
+test("A command with data-error has failed and does not run", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('Given <lcty-c> holds a message and then <lcty-cmd data-op="send" data-error="boom">', () =>
+		setBody(
+			page,
+			`<lcty-c id="c-conv">${MESSAGE}<lcty-cmd data-op="send" data-error="boom"></lcty-cmd></lcty-c>`,
+		));
+	await whenDefined(page);
+	await thenNotCalled(page);
+	await test.step('And the command\'s state is "failed" and its label reads "Stopped: boom"', async () => {
+		expect(
+			await page.evaluate(() => {
+				const cmd = document.querySelector("lcty-cmd");
+				return [cmd.getAttribute("state"), cmd.label.textContent];
+			}),
+		).toEqual(["failed", "Stopped: boom"]);
+	});
+});
+
+test("A command that has a state already does not run", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('Given <lcty-c> holds a message and then <lcty-cmd data-op="send" state="stale">', () =>
+		setBody(
+			page,
+			`<lcty-c id="c-conv">${MESSAGE}<lcty-cmd data-op="send" state="stale"></lcty-cmd></lcty-c>`,
+		));
+	await whenDefined(page);
+	await thenNotCalled(page);
+	await test.step('And the command\'s state is still "stale"', async () => {
+		expect((await commandState(page)).state).toBe("stale");
 	});
 });

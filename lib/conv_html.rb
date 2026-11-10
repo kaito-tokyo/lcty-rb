@@ -353,6 +353,9 @@ module Chatty
       els = decode_elements(text, label)
       setup = els.find { |o, _| o['type'] == 'setup' }
       meta['instructions'] = setup[0]['instructions'] if meta && setup
+      # LCTYSP-0013 has no lcty-setup: the instructions are its system messages without a tag, joined
+      systems = els.map(&:first).select { |o| o['type'] == 'system' && o['role'] == 'system' && !o['tag'] }
+      meta['instructions'] = systems.map { |o| o['content'] }.join("\n\n") if meta && !setup && !systems.empty?
       head = title.nil? || title.empty? ? [] : [[{ 'type' => 'title', 'title' => title }, nil]]
       head << [meta, nil] if meta
       head + els.reject { |o, _| o['type'] == 'setup' }

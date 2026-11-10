@@ -9,6 +9,7 @@
 
 require_relative 'helper'
 require 'conv_html'
+require 'uuid'
 
 class ConvHtmlTest < Lcty::Scenarios
   ConvHtml = Chatty::ConvHtml
@@ -610,6 +611,21 @@ class ConvHtmlTest < Lcty::Scenarios
     end
     step('And the meta has no tags') do
       assert_equal [], ConvHtml.current_meta(objs)['tags']
+    end
+  end
+
+  scenario 'The instructions of a file in the lcty-msg format are its system messages without a tag' do
+    text = objs = nil
+    step('Given a file in the lcty-msg format with the system messages "a", "b" of the tag "ruby" and "c", and a memory') do
+      sys = lambda do |content, extra = ''|
+        %(<lcty-msg data-role="system" id="sys-#{Chatty::Uuid.v7}"#{extra} data-content="#{content}"><article>#{content}</article></lcty-msg>\n)
+      end
+      text = lcty_msg_file(sys.('a') + sys.('b', ' data-tag="ruby"') + sys.('c') +
+                           %(<lcty-msg data-role="memory" id="mem-#{ID1}" data-tag="ruby" data-content="m"><article>m</article></lcty-msg>\n))
+    end
+    step('When ConvHtml.decode reads it') { objs = ConvHtml.decode(text).map(&:first) }
+    step('Then the meta\'s instructions are "a", a blank line and "c"') do
+      assert_equal "a\n\nc", ConvHtml.current_meta(objs)['instructions']
     end
   end
 

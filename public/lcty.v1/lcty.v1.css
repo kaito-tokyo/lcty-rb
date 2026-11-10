@@ -579,12 +579,15 @@ lcty-message:last-of-type::part(lcty-message__action--regenerate) {
 lcty-c[busy] lcty-message::part(lcty-message__actions) {
 	display: none;
 }
-lcty-message::part(lcty-message__foot) {
+lcty-message::part(lcty-message__foot),
+lcty-msg::part(lcty-msg__foot) {
 	color: var(--fg-dim);
 	margin-top: 4px;
 }
-/* the ⓘ of a reply's timings, a bare button that opens them in a popover, one item per line (lcty.v1.cjs) */
-lcty-message::part(lcty-message__info) {
+/* the ⓘ of a reply's timings, a bare button that opens them in a popover, one item per line (lcty.v1.cjs); the same
+   for <lcty-msg>, whose stats a module reads from lcty_c.sqlite */
+lcty-message::part(lcty-message__info),
+lcty-msg::part(lcty-msg__info) {
 	font: inherit;
 	color: inherit;
 	background: none;
@@ -592,7 +595,8 @@ lcty-message::part(lcty-message__info) {
 	padding: 0 2px;
 	cursor: pointer;
 }
-lcty-message::part(lcty-message__timings) {
+lcty-message::part(lcty-message__timings),
+lcty-msg::part(lcty-msg__timings) {
 	white-space: pre-line;
 	color: var(--fg);
 	background: var(--bg);
@@ -604,7 +608,8 @@ lcty-message::part(lcty-message__timings) {
 /* just above the ⓘ, its implicit anchor (popovertarget), below it when there is no room; without anchor positioning
    it stays centered, as popovers are by default */
 @supports (position-area: top) {
-	lcty-message::part(lcty-message__timings) {
+	lcty-message::part(lcty-message__timings),
+	lcty-msg::part(lcty-msg__timings) {
 		inset: auto;
 		margin: 0 0 4px;
 		position-area: top span-right;
@@ -814,8 +819,29 @@ lcty-thinking[id] > article {
 lcty-msg::part(lcty-msg__head) {
 	display: flex;
 	align-items: center;
+	gap: 8px;
 	color: var(--fg-dim);
 	min-height: 24px;
+}
+/* the actions, as those of <lcty-message>: shown while hovered; undo on the last user message only, regenerate on the
+   last reply only when it ends the conversation (marked by the module); none while busy or read-only */
+lcty-msg::part(lcty-msg__actions) {
+	margin-left: auto;
+	display: flex;
+	gap: 4px;
+	visibility: hidden;
+}
+lcty-msg:hover::part(lcty-msg__actions) {
+	visibility: visible;
+}
+lcty-msg::part(lcty-msg__action) {
+	padding: 0 8px;
+}
+lcty-msg:not([data-last-user])::part(lcty-msg__action--undo),
+lcty-msg:not([data-last-model])::part(lcty-msg__action--regenerate),
+lcty-c:is([busy], [data-read-only]) lcty-msg::part(lcty-msg__actions),
+lcty-c[data-read-only] lcty-message::part(lcty-message__actions) {
+	display: none;
 }
 lcty-msg[data-role="user"] > article {
 	background: var(--bg-user);
@@ -848,7 +874,12 @@ lcty-msg:is([data-role="system"], [data-role="memory"]) > article {
 lcty-cmd {
 	display: none;
 }
-lcty-cmd[state="running"] {
+lcty-cmd:is(
+	[state="running"],
+	[state="failed"],
+	[state="stale"],
+	[state="held"]
+) {
 	box-sizing: border-box;
 	display: block;
 	max-width: var(--content-width);
@@ -871,9 +902,22 @@ lcty-cmd::part(lcty-cmd__box) {
 	align-items: center;
 	color: var(--fg-dim);
 }
-lcty-cmd::part(lcty-cmd__stop) {
+lcty-cmd::part(lcty-cmd__stop),
+lcty-cmd::part(lcty-cmd__retry),
+lcty-cmd::part(lcty-cmd__remove) {
 	padding: 1px 8px;
 } /* lcty-button */
+/* the spinner and Stop while it runs; Retry and Remove for a failed lock (data-error) or one nobody holds (stale);
+   nothing but the label while another tab holds it (held) */
+lcty-cmd:not([state="running"])::part(lcty-cmd__spinner),
+lcty-cmd:not([state="running"])::part(lcty-cmd__stop),
+lcty-cmd:not([state="failed"], [state="stale"])::part(lcty-cmd__retry),
+lcty-cmd:not([state="failed"], [state="stale"])::part(lcty-cmd__remove) {
+	display: none;
+}
+lcty-cmd[state="failed"]::part(lcty-cmd__label) {
+	color: var(--danger);
+}
 lcty-cmd::part(lcty-cmd__spinner) {
 	width: 14px;
 	height: 14px;

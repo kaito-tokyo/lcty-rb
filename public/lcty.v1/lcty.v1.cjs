@@ -895,6 +895,9 @@
 		this.who = null;
 		this.details = null;
 		this.summary = null;
+		this.undoButton = null;
+		this.forkButton = null;
+		this.regenerateButton = null;
 		if (role === "system" || role === "memory") {
 			this.summary = document.createElement("summary");
 			this.summary.setAttribute("part", "lcty-msg__summary");
@@ -918,10 +921,59 @@
 					? _("assistant", "Assistant")
 					: "",
 		);
+		// the actions of the role, as <lcty-message>'s: undo and fork for user, regenerate for model (a module wires them)
+		const action = (name, label) => {
+			const b = document.createElement("button");
+			b.type = "button";
+			b.setAttribute(
+				"part",
+				`lcty-msg__action lcty-msg__action--${name} lcty-button`,
+			);
+			b.append(label);
+			return b;
+		};
+		if (role === "user") {
+			this.undoButton = action("undo", _("undo", "Undo"));
+			this.forkButton = action("fork", _("fork", "Fork from here"));
+		} else if (role === "model")
+			this.regenerateButton = action(
+				"regenerate",
+				_("regenerate", "Regenerate"),
+			);
+		const actions = document.createElement("span");
+		actions.setAttribute("part", "lcty-msg__actions");
+		actions.append(
+			...[this.undoButton, this.forkButton, this.regenerateButton].filter(
+				Boolean,
+			),
+		);
 		const head = document.createElement("div");
 		head.setAttribute("part", "lcty-msg__head");
-		head.append(this.who);
-		this.shadowRoot.replaceChildren(head, slot);
+		head.append(this.who, actions);
+		this.foot = null;
+		this.info = null;
+		this.timings = null;
+		if (role !== "model") {
+			this.shadowRoot.replaceChildren(head, slot);
+			return;
+		}
+		// a reply's ⓘ, as <lcty-message>'s: the stats are not in the file (lcty_c.sqlite), so the foot stays hidden until a
+		// module has read them, filled in the popover and shown it
+		this.timings = document.createElement("div");
+		this.timings.id = "timings";
+		this.timings.setAttribute("part", "lcty-msg__timings");
+		this.timings.setAttribute("popover", "auto");
+		this.info = document.createElement("button");
+		this.info.type = "button";
+		this.info.setAttribute("part", "lcty-msg__info");
+		this.info.setAttribute("popovertarget", "timings");
+		this.info.setAttribute("aria-label", _("timings", "Timings"));
+		this.info.append("ⓘ");
+		this.foot = document.createElement("div");
+		this.foot.setAttribute("part", "lcty-msg__foot");
+		this.foot.hidden = true;
+		this.foot.append(this.info, this.timings);
+		this.shadowRoot.replaceChildren(head, slot, this.foot);
 	}
 }
 

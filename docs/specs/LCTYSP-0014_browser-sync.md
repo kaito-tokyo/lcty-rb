@@ -13,8 +13,12 @@ SPDX-License-Identifier: Apache-2.0
   [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file),
   [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) and [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the copies and
   their workers)
-- Implementation: none in the pages yet; the server sends `c.batch.updated` (`lib/rpc/servlet.rb`), and what the pages
-  rely on from it is tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature) and [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)
+- Implementation: the conversation page and the new conversation page (`lcty.v1.async.mjs`, `js/pages/new.js`)
+  through `js/api/rpc.js` ([LCTYSP-1022](LCTYSP-1022_rpc-client.feature)), tested by
+  [LCTYSP-2002](LCTYSP-2002_conversation-page.feature); the server sends `c.batch.updated` (`lib/rpc/servlet.rb`),
+  and what the pages rely on from it is tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature) and
+  [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature). The sidebar does not use `/v1/rpc` yet: it still reads
+  `GET /v1/meta-all.json` (LCTYSP-0010), and the stores `sync` and `c_recordcount` are not made yet.
 
 ## Summary
 
@@ -141,9 +145,9 @@ When the connection is open and `initialize` has answered:
 
 - **The `c_meta` and `c_recordcount` records** of a `c.batch.updated` are written by the worker of `lcty_c` in one
   transaction under the version rule, and the sidebar is redrawn from them.
-- **The `c_html` records** of the conversation shown are applied to the document when their `after` (or `id`) is the
-  document's last element; otherwise the conversation is [out of sync](#out-of-sync). Those of its own `actorId` are
-  skipped when already applied.
+- **The `c_html` records** of the conversation shown that another page made (another `actorId`) put the conversation
+  [out of sync](#out-of-sync): they are not applied to the document, whether or not they follow its last element.
+  Those of the page's own `actorId` are already in its document. Applying the records that follow is left for later.
 - **`c.cmd.holds`** is answered `{holds: true}` while the page runs that `lcty-cmd`, `{holds: false}` otherwise, at
   once: the page that asked waits only a short time.
 

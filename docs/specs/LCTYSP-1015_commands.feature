@@ -118,12 +118,24 @@ Feature: LCTYSP-1015 Command tags
   Scenario: A command shows a spinner, a label and a stop button in its Shadow DOM
     Given defineCommands has been given the operation "send"
     When a <lcty-cmd> is created
-    Then its Shadow DOM is a box holding a spinner, the label "Generating…" and the button "Stop"
-    And they have the parts lcty-cmd__box, lcty-cmd__spinner, lcty-cmd__label and "lcty-cmd__stop lcty-button"
-    And its fields label and stopButton are the label and the button
+    Then its Shadow DOM is a box holding a spinner, the label "Generating…" and the buttons "Stop", "Retry" and "Remove"
+    And they have the parts lcty-cmd__box, lcty-cmd__spinner, lcty-cmd__label, "lcty-cmd__stop lcty-button", "lcty-cmd__retry lcty-button" and "lcty-cmd__remove lcty-button"
+    And its fields label, stopButton, retryButton and removeButton are the label and the buttons
 
   Scenario: A command's texts follow the page's language
     Given the page is in Japanese
     And defineCommands has been given the operation "send"
     When a <lcty-cmd> is created
-    Then its label reads "生成中…" and its button "停止"
+    Then its label reads "生成中…" and its buttons "停止", "やり直す" and "削除"
+
+  Scenario: A command with data-error has failed and does not run
+    Given <lcty-c> holds a message and then <lcty-cmd data-op="send" data-error="boom">
+    When defineCommands is given the operation "send"
+    Then "send" has not been called
+    And the command's state is "failed" and its label reads "Stopped: boom"
+
+  Scenario: A command that has a state already does not run
+    Given <lcty-c> holds a message and then <lcty-cmd data-op="send" state="stale">
+    When defineCommands is given the operation "send"
+    Then "send" has not been called
+    And the command's state is still "stale"

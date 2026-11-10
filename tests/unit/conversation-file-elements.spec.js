@@ -915,6 +915,16 @@ function shadowOf(page, tag) {
 			who: el.who?.textContent ?? null,
 			isWho: el.who === (el.shadowRoot.querySelector("span") ?? null),
 			nulls: { who: el.who, details: el.details, summary: el.summary },
+			actions: [
+				...(el.shadowRoot.querySelector('[part="lcty-msg__actions"]')
+					?.children ?? []),
+			].map((b) => ({
+				text: b.textContent,
+				part: b.getAttribute("part"),
+				field: ["undoButton", "forkButton", "regenerateButton"].find(
+					(f) => el[f] === b,
+				),
+			})),
 			slotted: el.shadowRoot
 				.querySelector("slot")
 				.assignedElements()
@@ -923,9 +933,26 @@ function shadowOf(page, tag) {
 	}, tag);
 }
 
-for (const [role, who] of [
-	["user", "You"],
-	["model", "Assistant"],
+for (const [role, who, actions, fields, name, expected] of [
+	[
+		"user",
+		"You",
+		'"Undo" and "Fork from here"',
+		"undoButton and forkButton",
+		"undo and fork",
+		[
+			["Undo", "undo", "undoButton"],
+			["Fork from here", "fork", "forkButton"],
+		],
+	],
+	[
+		"model",
+		"Assistant",
+		'"Regenerate"',
+		"regenerateButton",
+		"regenerate",
+		[["Regenerate", "regenerate", "regenerateButton"]],
+	],
 ]) {
 	test(`A user or model message has a head with who wrote it and its article (${role})`, async ({
 		page,
@@ -937,15 +964,27 @@ for (const [role, who] of [
 			`<lcty-msg data-role="${role}" data-content="Hi"><article>Hi</article></lcty-msg>`,
 		);
 		let shadow;
-		await test.step(`Then its Shadow DOM is the head (part lcty-msg__head) holding the who "${who}" (part lcty-msg__who), its field who, and a <slot>`, async () => {
+		await test.step(`Then its Shadow DOM starts with the head (part lcty-msg__head) holding the who "${who}" (part lcty-msg__who), its field who, and a <slot>`, async () => {
 			shadow = await shadowOf(page, "lcty-msg");
-			expect(shadow.children).toEqual([
+			expect(shadow.children.slice(0, 2)).toEqual([
 				["div", "lcty-msg__head"],
 				["slot", null],
 			]);
-			expect(shadow.head).toEqual([["span", "lcty-msg__who"]]);
+			expect(shadow.head).toEqual([
+				["span", "lcty-msg__who"],
+				["span", "lcty-msg__actions"],
+			]);
 			expect(shadow.who).toBe(who);
 			expect(shadow.isWho).toBe(true);
+		});
+		await test.step(`And the head's actions (part lcty-msg__actions) are ${actions}, its fields ${fields}, with the parts lcty-msg__action, lcty-msg__action--${name} and lcty-button`, () => {
+			expect(shadow.actions).toEqual(
+				expected.map(([text, n, field]) => ({
+					text,
+					part: `lcty-msg__action lcty-msg__action--${n} lcty-button`,
+					field,
+				})),
+			);
 		});
 		await test.step("And its fields details and summary are null", () => {
 			expect(shadow.nulls.details).toBeNull();
@@ -956,6 +995,70 @@ for (const [role, who] of [
 		});
 	});
 }
+
+test("A model message has a hidden foot with the ⓘ of its timings", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenBody(
+		page,
+		'<lcty-msg data-role="model" data-content="Hi"><article>Hi</article></lcty-msg>',
+	);
+	const footOf = (selector) =>
+		page.evaluate((selector) => {
+			const el = document.querySelector(selector);
+			const last = el.shadowRoot.lastElementChild;
+			return {
+				last: [last.localName, last.getAttribute("part"), last.hidden],
+				isFoot: last === el.foot,
+				info: el.info && [
+					el.info.localName,
+					el.info.getAttribute("part"),
+					el.info.getAttribute("aria-label"),
+					el.info.getAttribute("popovertarget"),
+					el.info.parentElement === el.foot,
+				],
+				timings: el.timings && [
+					el.timings.id,
+					el.timings.getAttribute("popover"),
+					el.timings.getAttribute("part"),
+					el.timings.parentElement === el.foot,
+				],
+				nulls: [el.foot, el.info, el.timings],
+			};
+		}, selector);
+	let foot;
+	await test.step("Then the last of its Shadow DOM is the foot (part lcty-msg__foot), its field foot, which is hidden", async () => {
+		foot = await footOf("lcty-msg");
+		expect(foot.last).toEqual(["div", "lcty-msg__foot", true]);
+		expect(foot.isFoot).toBe(true);
+	});
+	await test.step('And the foot holds the ⓘ, its field info, a button labelled "Timings" (part lcty-msg__info) whose popovertarget is "timings"', () => {
+		expect(foot.info).toEqual([
+			"button",
+			"lcty-msg__info",
+			"Timings",
+			"timings",
+			true,
+		]);
+	});
+	await test.step('And the <div id="timings"> with popover="auto" (part lcty-msg__timings), its field timings', () => {
+		expect(foot.timings).toEqual([
+			"timings",
+			"auto",
+			"lcty-msg__timings",
+			true,
+		]);
+	});
+	await test.step("And a user message has no foot: its fields foot, info and timings are null", async () => {
+		await setBody(
+			page,
+			'<lcty-msg data-role="user" data-content="Hi"><article>Hi</article></lcty-msg>',
+		);
+		expect((await footOf("lcty-msg")).nulls).toEqual([null, null, null]);
+	});
+});
 
 for (const [kase, attributes, summary] of [
 	["system without tag", 'data-role="system"', "System prompt"],

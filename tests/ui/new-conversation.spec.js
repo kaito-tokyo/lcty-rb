@@ -225,11 +225,17 @@ test("A fork starts from the source's system prompt and puts the chosen message 
 		id = conversationIdOf(page);
 		expect(id).not.toBe(src.id);
 	});
-	await test.step("And the server has saved four messages, of which the first two are inherited", async () => {
-		// Sending copies the first two messages (inherited) and adds the edited one, then the reply
+	await test.step("And the server has saved four messages, the first two copies of the source's with ids of their own", async () => {
+		// Sending copies the first two messages with new ids (a fork shares none, LCTYSP-0013) and adds the edited one,
+		// then the reply
 		await waitForSaved(request, id, 4);
 		const saved = await savedMessages(request, id);
-		expect(saved.slice(0, 2).every((m) => m.inherited)).toBe(true);
+		const source = await savedMessages(request, src.id);
+		expect(saved.slice(0, 2).map((m) => m.content)).toEqual(
+			source.slice(0, 2).map((m) => m.content),
+		);
+		expect(saved.slice(0, 2).map((m) => m.id)).not.toContain(source[0].id);
+		expect(saved.slice(0, 2).map((m) => m.id)).not.toContain(source[1].id);
 	});
 	await test.step("And the source still has its four messages", async () => {
 		expect(await savedMessages(request, src.id)).toHaveLength(4);

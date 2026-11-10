@@ -341,13 +341,28 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   - An `<lcty-thinking>` is collapsed, its summary "Thinking (n characters)", as the thinking of `<lcty-message>`.
   - Changing `data-role` or `data-tag` rebuilds a `<lcty-msg>`, and changing the text of an `<lcty-thinking>` its
     summary.
-- **A file of LCTYSP-0013 is read-only for now.** The module tells the format by the absence of `<lcty-setup>` and
-  `<lcty-message>`, which every file of LCTYSP-0003 has. Until the pages write such a file through `/v1/rpc`:
-  - the composer is disabled, with a notice for a placeholder;
-  - the messages get no handlers, and no command runs, so a trailing `<lcty-cmd>` stays an element of the file;
-  - the title, the tags and deleting still work;
-  - the header's chips are the current tags, since the file has no `data-setup-tags`;
-  - a search result scrolls to `#msg-u-<id>`.
+- **The page writes a file of LCTYSP-0013 through `/v1/rpc`** ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md),
+  [LCTYSP-0014](LCTYSP-0014_browser-sync.md)), one element at a time at its end, and puts into its document the same
+  element it sent. The module tells the format by the absence of `<lcty-setup>` and `<lcty-message>`, which every file
+  of LCTYSP-0003 has.
+  - **Sending** appends the user `lcty-msg`, then the lock, an `lcty-cmd send`, which runs at once as the page's own.
+  - **The reply** streams into a draft `<lcty-message data-draft>` after the lock, which is never written. When it has
+    finished, the lock is removed, the `lcty-thinking` and the model `lcty-msg` are appended, and what was measured is
+    recorded (`c.stats.put`).
+  - **When it is stopped or fails,** the lock is replaced by one with `data-error`, the draft is dropped, and the lock
+    shows its error with "Retry" (take the lock again) and "Remove".
+  - **Undo** removes the elements from the end back to the last user message, and puts its text into the composer.
+    **Regenerate** removes what follows the last user message and takes the lock again. **Fork** goes to the new
+    conversation page.
+  - **A lock the page did not start** is not run: the page asks `c.cmd.held`, and shows "A reply is being made in
+    another tab" when a tab holds it, or "A reply was left unfinished" with "Retry" and "Remove" when none does. The new
+    conversation page marks the lock it appended (`sessionStorage` `lcty.run.<id>`), so that tab runs it.
+  - **A change made by another tab** to the conversation puts the page out of sync: the composer is disabled, asking for
+    a reload.
+  - The header's chips are the current tags, since the file has no `data-setup-tags`; the ⓘ of a reply shows what
+    `c.stats.list` gives; a search result scrolls to `#msg-u-<id>`.
+- **A file of LCTYSP-0003 is read-only.** Until `lcty.rb convert` converts it, the composer is disabled with a notice,
+  the messages' actions are hidden and no command runs. The title, the tags and deleting still work.
 - `<lcty-conv-list>` (the sidebar's conversation list) is defined in `lcty.v1.cjs` like the other elements: it builds
   the items (title, tag chips, date and, when known, the message count) as parts of `<lcty-sidebar>`'s Shadow DOM
   and fires `select` and `tag` (with the name the chip shows). Pages give it items (`show(items, empty)`) and the

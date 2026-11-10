@@ -44,7 +44,7 @@ type LctyTextKey =
 	| "setupTags"
 	| "systemPrompt"
 	| "memoryOf"
-	| "lctyMsgReadOnly"
+	| "formerReadOnly"
 	| "none"
 	| "recompose"
 	| "setupHint"
@@ -123,6 +123,13 @@ type LctyTextKey =
 	| "selectAll"
 	| "toEnd"
 	| "generating"
+	| "retry"
+	| "remove"
+	| "cmdFailed"
+	| "incomplete"
+	| "cmdStale"
+	| "cmdHeld"
+	| "outOfSync"
 	| "noConversations"
 	| "noMatches"
 	| "semanticUnavailable"
@@ -374,7 +381,8 @@ declare function lctyContentOf(el: Element): string;
 /**
  * <lcty-msg>: a message of a conversation file of LCTYSP-0013 (lcty-msg). Its <article>, as written in the file, shows
  * through a slot; nothing is rendered from data-content. user and model have a head (part lcty-msg__head) with who wrote
- * it ("You", "Assistant"; part lcty-msg__who). system and memory are a collapsed <details> (part lcty-msg__details)
+ * it ("You", "Assistant"; part lcty-msg__who) and the actions of the role (part lcty-msg__actions), and model a hidden
+ * foot with the ⓘ of its timings. system and memory are a collapsed <details> (part lcty-msg__details)
  * whose <summary> (part lcty-msg__summary) reads "System prompt" or "Memory", and " · " and data-tag when it has one.
  * Rebuilt when data-role or data-tag changes.
  */
@@ -386,6 +394,17 @@ declare class LctyMsgElement extends HTMLElement {
 	details: HTMLDetailsElement | null;
 	/** Its summary (system and memory, else null) */
 	summary: HTMLElement | null;
+	/** Undo and "Fork from here" (user, else null; part lcty-msg__action --undo / --fork, with lcty-button); a module wires them */
+	undoButton: HTMLButtonElement | null;
+	forkButton: HTMLButtonElement | null;
+	/** Regenerate (model, else null; part lcty-msg__action --regenerate) */
+	regenerateButton: HTMLButtonElement | null;
+	/** A reply's foot (model, else null; part lcty-msg__foot), hidden until a module has shown the stats in it */
+	foot: HTMLDivElement | null;
+	/** The ⓘ (part lcty-msg__info), which opens timings */
+	info: HTMLButtonElement | null;
+	/** The popover with the timings (part lcty-msg__timings), filled in by a module from c.stats.list */
+	timings: HTMLDivElement | null;
 }
 
 /**
