@@ -230,6 +230,7 @@ module Chatty
       @db.execute('SELECT DISTINCT msg_id FROM chunks WHERE conv_id = ?', [conv_id]).each { |(m)| delete_round(m) }
       @db.execute('DELETE FROM conv_tags WHERE conv_id = ?', [conv_id])
       @db.execute('DELETE FROM conv_stats WHERE conv_id = ?', [conv_id])
+      @db.execute('DELETE FROM c_recordcount WHERE cid = ?', [conv_id])
     end
 
     # Delete a round (vectors stay; the vector DB's garbage collection removes them at startup)

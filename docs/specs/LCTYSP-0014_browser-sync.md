@@ -17,8 +17,10 @@ SPDX-License-Identifier: Apache-2.0
   through `js/api/rpc.js` ([LCTYSP-1022](LCTYSP-1022_rpc-client.feature)), tested by
   [LCTYSP-2002](LCTYSP-2002_conversation-page.feature); the server sends `c.batch.updated` (`lib/rpc/servlet.rb`),
   and what the pages rely on from it is tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature) and
-  [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature). The sidebar does not use `/v1/rpc` yet: it still reads
-  `GET /v1/meta-all.json` (LCTYSP-0010), and the stores `sync` and `c_recordcount` are not made yet.
+  [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature); the server also answers `t.c.list` and sends `t.batch.updated`
+  (`lib/tag_store.rb`, tested by [LCTYSP-3005](LCTYSP-3005_tag-store.feature) and LCTYSP-3020). The sidebar does not
+  use `/v1/rpc` yet: it still reads `GET /v1/meta-all.json` (LCTYSP-0010), and the stores `sync`, `c_recordcount`
+  and `t_has_many_c` are not made yet.
 
 ## Summary
 
@@ -56,6 +58,12 @@ the version they were last brought to, so that an older answer never overwrites 
   - `c_recordcount`, `op` `put`: `row` is `{cid, count}` (creating it, appending, unappending).
   - `c_html`, the document of the conversation: `op` `append` with `row` `{cid, after, tag, attrs, innerHTML}`, the
     element as written; `op` `unappend` with `row` `{cid, id}`.
+  - `c_meta` and `c_recordcount`, `op` `delete`: `row` is `{cid}` (deleting a conversation, today through the HTTP
+    API, with the `actorId` `null`).
+- **`t.batch.updated` does the same for `t/`:** its records are those of `t_has_many_c` of `lcty_t`, `op` `delete`
+  and then `put` with `row` `{tag, cid}`, the rows of a conversation's tags that went and those that came. Tags are
+  still written through the HTTP API, so its `actorId` is `null`. A page that shows the sidebar declares it beside
+  `c.batch.updated`.
 - **Each connection gets the records it follows:** `c_html` records go only to the connections that follow their
   conversation (`c.subscribe`), the others to every connection that receives `c.batch.updated`. The server leaves out
   the records a connection does not get, and sends it nothing when none is left. A page declares `c.batch.updated`
@@ -97,7 +105,10 @@ the version they were last brought to, so that an older answer never overwrites 
 
 - **The tags of a conversation come from `lcty_t`:** the tag database is their source of truth, so the browser's
   copy of it holds them too, and the sidebar reads them from there with the display names of the tags. `c_meta` holds
-  none.
+  none. The store is `t_has_many_c`, the table of the same name in `lcty_t.sqlite`
+  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#the-tags-of-a-conversation)): which conversations each tag has, one
+  row `{tag, cid}` per tag and conversation, keyed by both. `t.c.list` answers every row with its version and
+  `t.batch.updated` the changes; the sidebar shows a conversation's tags in the order of the tags' files (`t_full`).
 - **The number of messages is a store of its own in `lcty_c`: `c_recordcount`.** It is a resource of `c/`, so it
   belongs in the database of `c/`; but it costs more than the meta (counting reads the whole file, where the meta needs
   only the head lines and the modification time), so it is kept apart from `c_meta` and can be read, updated or left
@@ -178,8 +189,8 @@ is not the page's own resend.
 
 ## Open points
 
-- **The store of the conversations' tags in `lcty_t`:** its name and rows, and the RPC methods that fill it.
-- **Tags, settings and vectors** have no RPC methods yet, so `lcty_t` keeps its sync of today until they do.
+- **Writing tags, settings and vectors** has no RPC methods yet, and the tag definitions (`t_full`) are not read over
+  it, so `t_full` keeps its sync of today until they do.
 - **Protecting the user's data before the reload:** what the user has in the page and the server does not (an unsent
   message in the composer, say) must not be lost when the user reloads an out-of-sync page; how it is kept is to be
   discussed.

@@ -142,8 +142,13 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   - `c_html` / `append`: `{cid, after, tag, attrs, innerHTML}`, the element as written. `c_html` / `unappend`:
     `{cid, id}`. A page applies one only when its `after` (or `id`) matches what it holds; otherwise the conversation
     is out of sync.
+  - `c_meta` / `delete` and `c_recordcount` / `delete`: `{cid}`, a conversation deleted (today only through the HTTP
+    API, so the `actorId` is `null`).
 
   A kind of update is a store, not a method, so a new one adds a record, not a notification.
+- **`t.batch.updated` announces every change of the tags of conversations** in the same way, for the resource `t/`:
+  its records are `t_has_many_c` / `delete` and `put`, rows `{tag, cid}`, the rows that went and then those that came.
+  Tags are still written through the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)), so its `actorId` is `null`.
 - **The title** is changed with `c.update.title`, which the server fits into the slot and answers as written. The slot
   is in the middle of the file, so no id guards it: the last title written wins, which is enough for a value that is
   only shown. It is allowed while an `lcty-cmd` holds the conversation, and sends a `c_meta` record.
@@ -184,7 +189,10 @@ not holding it. When none holds it, the page asks the user whether to run it aga
 at, taken together, so a page fills its list from it and follows the `c_meta` records from that version; after reconnecting it
 reads it again. `c.recordcount.list` does the same for the counts of elements: every row of the server's cache
 (`{cid, count}`, ordered by `cid`) with its version, so a page fills `c_recordcount` from it and follows the
-`c_recordcount` records; a conversation the cache has no count for is not among them, and its count is unknown. The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
+`c_recordcount` records; a conversation the cache has no count for is not among them, and its count is unknown.
+`t.c.list` does the same for the tags of conversations: every row of `t_has_many_c` (`{tag, cid}`) with its version,
+followed by the records of `t.batch.updated`, the notification of every change of them (today made through the HTTP
+API, so its `actorId` is `null`). The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
 /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the version they were read at, read before
 the data so that the data is at least that new. The page then listens from that version; a notification it already holds

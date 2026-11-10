@@ -155,22 +155,23 @@ module Lcty
         end
       end
 
-      # Run the change and announce it as one c.batch.updated (LCTYSP-0014). The block returns the records of the
-      # change, [{store, op, row}, ...], in the order they are applied; they share its version and name the actor that
-      # made it. Records of the stores in SUBSCRIBED go only to the connections following their conversation; a
-      # connection left with no record gets nothing.
-      def commit(peer)
+      # Run the change and announce it as one method notification, c.batch.updated for c/ and t.batch.updated for t/
+      # (LCTYSP-0014). The block returns the records of the change, [{store, op, row}, ...], in the order they are
+      # applied; they share its version and name the actor that made it (null for a change through the HTTP API, peer
+      # nil). Records of the stores in SUBSCRIBED go only to the connections following their conversation; a connection
+      # left with no record gets nothing.
+      def commit(peer, method = BATCH)
         @lock.synchronize do
           records = yield
           @seq += 1
           version = "#{@boot}.#{@seq}"
           msgs = {}
           @conns.each do |c|
-            next unless c.receives.include?(BATCH)
+            next unless c.receives.include?(method)
             mine = records.reject { |r| SUBSCRIBED.include?(r['store']) && c.subscription != r['row']['cid'] }
             next if mine.empty?
-            c.push(msgs[mine] ||= JSON.generate('jsonrpc' => '2.0', 'method' => BATCH, 'params' => {
-                                                       'version' => version, 'actorId' => peer.actor_id, 'records' => mine
+            c.push(msgs[mine] ||= JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => {
+                                                       'version' => version, 'actorId' => peer&.actor_id, 'records' => mine
                                                      }))
           end
           version
@@ -278,6 +279,14 @@ module Lcty
       # reconnecting. Read under the lock, as c.list, since a change writes its count before its version is given.
       'c.recordcount.list' => lambda do |_p, _peer|
         items, version = HUB.read { ConvStore.list_record_counts }
+        { 'version' => version, 'items' => items }
+      end,
+
+      # Every row of t_has_many_c, which conversations each tag has, with the version they belong to (LCTYSP-0014):
+      # read whenever a page is shown and after reconnecting. Read under the lock, as c.list, since a change of the tags
+      # (POST …/lines over HTTP) is written under it.
+      't.c.list' => lambda do |_p, _peer|
+        items, version = HUB.read { Rpc.tags&.list || [] }
         { 'version' => version, 'items' => items }
       end,
 

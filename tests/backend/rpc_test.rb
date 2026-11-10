@@ -539,6 +539,55 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
+  # ---- The tags of conversations ----
+
+  scenario 't.c.list returns which conversations each tag has with the version' do
+    c1 = c2 = r = nil
+    step('Given two conversations, the first tagged "z" and "a" and the second "a" in the tag store') do
+      c1 = create
+      c2 = create
+      Rpc.tags.set_conversation_tags(c1, %w[z a])
+      Rpc.tags.set_conversation_tags(c2, %w[a])
+    end
+    step('When t.c.list is called') { r = rpc('t.c.list')['result'] }
+    step('Then the items hold z of the first, a of the first and a of the second in that order, each only tag and cid') do
+      assert(r['items'].all? { |i| i.keys == %w[tag cid] })
+      assert_equal [['z', c1], ['a', c1], ['a', c2]],
+                   r['items'].select { |i| [c1, c2].include?(i['cid']) }.map { |i| i.values_at('tag', 'cid') }
+    end
+    step('And the version is that of the last change') { assert_equal rpc('initialize', 'capabilities' => { 'receives' => [] })['result']['version'], r['version'] }
+  end
+
+  scenario 'A change of the tags made outside /v1/rpc is one t.batch.updated with no actor' do
+    tp = cp = cid = nil
+    step('Given a page receiving t.batch.updated and one receiving only c.batch.updated') do
+      tp = page
+      tp.initialize_session(%w[t.batch.updated])
+      cp = page
+      cp.initialize_session
+    end
+    step('When the tags of a conversation are set to "a" and "b" in the tag store, then to "b"') do
+      cid = new_cid
+      Rpc.tags.set_conversation_tags(cid, %w[a b])
+      Rpc.tags.set_conversation_tags(cid, %w[b])
+      settle
+    end
+    mine = nil
+    step('Then the first page gets two t.batch.updated with only version, actorId and records, the actorId null') do
+      mine = tp.notes('t.batch.updated').select { |n| n['params']['records'].any? { |x| x['row']['cid'] == cid } }
+      assert_equal 2, mine.size
+      assert(mine.all? { |n| n['params'].keys.sort == %w[actorId records version] && n['params']['actorId'].nil? })
+    end
+    step('And their records put a and b, then delete a, and the second has the larger version') do
+      assert_equal [[%w[put a], %w[put b]], [%w[delete a]]],
+                   mine.map { |n| n['params']['records'].map { |x| [x['op'], x['row']['tag']] } }
+      assert(mine.all? { |n| n['params']['records'].all? { |x| x['store'] == 't_has_many_c' && x['row'] == { 'tag' => x['row']['tag'], 'cid' => cid } } })
+      first, second = mine.map { |n| n['params']['version'].split('.').last.to_i }
+      assert_operator first, :<, second
+    end
+    step('And the other page gets no t.batch.updated') { assert_empty cp.notes('t.batch.updated') }
+  end
+
   scenario 'c.update.title fits the title into the slot and sends a c_meta record' do
     cid = pg = r = nil
     long = 'a much longer title that cannot fit'

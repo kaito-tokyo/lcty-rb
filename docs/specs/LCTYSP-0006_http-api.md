@@ -76,7 +76,10 @@ lcty.rb answers `/v1/*` on the same origin as the pages. Bodies are JSON unless 
   receives before comparing them. The server writes and parses the HTML; the browser never sees it through this API.
 - There are no `PATCH` or `DELETE` on memory items (404): the tag editor edits memory through replace-all.
 - There is no reorder or rename endpoint; the reorder page and the tag editor send replace-all.
-- The `tags` line of `POST /v1/conversations/:id/lines` sets `conversation_tags` in `lcty_t.sqlite`. Its tags, like
+- The `tags` line of `POST /v1/conversations/:id/lines` sets the rows of the conversation in `t_has_many_c` of
+  `lcty_t.sqlite`, and the change is announced over `/v1/rpc` as `t.batch.updated`; `DELETE /v1/conversations/:id`
+  is announced as a `c.batch.updated` that deletes it from `c_meta` and `c_recordcount`, and a `t.batch.updated` for
+  its rows ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)). Its tags, like
   `data-setup-tags` of a new conversation and `tag:` in `POST /v1/search`, are references (file-name parts, `c~23`),
   checked mechanically only: valid UTF-8, no whitespace or control characters, no `/`, `\` or `:`, at most 244 bytes.
 

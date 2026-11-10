@@ -139,6 +139,13 @@ Feature: LCTYSP-3012 HTTP API
     And the search index keeps no count for it
     And deleting it again still answers 200, leaving no count either
 
+  Scenario: Deleting a conversation is announced to the pages
+    Given a conversation whose tags were changed to ["gone"], and the changes announced through Chatty.commit recorded
+    When DELETE /v1/conversations/<id> is requested
+    Then a c.batch.updated deletes it from c_meta and c_recordcount
+    And a t.batch.updated deletes its row of t_has_many_c
+    And deleting it again announces no record
+
   Scenario: The meta of every conversation is listed newest first
     Given a conversation created with the tag "setup" whose tags were changed to ["now"], last modified in 2002
     And a conversation last modified in 2001

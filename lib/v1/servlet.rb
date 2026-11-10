@@ -140,10 +140,17 @@ module Chatty
           reindex(parts[1])
           json(res, 200, 'ok' => true)
         when ['DELETE', 'conversations', 2, nil]
-          path = Store.conv_path(parts[1])
-          File.unlink(path) if File.exist?(path)
-          TAGS.delete_conversation_tags(parts[1])
-          INDEX.remove(parts[1])
+          # Announced to the pages as c.batch.updated (the conversation leaves c_meta and c_recordcount) and, apart, as
+          # t.batch.updated for its tags (LCTYSP-0014)
+          id = parts[1]
+          path = Store.conv_path(id)
+          Chatty.commit('c.batch.updated') do
+            next [] unless File.exist?(path)
+            File.unlink(path)
+            %w[c_meta c_recordcount].map { |s| { 'store' => s, 'op' => 'delete', 'row' => { 'cid' => id } } }
+          end
+          INDEX.remove(id)
+          TAGS.delete_conversation_tags(id)
           json(res, 200, 'ok' => true)
         else
           raise HttpError.new(404, 'no such endpoint')
