@@ -2,75 +2,98 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The browser's copy of every conversation's meta (IndexedDB "lcty_c", store "c_meta", LCTYSP-0010). Every operation on
-// it starts one worker, lcty.v1/lcty.v1.c.worker.cjs of the site, posts it one message ({id, op: "sync_meta"} or {id,
-// op: "get"}, with the site's v1/ as the endpoint) and gets its answer, {id, result} or {id, errorType, ...}; the
-// worker is the only code that opens the database (LCTYSP-0009). A sync (sync_meta) fetches GET v1/meta-all.json and
-// replaces the whole store; a read returns the copy without ever creating it.
+// The browser's copies of the list of conversations (IndexedDB "lcty_c", stores "c_meta" and "c_recordcount",
+// LCTYSP-0014). Every operation on them posts one message ({id, op, endpoint, payload}, with the site's v1/ as the
+// endpoint) to the tab's worker, lcty.v1/lcty.v1.c.worker.cjs of the site (started by the first operation), and gets
+// its answer, {id, result} or {id, errorType, ...}; the worker is the only code that opens the database (LCTYSP-0009).
 //
-// Every page syncs whenever it is shown (forceSyncMetaDb(), called by js/ui/sidebar.js, at once). Pages also request a
-// sync when they load the list and after sending a change of conversations to the server (requestMetaDbSync(), called
-// by api/storage.js), when the browser is idle (requestIdleCallback is not available in
-// workers). In a tab at most one worker runs: a sync requested while one runs is run once after it, so an older
-// response never overwrites a newer one in this tab and a change made meanwhile is still fetched. Changes not made
-// through this browser (a file edited by hand, another browser, another tab) are seen at the next sync.
+// The copies follow the server over the tab's /v1/rpc connection (api/tab-rpc.js): readMetaDbFrom(rpc) reads c.list and
+// c.recordcount.list and replaces them (whenever the connection opens, and the sidebar's refresh button), and
+// applyMetaBatch(params) writes the records of a c.batch.updated. The worker keeps a copy from going back, whichever
+// tab writes last (the version rule of LCTYSP-0014). In a tab the operations run one at a time, in the order they were
+// called, and the notifications that arrive while the lists are read are written after them.
 
 import { siteUrl } from "../site.js";
+import { followCopies } from "./tab-rpc.js";
 
 const WORKER_PATH = "lcty.v1/lcty.v1.c.worker.cjs"; // relative to the root of the site (LCTYSP-0005)
-const IDLE_TIMEOUT_MS = 10000; // run by then even if the browser never becomes idle
-const FALLBACK_DELAY_MS = 1000; // where requestIdleCallback is missing
 
-// lastId: the id of the last message posted to a worker; running: the sync in progress; queued: the one that runs
-// after it; scheduled: a requested sync waits for idle time; listeners: called when a new list was stored
+// tail: the last operation posted in this tab; lastId: the id of the last message posted to the worker; worker: the
+// tab's worker; pending: the operations posted to it and not answered yet, by id; listeners: called when the copies
+// have changed
 const state = {
+	tail: null,
 	lastId: 0,
-	running: null,
-	queued: null,
-	scheduled: false,
-	listeners: null,
+	worker: null,
+	pending: new Map(),
+	listeners: [],
 };
 
-// One worker, one operation: posts {id, op, endpoint (the site's v1/), payload} and resolves to the result of the
-// answer with that id, or rejects with its error (with the HTTP status as status)
+// The tab's one worker, started by the first operation and kept for the life of the page, as in api/lcty-t.js: a
+// worker started while the page is being left fails to load. One that fails is dropped with the operations it had.
+function workerOf() {
+	if (state.worker) return state.worker;
+	const worker = new Worker(siteUrl(WORKER_PATH));
+	worker.onmessage = ({ data }) => {
+		if (typeof data?.id !== "number") return;
+		const p = state.pending.get(data.id);
+		if (!p) return;
+		state.pending.delete(data.id);
+		if (data.errorType) p.reject(errorOf(data, p.op));
+		else p.resolve(data.result);
+	};
+	// A worker that could not be loaded (or threw outside an operation). Chromium prefixes "Uncaught "
+	worker.onerror = (e) => {
+		e.preventDefault();
+		worker.terminate();
+		if (state.worker === worker) state.worker = null;
+		const text = (e.message || "").replace(/^Uncaught /, "");
+		const error = new Error(text || "the worker of the conversations failed");
+		for (const p of state.pending.values()) p.reject(error);
+		state.pending.clear();
+	};
+	state.worker = worker;
+	return worker;
+}
+
+// Post {id, op, endpoint (the site's v1/), payload} to the worker and resolve to the result of the answer with that id,
+// or reject with its error
 function runWorker(op, payload) {
 	return new Promise((resolve, reject) => {
 		state.lastId += 1;
 		const id = state.lastId;
-		const worker = new Worker(siteUrl(WORKER_PATH));
-		worker.onmessage = ({ data }) => {
-			if (data?.id !== id) return;
-			worker.terminate();
-			if (data.errorType) reject(errorOf(data, op));
-			else resolve(data.result);
-		};
-		// A worker that could not be loaded (or threw outside an operation). Chromium prefixes "Uncaught "
-		worker.onerror = (e) => {
-			e.preventDefault();
-			worker.terminate();
-			const text = (e.message || "").replace(/^Uncaught /, "");
-			reject(new Error(text || "the meta sync worker failed"));
-		};
-		worker.postMessage({ id, op, endpoint: siteUrl("v1/").href, payload });
+		state.pending.set(id, { op, resolve, reject });
+		workerOf().postMessage({
+			id,
+			op,
+			endpoint: siteUrl("v1/").href,
+			payload,
+		});
 	});
 }
 
-// The Error of an answer {errorType, error?, errorMessage?, status}, with the HTTP status (or null) as status
+// The Error of an answer {errorType, error?, errorMessage?}
 function errorOf(data, op) {
-	const e =
-		data.errorType === "error" && data.error instanceof Error
-			? data.error
-			: new Error(
-					data.errorType === "unknownOperation"
-						? `unknown operation: ${op}`
-						: String(data.errorMessage ?? data.error),
-				);
-	e.status = data.status ?? null;
-	return e;
+	return data.errorType === "error" && data.error instanceof Error
+		? data.error
+		: new Error(
+				data.errorType === "unknownOperation"
+					? `unknown operation: ${op}`
+					: String(data.errorMessage ?? data.error),
+			);
+}
+
+// Run the operation after the ones posted before it in this tab, whether they succeeded or not
+function run(op, payload) {
+	const task = (state.tail ?? Promise.resolve())
+		.catch(() => {})
+		.then(() => runWorker(op, payload));
+	state.tail = task;
+	return task;
 }
 
 function notify() {
-	for (const fn of state.listeners || []) {
+	for (const fn of state.listeners) {
 		try {
 			fn();
 		} catch (e) {
@@ -79,60 +102,37 @@ function notify() {
 	}
 }
 
-// A sync now; while one runs, one more after it (requests made meanwhile share it)
-function sync() {
-	if (!state.running) {
-		state.running = runWorker("sync_meta")
-			.then(notify)
-			.finally(() => {
-				state.running = null;
-			});
-		return state.running;
-	}
-	state.queued ??= state.running
-		.catch(() => {})
-		.then(() => {
-			state.queued = null;
-			return sync();
-		});
-	return state.queued;
-}
+const copies = followCopies({
+	lists: [
+		["c.list", "c_meta"],
+		["c.recordcount.list", "c_recordcount"],
+	],
+	run,
+	onChange: notify,
+});
 
-/**
- * Call fn whenever a sync in this tab has stored a new list. fn reads the copy again with readMetaDb().
- */
+/** Call fn whenever this tab has stored a change of the copies. fn reads them again with readMetaDb(). */
 export function onMetaDbChange(fn) {
-	state.listeners ??= [];
 	state.listeners.push(fn);
 }
 
-/** Sync the copy when the browser is idle: on loading the list, and after a change of conversations was sent. */
-export function requestMetaDbSync() {
-	if (state.scheduled) return; // one is already waiting for the browser to be idle: that one is enough
-	state.scheduled = true;
-	const run = () => {
-		state.scheduled = false;
-		sync().catch((e) =>
-			console.warn("the meta of the conversations could not be synced", e),
-		);
-	};
-	if (typeof requestIdleCallback === "function")
-		requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
-	else setTimeout(run, FALLBACK_DELAY_MS);
-}
-
 /**
- * Sync now, not when idle (sync_meta): every page whenever it is shown, and the sidebar's refresh button. Resolves
- * when the new list has been stored (listeners are notified), rejects with the worker's error.
+ * Read c.list and c.recordcount.list over rpc and replace the copies with them. Resolves when they are stored
+ * (listeners are notified when something was), rejects with the error of the request or of the worker.
  */
-export function forceSyncMetaDb() {
-	return sync();
+export function readMetaDbFrom(rpc) {
+	return copies.readAll(rpc);
+}
+
+/** Write the records of one c.batch.updated (after the lists being read, if any); a failure is only logged. */
+export function applyMetaBatch(params) {
+	copies.onBatch(params);
 }
 
 /**
- * The stored copy: {items, stale}. items are newest first by updated_at_hint (only a hint); stale is true when there is
- * no copy yet (the first sync has not finished), and items is then [].
+ * The stored copies: {items, counts, stale}. items are the meta newest first by updatedAt; counts the number of
+ * elements by cid (unknown when absent); stale is true when the list has never been read, and items is then [].
  */
 export function readMetaDb() {
-	return runWorker("get");
+	return run("get");
 }

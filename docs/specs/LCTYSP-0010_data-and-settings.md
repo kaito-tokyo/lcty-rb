@@ -64,9 +64,9 @@ the following. The rule on `_` is unchanged.
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out    |
 | `lcty_t.sqlite`                           | Source, but only `t_has_many_c` (the current tags of conversations). The `tags` and `memory` tables are dropped by a migration, without conversion            |
 
-In the browser, IndexedDB is split by resource: `lcty_c` (store `c_meta`, owned by `lcty.v1.c.worker.cjs`, below) and
-`lcty_t` (stores `t_full` and `t_set`, owned by `lcty.v1.t.worker.cjs`), a full copy of the tags, one row per tag
-file, with the set's `ETag`
+In the browser, IndexedDB is split by resource: `lcty_c` (stores `c_meta`, `c_recordcount` and `sync`, owned by
+`lcty.v1.c.worker.cjs`, below) and `lcty_t` (stores `t_full` and `t_set`, a full copy of the tags, one row per tag
+file, with the set's `ETag`, and `t_has_many_c` and `sync`, the tags of conversations; owned by `lcty.v1.t.worker.cjs`)
 ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). The names are the resources',
 cut at the same grain as the server's SQLite files ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)); each database's
 own version says what it stores.
@@ -76,52 +76,53 @@ own version says what it stores.
 
 ### In the browser
 
-- **IndexedDB `lcty_c`** (derived; it can be dropped at any time; version 1):
-  - store `c_meta` (key `id`): a copy of `GET /v1/meta-all.json`, the meta of every conversation read from its head lines
-    ([LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0006](LCTYSP-0006_http-api.md)). It holds `setup_tags` (the
-    tags at creation), `updated_at_hint`, `tags_hint` and `messages_hint` (the current tags and the number of
-    messages, from the search index); the last three are only hints. It is the only store: an upgrade drops every
-    other store.
+- **IndexedDB `lcty_c`** (derived; it can be dropped at any time; version 2). Its stores follow the server over
+  `/v1/rpc` ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)), and an upgrade drops every store and recreates them empty:
+  - store `c_meta` (key `cid`): the meta of every conversation as `c.list` gives it, `{cid, lang, title, titleTypeId,
+    updatedAt, createdAt}`.
+  - store `c_recordcount` (key `cid`): `{cid, count}`, the number of elements of each conversation as
+    `c.recordcount.list` gives it; a conversation without a row has an unknown count.
+  - store `sync` (key `store`): `{store, boot, seq}`, the global version each of the two was last brought to.
 - **Every operation on it is one worker:** `lcty.v1.c.worker.cjs` (a classic worker script with no imports, served at
   `/lcty.v1/lcty.v1.c.worker.cjs` with the frame that starts it; never copied into `data/c/`, since a conversation file
   opened on its own does not need it, [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)), the same pattern as `lcty.v1.t.worker.cjs`
-  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Started by `new Worker(url)` for one operation, it is posted one
-  message `{id, op, endpoint}` and posts one back, `{id, result}` or `{id, errorType, ...}` (the RPC of the workers,
-  [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)); then the page terminates it. It is the only code that opens the
-  database, so the schema is defined there alone ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature)).
-  - `sync_meta` fetches `GET /v1/meta-all.json`, clears and fills `c_meta` in one transaction (so a conversation deleted
-    on the server disappears from it too), deletes the old database `lcty`, and answers no result. When a step fails
-    the copy is left as it was; when it cannot open the database (a newer version left by other code, a broken
-    database), the sync fails with that error.
-  - `get` answers `{items, stale}`: the copy newest first by `updated_at_hint`, then by id, or no items and `stale`
-    true when there is no copy yet. It opens the database without a version and never creates it (an upgrade that
-    would create it is aborted).
-- **When a sync runs:** every page runs one at once whenever it is shown (`forceSyncMetaDb()`, called by
-  `js/ui/sidebar.js` when the page loads and on `pageshow` from the back/forward cache, together with the tags'
-  `sync_full`, [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Loading the list and sending a change of conversations
-  to the server (creating, appending lines, popping, deleting: `js/api/storage.js`) also request one, run when the
-  browser is idle (`requestIdleCallback`, at most 10 s
-  later; 1 s later where it is missing); requests made before it starts share it. In a tab at most one worker runs: a
-  sync requested while one runs is run once after it, so an older response never overwrites a newer one in this tab
-  and a change made meanwhile is still fetched. Tabs do not coordinate: the transaction that commits last wins.
-  Changes not made through this browser or this tab (a file edited by hand, another browser, another tab) are seen at
-  the next sync.
-- **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) syncs at once (`forceSyncMetaDb()`),
-  not when idle. The list is shown again through `onMetaDbChange`; a failure is shown as a toast.
-- **Readers:** `lcty.v1.cjs` (`<lcty-sidebar>`, when it is in the document) reads `c_meta` (through the worker's `get`,
-  found at `../lcty.v1/lcty.v1.c.worker.cjs` from the page, which is one directory below the root) to fill the sidebar
-  before any module has loaded. Once the module has loaded, the sidebar's list and
-  its `tag:` filters come from `c_meta`, read by `readMetaDb()` (`js/api/meta-db.js`, the worker's `get`), which tells
-  whether there is a copy yet (`stale` until the first sync has finished), read again whenever a sync in this tab has
-  stored a new list (`onMetaDbChange`) ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). Every connection is closed
-  when its operation ends, so an upgrade is not blocked.
+  ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). Started by `new Worker(url)` for the first operation and kept for
+  the life of the page, it is posted one message `{id, op, endpoint, payload}` per operation and posts one back,
+  `{id, result}` or `{id, errorType, ...}` (the RPC of the workers, [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)). A
+  worker started for each operation was given up: the reads that follow `/v1/rpc` start late, and a worker that is still
+  loading when the page is left fails to load, which WebKit reports as an error of the page. It is the only code that opens
+  the database, so the schema is defined there alone ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature)). It never talks to
+  the server: the page posts what its connection received.
+  - `replace` `{store, version, rows}` replaces `c_meta` or `c_recordcount` with a full read, unless the store holds a
+    newer version of the same boot; `apply` `{version, records}` writes the `c_meta` and `c_recordcount` records of a
+    `c.batch.updated` onto a store of the same boot holding an older version, and leaves the others. Each checks and
+    writes in one transaction (the version rule of LCTYSP-0014).
+  - `get` answers `{items, counts, stale}`: `c_meta` newest first by `updatedAt`, then by `cid`; the counts by `cid`;
+    and `stale` true, with no items, when `c_meta` has never been filled. It opens the database without a version and
+    never creates it (an upgrade that would create it is aborted).
+- **When the copies change:** whenever the tab's connection to `/v1/rpc` opens, the first time and after every
+  reconnection, the sidebar reads `c.list` and `c.recordcount.list` and replaces the copies (`readMetaDbFrom(rpc)`,
+  `js/api/meta-db.js`, called by `js/ui/sidebar.js`), and every `c.batch.updated` is applied (`applyMetaBatch`). In a
+  tab the operations run one at a time, in order, and the notifications that arrive while the lists are being read
+  are applied after them. Tabs do not coordinate: the version rule keeps a copy from going back, whichever writes last.
+- **The refresh button** (`lcty-sidebar__refresh`, next to the settings button) reads the lists again at once. The list
+  is shown again through `onMetaDbChange`; a failure is shown as a toast.
+- **Readers:** `lcty.v1.cjs` (`<lcty-sidebar>`, when it is in the document) reads the copies (through the worker's
+  `get`, found at `../lcty.v1/lcty.v1.c.worker.cjs` from the page, which is one directory below the root) to fill the
+  sidebar before any module has loaded, without tags. Once the module has loaded, the sidebar's list comes from
+  `readMetaDb()` (`js/api/meta-db.js`, the worker's `get`) and the tags of the conversations from `t_has_many_c` of
+  `lcty_t` ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)), read again whenever this tab has stored a change of either
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). Every connection is closed when its operation ends, so an upgrade
+  is not blocked.
+- **`GET /v1/meta-all.json` is gone.** It gave the rows of version 1 (`id`, `title`, `created_at`, `updated_at_hint`,
+  `setup_tags`, `tags_hint`, `messages_hint`), built from the head lines of the files and the search index.
 - **No `localStorage` copy.** A snapshot of the newest conversations in `localStorage` key `lcty.meta.v1`, read
   synchronously for the first paint, was removed to keep the meta's handling simple; a browser that still has the key
   ignores it.
-- **One order everywhere:** lists of conversations are newest first by `updated_at_hint`, then by id (which starts with
-  the creation time), on the server (`meta-all.json`, `/v1/conversations`), in `readMetaDb()` and in the sidebar. With
-  the date alone, conversations with the same `updated_at_hint` came out in a different order from different sources,
-  and swapped places when the module redrew the list.
+- **One order everywhere:** lists of conversations are newest first by the file's modification time (`updatedAt`, or
+  `updated_at_hint` in `/v1/conversations`), then by id (which starts with the creation time), on the server (`c.list`,
+  `/v1/conversations`), in `readMetaDb()` and in the sidebar. With the date alone, conversations with the same time
+  came out in a different order from different sources, and swapped places when the module redrew the list.
 - `localStorage` key `lcty.settings.v1`: the changed settings (below).
 
 ## Settings

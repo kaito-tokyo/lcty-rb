@@ -39,7 +39,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 
 | ID                                                            | Module                                                      | Node.js | Browser |
 | ------------------------------------------------------------- | ----------------------------------------------------------- | ------: | ------: |
-| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `lcty.v1.c.worker.cjs`: the meta in the browser             |       0 |      18 |
+| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `lcty.v1.c.worker.cjs`: the copies of c/ in the browser     |       0 |      25 |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                         |      21 |       0 |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts               |      22 |      10 |
 | [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings               |      34 |      10 |
@@ -47,21 +47,22 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                         |      23 |       0 |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API    |      29 |       0 |
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation        |      17 |       0 |
-| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      26 |       7 |
-| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the browser's copy of the meta         |       0 |      13 |
+| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      26 |       4 |
+| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the copies of the list                 |       0 |       9 |
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search           |      25 |       0 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing                |      27 |       0 |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      28 |       0 |
 | [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | `js/ui/markdown.js`: Markdown rendering                     |      67 |      15 |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                           |       0 |      19 |
-| [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      82 |
+| [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      83 |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      32 |
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                       |      15 |      45 |
-| [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel               |       0 |      21 |
+| [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel               |       0 |      22 |
 | [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references     |      62 |       0 |
-| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `lcty.v1.t.worker.cjs` and `js/api/lcty-t.js`: the tags     |       0 |      20 |
+| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `lcty.v1.t.worker.cjs` and `js/api/lcty-t.js`: the tags     |       0 |      43 |
 | [LCTYSP-1022](LCTYSP-1022_rpc-client.feature)                 | `js/api/rpc.js`: the client of `/v1/rpc`                    |       9 |       0 |
 | [LCTYSP-1023](LCTYSP-1023_lcty-msg-elements.feature)          | `js/ui/lcty-msg.js`: the elements the page builds           |       0 |       7 |
+| [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | `js/api/tab-rpc.js`: the tab's connection                   |       5 |       0 |
 
 ## How a feature is written
 

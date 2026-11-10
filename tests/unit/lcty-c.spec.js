@@ -6,38 +6,38 @@
 // Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
 //
 // The worker runs in a real browser on the test server's origin: the page is an empty document served by a route, so
-// no page module runs a sync of its own, and every test gets a new browser context, so IndexedDB starts empty.
-// GET /v1/meta-all.json is answered by a route too (routes also catch a worker's requests), so the server's data does
-// not matter.
+// no page module runs, and every test gets a new browser context, so IndexedDB starts empty. The worker sends no
+// request, so the server's data does not matter.
 
 import { expect, test } from "@playwright/test";
 
 const PAGE = "/__lcty_unit.html";
 const WORKER_URL = "/lcty.v1/lcty.v1.c.worker.cjs";
 
-/** A conversation's meta as GET /v1/meta-all.json returns it (LCTYSP-0006). */
-function conv(id, title = `Conversation ${id}`) {
+/** A conversation's meta as c.list answers it (LCTYSP-0012). */
+function conv(cid, title = `Conversation ${cid}`) {
 	return {
-		id,
+		cid,
+		lang: "en",
 		title,
-		created_at: "2026-11-01T00:00:00.000Z",
-		updated_at_hint: "2026-11-02T00:00:00.000Z",
-		setup_tags: [],
-		tags_hint: ["tag"],
-		messages_hint: 2,
+		titleTypeId: "__64",
+		updatedAt: "2026-11-02T00:00:00.000Z",
+		createdAt: "2026-11-01T00:00:00.000Z",
 	};
 }
 
-const byId = (items) => [...items].sort((a, b) => (a.id < b.id ? -1 : 1));
+const count = (cid, n) => ({ cid, count: n });
+const byCid = (items) => [...items].sort((a, b) => (a.cid < b.cid ? -1 : 1));
+
+/** "b1.5" as the row of sync for store */
+function syncRow(store, version) {
+	const [boot, seq] = version.split(".");
+	return { store, boot, seq: Number(seq) };
+}
 
 // ---- Background ----
 
-/** A page on the server's origin, and GET /v1/meta-all.json answered by answer(route), which the test sets. */
 async function background(page, context) {
-	const server = {
-		answer: (route) => route.fulfill({ json: [] }),
-		requested: [],
-	};
 	await test.step("Given a page on the server's origin", async () => {
 		await context.route(`**${PAGE}`, (route) =>
 			route.fulfill({
@@ -47,24 +47,17 @@ async function background(page, context) {
 		);
 		await page.goto(PAGE);
 	});
-	await test.step("And GET /v1/meta-all.json is answered by the test", async () => {
-		await context.route("**/v1/meta-all.json", (route) => {
-			server.requested.push(new URL(route.request().url()).pathname);
-			return server.answer(route);
-		});
-	});
 	await test.step('And every message to the worker has the endpoint "/v1/" on the page\'s origin, unless the scenario says otherwise', () => {});
-	return server;
 }
 
 // ---- The database, from the page ----
 
-/** The database name ("lcty_c" by default) as it is: {exists, version, stores, items (of c_meta)}. Never creates it. */
-function readDb(page, name = "lcty_c") {
+/** The database "lcty_c" as it is: {exists, version, stores, c_meta, c_recordcount, sync}. Never creates it. */
+function readDb(page) {
 	return page.evaluate(
-		(name) =>
+		() =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open(name);
+				const req = indexedDB.open("lcty_c");
 				req.onupgradeneeded = () => req.transaction.abort(); // no database: do not create one
 				req.onerror = () =>
 					req.error?.name === "AbortError"
@@ -72,48 +65,42 @@ function readDb(page, name = "lcty_c") {
 						: reject(req.error);
 				req.onsuccess = () => {
 					const db = req.result;
-					const result = {
-						exists: true,
-						version: db.version,
-						stores: [...db.objectStoreNames].sort(),
-					};
-					if (!db.objectStoreNames.contains("c_meta")) {
+					const stores = [...db.objectStoreNames].sort();
+					const result = { exists: true, version: db.version, stores };
+					if (stores.length === 0) {
 						db.close();
-						resolve({ ...result, items: null });
+						resolve(result);
 						return;
 					}
-					const get = db.transaction("c_meta").objectStore("c_meta").getAll();
-					get.onsuccess = () => {
+					const tx = db.transaction(stores);
+					for (const s of stores)
+						tx.objectStore(s).getAll().onsuccess = (e) => {
+							result[s] = e.target.result;
+						};
+					tx.oncomplete = () => {
 						db.close();
-						resolve({ ...result, items: get.result });
+						resolve(result);
 					};
-					get.onerror = () => {
+					tx.onerror = () => {
 						db.close();
-						reject(get.error);
+						reject(tx.error);
 					};
 				};
 			}),
-		name,
 	);
 }
 
-/**
- * Create the database name ("lcty_c" by default) at version with stores ({store: {keyPath?, records: [[key?, value]]}}).
- */
-function seedDb(page, version, stores, name = "lcty_c") {
+/** Create "lcty_c" at version with stores ({store: {keyPath, records: [value]}}). */
+function seedDb(page, version, stores) {
 	return page.evaluate(
-		({ version, stores, name }) =>
+		({ version, stores }) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open(name, version);
+				const req = indexedDB.open("lcty_c", version);
 				req.onupgradeneeded = () => {
 					const db = req.result;
 					for (const [store, { keyPath, records }] of Object.entries(stores)) {
-						const os = db.createObjectStore(
-							store,
-							keyPath ? { keyPath } : undefined,
-						);
-						for (const [key, value] of records)
-							key === null ? os.put(value) : os.put(value, key);
+						const os = db.createObjectStore(store, { keyPath });
+						for (const value of records) os.put(value);
 					}
 				};
 				req.onsuccess = () => {
@@ -122,14 +109,19 @@ function seedDb(page, version, stores, name = "lcty_c") {
 				};
 				req.onerror = () => reject(req.error);
 			}),
-		{ version, stores, name },
+		{ version, stores },
 	);
 }
 
-/** c_meta at version 1, as the worker leaves it, holding items. */
-function seedCMeta(page, items) {
-	return seedDb(page, 1, {
-		c_meta: { keyPath: "id", records: items.map((m) => [null, m]) },
+/** The database as the worker leaves it: c_meta, c_recordcount and their versions in sync (undefined: no row). */
+function seed(page, { meta = [], counts = [], metaAt, countsAt }) {
+	const sync = [];
+	if (metaAt) sync.push(syncRow("c_meta", metaAt));
+	if (countsAt) sync.push(syncRow("c_recordcount", countsAt));
+	return seedDb(page, 2, {
+		c_meta: { keyPath: "cid", records: meta },
+		c_recordcount: { keyPath: "cid", records: counts },
+		sync: { keyPath: "store", records: sync },
 	});
 }
 
@@ -137,9 +129,8 @@ function seedCMeta(page, items) {
 
 /**
  * Start the worker, post it message (with the endpoint "/v1/" on the page's origin unless message has one; an endpoint
- * null is left out, and a relative one is resolved against the page) and collect what it sends until it has answered or
- * failed, and for a little while after (so a second message would be seen). The worker stays alive (window.lctyWorker)
- * until stopWorker().
+ * null is left out) and collect what it sends until it has answered or failed, and for a little while after (so a
+ * second message would be seen). The worker stays alive (window.lctyWorker) until stopWorker().
  */
 function runWorker(page, message) {
 	return page.evaluate(
@@ -184,6 +175,24 @@ test.afterEach(async ({ page }) => {
 	await stopWorker(page).catch(() => {});
 });
 
+const replace = (store, rows, version) => ({
+	id: 1,
+	op: "replace",
+	payload: { store, version, rows },
+});
+const apply = (version, records) => ({
+	id: 1,
+	op: "apply",
+	payload: { version, records },
+});
+const put = (store, row) => ({ store, op: "put", row });
+const del = (store, cid) => ({ store, op: "delete", row: { cid } });
+const HTML = {
+	store: "c_html",
+	op: "append",
+	row: { cid: "a", after: null, tag: "lcty-msg", attrs: {}, innerHTML: "" },
+};
+
 // ---- Steps shared by the scenarios ----
 
 async function givenNoDatabase(page) {
@@ -192,16 +201,10 @@ async function givenNoDatabase(page) {
 	});
 }
 
-async function givenCMetaHolds(page, items, text) {
-	await test.step(`Given "c_meta" holds ${text}`, async () => {
-		await seedCMeta(page, items);
-	});
-}
-
-async function whenPosted(page, op) {
+async function whenPosted(page, text, message) {
 	let seen;
-	await test.step(`When the worker is posted {"id": 1, "op": "${op}"}`, async () => {
-		seen = await runWorker(page, { id: 1, op });
+	await test.step(`When the worker is posted ${text}`, async () => {
+		seen = await runWorker(page, message);
 	});
 	return seen;
 }
@@ -215,237 +218,386 @@ function answerOf(seen) {
 	return answer;
 }
 
-async function thenAnswersNoResult(seen) {
-	await test.step("Then it answers with no result", () => {
-		const answer = answerOf(seen);
-		expect("result" in answer).toBe(true);
-		expect(answer.result).toBeUndefined();
+async function thenApplied(
+	seen,
+	applied,
+	text = applied ? "applied" : "not applied",
+) {
+	await test.step(`Then it answers that it was ${text}`, () => {
+		expect(answerOf(seen)).toEqual({ result: { applied } });
 	});
 }
 
-async function thenAnswersError(seen, message, status) {
-	await test.step(`Then it answers the error "${message}" with the status ${status}`, () => {
+async function thenStoresApplied(seen, stores, text) {
+	await test.step(`Then it answers that ${text}`, () => {
+		expect(answerOf(seen)).toEqual({ result: { applied: stores } });
+	});
+}
+
+async function thenAnswersError(seen, message) {
+	await test.step(`Then it answers the error "${message}" with the status null`, () => {
 		expect(answerOf(seen)).toEqual({
 			errorType: "error",
 			error: message,
-			status,
+			status: null,
 		});
 	});
 }
 
-async function thenAnswersAnError(seen) {
+async function thenHolds(page, store, rows, text) {
+	await test.step(`And "${store}" holds exactly ${text}`, async () => {
+		expect(byCid((await readDb(page))[store])).toEqual(byCid(rows));
+	});
+}
+
+// ---- Scenarios: full reads ----
+
+test("A full read creates the copies", async ({ page, context }) => {
+	await background(page, context);
+	const list = [conv("a"), conv("b")];
+	await givenNoDatabase(page);
+	const seen = await whenPosted(
+		page,
+		'a replace of "c_meta" with the conversations "a" and "b" at "b1.5"',
+		replace("c_meta", list, "b1.5"),
+	);
+	await thenApplied(seen, true);
+	await test.step('And the database "lcty_c" is at version 2 with the stores "c_meta", "c_recordcount" and "sync"', async () => {
+		const db = await readDb(page);
+		expect(db.version).toBe(2);
+		expect(db.stores).toEqual(["c_meta", "c_recordcount", "sync"]);
+	});
+	await thenHolds(
+		page,
+		"c_meta",
+		list,
+		'the conversations "a" and "b", as posted',
+	);
+	await test.step('And "sync" holds "c_meta" at boot "b1" and seq 5, and nothing for "c_recordcount"', async () => {
+		expect((await readDb(page)).sync).toEqual([syncRow("c_meta", "b1.5")]);
+	});
+});
+
+test("A full read replaces the copy as a whole", async ({ page, context }) => {
+	await background(page, context);
+	await test.step('Given "c_meta" holds the conversations "a" and "b" at "b1.5"', async () => {
+		await seed(page, { meta: [conv("a"), conv("b")], metaAt: "b1.5" });
+	});
+	const list = [conv("b", "New title"), conv("c")];
+	const seen = await whenPosted(
+		page,
+		'a replace of "c_meta" with the conversation "b" with a new title and the conversation "c" at "b1.7"',
+		replace("c_meta", list, "b1.7"),
+	);
+	await thenApplied(seen, true);
+	await thenHolds(
+		page,
+		"c_meta",
+		list,
+		'the conversations "b" and "c", as posted',
+	);
+	await test.step('And "sync" holds "c_meta" at boot "b1" and seq 7', async () => {
+		expect((await readDb(page)).sync).toEqual([syncRow("c_meta", "b1.7")]);
+	});
+});
+
+for (const { held, read, applied, kept } of [
+	{ held: "b1.5", read: "b1.5", applied: "applied", kept: "b" },
+	{ held: "b1.7", read: "b1.5", applied: "not applied", kept: "a" },
+	{ held: "b1.9", read: "b2.1", applied: "applied", kept: "b" },
+]) {
+	test(`A full read is written unless the copy is newer in the same boot (${held})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await test.step(`Given "c_meta" holds the conversation "a" at "${held}"`, async () => {
+			await seed(page, { meta: [conv("a")], metaAt: held });
+		});
+		const seen = await whenPosted(
+			page,
+			`a replace of "c_meta" with the conversation "b" at "${read}"`,
+			replace("c_meta", [conv("b")], read),
+		);
+		await thenApplied(seen, applied === "applied", applied);
+		await thenHolds(page, "c_meta", [conv(kept)], `the conversation "${kept}"`);
+	});
+}
+
+test("The counts are a copy of their own", async ({ page, context }) => {
+	await background(page, context);
+	await test.step('Given "c_meta" holds the conversation "a" at "b1.9"', async () => {
+		await seed(page, { meta: [conv("a")], metaAt: "b1.9" });
+	});
+	const counts = [count("a", 2), count("b", 5)];
+	const seen = await whenPosted(
+		page,
+		'a replace of "c_recordcount" with the counts 2 of "a" and 5 of "b" at "b1.5"',
+		replace("c_recordcount", counts, "b1.5"),
+	);
+	await thenApplied(seen, true);
+	await thenHolds(page, "c_recordcount", counts, '2 of "a" and 5 of "b"');
+	await test.step('And "sync" holds "c_meta" at seq 9 and "c_recordcount" at seq 5', async () => {
+		expect((await readDb(page)).sync).toEqual([
+			syncRow("c_meta", "b1.9"),
+			syncRow("c_recordcount", "b1.5"),
+		]);
+	});
+});
+
+// ---- Scenarios: changes ----
+
+test("A change is written onto an older copy of the same boot", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('Given "c_meta" holds the conversations "a" and "b" and "c_recordcount" 2 of "a", both at "b1.5"', async () => {
+		await seed(page, {
+			meta: [conv("a"), conv("b")],
+			counts: [count("a", 2)],
+			metaAt: "b1.5",
+			countsAt: "b1.5",
+		});
+	});
+	const renamed = conv("a", "New title");
+	const seen = await whenPosted(
+		page,
+		'an apply at "b1.6" of a c_meta put of "a" with a new title, a c_recordcount put of 3 of "a" and a c_html append',
+		apply("b1.6", [
+			put("c_meta", renamed),
+			put("c_recordcount", count("a", 3)),
+			HTML,
+		]),
+	);
+	await thenStoresApplied(
+		seen,
+		["c_meta", "c_recordcount"],
+		'"c_meta" and "c_recordcount" applied it',
+	);
+	await thenHolds(
+		page,
+		"c_meta",
+		[renamed, conv("b")],
+		'the conversation "a" with the new title and "b"',
+	);
+	await thenHolds(page, "c_recordcount", [count("a", 3)], '3 of "a"');
+	await test.step('And "sync" holds "c_meta" and "c_recordcount" at seq 6', async () => {
+		expect((await readDb(page)).sync).toEqual([
+			syncRow("c_meta", "b1.6"),
+			syncRow("c_recordcount", "b1.6"),
+		]);
+	});
+});
+
+test("A deleted conversation leaves both copies", async ({ page, context }) => {
+	await background(page, context);
+	await test.step('Given "c_meta" holds the conversations "a" and "b" and "c_recordcount" 2 of "a" and 4 of "b", both at "b1.5"', async () => {
+		await seed(page, {
+			meta: [conv("a"), conv("b")],
+			counts: [count("a", 2), count("b", 4)],
+			metaAt: "b1.5",
+			countsAt: "b1.5",
+		});
+	});
+	const seen = await whenPosted(
+		page,
+		'an apply at "b1.6" of a c_meta delete and a c_recordcount delete of "b"',
+		apply("b1.6", [del("c_meta", "b"), del("c_recordcount", "b")]),
+	);
+	await thenStoresApplied(
+		seen,
+		["c_meta", "c_recordcount"],
+		'"c_meta" and "c_recordcount" applied it',
+	);
+	await thenHolds(page, "c_meta", [conv("a")], 'the conversation "a"');
+	await thenHolds(page, "c_recordcount", [count("a", 2)], '2 of "a"');
+});
+
+for (const { held, change } of [
+	{ held: "b1.6", change: "b1.6" },
+	{ held: "b1.6", change: "b1.5" },
+	{ held: "b1.6", change: "b2.7" },
+]) {
+	test(`A change is left when the copy is not older in the same boot (${change})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await test.step(`Given "c_meta" holds the conversation "a" at "${held}"`, async () => {
+			await seed(page, { meta: [conv("a")], metaAt: held });
+		});
+		const seen = await whenPosted(
+			page,
+			`an apply at "${change}" of a c_meta put of "b"`,
+			apply(change, [put("c_meta", conv("b"))]),
+		);
+		await thenStoresApplied(seen, [], "no store applied it");
+		await thenHolds(page, "c_meta", [conv("a")], 'the conversation "a"');
+	});
+}
+
+test("A change onto a copy that was never read is left", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('Given "c_meta" holds the conversation "a" at "b1.5" and "c_recordcount" was never read', async () => {
+		await seed(page, { meta: [conv("a")], metaAt: "b1.5" });
+	});
+	const seen = await whenPosted(
+		page,
+		'an apply at "b1.6" of a c_recordcount put of 3 of "a"',
+		apply("b1.6", [put("c_recordcount", count("a", 3))]),
+	);
+	await thenStoresApplied(seen, [], "no store applied it");
+	await test.step('And "c_recordcount" is empty', async () => {
+		expect((await readDb(page)).c_recordcount).toEqual([]);
+	});
+});
+
+test("A change of other stores only does not open the database", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenNoDatabase(page);
+	const seen = await whenPosted(
+		page,
+		'an apply at "b1.6" of a c_html append only',
+		apply("b1.6", [HTML]),
+	);
+	await thenStoresApplied(seen, [], "no store applied it");
+	await test.step('And there is still no database "lcty_c"', async () => {
+		expect((await readDb(page)).exists).toBe(false);
+	});
+});
+
+for (const { payload, message, posted } of [
+	{
+		payload: 'a replace of "c_html" at "b1.5"',
+		message: "no such store: c_html",
+		posted: replace("c_html", [], "b1.5"),
+	},
+	{
+		payload: 'a replace of "c_meta" at "5"',
+		message: "not a version: 5",
+		posted: replace("c_meta", [], "5"),
+	},
+	{
+		payload: 'an apply at "b1" of a c_meta put of "a"',
+		message: "not a version: b1",
+		posted: apply("b1", [put("c_meta", conv("a"))]),
+	},
+]) {
+	test(`A bad payload is an error (${payload})`, async ({ page, context }) => {
+		await background(page, context);
+		const seen = await whenPosted(page, payload, posted);
+		await thenAnswersError(seen, message);
+	});
+}
+
+test("A newer database is left alone", async ({ page, context }) => {
+	await background(page, context);
+	await test.step('Given the database "lcty_c" is at version 3 with the store "c_meta" holding the conversation "a"', async () => {
+		await seedDb(page, 3, { c_meta: { keyPath: "cid", records: [conv("a")] } });
+	});
+	const seen = await whenPosted(
+		page,
+		'a replace of "c_meta" with the conversation "b" at "b1.5"',
+		replace("c_meta", [conv("b")], "b1.5"),
+	);
 	await test.step("Then it answers an error with the status null", () => {
 		const answer = answerOf(seen);
 		expect(answer.errorType).toBe("error");
 		expect(typeof answer.error).toBe("string");
 		expect(answer.status).toBeNull();
 	});
-}
-
-async function thenOnlyCMetaAtVersion1(page) {
-	await test.step('And the database "lcty_c" is at version 1 with only the store "c_meta"', async () => {
-		const db = await readDb(page);
-		expect(db.version).toBe(1);
-		expect(db.stores).toEqual(["c_meta"]);
+	await test.step('And the database "lcty_c" is still at version 3', async () => {
+		expect((await readDb(page)).version).toBe(3);
 	});
-}
+});
 
-async function thenCMetaHoldsExactly(page, items, text) {
-	await test.step(`And "c_meta" holds exactly ${text}`, async () => {
-		expect(byId((await readDb(page)).items)).toEqual(byId(items));
-	});
-}
-
-// ---- Scenarios ----
-
-test("A sync stores every conversation of the list", async ({
+test("The worker closes its connection after a write", async ({
 	page,
 	context,
 }) => {
-	const server = await background(page, context);
-	const list = [conv("a"), conv("b")];
+	await background(page, context);
 	await givenNoDatabase(page);
-	await test.step('And GET /v1/meta-all.json returns the conversations "a" and "b"', () => {
-		server.answer = (route) => route.fulfill({ json: list });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersNoResult(seen);
-	await thenOnlyCMetaAtVersion1(page);
-	await thenCMetaHoldsExactly(
+	const seen = await whenPosted(
 		page,
-		list,
-		'the conversations "a" and "b", as returned',
+		'a replace of "c_meta" with the conversation "a" at "b1.5"',
+		replace("c_meta", [conv("a")], "b1.5"),
 	);
-});
-
-test("A sync replaces the copy as a whole", async ({ page, context }) => {
-	const server = await background(page, context);
-	const list = [conv("b", "A new title"), conv("c")];
-	await givenCMetaHolds(
-		page,
-		[conv("a"), conv("b")],
-		'the conversations "a" and "b"',
-	);
-	await test.step('And GET /v1/meta-all.json returns the conversation "b" with a new title and the conversation "c"', () => {
-		server.answer = (route) => route.fulfill({ json: list });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersNoResult(seen);
-	await thenCMetaHoldsExactly(
-		page,
-		list,
-		'the conversations "b" and "c", as returned',
-	);
-});
-
-test("An empty list empties the copy", async ({ page, context }) => {
-	const server = await background(page, context);
-	await givenCMetaHolds(
-		page,
-		[conv("a"), conv("b")],
-		'the conversations "a" and "b"',
-	);
-	await test.step("And GET /v1/meta-all.json returns no conversations", () => {
-		server.answer = (route) => route.fulfill({ json: [] });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersNoResult(seen);
-	await test.step('And "c_meta" is empty', async () => {
-		expect((await readDb(page)).items).toEqual([]);
-	});
-});
-
-test("The worker closes its connection after the sync", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	await givenNoDatabase(page);
-	await test.step('And GET /v1/meta-all.json returns the conversation "a"', () => {
-		server.answer = (route) => route.fulfill({ json: [conv("a")] });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersNoResult(seen);
-	await test.step('And the database "lcty_c" can be opened at version 2 without being blocked, while the worker is still alive', async () => {
-		const result = await page.evaluate(
+	await thenApplied(seen, true);
+	await test.step('And the database "lcty_c" can be opened at version 3 without being blocked, while the worker is still alive', async () => {
+		const outcome = await page.evaluate(
 			() =>
 				new Promise((resolve) => {
-					let blocked = false;
-					const req = indexedDB.open("lcty_c", 2);
-					req.onblocked = () => {
-						blocked = true;
-					};
+					const req = indexedDB.open("lcty_c", 3);
+					req.onblocked = () => resolve("blocked");
 					req.onsuccess = () => {
 						req.result.close();
-						resolve({ opened: true, blocked });
+						resolve("opened");
 					};
-					req.onerror = () => resolve({ opened: false, blocked });
-					setTimeout(() => resolve({ opened: false, blocked }), 2000);
+					req.onerror = () => resolve(`error: ${req.error}`);
 				}),
 		);
-		expect(result).toEqual({ opened: true, blocked: false });
+		expect(outcome).toBe("opened");
 	});
-});
-
-for (const { answer, message, status, fulfill } of [
-	{
-		answer: "answers with the status 500",
-		message: "Failed to fetch /v1/meta-all.json: 500",
-		status: 500,
-		fulfill: (route) => route.fulfill({ status: 500, body: "boom" }),
-	},
-	{
-		answer: "returns an object, not a list",
-		message: "meta-all.json is invalid",
-		status: null,
-		fulfill: (route) => route.fulfill({ json: { a: conv("a") } }),
-	},
-]) {
-	test(`A failed sync leaves the copy as it was (${answer})`, async ({
-		page,
-		context,
-	}) => {
-		const server = await background(page, context);
-		const kept = [conv("a"), conv("b")];
-		await givenCMetaHolds(page, kept, 'the conversations "a" and "b"');
-		await test.step(`And GET /v1/meta-all.json ${answer}`, () => {
-			server.answer = fulfill;
-		});
-		const seen = await whenPosted(page, "sync_meta");
-		await thenAnswersError(seen, message, status);
-		await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
-	});
-}
-
-test("A response that is not JSON leaves the copy as it was", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	const kept = [conv("a"), conv("b")];
-	await givenCMetaHolds(page, kept, 'the conversations "a" and "b"');
-	await test.step("And GET /v1/meta-all.json returns a body that is not JSON", () => {
-		server.answer = (route) =>
-			route.fulfill({ contentType: "application/json", body: "not json" });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersAnError(seen);
-	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
-});
-
-test("A failed request leaves the copy as it was", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	const kept = [conv("a"), conv("b")];
-	await givenCMetaHolds(page, kept, 'the conversations "a" and "b"');
-	await test.step("And GET /v1/meta-all.json fails without a response", () => {
-		server.answer = (route) => route.abort("failed");
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersAnError(seen);
-	await thenCMetaHoldsExactly(page, kept, 'the conversations "a" and "b"');
-});
-
-test("A newer database is left alone", async ({ page, context }) => {
-	const server = await background(page, context);
-	const kept = [conv("a")];
-	await test.step('Given the database "lcty_c" is at version 2 with the store "c_meta" holding the conversation "a"', async () => {
-		await seedDb(page, 2, {
-			c_meta: { keyPath: "id", records: kept.map((m) => [null, m]) },
-		});
-	});
-	await test.step('And GET /v1/meta-all.json returns the conversation "b"', () => {
-		server.answer = (route) => route.fulfill({ json: [conv("b")] });
-	});
-	const seen = await whenPosted(page, "sync_meta");
-	await thenAnswersAnError(seen);
-	await test.step('And the database "lcty_c" is still at version 2', async () => {
-		expect((await readDb(page)).version).toBe(2);
-	});
-	await thenCMetaHoldsExactly(page, kept, 'the conversation "a"');
 });
 
 // ---- Scenarios: reading ----
 
-test("Getting before any sync finds no copy", async ({ page, context }) => {
+test("Getting before any read finds no copy", async ({ page, context }) => {
 	await background(page, context);
 	await givenNoDatabase(page);
-	const seen = await whenPosted(page, "get");
-	await test.step("Then it answers no items and stale true", () => {
-		expect(answerOf(seen)).toEqual({ result: { items: [], stale: true } });
+	const seen = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
+	await test.step("Then it answers no items, no counts and stale true", () => {
+		expect(answerOf(seen)).toEqual({
+			result: { items: [], counts: {}, stale: true },
+		});
 	});
 	await test.step('And there is still no database "lcty_c"', async () => {
 		expect((await readDb(page)).exists).toBe(false);
 	});
 });
 
-test("Getting returns the copy newest first", async ({ page, context }) => {
+test("Getting a database of version 1 finds no copy", async ({
+	page,
+	context,
+}) => {
 	await background(page, context);
-	const at = (id, time) => ({
-		...conv(id),
-		updated_at_hint: `2026-11-02T${time}:00.000Z`,
+	await test.step('Given the database "lcty_c" is at version 1 with the store "c_meta" holding the conversation "a"', async () => {
+		await seedDb(page, 1, {
+			c_meta: { keyPath: "id", records: [{ id: "a", title: "a" }] },
+		});
+	});
+	const seen = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
+	await test.step("Then it answers no items, no counts and stale true", () => {
+		expect(answerOf(seen)).toEqual({
+			result: { items: [], counts: {}, stale: true },
+		});
+	});
+	await test.step('And the database "lcty_c" is still at version 1', async () => {
+		expect((await readDb(page)).version).toBe(1);
+	});
+});
+
+test("Getting returns the copy newest first with the counts", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	const at = (cid, time) => ({
+		...conv(cid),
+		updatedAt: `2026-11-02T${time}:00.000Z`,
 	});
 	const stored = {
 		a: at("a", "10:00"),
@@ -453,45 +605,51 @@ test("Getting returns the copy newest first", async ({ page, context }) => {
 		c: at("c", "11:00"),
 		d: at("d", "12:00"),
 	};
-	await givenCMetaHolds(
-		page,
-		Object.values(stored),
-		'the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00',
-	);
-	const seen = await whenPosted(page, "get");
-	await test.step('Then it answers "d", "b", "c" and "a" in that order, as stored, and stale false', () => {
+	await test.step('Given "c_meta" holds the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00', async () => {
+		await seed(page, {
+			meta: Object.values(stored),
+			counts: [count("a", 2), count("d", 5)],
+			metaAt: "b1.5",
+			countsAt: "b1.5",
+		});
+	});
+	await test.step('And "c_recordcount" holds 2 of "a" and 5 of "d"', () => {});
+	const seen = await whenPosted(page, '{"id": 1, "op": "get"}', {
+		id: 1,
+		op: "get",
+	});
+	await test.step('Then it answers "d", "b", "c" and "a" in that order, as stored, the counts 2 of "a" and 5 of "d", and stale false', () => {
 		expect(answerOf(seen)).toEqual({
 			result: {
 				items: [stored.d, stored.b, stored.c, stored.a],
+				counts: { a: 2, d: 5 },
 				stale: false,
 			},
 		});
 	});
 });
 
+// ---- Scenarios: messages ----
+
 test("An unknown operation is an error", async ({ page, context }) => {
-	const server = await background(page, context);
-	let requested = false;
-	server.answer = (route) => {
-		requested = true;
-		return route.fulfill({ json: [] });
-	};
-	const seen = await whenPosted(page, "nope");
+	await background(page, context);
+	const seen = await whenPosted(page, '{"id": 1, "op": "nope"}', {
+		id: 1,
+		op: "nope",
+	});
 	await test.step('Then it answers the error type "unknownOperation"', () => {
 		expect(answerOf(seen)).toEqual({ errorType: "unknownOperation" });
 	});
-	await test.step("And GET /v1/meta-all.json is not fetched", () => {
-		expect(requested).toBe(false);
-	});
 });
 
-// Playwright's routes do not catch the requests of a SharedWorker, so this scenario uses no request
 test("A SharedWorker answers on the port the message came from", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
-	await givenCMetaHolds(page, [conv("a")], 'the conversation "a"');
+	await test.step('Given "c_meta" holds the conversation "a" at "b1.5"', async () => {
+		await seed(page, { meta: [conv("a")], metaAt: "b1.5" });
+	});
 	let answers;
 	await test.step('When two ports of new SharedWorker("/lcty.v1/lcty.v1.c.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
 		answers = await page.evaluate(async (url) => {
@@ -512,7 +670,7 @@ test("A SharedWorker answers on the port the message came from", async ({
 	await test.step('Then the first port is answered with the id 1 and the conversation "a"', () => {
 		expect(answers.first).toEqual({
 			id: 1,
-			result: { items: [conv("a")], stale: false },
+			result: { items: [conv("a")], counts: {}, stale: false },
 		});
 	});
 	await test.step('And the second port is answered with the id 2 and the error type "unknownOperation"', () => {
@@ -521,61 +679,24 @@ test("A SharedWorker answers on the port the message came from", async ({
 });
 
 test("A message without an endpoint is an error", async ({ page, context }) => {
-	const server = await background(page, context);
-	let seen;
-	await test.step('When the worker is posted {"id": 1, "op": "sync_meta"} without an endpoint', async () => {
-		seen = await runWorker(page, { id: 1, op: "sync_meta", endpoint: null });
-	});
-	await thenAnswersError(seen, "the message has no endpoint", null);
-	await test.step("And GET /v1/meta-all.json is not fetched", () => {
-		expect(server.requested).toEqual([]);
-	});
+	await background(page, context);
+	const seen = await whenPosted(
+		page,
+		'{"id": 1, "op": "get"} without an endpoint',
+		{ id: 1, op: "get", endpoint: null },
+	);
+	await thenAnswersError(seen, "the message has no endpoint");
 });
 
 test("An endpoint on another origin is an error", async ({ page, context }) => {
-	const server = await background(page, context);
-	let seen;
-	await test.step('When the worker is posted {"id": 1, "op": "sync_meta", "endpoint": "http://example.com/v1/"}', async () => {
-		seen = await runWorker(page, {
-			id: 1,
-			op: "sync_meta",
-			endpoint: "http://example.com/v1/",
-		});
-	});
+	await background(page, context);
+	const seen = await whenPosted(
+		page,
+		'{"id": 1, "op": "get", "endpoint": "http://example.com/v1/"}',
+		{ id: 1, op: "get", endpoint: "http://example.com/v1/" },
+	);
 	await thenAnswersError(
 		seen,
 		"the endpoint is not on this origin: http://example.com/v1/",
-		null,
-	);
-	await test.step("And GET /v1/meta-all.json is not fetched", () => {
-		expect(server.requested).toEqual([]);
-	});
-});
-
-test("A sync fetches the list from the endpoint it is given", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	await givenNoDatabase(page);
-	await test.step('And GET /api/v1/meta-all.json returns the conversation "a"', () => {
-		server.answer = (route) => route.fulfill({ json: [conv("a")] });
-	});
-	let seen;
-	await test.step('When the worker is posted {"id": 1, "op": "sync_meta"} with the endpoint "/api/v1/" on the page\'s origin', async () => {
-		seen = await runWorker(page, {
-			id: 1,
-			op: "sync_meta",
-			endpoint: "/api/v1/",
-		});
-	});
-	await thenAnswersNoResult(seen);
-	await test.step("And the list was fetched from /api/v1/meta-all.json only", () => {
-		expect(server.requested).toEqual(["/api/v1/meta-all.json"]);
-	});
-	await thenCMetaHoldsExactly(
-		page,
-		[conv("a")],
-		'the conversation "a", as returned',
 	);
 });

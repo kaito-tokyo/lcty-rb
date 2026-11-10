@@ -183,18 +183,6 @@ Feature: LCTYSP-3003 Storing conversations and their tags
     And each has its id, title, created_at, updated_at_hint, the number of messages and its current tags
     And message_ids are the ids of its own user messages, not the inherited ones
 
-  Scenario: The meta of every conversation comes from the head lines
-    Given a conversation with the title "Meta", the tags "x" and "y" and two messages
-    When Store.meta_all lists the meta
-    Then its entry has the id, the title "Meta", created_at, updated_at_hint and setup_tags ["x", "y"]
-    And tags_hint is [] and messages_hint is nil until the search index records the conversation
-    And after the index records it, tags_hint and messages_hint follow the index
-
-  Scenario: A file without the head lines is left out of the meta with a warning
-    Given a conversation file that holds no head lines
-    When Store.meta_all lists the meta
-    Then it warns "no head lines" for that file and leaves it out
-
   Scenario: A file whose name is not a conversation id is skipped once with a warning
     Given a file "copy of x.html" in data/c
     When Store.conversation_paths is called twice

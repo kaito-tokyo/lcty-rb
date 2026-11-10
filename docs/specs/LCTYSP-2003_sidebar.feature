@@ -21,6 +21,16 @@ Feature: LCTYSP-2003 The sidebar
     And the item shows the title
     And clicking it opens the page /c/<id>.html
 
+  # The list follows /v1/rpc (LCTYSP-0014): c.batch.updated and t.batch.updated, whoever made the change
+  Scenario: A change made elsewhere shows up in the list without a reload
+    Given the new conversation page /c/ is open
+    When a conversation with a unique title is created through /v1/rpc
+    Then it is listed, without a reload
+    When its tags are changed to a unique tag through the HTTP API
+    Then its item shows the tag
+    When it is deleted through the HTTP API
+    Then it is no longer listed
+
   # sync_full of LCTYSP-0009: the tags are synced when the page is shown, without waiting for idle time or a save
   Scenario: Every page takes the server's tags as soon as it is shown
     Given the tag file "00010-<part>.html" named "<PART>", in upper case

@@ -2,14 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// LCTYSP-1009: the scenarios of docs/specs/LCTYSP-1009_storage-api.feature that need the browser (the sync of the meta,
-// whose worker fetches GET /v1/meta-all.json), written by hand. Each test has the title of its Scenario (an Examples
-// row is added in parentheses) and one test.step per line of it, so the two read side by side. The other Scenarios run
-// in Node.js, in tests/unit/storage.test.js.
+// LCTYSP-1009: the scenarios of docs/specs/LCTYSP-1009_storage-api.feature that need the browser (that a change starts
+// no worker), written by hand. Each test has the title of its Scenario (an Examples row is added in parentheses) and one
+// test.step per line of it, so the two read side by side. The other Scenarios run in Node.js, in
+// tests/unit/storage.test.js.
 //
 // js/api/storage.js runs in a real browser on the test server's origin. Every request to /v1/ is answered by a route
-// (routes also catch the meta sync worker's GET /v1/meta-all.json, answered with an empty list), so the server's data
-// does not matter. A call of the feature, such as appendLines("c1", []), is the function's name and JSON arguments.
+// (a GET /v1/meta-all.json, which nothing should send any more, is counted apart), so the server's data does not
+// matter. A call of the feature, such as appendLines("c1", []), is the function's name and JSON arguments.
 
 import { expect, test } from "@playwright/test";
 import { givenAPage } from "./unit-page.js";
@@ -93,17 +93,7 @@ async function givenTheServerAnswers(server, json) {
 	});
 }
 
-async function thenTheSyncFetches(server) {
-	await test.step("And the meta sync worker then fetches GET /v1/meta-all.json", async () => {
-		await expect
-			.poll(() => server.syncs.length, { timeout: 15000 })
-			.toBeGreaterThan(0);
-		expect(server.requests).toHaveLength(1);
-		expect(server.syncs[0]).toBeGreaterThanOrEqual(server.requests[0].at);
-	});
-}
-
-// ---- Scenarios: the sync of the meta ----
+// ---- Scenarios: a change of conversations ----
 
 for (const call of [
 	'createConversation({"id": "c1"}, [])',
@@ -111,74 +101,23 @@ for (const call of [
 	'popMessages("c1", 2)',
 	'deleteConversation("c1")',
 ]) {
-	test(`A change of conversations asks for a sync of the meta (${call})`, async ({
+	test(`A change of conversations sends only its own request (${call})`, async ({
 		page,
 		context,
 	}) => {
 		const server = await background(page, context);
+		const workers = [];
+		page.on("worker", (w) => workers.push(w.url()));
 		await givenTheServerAnswers(server, { ok: true });
 		const result = await whenCalled(page, call);
 		await test.step("Then it resolves", () => {
 			expect(result).toEqual({ value: { ok: true } });
 		});
-		await thenTheSyncFetches(server);
+		await test.step("And no other request is sent and no worker is started within 1 second", async () => {
+			await page.waitForTimeout(1000);
+			expect(server.requests).toHaveLength(1);
+			expect(server.syncs).toEqual([]);
+			expect(workers).toEqual([]);
+		});
 	});
 }
-
-for (const { answer, fulfill } of [
-	{
-		answer: "the server answers with the status 500",
-		fulfill: (route) => route.fulfill({ status: 500, body: "boom" }),
-	},
-	{
-		answer: "the request to the server fails without an answer",
-		fulfill: (route) => route.abort("failed"),
-	},
-]) {
-	test(`A change of conversations that fails still asks for a sync (${answer})`, async ({
-		page,
-		context,
-	}) => {
-		const server = await background(page, context);
-		await test.step(`Given ${answer}`, () => {
-			server.answer = fulfill;
-		});
-		const result = await whenCalled(page, 'appendLines("c1", [])');
-		await test.step("Then it rejects", () => {
-			expect(result.error).toBeDefined();
-		});
-		await thenTheSyncFetches(server);
-	});
-}
-
-test("Requests that do not change conversations do not ask for a sync", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	await givenTheServerAnswers(server, { ok: true });
-	await test.step("When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations and fetchSnippets are called", async () => {
-		const results = await page.evaluate(async () => {
-			const s = await import("/js/api/storage.js");
-			return Promise.all([
-				s.listConversations(),
-				s.getConversation("c1"),
-				s.getDefaults(),
-				s.vectorsPending("eg"),
-				s.putVectors("eg", [["r1", 1]], {
-					body: new Uint8Array(8),
-					size: 8,
-					count: 1,
-				}),
-				s.searchConversations({ q: "x" }),
-				s.fetchSnippets(["r1"], "x"),
-			]);
-		});
-		expect(results).toHaveLength(7);
-		expect(server.requests).toHaveLength(7);
-	});
-	await test.step("Then no GET /v1/meta-all.json is fetched within 3 seconds", async () => {
-		await page.waitForTimeout(3000);
-		expect(server.syncs).toEqual([]);
-	});
-});

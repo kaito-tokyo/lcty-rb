@@ -459,9 +459,10 @@ class V1ServletTest < Lcty::Scenarios
     id = res = nil
     word = unique_word
     round = user("about #{word}")
+    tag = "gone-#{hex}"
     step('Given a conversation with a round with a unique word whose tags were changed to ["gone"]') do
       id = create([round, assistant('noted')])
-      assert_ok http('POST', "/v1/conversations/#{id}/lines", [{ 'type' => 'tags', 'tags' => ["gone-#{hex}"] }])
+      assert_ok http('POST', "/v1/conversations/#{id}/lines", [{ 'type' => 'tags', 'tags' => [tag] }])
       assert_includes search('q' => word).map { |r| r['id'] }, round['id']
     end
     step('When DELETE /v1/conversations/<id> is requested') { res = http('DELETE', "/v1/conversations/#{id}") }
@@ -469,19 +470,15 @@ class V1ServletTest < Lcty::Scenarios
     step('And GET /v1/conversations/<id> answers 404') do
       assert_error http('GET', "/v1/conversations/#{id}"), 404, 'not found'
     end
-    step('And it is in neither /v1/conversations nor /v1/meta-all.json') do
+    step('And it is not in /v1/conversations') do
       refute_includes http('GET', '/v1/conversations').json.map { |c| c['id'] }, id
-      refute_includes http('GET', '/v1/meta-all.json').json.map { |c| c['id'] }, id
     end
     step('And a search for its word no longer finds its round') do
       refute_includes search('q' => word).map { |r| r['id'] }, round['id']
     end
     step('And its current tags are forgotten') { assert_nil Chatty::TAGS.conversation_tags(id) }
-    step('And the search index keeps no count for it') { refute Chatty::INDEX.messages_hint.key?(id) }
-    step('And deleting it again still answers 200, leaving no count either') do
-      assert_ok http('DELETE', "/v1/conversations/#{id}")
-      refute Chatty::INDEX.messages_hint.key?(id)
-    end
+    step('And the search index keeps no tag for it') { refute_includes Chatty::INDEX.convs_with_tags([tag]), id }
+    step('And deleting it again still answers 200') { assert_ok http('DELETE', "/v1/conversations/#{id}") }
   end
 
   scenario 'Deleting a conversation is announced to the pages' do
@@ -515,38 +512,11 @@ class V1ServletTest < Lcty::Scenarios
     end
   end
 
-  scenario 'The meta of every conversation is listed newest first' do
-    newer = older = list = nil
-    setup_tag = "setup-#{hex}"
-    now_tag = "now-#{hex}"
-    step('Given a conversation created with the tag "setup" whose tags were changed to ["now"], last modified in 2002') do
-      newer = create([{ 'type' => 'title', 'title' => 'Newer' }, user('hi'), assistant('hello')], [setup_tag])
-      assert_ok http('POST', "/v1/conversations/#{newer}/lines", [{ 'type' => 'tags', 'tags' => [now_tag] }])
-      File.utime(Time.utc(2002), Time.utc(2002), Chatty::Store.conv_path(newer))
-    end
-    step('And a conversation last modified in 2001') do
-      older = create([user('hi')])
-      File.utime(Time.utc(2001), Time.utc(2001), Chatty::Store.conv_path(older))
-    end
-    step('When GET /v1/meta-all.json is requested') do
-      res = http('GET', '/v1/meta-all.json')
-      assert_equal 200, res.status
-      list = res.json
-    end
-    step('Then the one of 2002 is listed before the one of 2001') do
-      ids = list.map { |c| c['id'] }
-      assert_operator ids.index(newer), :<, ids.index(older)
-    end
-    step('And the one of 2002 has its id, title, created_at, updated_at_hint, the setup_tags ["setup"], the tags_hint ["now"] and the messages_hint 2') do
-      entry = list.find { |c| c['id'] == newer }
-      assert_equal %w[created_at id messages_hint setup_tags tags_hint title updated_at_hint], entry.keys.sort
-      assert_equal 'Newer', entry['title']
-      assert_equal '2026-11-07T00:00:00Z', entry['created_at']
-      assert_equal Time.utc(2002), Time.iso8601(entry['updated_at_hint'])
-      assert_equal [setup_tag], entry['setup_tags']
-      assert_equal [now_tag], entry['tags_hint']
-      assert_equal 2, entry['messages_hint']
-    end
+  scenario 'GET /v1/meta-all.json is no longer served' do
+    res = nil
+    step('Given a conversation') { create([user('hi')]) }
+    step('When GET /v1/meta-all.json is requested') { res = http('GET', '/v1/meta-all.json') }
+    step('Then the status is 404 with the error "no such endpoint"') { assert_error res, 404, 'no such endpoint' }
   end
 
   scenario 'Keyword search finds rounds and can be limited to tags' do

@@ -13,12 +13,12 @@ Feature: LCTYSP-1009 The client of the HTTP API
   Content-Type application/json, ids and names in a path are percent-encoded, and putVectors sends a registration
   vector binary as application/octet-stream. An answer that is not OK becomes an Error "<status> <body>", the body
   cut to 200 characters, with the status as its status. The tags are not here: js/api/lcty-t.js and its worker
-  (LCTYSP-1021) send their requests. The requests that change conversations (create, append, pop, delete) then ask for a sync of the browser's copy
-  of the meta (requestMetaDbSync of js/api/meta-db.js), also when they fail, and the meta sync worker fetches GET
-  /v1/meta-all.json when the browser is idle; changing the tags changes no conversation. toLine turns a message into a line to append: a
-  reply also carries its content rendered by js/ui/markdown.js, as the screen shows it.
+  (LCTYSP-1021) send their requests. The requests that change conversations (create, append, pop, delete) send nothing
+  else: the browser's copies of the list hear of the change from the server, over /v1/rpc (LCTYSP-0014). toLine turns
+  a message into a line to append: a reply also carries its content rendered by js/ui/markdown.js, as the screen shows
+  it.
 
-  In the steps the requests of the meta sync worker, GET /v1/meta-all.json, are counted apart from the others.
+  In the steps a GET /v1/meta-all.json, which nothing should send any more, is counted apart from the other requests.
 
   Background:
     Given requests to /v1/ are answered by the test, which records them
@@ -110,12 +110,12 @@ Feature: LCTYSP-1009 The client of the HTTP API
     When listConversations() is called
     Then it rejects with a TypeError
 
-  Scenario Outline: A change of conversations asks for a sync of the meta
+  Scenario Outline: A change of conversations sends only its own request
     Given a page on the server's origin
     Given the server answers {"ok": true}
     When <call> is called
     Then it resolves
-    And the meta sync worker then fetches GET /v1/meta-all.json
+    And no other request is sent and no worker is started within 1 second
 
     Examples:
       | call                                    |
@@ -123,21 +123,3 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | appendLines("c1", [])                   |
       | popMessages("c1", 2)                    |
       | deleteConversation("c1")                |
-
-  Scenario Outline: A change of conversations that fails still asks for a sync
-    Given a page on the server's origin
-    Given <answer>
-    When appendLines("c1", []) is called
-    Then it rejects
-    And the meta sync worker then fetches GET /v1/meta-all.json
-
-    Examples:
-      | answer                                            |
-      | the server answers with the status 500            |
-      | the request to the server fails without an answer |
-
-  Scenario: Requests that do not change conversations do not ask for a sync
-    Given a page on the server's origin
-    Given the server answers {"ok": true}
-    When listConversations, getConversation, getDefaults, vectorsPending, putVectors, searchConversations and fetchSnippets are called
-    Then no GET /v1/meta-all.json is fetched within 3 seconds

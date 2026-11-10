@@ -3,525 +3,403 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // LCTYSP-1010: the scenarios of docs/specs/LCTYSP-1010_meta-db.feature, written by hand. Each test has the title of its
-// Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
+// Scenario and one test.step per line of it, so the two read side by side.
 //
 // js/api/meta-db.js runs in a real browser on the test server's origin, on the empty page of unit-page.js, with the
-// real sync worker (LCTYSP-1001). GET /v1/meta-all.json is answered by a route (it also catches the worker's request),
-// so the server's data does not matter. Every test gets a new browser context: IndexedDB starts empty, and the
-// module's state (the running sync, the listeners) is new.
+// real worker (LCTYSP-1001). The connection to /v1/rpc is a fake in the page (window.fakeRpc), whose answers the test
+// sets in window.rpcAnswers: a result, {error} for a rejection, or "hold" to keep it until the test settles it through
+// window.rpcHeld. Every test gets a new browser context: IndexedDB starts empty, and the module's state is new.
 
 import { expect, test } from "@playwright/test";
 import { givenAPage } from "./unit-page.js";
 
-/** A conversation's meta as GET /v1/meta-all.json returns it (LCTYSP-0006), updated at the time given. */
-function conv(id, updated = "12:00", title = `Conversation ${id}`) {
+/** A conversation's meta as c.list answers it (LCTYSP-0012), updated at the time given. */
+function conv(cid, updated = "12:00") {
 	return {
-		id,
-		title,
-		created_at: "2026-11-01T00:00:00.000Z",
-		updated_at_hint: `2026-11-02T${updated}:00.000Z`,
-		setup_tags: ["setup"],
-		tags_hint: ["tag"],
-		messages_hint: 2,
+		cid,
+		lang: "en",
+		title: `Conversation ${cid}`,
+		titleTypeId: "__64",
+		updatedAt: `2026-11-02T${updated}:00.000Z`,
+		createdAt: "2026-11-01T00:00:00.000Z",
 	};
 }
 
+const list = (version, items) => ({ version, items });
+
 // ---- Background ----
 
-/**
- * The page with the module loaded (window.metaDb) and GET /v1/meta-all.json answered by the test: by the next of
- * server.queue, or else by server.answer. server.requests counts the requests.
- */
 async function background(page, context) {
-	const server = {
-		requests: 0,
-		queue: [],
-		answer: (route) => route.fulfill({ json: [] }),
-	};
 	await givenAPage(page, context);
 	await page.evaluate(async () => {
 		window.metaDb = await import("/js/api/meta-db.js");
 		window.lctyCalls = [];
 	});
-	await test.step("And GET /v1/meta-all.json is answered by the test", async () => {
-		await context.route("**/v1/meta-all.json", (route) => {
-			server.requests++;
-			return (server.queue.shift() || server.answer)(route);
+	await test.step("And a connection whose answers to c.list and c.recordcount.list the test gives", async () => {
+		await page.evaluate(() => {
+			window.rpcCalls = [];
+			window.rpcHeld = {};
+			window.rpcAnswers = {};
+			window.fakeRpc = {
+				call: (method) =>
+					new Promise((resolve, reject) => {
+						window.rpcCalls.push(method);
+						const a = window.rpcAnswers[method];
+						if (a === "hold") window.rpcHeld[method] = { resolve, reject };
+						else if (a?.error) reject(new Error(a.error));
+						else resolve(a);
+					}),
+			};
 		});
 	});
-	return server;
 }
 
-/** The warnings the page logs. */
-function collectWarnings(page) {
-	const warnings = [];
-	page.on("console", (msg) => {
-		if (msg.type() === "warning") warnings.push(msg.text());
+function answer(page, answers) {
+	return page.evaluate((answers) => {
+		Object.assign(window.rpcAnswers, answers);
+	}, answers);
+}
+
+/** Start readMetaDbFrom(fakeRpc); window.lctyRead says how it ended once it has. */
+function startRead(page) {
+	return page.evaluate(() => {
+		window.lctyRead = null;
+		window.metaDb.readMetaDbFrom(window.fakeRpc).then(
+			() => {
+				window.lctyRead = { resolved: true };
+			},
+			(e) => {
+				window.lctyRead = { rejected: e.message };
+			},
+		);
 	});
-	return warnings;
 }
 
-// ---- The database, from the page ----
-
-/** The database name ("lcty_c" by default) as it is: {exists, version, stores}. Never creates it. */
-function dbInfo(page, name = "lcty_c") {
-	return page.evaluate(
-		(name) =>
-			new Promise((resolve, reject) => {
-				const req = indexedDB.open(name);
-				req.onupgradeneeded = () => req.transaction.abort();
-				req.onerror = () =>
-					req.error?.name === "AbortError"
-						? resolve({ exists: false })
-						: reject(req.error);
-				req.onsuccess = () => {
-					const db = req.result;
-					const info = {
-						exists: true,
-						version: db.version,
-						stores: [...db.objectStoreNames].sort(),
-					};
-					db.close();
-					resolve(info);
-				};
-			}),
-		name,
-	);
-}
-
-/** Create the database name ("lcty_c" by default) at version with stores ({store: {keyPath?, records: [value]}}). */
-function seedDb(page, version, stores, name = "lcty_c") {
-	return page.evaluate(
-		({ version, stores, name }) =>
-			new Promise((resolve, reject) => {
-				const req = indexedDB.open(name, version);
-				req.onupgradeneeded = () => {
-					for (const [store, { keyPath, records }] of Object.entries(stores)) {
-						const os = req.result.createObjectStore(
-							store,
-							keyPath ? { keyPath } : { autoIncrement: true },
-						);
-						for (const value of records) os.put(value);
-					}
-				};
-				req.onsuccess = () => {
-					req.result.close();
-					resolve();
-				};
-				req.onerror = () => reject(req.error);
-			}),
-		{ version, stores, name },
-	);
-}
-
-/** c_meta at version 1, as the worker leaves it, holding items. */
-function seedCMeta(page, items) {
-	return seedDb(page, 1, { c_meta: { keyPath: "id", records: items } });
+function readOutcome(page) {
+	return expect.poll(() => page.evaluate(() => window.lctyRead));
 }
 
 function readMetaDb(page) {
 	return page.evaluate(() => window.metaDb.readMetaDb());
 }
 
+const cids = (r) => r.items.map((m) => m.cid);
+
 function calls(page) {
 	return page.evaluate(() => window.lctyCalls);
 }
 
-/** Start forceSyncMetaDb() n times; window.lctyResults[i] says how call i ended once it has. */
-function startForcedSyncs(page, n) {
-	return page.evaluate((n) => {
-		window.lctyResults = [];
-		window.lctyPromises = Array.from({ length: n }, () =>
-			window.metaDb.forceSyncMetaDb(),
-		);
-		window.lctyPromises.forEach((p, i) => {
-			p.then(
-				() => {
-					window.lctyResults[i] = { resolved: true };
-				},
-				(e) => {
-					window.lctyResults[i] = { rejected: e.message };
-				},
-			);
-		});
-	}, n);
-}
-
-/** How the forced syncs ended, once all n have. */
-async function forcedSyncResults(page, n) {
-	await page.waitForFunction(
-		(n) => window.lctyResults.filter(Boolean).length === n,
-		n,
+function addListener(page) {
+	return page.evaluate(() =>
+		window.metaDb.onMetaDbChange(() => window.lctyCalls.push("change")),
 	);
-	return page.evaluate(() => window.lctyResults);
 }
 
-// ---- Steps shared by the scenarios ----
-
-async function givenNoDatabase(page) {
-	await test.step('Given there is no database "lcty_c"', async () => {
-		expect((await dbInfo(page)).exists).toBe(false);
-	});
+function applyBatch(page, params) {
+	return page.evaluate((p) => window.metaDb.applyMetaBatch(p), params);
 }
 
-async function givenCMetaHolds(page, items, text, keyword = "Given") {
-	await test.step(`${keyword} "c_meta" holds ${text}`, async () => {
-		await seedCMeta(page, items);
-	});
+/** The database "lcty_c" as it is: {exists, version}. Never creates it. */
+function dbInfo(page) {
+	return page.evaluate(
+		() =>
+			new Promise((resolve, reject) => {
+				const req = indexedDB.open("lcty_c");
+				req.onupgradeneeded = () => req.transaction.abort();
+				req.onerror = () =>
+					req.error?.name === "AbortError"
+						? resolve({ exists: false })
+						: reject(req.error);
+				req.onsuccess = () => {
+					const info = { exists: true, version: req.result.version };
+					req.result.close();
+					resolve(info);
+				};
+			}),
+	);
 }
 
-async function givenAListener(page, keyword = "And") {
-	await test.step(`${keyword} a listener is registered with onMetaDbChange`, async () => {
-		await page.evaluate(() =>
-			window.metaDb.onMetaDbChange(() => window.lctyCalls.push("listener")),
-		);
-	});
-}
-
-async function givenMetaAllReturns(server, items, text) {
-	await test.step(`And GET /v1/meta-all.json returns ${text}`, () => {
-		server.answer = (route) => route.fulfill({ json: items });
-	});
-}
-
-async function whenReadMetaDb(page) {
-	let result;
-	await test.step("When readMetaDb() reads the copy", async () => {
-		result = await readMetaDb(page);
-	});
-	return result;
-}
-
-async function thenNoItemsAndStale(result) {
-	await test.step("Then it returns no items and stale true", () => {
-		expect(result).toEqual({ items: [], stale: true });
+/** Read the lists once, with only items as the meta at version, and no counts. */
+async function givenRead(page, items, version) {
+	const text = `"${items.map((m) => m.cid).join('", "')}"`;
+	await test.step(`Given the lists have been read with ${text} at "${version}"`, async () => {
+		await answer(page, {
+			"c.list": list(version, items),
+			"c.recordcount.list": list(version, []),
+		});
+		await page.evaluate(() => window.metaDb.readMetaDbFrom(window.fakeRpc));
 	});
 }
 
-async function whenForcedSyncResolves(page) {
-	await test.step("When forceSyncMetaDb() is called", async () => {
-		await startForcedSyncs(page, 1);
-	});
-	await test.step("Then it resolves", async () => {
-		expect(await forcedSyncResults(page, 1)).toEqual([{ resolved: true }]);
-	});
-}
-
-async function thenReadMetaDbReturns(page, expected, text) {
-	await test.step(`And readMetaDb() returns ${text}`, async () => {
-		const { items, stale } = await readMetaDb(page);
-		expect(stale).toBe(false);
-		expect(items).toEqual(expected);
-	});
-}
-
-async function thenListenerNotCalled(page) {
-	await test.step("And the listener was not called", async () => {
-		await page.waitForTimeout(300);
-		expect(await calls(page)).toEqual([]);
-	});
+async function andListener(page) {
+	await test.step("And a listener is registered with onMetaDbChange", () =>
+		addListener(page));
 }
 
 // ---- Scenarios ----
 
-test("Reading before any sync finds no copy", async ({ page, context }) => {
+test("Reading before any list finds no copy", async ({ page, context }) => {
 	await background(page, context);
-	await givenNoDatabase(page);
-	const result = await whenReadMetaDb(page);
-	await thenNoItemsAndStale(result);
+	await test.step('Given there is no database "lcty_c"', async () => {
+		expect((await dbInfo(page)).exists).toBe(false);
+	});
+	let r;
+	await test.step("When readMetaDb() reads the copies", async () => {
+		r = await readMetaDb(page);
+	});
+	await test.step("Then it returns no items, no counts and stale true", () => {
+		expect(r).toEqual({ items: [], counts: {}, stale: true });
+	});
 	await test.step('And there is still no database "lcty_c"', async () => {
 		expect((await dbInfo(page)).exists).toBe(false);
 	});
 });
 
-test("Reading returns the copy newest first", async ({ page, context }) => {
+test("Reading the lists stores the meta and the counts", async ({
+	page,
+	context,
+}) => {
 	await background(page, context);
-	const stored = {
-		a: conv("a", "10:00"),
-		b: conv("b", "12:00"),
-		c: conv("c", "11:00"),
-		d: conv("d", "12:00"),
-	};
-	await givenCMetaHolds(
-		page,
-		Object.values(stored),
-		'the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00',
-	);
-	const result = await whenReadMetaDb(page);
-	await test.step('Then it returns "d", "b", "c" and "a" in that order, as stored, and stale false', () => {
-		expect(result).toEqual({
-			items: [stored.d, stored.b, stored.c, stored.a],
-			stale: false,
-		});
+	await test.step('Given c.list answers "a" updated at 10:00 and "b" at 12:00, and c.recordcount.list 2 of "a", both at "b1.5"', () =>
+		answer(page, {
+			"c.list": list("b1.5", [conv("a", "10:00"), conv("b", "12:00")]),
+			"c.recordcount.list": list("b1.5", [{ cid: "a", count: 2 }]),
+		}));
+	await andListener(page);
+	await test.step("When readMetaDbFrom(the connection) is called", () =>
+		startRead(page));
+	await test.step("Then it resolves after c.list and then c.recordcount.list were called once each", async () => {
+		await readOutcome(page).toEqual({ resolved: true });
+		expect(await page.evaluate(() => window.rpcCalls)).toEqual([
+			"c.list",
+			"c.recordcount.list",
+		]);
 	});
-});
-
-test("Reading leaves no connection open", async ({ page, context }) => {
-	await background(page, context);
-	await givenCMetaHolds(page, [conv("a")], 'the conversation "a"');
-	await whenReadMetaDb(page);
-	await test.step('Then the database "lcty_c" can be opened at version 2 without being blocked', async () => {
-		const result = await page.evaluate(
-			() =>
-				new Promise((resolve) => {
-					let blocked = false;
-					const req = indexedDB.open("lcty_c", 2);
-					req.onblocked = () => {
-						blocked = true;
-					};
-					req.onsuccess = () => {
-						req.result.close();
-						resolve({ opened: true, blocked });
-					};
-					req.onerror = () => resolve({ opened: false, blocked });
-					setTimeout(() => resolve({ opened: false, blocked }), 2000);
-				}),
-		);
-		expect(result).toEqual({ opened: true, blocked: false });
-	});
-});
-
-test("A forced sync syncs at once", async ({ page, context }) => {
-	const server = await background(page, context);
-	const list = [conv("a", "10:00"), conv("b", "11:00")];
-	await givenNoDatabase(page);
-	await givenMetaAllReturns(server, list, 'the conversations "a" and "b"');
-	await givenAListener(page);
-	await test.step("When forceSyncMetaDb() is called", async () => {
-		await startForcedSyncs(page, 1);
-	});
-	await test.step("Then it resolves after GET /v1/meta-all.json was requested once", async () => {
-		expect(await forcedSyncResults(page, 1)).toEqual([{ resolved: true }]);
-		expect(server.requests).toBe(1);
-	});
-	await test.step('And readMetaDb() returns the conversations "a" and "b" and stale false', async () => {
-		expect(await readMetaDb(page)).toEqual({
-			items: [list[1], list[0]],
-			stale: false,
-		});
+	await test.step('And readMetaDb() returns "b" and "a" in that order, the counts 2 of "a", and stale false', async () => {
+		const r = await readMetaDb(page);
+		expect(cids(r)).toEqual(["b", "a"]);
+		expect(r.counts).toEqual({ a: 2 });
+		expect(r.stale).toBe(false);
 	});
 	await test.step("And the listener was called once", async () => {
-		expect(await calls(page)).toEqual(["listener"]);
+		expect(await calls(page)).toEqual(["change"]);
 	});
 });
 
-for (const { answer, message, fulfill } of [
-	{
-		answer: "answers with the status 500",
-		message: "Failed to fetch /v1/meta-all.json: 500",
-		fulfill: (route) => route.fulfill({ status: 500, body: "boom" }),
-	},
-	{
-		answer: "returns an object, not a list",
-		message: "meta-all.json is invalid",
-		fulfill: (route) => route.fulfill({ json: { a: conv("a") } }),
-	},
-]) {
-	test(`A failed forced sync rejects with the worker's error and keeps the copy (${answer})`, async ({
-		page,
-		context,
-	}) => {
-		const server = await background(page, context);
-		const kept = [conv("a", "10:00"), conv("b", "11:00")];
-		await givenCMetaHolds(page, kept, 'the conversations "a" and "b"');
-		await givenAListener(page);
-		await test.step(`And GET /v1/meta-all.json ${answer}`, () => {
-			server.answer = fulfill;
-		});
-		await test.step("When forceSyncMetaDb() is called", async () => {
-			await startForcedSyncs(page, 1);
-		});
-		await test.step(`Then it rejects with an error whose message has "${message}" and does not start with "Uncaught"`, async () => {
-			const [result] = await forcedSyncResults(page, 1);
-			expect(result.rejected).toContain(message);
-			expect(result.rejected).not.toMatch(/^Uncaught/);
-		});
-		await thenReadMetaDbReturns(
-			page,
-			[kept[1], kept[0]],
-			'the conversations "a" and "b"',
-		);
-		await thenListenerNotCalled(page);
-	});
-}
-
-test("Forced syncs made during a sync share one sync after it", async ({
+test("A notification that arrives while the lists are read is written after them", async ({
 	page,
 	context,
 }) => {
-	const server = await background(page, context);
-	const held = [];
-	await test.step("Given GET /v1/meta-all.json is held until the test answers it", () => {
-		server.answer = (route) => {
-			held.push(route);
-		};
-	});
-	await test.step("When forceSyncMetaDb() is called three times", async () => {
-		await startForcedSyncs(page, 3);
-	});
-	await test.step("Then GET /v1/meta-all.json has been requested once", async () => {
-		await expect.poll(() => server.requests).toBe(1);
-		await page.waitForTimeout(300);
-		expect(server.requests).toBe(1);
-	});
-	await test.step("And the second and the third call return the same promise", async () => {
-		expect(
-			await page.evaluate(
-				() => window.lctyPromises[1] === window.lctyPromises[2],
-			),
-		).toBe(true);
-	});
-	await test.step('When the first request is answered with the conversation "a"', async () => {
-		await held[0].fulfill({ json: [conv("a")] });
-	});
-	await test.step("Then GET /v1/meta-all.json is requested a second time", async () => {
-		await expect.poll(() => held.length).toBe(2);
-	});
-	await test.step('When the second request is answered with the conversation "b"', async () => {
-		await held[1].fulfill({ json: [conv("b")] });
-	});
-	await test.step("Then all three calls resolve", async () => {
-		expect(await forcedSyncResults(page, 3)).toEqual([
-			{ resolved: true },
-			{ resolved: true },
-			{ resolved: true },
-		]);
-		expect(server.requests).toBe(2);
-	});
-	await thenReadMetaDbReturns(page, [conv("b")], 'only the conversation "b"');
-});
-
-test("A sync queued after a failed one still runs", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	await test.step('Given GET /v1/meta-all.json answers with the status 500 first and returns the conversation "a" next', () => {
-		server.queue.push((route) => route.fulfill({ status: 500, body: "boom" }));
-		server.answer = (route) => route.fulfill({ json: [conv("a")] });
-	});
-	await test.step("When forceSyncMetaDb() is called twice at once", async () => {
-		await startForcedSyncs(page, 2);
-	});
-	await test.step("Then the first call rejects and the second resolves", async () => {
-		const [first, second] = await forcedSyncResults(page, 2);
-		expect(first.rejected).toContain("Failed to fetch /v1/meta-all.json: 500");
-		expect(second).toEqual({ resolved: true });
-	});
-	await thenReadMetaDbReturns(page, [conv("a")], 'only the conversation "a"');
-});
-
-test("Requests made before the browser is idle share one sync", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	await test.step('Given GET /v1/meta-all.json returns the conversation "a"', () => {
-		server.answer = (route) => route.fulfill({ json: [conv("a")] });
-	});
-	await givenAListener(page);
-	await test.step("When requestMetaDbSync() is called three times", async () => {
-		await page.evaluate(() => {
-			window.metaDb.requestMetaDbSync();
-			window.metaDb.requestMetaDbSync();
-			window.metaDb.requestMetaDbSync();
-		});
-	});
-	await test.step("Then the listener is called once", async () => {
-		await page.waitForFunction(() => window.lctyCalls.length > 0);
-		await page.waitForTimeout(500);
-		expect(await calls(page)).toEqual(["listener"]);
-	});
-	await test.step("And GET /v1/meta-all.json was requested once", () => {
-		expect(server.requests).toBe(1);
-	});
-	await thenReadMetaDbReturns(page, [conv("a")], 'only the conversation "a"');
-});
-
-test("A request after a finished sync syncs again", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	const both = [conv("a", "10:00"), conv("b", "11:00")];
-	await test.step('Given GET /v1/meta-all.json returns the conversation "a" first and the conversations "a" and "b" next', () => {
-		server.queue.push((route) => route.fulfill({ json: [conv("a", "10:00")] }));
-		server.answer = (route) => route.fulfill({ json: both });
-	});
-	await givenAListener(page);
-	await test.step("When requestMetaDbSync() is called and the listener has been called", async () => {
-		await page.evaluate(() => window.metaDb.requestMetaDbSync());
-		await page.waitForFunction(() => window.lctyCalls.length === 1);
-	});
-	await test.step("And requestMetaDbSync() is called again", async () => {
-		await page.evaluate(() => window.metaDb.requestMetaDbSync());
-	});
-	await test.step("Then the listener is called a second time", async () => {
-		await page.waitForFunction(() => window.lctyCalls.length === 2);
-	});
-	await test.step("And GET /v1/meta-all.json was requested twice", () => {
-		expect(server.requests).toBe(2);
-	});
-	await test.step('And readMetaDb() returns the conversations "a" and "b" and stale false', async () => {
-		expect(await readMetaDb(page)).toEqual({
-			items: [both[1], both[0]],
-			stale: false,
-		});
-	});
-});
-
-test("A failed requested sync is only logged", async ({ page, context }) => {
-	const server = await background(page, context);
-	const warnings = collectWarnings(page);
-	await givenCMetaHolds(page, [conv("a")], 'the conversation "a"');
-	await test.step("And GET /v1/meta-all.json answers with the status 500", () => {
-		server.answer = (route) => route.fulfill({ status: 500, body: "boom" });
-	});
-	await givenAListener(page);
-	await test.step("When requestMetaDbSync() is called", async () => {
-		await page.evaluate(() => window.metaDb.requestMetaDbSync());
-	});
-	await test.step('Then the warning "the meta of the conversations could not be synced" is logged', async () => {
+	await background(page, context);
+	await test.step("Given c.list is held until the test answers it", () =>
+		answer(page, { "c.list": "hold" }));
+	await test.step("When readMetaDbFrom(the connection) is called", async () => {
+		await startRead(page);
 		await expect
-			.poll(() =>
-				warnings.some((w) =>
-					w.includes("the meta of the conversations could not be synced"),
-				),
-			)
+			.poll(() => page.evaluate(() => Boolean(window.rpcHeld["c.list"])))
 			.toBe(true);
 	});
-	await thenListenerNotCalled(page);
-	await thenReadMetaDbReturns(page, [conv("a")], 'only the conversation "a"');
+	await test.step('And applyMetaBatch() is given a c_meta put of "c" at "b1.6"', () =>
+		applyBatch(page, {
+			version: "b1.6",
+			actorId: null,
+			records: [{ store: "c_meta", op: "put", row: conv("c", "13:00") }],
+		}));
+	await test.step('And c.list answers "a" at "b1.5" and c.recordcount.list nothing at "b1.5"', async () => {
+		await answer(page, { "c.recordcount.list": list("b1.5", []) });
+		await page.evaluate(() =>
+			window.rpcHeld["c.list"].resolve({
+				version: "b1.5",
+				items: [
+					{
+						cid: "a",
+						lang: "en",
+						title: "Conversation a",
+						titleTypeId: "__64",
+						updatedAt: "2026-11-02T12:00:00.000Z",
+						createdAt: "2026-11-01T00:00:00.000Z",
+					},
+				],
+			}),
+		);
+	});
+	await test.step("Then readMetaDbFrom resolves", async () => {
+		await readOutcome(page).toEqual({ resolved: true });
+	});
+	await test.step('And readMetaDb() returns "c" and "a"', async () => {
+		await expect
+			.poll(async () => cids(await readMetaDb(page)))
+			.toEqual(["c", "a"]);
+	});
+});
+
+test("A notification after the lists is written and calls the listeners", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenRead(page, [conv("a", "10:00")], "b1.5");
+	await andListener(page);
+	await test.step('When applyMetaBatch() is given a c_meta put of "b" at "b1.6" and a c_recordcount put of 3 of "b"', () =>
+		applyBatch(page, {
+			version: "b1.6",
+			actorId: null,
+			records: [
+				{ store: "c_meta", op: "put", row: conv("b", "12:00") },
+				{ store: "c_recordcount", op: "put", row: { cid: "b", count: 3 } },
+			],
+		}));
+	await test.step('Then readMetaDb() returns "b" and "a" and the counts 3 of "b"', async () => {
+		await expect
+			.poll(async () => {
+				const r = await readMetaDb(page);
+				return { cids: cids(r), counts: r.counts };
+			})
+			.toEqual({ cids: ["b", "a"], counts: { b: 3 } });
+	});
+	await test.step("And the listener was called once", async () => {
+		await expect.poll(() => calls(page)).toEqual(["change"]);
+	});
+});
+
+test("A notification older than the copy is left and calls no listener", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenRead(page, [conv("a")], "b1.6");
+	await andListener(page);
+	await test.step('When applyMetaBatch() is given a c_meta put of "b" at "b1.5"', () =>
+		applyBatch(page, {
+			version: "b1.5",
+			actorId: null,
+			records: [{ store: "c_meta", op: "put", row: conv("b") }],
+		}));
+	let r;
+	await test.step("And readMetaDb() has been called after it", async () => {
+		r = await readMetaDb(page); // the operations of a tab run in order: the apply has ended
+	});
+	await test.step('Then readMetaDb() returns only "a"', () => {
+		expect(cids(r)).toEqual(["a"]);
+	});
+	await test.step("And the listener was not called", async () => {
+		expect(await calls(page)).toEqual([]);
+	});
+});
+
+test("A failed read rejects and keeps the copies", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenRead(page, [conv("a")], "b1.5");
+	await andListener(page);
+	await test.step('And c.list fails with "the connection was lost"', () =>
+		answer(page, { "c.list": { error: "the connection was lost" } }));
+	await test.step("When readMetaDbFrom(the connection) is called", () =>
+		startRead(page));
+	await test.step('Then it rejects with "the connection was lost"', async () => {
+		await readOutcome(page).toEqual({ rejected: "the connection was lost" });
+	});
+	await test.step('And readMetaDb() returns only "a"', async () => {
+		expect(cids(await readMetaDb(page))).toEqual(["a"]);
+	});
+	await test.step("And the listener was not called", async () => {
+		expect(await calls(page)).toEqual([]);
+	});
+});
+
+test("A notification held during a failed read is still written", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenRead(page, [conv("a", "10:00")], "b1.5");
+	await test.step("And c.list is held until the test answers it", () =>
+		answer(page, { "c.list": "hold" }));
+	await test.step("When readMetaDbFrom(the connection) is called", async () => {
+		await page.evaluate(() => {
+			window.rpcHeld = {};
+		});
+		await startRead(page);
+		await expect
+			.poll(() => page.evaluate(() => Boolean(window.rpcHeld["c.list"])))
+			.toBe(true);
+	});
+	await test.step('And applyMetaBatch() is given a c_meta put of "b" at "b1.6"', () =>
+		applyBatch(page, {
+			version: "b1.6",
+			actorId: null,
+			records: [{ store: "c_meta", op: "put", row: conv("b", "12:00") }],
+		}));
+	await test.step('And c.list fails with "the connection was lost"', () =>
+		page.evaluate(() =>
+			window.rpcHeld["c.list"].reject(new Error("the connection was lost")),
+		));
+	await test.step("Then readMetaDbFrom rejects", async () => {
+		await readOutcome(page).toEqual({ rejected: "the connection was lost" });
+	});
+	await test.step('And readMetaDb() returns "b" and "a"', async () => {
+		await expect
+			.poll(async () => cids(await readMetaDb(page)))
+			.toEqual(["b", "a"]);
+	});
 });
 
 test("A listener that throws does not stop the others", async ({
 	page,
 	context,
 }) => {
-	const server = await background(page, context);
-	const warnings = collectWarnings(page);
-	await test.step("Given a listener that throws is registered with onMetaDbChange", async () => {
-		await page.evaluate(() =>
+	const warnings = [];
+	page.on("console", (msg) => {
+		if (msg.type() === "warning") warnings.push(msg.text());
+	});
+	await background(page, context);
+	await test.step("Given a listener that throws is registered with onMetaDbChange", () =>
+		page.evaluate(() =>
 			window.metaDb.onMetaDbChange(() => {
-				throw new Error("the first listener failed");
+				throw new Error("listener broke");
 			}),
-		);
+		));
+	await test.step("And a second listener is registered with onMetaDbChange", () =>
+		addListener(page));
+	await test.step('And c.list answers "a" and c.recordcount.list nothing, both at "b1.5"', () =>
+		answer(page, {
+			"c.list": list("b1.5", [conv("a")]),
+			"c.recordcount.list": list("b1.5", []),
+		}));
+	await test.step("When readMetaDbFrom(the connection) is called", () =>
+		startRead(page));
+	await test.step("Then it resolves", async () => {
+		await readOutcome(page).toEqual({ resolved: true });
 	});
-	await test.step("And a second listener is registered with onMetaDbChange", async () => {
-		await page.evaluate(() =>
-			window.metaDb.onMetaDbChange(() => window.lctyCalls.push("second")),
-		);
-	});
-	await test.step('And GET /v1/meta-all.json returns the conversation "a"', () => {
-		server.answer = (route) => route.fulfill({ json: [conv("a")] });
-	});
-	await whenForcedSyncResolves(page);
 	await test.step("And the second listener was called once", async () => {
-		expect(await calls(page)).toEqual(["second"]);
+		expect(await calls(page)).toEqual(["change"]);
 	});
 	await test.step("And the error of the first listener is logged as a warning", async () => {
 		await expect
-			.poll(() => warnings.some((w) => w.includes("the first listener failed")))
+			.poll(() => warnings.some((w) => w.includes("listener broke")))
 			.toBe(true);
+	});
+});
+
+test("Reading leaves no connection open", async ({ page, context }) => {
+	await background(page, context);
+	await givenRead(page, [conv("a")], "b1.5");
+	await test.step("When readMetaDb() reads the copies", () => readMetaDb(page));
+	await test.step('Then the database "lcty_c" can be opened at version 3 without being blocked', async () => {
+		const outcome = await page.evaluate(
+			() =>
+				new Promise((resolve) => {
+					const req = indexedDB.open("lcty_c", 3);
+					req.onblocked = () => resolve("blocked");
+					req.onsuccess = () => {
+						req.result.close();
+						resolve("opened");
+					};
+					req.onerror = () => resolve(`error: ${req.error}`);
+				}),
+		);
+		expect(outcome).toBe("opened");
 	});
 });

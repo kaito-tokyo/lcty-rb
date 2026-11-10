@@ -9,7 +9,6 @@
 #               rev marks the version of the whole round's text; it changes when the text changes
 #   chunks_fts  Keyword search (FTS5 trigram; rowid equals chunks.rowid)
 #   conv_tags   Current tags of each conversation (for tag: filtering)
-#   conv_stats  The number of messages of each conversation (all of them, inherited ones included; for lists)
 #   c_recordcount  The number of elements of each conversation of /v1/rpc (LCTYSP-0014), written when the file is
 #               written and filled at startup from the files (lib/rpc/conv_store.rb)
 #
@@ -91,8 +90,6 @@ module Chatty
           changed ||= !have.empty?
           @db.execute('DELETE FROM conv_tags WHERE conv_id = ?', [conv_id])
           tags.each { |t| @db.execute('INSERT OR IGNORE INTO conv_tags (conv_id, tag) VALUES (?, ?)', [conv_id, t]) }
-          @db.execute('INSERT INTO conv_stats (conv_id, messages) VALUES (?, ?) ' \
-                      'ON CONFLICT(conv_id) DO UPDATE SET messages = excluded.messages', [conv_id, messages.size])
         end
         @listeners.each(&:call) if changed
       end
@@ -103,8 +100,8 @@ module Chatty
       conversations.each { |conv_id, (messages, tags)| sync(conv_id, messages, tags || []) }
       @mutex.synchronize do
         known = conversations.keys
-        stale = (@db.execute('SELECT DISTINCT conv_id FROM chunks').map(&:first) | @db.execute('SELECT DISTINCT conv_id FROM conv_tags').map(&:first) |
-                 @db.execute('SELECT conv_id FROM conv_stats').map(&:first)) - known
+        stale = (@db.execute('SELECT DISTINCT conv_id FROM chunks').map(&:first) |
+                 @db.execute('SELECT DISTINCT conv_id FROM conv_tags').map(&:first)) - known
         @db.transaction { stale.each { |cid| delete_conversation(cid) } }
         @listeners.each(&:call)
       end
@@ -121,22 +118,6 @@ module Chatty
     end
 
     # ---- Keyword search ----
-
-    # The current tags of every conversation as recorded here, in the order they were given: {conv_id => [tag, …]}.
-    # A hint for lists (GET /v1/meta-all.json): the index is derived and follows the files when they are written through
-    # the server or at startup, so a file edited by hand is not reflected until the next start.
-    def tags_hint
-      @mutex.synchronize do
-        @db.execute('SELECT conv_id, tag FROM conv_tags ORDER BY rowid').each_with_object({}) do |(id, tag), h|
-          (h[id] ||= []) << tag
-        end
-      end
-    end
-
-    # The number of messages of every conversation as recorded here: {conv_id => n}. A hint for lists, like tags_hint.
-    def messages_hint
-      @mutex.synchronize { @db.execute('SELECT conv_id, messages FROM conv_stats').to_h }
-    end
 
     # The cached number of elements of a conversation of /v1/rpc, or nil when the cache has none (LCTYSP-0014)
     def record_count(cid)
@@ -213,7 +194,6 @@ module Chatty
         CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(text, tokenize='trigram');
         CREATE TABLE IF NOT EXISTS conv_tags (conv_id TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (conv_id, tag));
         CREATE INDEX IF NOT EXISTS conv_tags_tag ON conv_tags(tag);
-        CREATE TABLE IF NOT EXISTS conv_stats (conv_id TEXT PRIMARY KEY, messages INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS c_recordcount (cid TEXT PRIMARY KEY, count INTEGER NOT NULL);
       SQL
     end
@@ -229,7 +209,6 @@ module Chatty
     def delete_conversation(conv_id)
       @db.execute('SELECT DISTINCT msg_id FROM chunks WHERE conv_id = ?', [conv_id]).each { |(m)| delete_round(m) }
       @db.execute('DELETE FROM conv_tags WHERE conv_id = ?', [conv_id])
-      @db.execute('DELETE FROM conv_stats WHERE conv_id = ?', [conv_id])
       @db.execute('DELETE FROM c_recordcount WHERE cid = ?', [conv_id])
     end
 

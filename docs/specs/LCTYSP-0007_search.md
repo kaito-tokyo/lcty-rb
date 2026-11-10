@@ -84,7 +84,8 @@ browser → POST /v1/snippets {ids, q}          only for rounds without a snippe
 
 - Rounds are mapped to conversations with `message_ids` from `GET /v1/conversations`. The sidebar's list comes from
   the browser's copy of the meta ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)), so this is fetched only when a
-  semantic search runs, and kept until the list changes. `tag:` filters use the copy's `tags_hint`.
+  semantic search runs, and kept until the list changes. `tag:` filters use the tags of the browser's copy
+  `t_has_many_c` ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
 
 ## Filtering by tag
 
@@ -93,10 +94,9 @@ browser → POST /v1/snippets {ids, q}          only for rounds without a snippe
 - The server filters keyword search with `conv_tags`, updated on every sync with the conversation's current tags. The
   browser filters semantic hits with the tags from the conversation list.
 - Conversation lists and results show current tags; clicking a tag searches for `tag:name`.
-- `conv_tags` also gives `GET /v1/meta-all.json` its `tags_hint` (in the order the tags were given), and `conv_stats`
-  (the number of messages of each conversation, inherited ones included, recorded on every sync) its `messages_hint`,
-  so the browser's copy of the meta has current tags and counts without the server reading the bodies of the files. It is a hint: written through
-  the server it follows every change, but a file edited by hand is reflected only at the next start.
+- `conv_tags` is only for filtering: the sidebar's list has the tags of `t_has_many_c` and the counts of
+  `c_recordcount` ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)). `conv_stats` and the hints of `GET /v1/meta-all.json`
+  that it and `conv_tags` gave went with that endpoint.
 
 ## Budget
 

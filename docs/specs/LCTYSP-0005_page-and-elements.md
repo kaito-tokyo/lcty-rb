@@ -408,15 +408,15 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   - Buttons do nothing until the module has loaded.
 - **The sidebar's list is filled from the browser's copy of the meta, on every page.** `<lcty-sidebar>` fills its list
   as soon as it is in the document, before any module has loaded ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)),
-  from IndexedDB `lcty_c` (store `c_meta`), asynchronously, through the operation `get` of `lcty.v1.c.worker.cjs`
-  (resolved as `../lcty.v1/lcty.v1.c.worker.cjs` from the page). The database is only read: when it does not exist yet
-  it is not created (the worker's sync owns the schema), and the list stays empty.
+  from IndexedDB `lcty_c` (stores `c_meta` and `c_recordcount`), asynchronously, through the operation `get` of
+  `lcty.v1.c.worker.cjs` (resolved as `../lcty.v1/lcty.v1.c.worker.cjs` from the page). The database is only read:
+  when it does not exist yet it is not created (the worker's writes own the schema), and the list stays empty.
 
-  These items have titles, dates, `tags_hint` as their tags and `messages_hint` as their counts (`showCached`), so
-  they look the same as the module's items when the hints are up to date. `<lcty-c>`
-  marks its own conversation as current when it is connected. Once the module has loaded, it shows the list from the same copy
-  (IndexedDB, all conversations; `js/search/search-panel.js`) and reads it again whenever a sync has stored a new
-  list, in this tab or another; a cached result that arrives after that is ignored. The sidebar does not fetch
+  These items have titles, dates and counts but no tags (`showCached`), which are in `lcty_t`; the module's items add
+  them. `<lcty-c>` marks its own conversation as current when it is connected. Once the module has loaded, it shows
+  the list from the same copies and the tags of `t_has_many_c` (`js/search/search-panel.js`) and reads them again
+  whenever this tab has stored a change of them, which follow the server over `/v1/rpc`
+  ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)); a cached result that arrives after that is ignored. The sidebar does not fetch
   `/v1/conversations` to show the list. Before the first sync of a new browser the copy is empty, and the list stays
   blank instead of saying there are no conversations. A conversation created or changed outside this browser
   appears when the copy is next invalidated ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).

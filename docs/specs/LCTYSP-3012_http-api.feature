@@ -133,11 +133,11 @@ Feature: LCTYSP-3012 HTTP API
     When DELETE /v1/conversations/<id> is requested
     Then the status is 200 and the body is {"ok": true}
     And GET /v1/conversations/<id> answers 404
-    And it is in neither /v1/conversations nor /v1/meta-all.json
+    And it is not in /v1/conversations
     And a search for its word no longer finds its round
     And its current tags are forgotten
-    And the search index keeps no count for it
-    And deleting it again still answers 200, leaving no count either
+    And the search index keeps no tag for it
+    And deleting it again still answers 200
 
   Scenario: Deleting a conversation is announced to the pages
     Given a conversation whose tags were changed to ["gone"], and the changes announced through Chatty.commit recorded
@@ -146,12 +146,10 @@ Feature: LCTYSP-3012 HTTP API
     And a t.batch.updated deletes its row of t_has_many_c
     And deleting it again announces no record
 
-  Scenario: The meta of every conversation is listed newest first
-    Given a conversation created with the tag "setup" whose tags were changed to ["now"], last modified in 2002
-    And a conversation last modified in 2001
+  Scenario: GET /v1/meta-all.json is no longer served
+    Given a conversation
     When GET /v1/meta-all.json is requested
-    Then the one of 2002 is listed before the one of 2001
-    And the one of 2002 has its id, title, created_at, updated_at_hint, the setup_tags ["setup"], the tags_hint ["now"] and the messages_hint 2
+    Then the status is 404 with the error "no such endpoint"
 
   Scenario: Keyword search finds rounds and can be limited to tags
     Given two conversations with a round with the same unique word, only one of them with the tag "pick"

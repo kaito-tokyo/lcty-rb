@@ -37,7 +37,7 @@ for the backend ones).
 
 | ID                                                            | Title                                         | Tested by                                                    |
 | ------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------ |
-| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | The meta in the browser: lcty.v1.c.worker.cjs | `tests/unit/lcty-c.spec.js`                                  |
+| [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | The copies of c/: lcty.v1.c.worker.cjs        | `tests/unit/lcty-c.spec.js`                                  |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | Message ids as UUIDv7                         | `tests/unit/uuid.test.js`                                    |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | UI texts                                      | `tests/unit/i18n.test.js`, `tests/unit/i18n.spec.js`         |
 | [LCTYSP-1004](LCTYSP-1004_common.feature)                     | Ids, times, URLs and settings                 | `tests/unit/common.test.js`, `tests/unit/common.spec.js`     |
@@ -46,7 +46,7 @@ for the backend ones).
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | Streaming a reply through the Responses API   | `tests/unit/responses.test.js`                               |
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | Building the request from a conversation      | `tests/unit/history.test.js`                                 |
 | [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | The client of the HTTP API                    | `tests/unit/storage.test.js`, `tests/unit/storage.spec.js`   |
-| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | The browser's copy of the meta                | `tests/unit/meta-db.spec.js`                                 |
+| [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | The copies of the list of conversations       | `tests/unit/meta-db.spec.js`                                 |
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | Vector records and the vector store           | `tests/unit/vectors.test.js`                                 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | Embedding and indexing                        | `tests/unit/embed.test.js`                                   |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | The semantic search worker                    | `tests/unit/fuzzy-search-worker.test.js`                     |
@@ -59,6 +59,7 @@ for the backend ones).
 | [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | The tags in the browser: lcty.v1.t.worker.cjs | `tests/unit/lcty-t.spec.js`                                  |
 | [LCTYSP-1022](LCTYSP-1022_rpc-client.feature)                 | The client of /v1/rpc                         | `tests/unit/rpc.test.js`                                     |
 | [LCTYSP-1023](LCTYSP-1023_lcty-msg-elements.feature)          | The elements of lcty-msg built by the page    | `tests/unit/lcty-msg.spec.js`                                |
+| [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | The tab's connection to /v1/rpc               | `tests/unit/tab-rpc.test.js`                                 |
 | [LCTYSP-2001](LCTYSP-2001_new-conversation-page.feature)      | The new conversation page /c/                 | `tests/ui/new-conversation.spec.js`                          |
 | [LCTYSP-2002](LCTYSP-2002_conversation-page.feature)          | The conversation page                         | `tests/ui/conversation.spec.js`                              |
 | [LCTYSP-2003](LCTYSP-2003_sidebar.feature)                    | The sidebar                                   | `tests/ui/sidebar.spec.js`                                   |

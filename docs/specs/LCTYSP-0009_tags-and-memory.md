@@ -346,8 +346,10 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
     be blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never
     need to be read in one transaction.
   - **The same pattern for both:** each worker is also the only code that opens its database, readers included.
-    `lcty.v1.c.worker.cjs` has the operations `sync_meta` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
+    `lcty.v1.c.worker.cjs` has the operations `replace`, `apply` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
     [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)); `js/api/meta-db.js` and `lcty.v1.cjs` read `c_meta` through it.
+    `lcty.v1.t.worker.cjs` keeps the tags of conversations, `t_has_many_c`, with the same `replace` and `apply`
+    ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
 - **The name is the resource's, as the server's files are:** `lcty_<resource>` (`lcty_c`, `lcty_t`), cut at the
   same grain as the server's SQLite files `lcty_<resource>.sqlite`
   ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)). What is stored is versioned by the database's own version, an

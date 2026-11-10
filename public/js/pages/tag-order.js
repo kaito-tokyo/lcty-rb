@@ -9,6 +9,7 @@
 // keeps its file.
 
 import { getTags, putTags } from "../api/lcty-t.js";
+import { tabRpc } from "../api/tab-rpc.js";
 import { loadSettings, showToast } from "../common.js";
 import { localize, tr } from "../i18n.js";
 import { renumber } from "../tag-names.js";
@@ -37,6 +38,7 @@ export function initTagOrderPage() {
 		// The tags dialog saved: show its set (it may have added, renamed or deleted tags)
 		onTagsSaved: () => load(),
 	});
+	tabRpc(); // the sidebar follows the lists over it (LCTYSP-0014)
 
 	const dirty = () =>
 		JSON.stringify(state.work.map((t) => t.file)) !==

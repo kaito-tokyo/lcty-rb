@@ -58,6 +58,47 @@ test("Conversations are listed as links to their pages", async ({
 	});
 });
 
+test("A change made elsewhere shows up in the list without a reload", async ({
+	page,
+	request,
+}) => {
+	const title = uniqueWord("追従");
+	const tag = uniqueWord("follow");
+	let conv;
+	await test.step("Given the new conversation page /c/ is open", () =>
+		openNewPage(page));
+	const loads = [];
+	page.on("load", () => loads.push(page.url()));
+	await test.step("When a conversation with a unique title is created through /v1/rpc", async () => {
+		conv = await createConversation(request, {
+			title,
+			messages: [["user", "質問"]],
+		});
+	});
+	const link = () => item(page, conv.id);
+	await test.step("Then it is listed, without a reload", async () => {
+		await expect(link()).toContainText(title);
+		expect(loads).toEqual([]);
+	});
+	await test.step("When its tags are changed to a unique tag through the HTTP API", async () => {
+		const res = await request.post(`/v1/conversations/${conv.id}/lines`, {
+			data: [{ type: "tags", tags: [tag] }],
+		});
+		expect(res.ok()).toBe(true);
+	});
+	await test.step("Then its item shows the tag", async () => {
+		await expect(link().locator(".tag-name")).toHaveText([tag]);
+	});
+	await test.step("When it is deleted through the HTTP API", async () => {
+		const res = await request.delete(`/v1/conversations/${conv.id}`);
+		expect(res.ok()).toBe(true);
+	});
+	await test.step("Then it is no longer listed", async () => {
+		await expect(link()).toHaveCount(0);
+		expect(loads).toEqual([]);
+	});
+});
+
 test("Every page takes the server's tags as soon as it is shown", async ({
 	page,
 	request,

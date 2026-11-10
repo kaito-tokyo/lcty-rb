@@ -54,9 +54,8 @@ conversation page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
   module scripts from `file://`, whose origin is `null`), so nothing is sent, nothing reaches the LLM server, and the
   sidebar's list is empty unless that origin has its own cached copy. None of this is needed to read it.
 - **The head lines (1 to 4) hold only what a list of conversations needs:** the title, the id, the tags at creation and
-  the creation time. Collecting them is enough to build the sidebar's database (`GET /v1/meta-all.json` reads only
-  these lines of each file, [LCTYSP-0006](LCTYSP-0006_http-api.md)). The system prompt, which may be long, is not among
-  them; it is on line 5.
+  the creation time. Collecting them is enough to build the sidebar's list (the `GET /v1/meta-all.json` of before read
+  only these lines of each file). The system prompt, which may be long, is not among them; it is on line 5.
 - **Line 3 is the title slot:** `<title id="__512">[begin]…[end]<!---->`. The `<title>` comes after `</head>`; the
   parser moves it into the head, so it is the document's own title (the tab shows it even without JavaScript). The id
   carries the length of the slot right next to it: the slot is the 512 bytes from `[begin]` (just after the `>` of the

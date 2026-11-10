@@ -502,56 +502,6 @@ class StoreTest < Lcty::Scenarios
     end
   end
 
-  scenario 'The meta of every conversation comes from the head lines' do
-    background
-    id = entry = nil
-    find = lambda do
-      found = nil
-      capture_io { found = Store.meta_all.find { |c| c['id'] == id } }
-      found
-    end
-    step('Given a conversation with the title "Meta", the tags "x" and "y" and two messages') do
-      id = create([{ 'type' => 'title', 'title' => 'Meta' }, user('q'), assistant('a')], 'tags' => %w[x y])
-    end
-    step('When Store.meta_all lists the meta') { entry = find.call }
-    step('Then its entry has the id, the title "Meta", created_at, updated_at_hint and setup_tags ["x", "y"]') do
-      assert_equal id, entry['id']
-      assert_equal 'Meta', entry['title']
-      assert_equal AT, entry['created_at']
-      assert_equal File.mtime(path_of(id)).iso8601, entry['updated_at_hint']
-      assert_equal %w[x y], entry['setup_tags']
-    end
-    step('And tags_hint is [] and messages_hint is nil until the search index records the conversation') do
-      assert_equal [], entry['tags_hint']
-      assert_nil entry['messages_hint']
-    end
-    step('And after the index records it, tags_hint and messages_hint follow the index') do
-      Store.append(id, [{ 'type' => 'tags', 'tags' => %w[z] }])
-      Chatty::INDEX.sync(id, *Store.index_state(path_of(id)))
-      entry = find.call
-      assert_equal %w[z], entry['tags_hint']
-      assert_equal 2, entry['messages_hint']
-    end
-  end
-
-  scenario 'A file without the head lines is left out of the meta with a warning' do
-    background
-    id = new_id
-    list = err = nil
-    begin
-      step('Given a conversation file that holds no head lines') do
-        File.write(path_of(id), %(<lcty-message data-role="user" data-content="x"></lcty-message>\n))
-      end
-      step('When Store.meta_all lists the meta') { _, err = capture_io { list = Store.meta_all } }
-      step('Then it warns "no head lines" for that file and leaves it out') do
-        assert_includes err, "skip #{id}.html: no head lines"
-        refute_includes list.map { |c| c['id'] }, id
-      end
-    ensure
-      FileUtils.rm_f(path_of(id))
-    end
-  end
-
   scenario 'A file whose name is not a conversation id is skipped once with a warning' do
     background
     name = "copy of #{SecureRandom.hex(4)}.html"

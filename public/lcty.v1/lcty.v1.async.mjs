@@ -3,12 +3,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getTags } from "../js/api/lcty-t.js";
-import { connectRpc, RpcError } from "../js/api/rpc.js";
+import { RpcError } from "../js/api/rpc.js";
 import {
 	appendLines,
 	deleteConversation,
 	getConversation,
 } from "../js/api/storage.js";
+import {
+	onTabNotify,
+	onTabOpen,
+	onTabRequest,
+	tabRpc,
+} from "../js/api/tab-rpc.js";
 import {
 	appIndexer,
 	backendOf,
@@ -131,18 +137,17 @@ function convFromDom() {
 
 // ---- Writing through /v1/rpc (LCTYSP-0012) ----
 
-const rpc = former
-	? null
-	: connectRpc({
-			onNotify: { "c.batch.updated": onBatch },
-			onRequest: {
-				// whether this page holds the lcty-cmd another page found at the end (LCTYSP-0014)
-				"c.cmd.holds": ({ cid: c, id }) => ({
-					holds: c === cid && state.cmdId === id,
-				}),
-			},
-			onOpen: subscribe,
-		});
+// The tab's one connection (api/tab-rpc.js), which the sidebar follows the lists over too. A file of LCTYSP-0003 is
+// never written, so the page neither follows it nor answers for a lock.
+if (!former) {
+	onTabNotify("c.batch.updated", onBatch);
+	// whether this page holds the lcty-cmd another page found at the end (LCTYSP-0014)
+	onTabRequest("c.cmd.holds", ({ cid: c, id }) => ({
+		holds: c === cid && state.cmdId === id,
+	}));
+	onTabOpen(subscribe);
+}
+const rpc = tabRpc();
 
 /** Follow this conversation, and check that the document is still the file (LCTYSP-0014, Starting). */
 async function subscribe() {
@@ -160,12 +165,11 @@ async function subscribe() {
 }
 
 // A change of this conversation made by another page: the document no longer follows the file (LCTYSP-0014). The
-// page's own changes are already in its document.
+// page's own changes are already in its document; the sidebar follows the other records itself.
 function onBatch({ actorId, records }) {
 	if (actorId === rpc.actorId) return;
 	if (records.some((r) => r.store === "c_html" && r.row.cid === cid))
 		outOfSync();
-	else panel.refresh();
 }
 
 /** The document no longer follows the file: nothing more is written, and the user is asked to reload (LCTYSP-0014). */
