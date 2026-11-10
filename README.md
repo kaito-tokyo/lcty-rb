@@ -55,18 +55,20 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
 
     ```
     # lcty-rb
-    --host=127.0.0.1
+    --bind-ip=127.0.0.1
+    --bind-ip=192.168.1.10
     --base-url=/
     --allowed-origin=http://127.0.0.1:45280
+    --allowed-origin=http://192.168.1.10:45280
     --allowed-origin=http://umireon-macbook-pro-2021.local:45280
     ```
 
-    - `--host`: the address to listen on (default 127.0.0.1).
+    - `--bind-ip`: an IP address to listen on, once per address, all at one port (default 127.0.0.1 only).
     - `--base-url`: the path the site is served under (default `/`).
     - `--allowed-origin`: an origin whose pages may use `/v1/rpc`, once per origin. Add the URL you open the site with
-      when it is not `127.0.0.1` or `localhost` (a `.local` name, a LAN address); the server logs the Origin it
-      refused.
-    - The environment variables `LCTY_HOST`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override the file, and the
+      when it is not one of the addresses listened on or `localhost` (a `.local` name, say); the server logs the
+      Origin it refused.
+    - The environment variables `LCTY_BIND_IP`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override the file, and the
       command line overrides both.
 - Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.

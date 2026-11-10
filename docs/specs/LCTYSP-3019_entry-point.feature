@@ -43,7 +43,7 @@ Feature: LCTYSP-3019 The entry point
 
   Scenario: --help prints every option
     When lcty.rb is run with "--help"
-    Then it exits with the status 0 and prints the usage with --host, --base-url and --allowed-origin
+    Then it exits with the status 0 and prints the usage with --bind-ip, --base-url and --allowed-origin
 
   # The port is LCTY_PORT or PORT, or else the first free one of Chatty::PORTS_TRIED (LCTYSP-0010)
   Scenario: Without a port asked for, the server listens on the first free port tried
@@ -56,6 +56,22 @@ Feature: LCTYSP-3019 The entry point
     Given a port taken by another server
     When Lcty.listen is given that port to ask for
     Then it raises Lcty::PortError "the port <port> (LCTY_PORT or PORT) is in use"
+
+  # Several addresses (--bind-ip) share one port. IPv6 is needed for these two: without ::1 they are skipped
+  Scenario: The server listens on every address given, at one port
+    Given a free port
+    When Lcty.listen is given that port to ask for and the addresses "127.0.0.1" and "::1"
+    Then both addresses answer at that port
+
+  Scenario: A port taken on one of the addresses is skipped on all of them
+    Given two free ports, the first of them taken on "::1" by another server
+    When Lcty.listen is given no port to ask for, the two ports to try and the addresses "127.0.0.1" and "::1"
+    Then it listens on the second port
+    And the first port is free again on "127.0.0.1"
+
+  Scenario: An address that is not one of this machine stops the server
+    When Lcty.listen is given the address "192.0.2.1"
+    Then it raises Lcty::PortError "cannot listen on 192.0.2.1: it is not an address of this machine (--bind-ip)"
 
   Scenario: When every port tried is taken the server stops
     Given two ports taken by another server

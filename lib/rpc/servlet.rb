@@ -384,15 +384,15 @@ module Lcty
     end
 
     # The origins whose pages may use /v1/rpc: --allowed-origin of server_settings.txt or the command line, or
-    # LCTY_ALLOWED_ORIGIN (Chatty.allowed_origins, LCTYSP-0010), or else the server's own address (and localhost when it
-    # listens on 127.0.0.1). Compared with the Origin a browser sends, so a page of another site cannot get in even when its
+    # LCTY_ALLOWED_ORIGIN (Chatty.allowed_origins, LCTYSP-0010), or else the server's own: every address it listens on
+    # (Chatty.bind_ips) at its port, and localhost when one of them is 127.0.0.1. Compared with the Origin a browser sends, so a page of another site cannot get in even when its
     # name resolves to this server (DNS rebinding): comparing Origin with Host would let it, since the browser sends
     # the attacker's name in both.
     def self.default_origins
       set = Chatty.allowed_origins || []
       return set.map { |o| normalize_origin(o) }.compact unless set.empty?
-      own = ["http://#{Chatty.bind_url_host}:#{Chatty.port}"]
-      own << "http://localhost:#{Chatty.port}" if Chatty.bind == '127.0.0.1'
+      own = Chatty.bind_ips.map { |ip| "http://#{Chatty.url_host(ip)}:#{Chatty.port}" }
+      own << "http://localhost:#{Chatty.port}" if Chatty.bind_ips.include?('127.0.0.1')
       own
     end
 

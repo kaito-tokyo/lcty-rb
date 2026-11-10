@@ -60,7 +60,7 @@ export default defineConfig({
 				reuseExistingServer: false,
 				env: {
 					PORT: String(PORT),
-					LCTY_HOST: "127.0.0.1",
+					LCTY_BIND_IP: "127.0.0.1",
 					LCTY_DATA_DIR: process.env.LCTY_TEST_DATA_DIR,
 				},
 				stdout: "ignore",

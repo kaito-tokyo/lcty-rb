@@ -87,7 +87,7 @@ class LctyTest < Lcty::Scenarios
   # lcty.rb run as the program in a new process with LCTY_DATA_DIR dir (and no other setting) and args: [out, err,
   # status]
   def run_lcty(dir, *args)
-    env = { 'LCTY_DATA_DIR' => dir, 'LCTY_HOST' => nil, 'LCTY_BASE_URL' => nil, 'LCTY_ALLOWED_ORIGIN' => nil }
+    env = { 'LCTY_DATA_DIR' => dir, 'LCTY_BIND_IP' => nil, 'LCTY_BASE_URL' => nil, 'LCTY_ALLOWED_ORIGIN' => nil }
     Open3.capture3(env, RbConfig.ruby, LCTY_RB, *args, chdir: REPO_ROOT)
   end
 
@@ -129,10 +129,10 @@ class LctyTest < Lcty::Scenarios
     dir = Dir.mktmpdir('lcty-settings-')
     out = status = nil
     step('When lcty.rb is run with "--help"') { out, _, status = run_lcty(dir, '--help') }
-    step('Then it exits with the status 0 and prints the usage with --host, --base-url and --allowed-origin') do
+    step('Then it exits with the status 0 and prints the usage with --bind-ip, --base-url and --allowed-origin') do
       assert_equal 0, status.exitstatus
       assert_equal usage, out
-      %w[--host=ADDRESS --base-url=PATH --allowed-origin=ORIGIN].each { |o| assert_includes out, o }
+      %w[--bind-ip=ADDRESS --base-url=PATH --allowed-origin=ORIGIN].each { |o| assert_includes out, o }
     end
   ensure
     FileUtils.rm_rf(dir)
@@ -140,9 +140,9 @@ class LctyTest < Lcty::Scenarios
 
   # ---- Lcty.listen ----
 
-  # n ports that were free a moment ago, each taken by a TCPServer of the test on Chatty.bind; release frees them
-  def taken_ports(n)
-    servers = Array.new(n) { TCPServer.new(Chatty.bind, 0) }
+  # n ports that were free a moment ago, each taken by a TCPServer of the test on ip; release frees them
+  def taken_ports(n, ip = '127.0.0.1')
+    servers = Array.new(n) { TCPServer.new(ip, 0) }
     @taken = (@taken || []) + servers
     servers.map { |s| s.addr[1] }
   end
@@ -153,12 +153,66 @@ class LctyTest < Lcty::Scenarios
     @taken.delete(s)
   end
 
-  # Lcty.listen(asked, ports): the server, or the PortError it raised. teardown stops it and puts Chatty.port back
-  def listen(asked, ports)
+  # Lcty.listen(asked, ports, ips): the server, or the PortError it raised. teardown stops it and puts Chatty.port back
+  def listen(asked, ports, ips = ['127.0.0.1'])
     @port_before = Chatty.port
-    @listener = Lcty.listen(asked, ports)
+    @listener = Lcty.listen(asked, ports, ips)
   rescue Lcty::PortError => e
     e
+  end
+
+  # Whether this machine can listen on ::1 (a container may have no IPv6)
+  def ipv6_loopback?
+    TCPServer.new('::1', 0).close
+    true
+  rescue SystemCallError
+    false
+  end
+
+  # Whether something answers at ip:port
+  def answers?(ip, port)
+    TCPSocket.new(ip, port).close
+    true
+  rescue SystemCallError
+    false
+  end
+
+  scenario 'The server listens on every address given, at one port' do
+    skip 'this machine has no IPv6 loopback' unless ipv6_loopback?
+    port = nil
+    step('Given a free port') { port = taken_ports(1).first.tap { |p| release(p) } }
+    step('When Lcty.listen is given that port to ask for and the addresses "127.0.0.1" and "::1"') do
+      assert_kind_of WEBrick::HTTPServer, listen(port, [], ['127.0.0.1', '::1'])
+    end
+    step('Then both addresses answer at that port') do
+      assert answers?('127.0.0.1', port)
+      assert answers?('::1', port)
+    end
+  end
+
+  scenario 'A port taken on one of the addresses is skipped on all of them' do
+    skip 'this machine has no IPv6 loopback' unless ipv6_loopback?
+    first = second = server = nil
+    step('Given two free ports, the first of them taken on "::1" by another server') do
+      first, second = taken_ports(2, '::1')
+      release(second)
+    end
+    step('When Lcty.listen is given no port to ask for, the two ports to try and the addresses "127.0.0.1" and "::1"') do
+      server = listen(nil, [first, second], ['127.0.0.1', '::1'])
+    end
+    step('Then it listens on the second port') { assert_equal second, server.config[:Port] }
+    step('And the first port is free again on "127.0.0.1"') do
+      TCPServer.new('127.0.0.1', first).close # raises Errno::EADDRINUSE while a listener of the first try is open
+    end
+  end
+
+  scenario 'An address that is not one of this machine stops the server' do
+    r = nil
+    step('When Lcty.listen is given the address "192.0.2.1"') { r = listen(nil, [taken_ports(1).first + 1], ['192.0.2.1']) }
+    step('Then it raises Lcty::PortError "cannot listen on 192.0.2.1: it is not an address of this machine (--bind-ip)"') do
+      assert_kind_of Lcty::PortError, r
+      assert_equal 'cannot listen on 192.0.2.1: it is not an address of this machine (--bind-ip)', r.message
+    end
   end
 
   scenario 'Without a port asked for, the server listens on the first free port tried' do

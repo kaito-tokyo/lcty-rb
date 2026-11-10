@@ -28,7 +28,7 @@ services:
       - 127.0.0.1:45290:45290
     environment:
       PORT: "45290"
-      LCTY_HOST: 0.0.0.0
+      LCTY_BIND_IP: 0.0.0.0
       LCTY_DATA_DIR: /tmp/lcty-data
       # Listening on 0.0.0.0 would allow only http://0.0.0.0:45290 to use /v1/rpc; the tests open the port published
       # above
