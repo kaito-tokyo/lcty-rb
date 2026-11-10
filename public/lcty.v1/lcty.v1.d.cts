@@ -43,6 +43,8 @@ type LctyTextKey =
 	| "delete"
 	| "setupTags"
 	| "systemPrompt"
+	| "memoryOf"
+	| "lctyMsgReadOnly"
 	| "none"
 	| "recompose"
 	| "setupHint"
@@ -365,6 +367,41 @@ declare class LctyMessageElement extends HTMLElement {
 	timings: HTMLDivElement;
 }
 
+/** The text an element of LCTYSP-0013 holds: data-content, or data-content-base64 (UTF-8) when it is there; "" when it
+ * cannot be read. */
+declare function lctyContentOf(el: Element): string;
+
+/**
+ * <lcty-msg>: a message of a conversation file of LCTYSP-0013 (lcty-msg). Its <article>, as written in the file, shows
+ * through a slot; nothing is rendered from data-content. user and model have a head (part lcty-msg__head) with who wrote
+ * it ("You", "Assistant"; part lcty-msg__who). system and memory are a collapsed <details> (part lcty-msg__details)
+ * whose <summary> (part lcty-msg__summary) reads "System prompt" or "Memory", and " · " and data-tag when it has one.
+ * Rebuilt when data-role or data-tag changes.
+ */
+declare class LctyMsgElement extends HTMLElement {
+	static readonly observedAttributes: readonly ["data-role", "data-tag"];
+	/** Who wrote it (user and model, else null) */
+	who: HTMLSpanElement | null;
+	/** The collapsed message (system and memory, else null) */
+	details: HTMLDetailsElement | null;
+	/** Its summary (system and memory, else null) */
+	summary: HTMLElement | null;
+}
+
+/**
+ * <lcty-thinking>: the thinking before a reply in a conversation file of LCTYSP-0013. A collapsed <details> (part
+ * lcty-thinking__details) whose <summary> (part lcty-thinking__summary) reads "Thinking (n characters)", n the length
+ * of its text (lctyContentOf); its <article> shows through a slot.
+ */
+declare class LctyThinkingElement extends HTMLElement {
+	static readonly observedAttributes: readonly [
+		"data-content",
+		"data-content-base64",
+	];
+	details: HTMLDetailsElement;
+	summary: HTMLElement;
+}
+
 /**
  * <lcty-composer>: the message input. Sending and stopping are attached by js/ui/lcty-elements.js.
  *
@@ -397,7 +434,8 @@ declare class LctyTElement extends HTMLElement {
 }
 
 /**
- * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message, lcty-composer and lcty-t in registry.
+ * Defines lcty-conv-list, lcty-sidebar, lcty-c, lcty-setup, lcty-message, lcty-msg, lcty-thinking, lcty-composer and
+ * lcty-t in registry.
  * lcty.v1.cjs calls it at its end (marked /*mjs-ignore*\/, so a module made from it would define nothing). The elements are created while the body is parsed, after
  * the language scripts in <head> have registered their texts.
  */
@@ -410,6 +448,8 @@ interface HTMLElementTagNameMap {
 	"lcty-setup": LctySetupElement;
 	"lcty-sidebar": LctySidebarElement;
 	"lcty-message": LctyMessageElement;
+	"lcty-msg": LctyMsgElement;
+	"lcty-thinking": LctyThinkingElement;
 	"lcty-composer": LctyComposerElement;
 	"lcty-t": LctyTElement;
 }

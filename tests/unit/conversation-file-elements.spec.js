@@ -22,6 +22,8 @@ const ELEMENTS = [
 	["lcty-c", "LctyCElement"],
 	["lcty-setup", "LctySetupElement"],
 	["lcty-message", "LctyMessageElement"],
+	["lcty-msg", "LctyMsgElement"],
+	["lcty-thinking", "LctyThinkingElement"],
 	["lcty-composer", "LctyComposerElement"],
 	["lcty-t", "LctyTElement"],
 ];
@@ -246,7 +248,7 @@ test("lcty.v1.cjs defines the elements with the classes it declares", async ({
 }) => {
 	await background(page, context);
 	let defined;
-	await test.step('Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t" are defined', async () => {
+	await test.step('Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-msg", "lcty-thinking", "lcty-composer" and "lcty-t" are defined', async () => {
 		defined = await page.evaluate((elements) => {
 			// the classes are global lexical bindings of the classic script, reachable by name only
 			const classes = {
@@ -255,6 +257,8 @@ test("lcty.v1.cjs defines the elements with the classes it declares", async ({
 				LctyCElement,
 				LctySetupElement,
 				LctyMessageElement,
+				LctyMsgElement,
+				LctyThinkingElement,
 				LctyComposerElement,
 				LctyTElement,
 			};
@@ -268,7 +272,7 @@ test("lcty.v1.cjs defines the elements with the classes it declares", async ({
 			ELEMENTS.map(([name]) => [name, "function"]),
 		);
 	});
-	await test.step("And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement, LctyComposerElement and LctyTElement", () => {
+	await test.step("And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement, LctyMsgElement, LctyThinkingElement, LctyComposerElement and LctyTElement", () => {
 		expect(defined.every(([, , same]) => same)).toBe(true);
 	});
 	await test.step('And "lcty-cmd" is not defined', async () => {
@@ -293,6 +297,8 @@ test("defineLctyV1CustomElements defines the elements in a registry it is given"
 				LctyCElement,
 				LctySetupElement,
 				LctyMessageElement,
+				LctyMsgElement,
+				LctyThinkingElement,
 				LctyComposerElement,
 				LctyTElement,
 			};
@@ -306,7 +312,7 @@ test("defineLctyV1CustomElements defines the elements in a registry it is given"
 			]);
 		});
 	});
-	await test.step('Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the global classes', () => {
+	await test.step('Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-msg", "lcty-thinking", "lcty-composer" and "lcty-t", in that order, with the global classes', () => {
 		expect(defined).toEqual(ELEMENTS);
 	});
 });
@@ -885,6 +891,186 @@ test("The ⓘ opens the timings popover", async ({ page, context }) => {
 				document.querySelector("lcty-message").timings.matches(":popover-open"),
 			),
 		).toBe(true);
+	});
+});
+
+// ---- <lcty-msg> and <lcty-thinking> (LCTYSP-0013) ----
+
+/** The Shadow DOM of the first element named tag, as [localName, part] of each child and of the <details>'s. */
+function shadowOf(page, tag) {
+	return page.evaluate((tag) => {
+		const el = document.querySelector(tag);
+		const pair = (e) => [e.localName, e.getAttribute("part")];
+		const details = el.shadowRoot.querySelector("details");
+		return {
+			children: [...el.shadowRoot.children].map(pair),
+			head: [...(el.shadowRoot.querySelector("div")?.children ?? [])].map(pair),
+			details: details && {
+				open: details.open,
+				children: [...details.children].map(pair),
+				isField: details === el.details,
+				summary: details.querySelector("summary").textContent,
+				isSummary: details.querySelector("summary") === el.summary,
+			},
+			who: el.who?.textContent ?? null,
+			isWho: el.who === (el.shadowRoot.querySelector("span") ?? null),
+			nulls: { who: el.who, details: el.details, summary: el.summary },
+			slotted: el.shadowRoot
+				.querySelector("slot")
+				.assignedElements()
+				.map((e) => e.localName),
+		};
+	}, tag);
+}
+
+for (const [role, who] of [
+	["user", "You"],
+	["model", "Assistant"],
+]) {
+	test(`A user or model message has a head with who wrote it and its article (${role})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await givenBody(
+			page,
+			`<lcty-msg data-role="${role}" data-content="Hi"><article>Hi</article></lcty-msg>`,
+		);
+		let shadow;
+		await test.step(`Then its Shadow DOM is the head (part lcty-msg__head) holding the who "${who}" (part lcty-msg__who), its field who, and a <slot>`, async () => {
+			shadow = await shadowOf(page, "lcty-msg");
+			expect(shadow.children).toEqual([
+				["div", "lcty-msg__head"],
+				["slot", null],
+			]);
+			expect(shadow.head).toEqual([["span", "lcty-msg__who"]]);
+			expect(shadow.who).toBe(who);
+			expect(shadow.isWho).toBe(true);
+		});
+		await test.step("And its fields details and summary are null", () => {
+			expect(shadow.nulls.details).toBeNull();
+			expect(shadow.nulls.summary).toBeNull();
+		});
+		await test.step("And the <slot> shows the <article>", () => {
+			expect(shadow.slotted).toEqual(["article"]);
+		});
+	});
+}
+
+for (const [kase, role, tag, summary] of [
+	["system without tag", "system", "", "System prompt"],
+	["system of a tag", "system", 'data-tag="ruby"', "System prompt · ruby"],
+	["memory of a tag", "memory", 'data-tag="ruby"', "Memory · ruby"],
+]) {
+	test(`A system or memory message is collapsed under its kind and its tag (${kase})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await givenBody(
+			page,
+			`<lcty-msg data-role="${role}" ${tag ? `${tag} ` : ""}data-content="Be brief."><article>Be brief.</article></lcty-msg>`,
+		);
+		let shadow;
+		await test.step(`Then its Shadow DOM is a closed <details> (part lcty-msg__details), its field details, holding the <summary> "${summary}" (part lcty-msg__summary), its field summary, and a <slot>`, async () => {
+			shadow = await shadowOf(page, "lcty-msg");
+			expect(shadow.children).toEqual([["details", "lcty-msg__details"]]);
+			expect(shadow.details).toEqual({
+				open: false,
+				children: [
+					["summary", "lcty-msg__summary"],
+					["slot", null],
+				],
+				isField: true,
+				summary,
+				isSummary: true,
+			});
+			expect(shadow.slotted).toEqual(["article"]);
+		});
+		await test.step("And its field who is null", () => {
+			expect(shadow.nulls.who).toBeNull();
+		});
+	});
+}
+
+test("Setting the role or the tag rebuilds the message", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenBody(
+		page,
+		'<lcty-msg data-role="user"><article>Hi</article></lcty-msg>',
+	);
+	await test.step('When data-role is set to "memory"', () =>
+		setAttr(page, "lcty-msg", "data-role", "memory"));
+	await test.step('Then its summary reads "Memory" and its field who is null', async () => {
+		const shadow = await shadowOf(page, "lcty-msg");
+		expect(shadow.details.summary).toBe("Memory");
+		expect(shadow.nulls.who).toBeNull();
+	});
+	await test.step('When data-tag is set to "ruby"', () =>
+		setAttr(page, "lcty-msg", "data-tag", "ruby"));
+	await test.step('Then its summary reads "Memory · ruby"', async () => {
+		expect((await shadowOf(page, "lcty-msg")).details.summary).toBe(
+			"Memory · ruby",
+		);
+	});
+});
+
+for (const [kase, attributes, summary] of [
+	["data-content", 'data-content="abc"', "Thinking (3 characters)"],
+	[
+		"base64 over the plain",
+		'data-content="plain" data-content-base64="AW9r"',
+		"Thinking (3 characters)",
+	],
+	[
+		"base64 that is invalid",
+		'data-content="plain" data-content-base64="!!!"',
+		"Thinking (0 characters)",
+	],
+	["no text", 'class="none"', "Thinking (0 characters)"],
+]) {
+	test(`A thinking is collapsed under the number of characters of its text (${kase})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await givenBody(
+			page,
+			`<lcty-thinking ${attributes}><article>…</article></lcty-thinking>`,
+		);
+		await test.step(`Then its Shadow DOM is a closed <details> (part lcty-thinking__details), its field details, holding the <summary> "${summary}" (part lcty-thinking__summary), its field summary, and a <slot>`, async () => {
+			const shadow = await shadowOf(page, "lcty-thinking");
+			expect(shadow.children).toEqual([["details", "lcty-thinking__details"]]);
+			expect(shadow.details).toEqual({
+				open: false,
+				children: [
+					["summary", "lcty-thinking__summary"],
+					["slot", null],
+				],
+				isField: true,
+				summary,
+				isSummary: true,
+			});
+			expect(shadow.slotted).toEqual(["article"]);
+		});
+	});
+}
+
+test("Changing the text of a thinking changes its summary", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenBody(page, '<lcty-thinking data-content="ab"></lcty-thinking>');
+	await test.step('When data-content is set to "abcd"', () =>
+		setAttr(page, "lcty-thinking", "data-content", "abcd"));
+	await test.step('Then its summary reads "Thinking (4 characters)"', async () => {
+		expect((await shadowOf(page, "lcty-thinking")).details.summary).toBe(
+			"Thinking (4 characters)",
+		);
 	});
 });
 

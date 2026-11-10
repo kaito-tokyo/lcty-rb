@@ -32,7 +32,9 @@ import {
 	finishMessage,
 	focusComposer,
 	initConversationElements,
+	isLctyMsgFile,
 	messageOf,
+	readLctyMsgs,
 	readMessages,
 	removeFrom,
 	setComposerBusy,
@@ -54,6 +56,10 @@ import { UUID_RE } from "../js/uuid.js";
 // The frame and the message list are <lcty-c> (built by lcty.v1.cjs during parsing. LCTYSP-0005). Its inner elements are taken from fields
 const log = document.querySelector("lcty-c");
 const { composer } = log;
+// A file of LCTYSP-0013 (lcty-msg) is shown read-only until the pages write it through /v1/rpc: the writes of
+// /v1/conversations would add elements of LCTYSP-0003 to it, so the server refuses them (409). The title, the tags and
+// deleting still work.
+const readOnly = isLctyMsgFile(log);
 
 const state = {
 	settings: null,
@@ -112,7 +118,7 @@ function convFromDom() {
 		meta,
 		title: document.querySelector("title")?.textContent || "", // the <title> on line 2, in the head (LCTYSP-0003)
 		tags: meta.tags,
-		messages: readMessages(log),
+		messages: readOnly ? readLctyMsgs(log) : readMessages(log),
 	};
 }
 
@@ -208,9 +214,11 @@ function setBusy(b) {
 
 /** Scroll to the round matched by search (the user message id) and highlight it briefly. */
 function focusMessage(msgId) {
-	const el = [...log.querySelectorAll(":scope > lcty-message")].find(
-		(c) => messageOf(c).id === msgId,
-	);
+	const el = readOnly
+		? document.getElementById(`msg-u-${msgId}`)
+		: [...log.querySelectorAll(":scope > lcty-message")].find(
+				(c) => messageOf(c).id === msgId,
+			);
 	if (!el) return;
 	el.scrollIntoView({ block: "start" });
 	for (const t of [el, el.nextElementSibling]) {
@@ -467,11 +475,19 @@ window.addEventListener("beforeunload", (e) => {
 			),
 		);
 	state.persisted = true;
-	initConversationElements(log, handlers);
+	if (readOnly) {
+		composer.input.disabled = true;
+		composer.sendButton.disabled = true;
+		composer.input.placeholder = tr(
+			"lctyMsgReadOnly",
+			"This conversation is in the new format (lcty-msg); it cannot be continued yet.",
+		);
+	} else initConversationElements(log, handlers);
 	renderHeader();
-	// #c-msg-<UUIDv7> (the message element's id); a bare #<UUIDv7> from older links still works
+	// #c-msg-<UUIDv7> (the message element's id; #msg-u-<UUIDv7> in a file of LCTYSP-0013); a bare #<UUIDv7> from older
+	// links still works
 	const hashId = decodeURIComponent(location.hash.slice(1)).replace(
-		/^c-msg-/,
+		/^(?:c-msg-|msg-u-)/,
 		"",
 	);
 	if (UUID_RE.test(hashId)) focusMessage(hashId);
@@ -480,6 +496,8 @@ window.addEventListener("beforeunload", (e) => {
 	try {
 		// The current tags (tags.sqlite), which the file does not have
 		state.conv.tags = (await getConversation(state.conv.meta.id)).tags;
+		// A file of LCTYSP-0013 has no data-setup-tags, from which the frame draws its chips: they are the current tags
+		if (readOnly) log.dataset.setupTags = state.conv.tags.join(" ");
 	} catch (e) {
 		showToast(
 			tr("tagsLoadFailed", "Failed to load the tags: {error}", {
@@ -500,14 +518,15 @@ window.addEventListener("beforeunload", (e) => {
 	renderHeader(); // again, with the tag definitions (the tag picker)
 	// Commands (<lcty-cmd>, LCTYSP-0004): defining the element now upgrades the ones in the file; one that is still the last
 	// element (a conversation just created on /, or a creation that was interrupted) runs. send generates a reply to the
-	// last user message.
-	defineCommands({
-		send: async (_cmd, controller) => {
-			const msgs = state.conv.messages;
-			if (state.busy || msgs[msgs.length - 1]?.role !== "user") return;
-			await generate(controller);
-		},
-	});
+	// last user message. A read-only file runs none: its <lcty-cmd> stays an element of the file.
+	if (!readOnly)
+		defineCommands({
+			send: async (_cmd, controller) => {
+				const msgs = state.conv.messages;
+				if (state.busy || msgs[msgs.length - 1]?.role !== "user") return;
+				await generate(controller);
+			},
+		});
 	panel.current = state.persisted ? state.conv.meta.id : null;
 	panel.refresh();
 	indexer.kick();

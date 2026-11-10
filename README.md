@@ -76,8 +76,8 @@ rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/D
 ### Converting the conversation files
 
 The conversations are moving to the format of LCTYSP-0013 (`lcty-msg`), which `/v1/rpc` writes. `lcty.rb convert`
-converts the files of `c/` once, with the server stopped. It is never run at startup, and the pages of today cannot
-show or write a converted file yet, so do not run it until they can. Back up the data directory first (above), then:
+converts the files of `c/` once, with the server stopped. It is never run at startup. The pages show a converted
+file read-only and cannot continue it yet, so do not run it until they can. Back up the data directory first (above), then:
 
 ```bash
 /usr/bin/ruby lcty.rb convert

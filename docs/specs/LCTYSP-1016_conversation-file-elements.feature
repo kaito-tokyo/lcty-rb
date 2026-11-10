@@ -35,13 +35,13 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And its body is that of /lcty.v1/lcty.v1.cjs
 
   Scenario: lcty.v1.cjs defines the elements with the classes it declares
-    Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t" are defined
-    And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement, LctyComposerElement and LctyTElement
+    Then "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-msg", "lcty-thinking", "lcty-composer" and "lcty-t" are defined
+    And each is defined by its global class: LctyConvListElement, LctySidebarElement, LctyCElement, LctySetupElement, LctyMessageElement, LctyMsgElement, LctyThinkingElement, LctyComposerElement and LctyTElement
     And "lcty-cmd" is not defined
 
   Scenario: defineLctyV1CustomElements defines the elements in a registry it is given
     When defineLctyV1CustomElements is given a registry that records what is defined
-    Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-composer" and "lcty-t", in that order, with the global classes
+    Then the registry is given "lcty-conv-list", "lcty-sidebar", "lcty-c", "lcty-setup", "lcty-message", "lcty-msg", "lcty-thinking", "lcty-composer" and "lcty-t", in that order, with the global classes
 
   # ---- LctyT ----
 
@@ -178,6 +178,53 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And its field timings is the <div id="timings"> with popover="auto" (part lcty-message__timings)
     When the ⓘ is clicked
     Then the timings popover is open
+
+  # ---- <lcty-msg> and <lcty-thinking> (LCTYSP-0013) ----
+
+  Scenario Outline: A user or model message has a head with who wrote it and its article
+    Given the body holds <lcty-msg data-role="<role>" data-content="Hi"><article>Hi</article></lcty-msg>
+    Then its Shadow DOM is the head (part lcty-msg__head) holding the who "<who>" (part lcty-msg__who), its field who, and a <slot>
+    And its fields details and summary are null
+    And the <slot> shows the <article>
+
+    Examples:
+      | role  | who       |
+      | user  | You       |
+      | model | Assistant |
+
+  Scenario Outline: A system or memory message is collapsed under its kind and its tag
+    Given the body holds <lcty-msg data-role="<role>" <tag>data-content="Be brief."><article>Be brief.</article></lcty-msg>
+    Then its Shadow DOM is a closed <details> (part lcty-msg__details), its field details, holding the <summary> "<summary>" (part lcty-msg__summary), its field summary, and a <slot>
+    And its field who is null
+
+    Examples:
+      | case               | role   | tag              | summary              |
+      | system without tag | system |                  | System prompt        |
+      | system of a tag    | system | data-tag="ruby"  | System prompt · ruby |
+      | memory of a tag    | memory | data-tag="ruby"  | Memory · ruby        |
+
+  Scenario: Setting the role or the tag rebuilds the message
+    Given the body holds <lcty-msg data-role="user"><article>Hi</article></lcty-msg>
+    When data-role is set to "memory"
+    Then its summary reads "Memory" and its field who is null
+    When data-tag is set to "ruby"
+    Then its summary reads "Memory · ruby"
+
+  Scenario Outline: A thinking is collapsed under the number of characters of its text
+    Given the body holds <lcty-thinking <attributes>><article>…</article></lcty-thinking>
+    Then its Shadow DOM is a closed <details> (part lcty-thinking__details), its field details, holding the <summary> "<summary>" (part lcty-thinking__summary), its field summary, and a <slot>
+
+    Examples:
+      | case                   | attributes                                         | summary                 |
+      | data-content           | data-content="abc"                                 | Thinking (3 characters) |
+      | base64 over the plain  | data-content="plain" data-content-base64="AW9r"    | Thinking (3 characters) |
+      | base64 that is invalid | data-content="plain" data-content-base64="!!!"     | Thinking (0 characters) |
+      | no text                | class="none"                                       | Thinking (0 characters) |
+
+  Scenario: Changing the text of a thinking changes its summary
+    Given the body holds <lcty-thinking data-content="ab"></lcty-thinking>
+    When data-content is set to "abcd"
+    Then its summary reads "Thinking (4 characters)"
 
   # ---- <lcty-composer> ----
 

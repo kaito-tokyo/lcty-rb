@@ -103,6 +103,22 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     When messageOf reads it
     Then it returns only the id, role, time and the content ""
 
+  Scenario Outline: isLctyMsgFile tells a file of LCTYSP-0013 from one of LCTYSP-0003
+    Given the container holds <elements>
+    Then isLctyMsgFile is <answer>
+
+    Examples:
+      | case                  | elements                                      | answer |
+      | LCTYSP-0003           | an <lcty-setup> and an <lcty-message>          | false  |
+      | messages of 0003 only | an <lcty-message>                              | false  |
+      | LCTYSP-0013           | an <lcty-msg> and an <lcty-thinking>           | true   |
+      | no element            | nothing                                       | true   |
+
+  Scenario: readLctyMsgs reads the user and model messages of a file of LCTYSP-0013
+    Given the container holds a system <lcty-msg>, a user one, an <lcty-thinking>, a model one with its text in data-content-base64, and an <lcty-cmd>
+    When readLctyMsgs reads it
+    Then it returns the user and model messages as id, role, time and content, with the bare ids and model as assistant
+
   Scenario: Starting prepares the messages of the file
     Given the container holds a user message, a reply with saved presentation HTML, a reply without it and an old <lcty-thinking> child, and a reply with timings
     When initConversationElements starts
