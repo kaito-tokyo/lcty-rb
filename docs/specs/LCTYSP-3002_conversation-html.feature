@@ -12,7 +12,8 @@ Feature: LCTYSP-3002 Conversation files as HTML
   (line 4). The elements follow from line 5, one per line, as a well-formed XML fragment. Text strings live in
   attributes and are kept byte for byte, as base64 only when they hold a character XML cannot represent; any other
   string with such a character is rejected. Presentation HTML is filtered through an allowlist. Files in the head
-  format before 2026-11-07 are still read.
+  format before 2026-11-07 are still read, and so are files in the lcty-msg format (LCTYSP-0013), which it reads but
+  never writes.
 
   Scenario: A document has the four head lines and then the elements
     Given a meta with the id "conv-1", the tags "ruby" and "concise", a creation time and the instructions "Be brief"
@@ -218,3 +219,23 @@ Feature: LCTYSP-3002 Conversation files as HTML
   Scenario: ConvHtml.current_title and ConvHtml.current_meta pick their lines
     Then ConvHtml.current_title returns the last title line, or nil when there is none
     And ConvHtml.current_meta returns the first meta line, or {} when there is none
+
+  # ---- The lcty-msg format (LCTYSP-0013) ----
+
+  Scenario: A file in the lcty-msg format is read as messages and lines of its own
+    Given a file in the lcty-msg format with a system message, a user message, a thinking, a model message and an lcty-cmd
+    When ConvHtml.decode reads it
+    Then the user and model messages are messages of the roles user and assistant, with the bare ids
+    And the system message is a system line, the thinking a thinking line and the lcty-cmd a cmd line with its bare id
+    And the meta has no tags
+
+  Scenario Outline: ConvHtml.lcty_msg? tells the lcty-msg format from the one before
+    Given <file>
+    Then ConvHtml.lcty_msg? is <answer>
+
+    Examples:
+      | file                                     | answer |
+      | a document ConvHtml.document wrote       | false  |
+      | a file of the head before 2026-11-07     | false  |
+      | a file of lcty-msg elements              | true   |
+      | a file with nothing after the head       | true   |

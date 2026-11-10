@@ -213,6 +213,18 @@ Feature: LCTYSP-3003 Storing conversations and their tags
     When Store.migrate_heads runs
     Then neither file has changed
 
+  Scenario: Files in the lcty-msg format are left as they are at startup
+    Given a conversation file in the lcty-msg format whose head loads no language file
+    When Store.migrate_heads runs
+    Then the file has not changed
+
+  Scenario: A file in the lcty-msg format is written only through /v1/rpc
+    Given a conversation file in the lcty-msg format with a user message and a model message
+    When a message is appended to it and the last turn is popped
+    Then both are refused with 409 and the file has not changed
+    And Store.conversation reads its messages
+    And appending a title overwrites the slot in place and leaves the elements as they are
+
   Scenario: A whole file is replaced atomically
     Given a directory that does not exist yet
     When Store.write_atomic writes a file in it twice

@@ -233,6 +233,14 @@ module Chatty
       head
     end
 
+    # Whether a file is in the format of LCTYSP-0013 (lcty-msg): one in the current head with no lcty-setup and no
+    # lcty-message. A file of LCTYSP-0003 always has lcty-setup on line 5, so a file with nothing after the head (as
+    # c.create writes it) is of LCTYSP-0013. Such a file is written only through /v1/rpc, never rewritten whole.
+    def lcty_msg?(text)
+      return false if legacy?(text)
+      text.each_line.drop(HEAD_LINES).none? { |l| l.start_with?('<lcty-setup', '<lcty-message') }
+    end
+
     # The elements: everything after the head
     def body_text(text)
       return legacy_body(text) if legacy?(text)
@@ -372,7 +380,27 @@ module Chatty
       when 'lcty-setup'
         { 'type' => 'setup', 'instructions' => get_text(e, 'data-instructions').to_s }
       when 'lcty-cmd'
-        { 'type' => 'cmd', 'op' => a.('data-op'), 'at' => a.('data-at') }
+        # An lcty-cmd of LCTYSP-0013 also has an id (cmd-…) and may have data-error
+        o = { 'type' => 'cmd', 'op' => a.('data-op'), 'at' => a.('data-at') }
+        o['id'] = a.('id').sub(/\Acmd-/, '') if a.('id')
+        o['error'] = a.('data-error') if a.('data-error')
+        o
+      when 'lcty-msg'
+        # LCTYSP-0013: user and model are the messages of today (model as assistant), with the bare id; system and
+        # memory are lines of their own
+        id = a.('id').to_s.sub(/\A(?:msg-[um]-|sys-|mem-)/, '')
+        content = get_text(e, 'data-content').to_s
+        case (role = a.('data-role'))
+        when 'user', 'model'
+          { 'type' => 'message', 'id' => id, 'role' => role == 'model' ? 'assistant' : 'user', 'at' => a.('data-at'),
+            'content' => content }
+        else
+          { 'type' => 'system', 'id' => id, 'role' => role, 'template' => a.('data-template'), 'tag' => a.('data-tag'),
+            'content' => content }.compact
+        end
+      when 'lcty-thinking'
+        { 'type' => 'thinking', 'id' => a.('id').to_s.sub(/\Athink-/, ''), 'at' => a.('data-at'),
+          'content' => get_text(e, 'data-content').to_s }
       when 'lcty-message'
         o = { 'type' => 'message', 'id' => a.('id') && a.('id').sub(/\Ac-msg-/, ''), 'role' => a.('data-role'), 'at' => a.('data-at') }
         o['status'] = a.('data-status') if a.('data-status')

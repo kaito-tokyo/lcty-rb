@@ -160,11 +160,39 @@ still read as well as it can be.
 
 ## Moving existing files
 
-Existing files are converted once to this format. `lcty-setup` becomes a `system` `lcty-msg` without `data-tag`;
-messages with `data-role` `user` and `assistant` become `user` and `model`; `data-thinking` becomes an `lcty-thinking`
-before its reply; `data-timings`, `data-usage` and `data-client` move to the database; `data-inherited` and
-the tags on line 4 are dropped; `div.user-text` becomes `<article>`; `data-content-integrity` is computed. The ids get
-the new prefixes, and links to the old ids (`#c-msg-…`) are not kept.
+Existing files are converted once to this format, by hand: `lcty.rb convert`, with the server stopped
+(`lib/convert_c.rb`, tested by [LCTYSP-3023](LCTYSP-3023_convert.feature)). Nothing converts them at startup: they are
+the user's data, and the pages of today show and write only the format of LCTYSP-0003.
+
+- **The elements:**
+  - `lcty-setup` becomes a `system` `lcty-msg` without `data-tag`, with a new id, and none when the instructions are
+    empty.
+  - Messages with `data-role` `user` and `assistant` become `user` and `model`. A reply whose `data-status` is other
+    than `completed` is dropped, with its `data-error`.
+  - `data-thinking` becomes an `lcty-thinking` before its reply, with a new id and the reply's `data-at`.
+  - An `lcty-cmd` gets a new id.
+  - `data-inherited` is dropped.
+- **The ids** get the new prefixes and keep the UUID behind them, so the search index and the vectors still find
+  them (an id that is not a UUIDv7 gets a new one). Links to the old ids (`#c-msg-…`) are not kept.
+- **The presentation:** `div.user-text` becomes `<article>`, and an `<article>` written by `lcty.v1` keeps its
+  contents. Where none was written, the `<article>` holds the text alone. `data-content-integrity` is computed.
+- **What leaves the file:**
+  - The tags on line 4 go to `lcty_t.sqlite`, unless the conversation's tags were changed since and a row is there
+    already ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
+  - `data-timings`, `data-usage` and `data-client` go to `message_stats` of `lcty_c.sqlite`, keyed by the id of the
+    `model` element ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)).
+- **Every element is checked and written by the code of `/v1/rpc`** (`Rpc::ConvStore.check` and `build`), so a
+  converted file is one `/v1/rpc` could have written. Lines 1 to 3 are kept, and line 4 loses `data-setup-tags`.
+- **Nothing is lost:**
+  - The file as it was is copied to `c-former/` before it is replaced; that copy is never deleted, and one already
+    there stops the conversion of the file.
+  - The file is replaced atomically, with its modification time kept.
+  - A file that cannot be converted is left as it was, and the others go on.
+  - A file in this format is left as it is, so running the command again converts only the rest.
+- **After the conversion** the server still reads the file. `/v1/meta-all.json`, the search index and
+  `Store.conversation` read `user` and `model` as the messages of today. The writes of the HTTP API of LCTYSP-0006
+  (appending and popping) are refused with `409`, and only the title slot is still overwritten in place. A file in
+  this format is never rewritten at startup.
 
 ## Open points
 

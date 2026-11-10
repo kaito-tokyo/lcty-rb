@@ -60,6 +60,9 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 - `lcty_t.sqlite`: the tags of conversations changed after they were created (an older version's `tags.sqlite` is
   renamed to it when the server starts). Tag definitions and memory kept there by an older version are dropped when it
   starts (they are not converted; define the tags again).
+- `lcty_c.sqlite` and `c-former/`: made by `lcty.rb convert` (below). `lcty_c.sqlite` holds the timings, usage and
+  client of the replies of converted conversations; `c-former/` keeps every conversation file as it was before the
+  conversion.
 - `lcty_fuzzy_search.sqlite`: the vectors of semantic search. They are derived, but only the browser can make them
   again (it does so while a page is open), so they are kept.
 - Files starting with `_` are derived (the search index) and are made anew at every start.
@@ -69,6 +72,19 @@ Back up everything that does not start with `_`:
 ```bash
 rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/" backup/
 ```
+
+### Converting the conversation files
+
+The conversations are moving to the format of LCTYSP-0013 (`lcty-msg`), which `/v1/rpc` writes. `lcty.rb convert`
+converts the files of `c/` once, with the server stopped. It is never run at startup, and the pages of today cannot
+show or write a converted file yet, so do not run it until they can. Back up the data directory first (above), then:
+
+```bash
+/usr/bin/ruby lcty.rb convert
+```
+
+Each file is copied to `c-former/` before it is replaced. A file that is converted already is left as it is, so
+running it again converts only the rest. Replies that were not completed are dropped.
 
 ## Tests
 

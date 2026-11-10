@@ -36,6 +36,7 @@ module Chatty
         with_lock(path) do |f|
           text = f.read
           next if text.start_with?(ConvHtml::HEADER) && ConvHtml.head_lines(text)
+          next if ConvHtml.lcty_msg?(text) # LCTYSP-0013: written only through /v1/rpc, never rewritten whole
           entries = parse_lines(text, File.basename(path)).map(&:first)
           next if ConvHtml.current_meta(entries).empty?
           mtime = f.mtime
@@ -101,6 +102,20 @@ module Chatty
         f.flock(File::LOCK_EX)
         yield f
       end
+    end
+
+    # A file in the format of LCTYSP-0013 (converted by `lcty.rb convert`) is written only through /v1/rpc: the
+    # messages of this API would add elements of LCTYSP-0003 to it, and a rewrite would lose the elements it cannot
+    # write. 409, the file left as it is; the title slot is still overwritten in place.
+    def lcty_msg_error
+      HttpError.new(409, 'the conversation is in the lcty-msg format (LCTYSP-0013); it is written only through /v1/rpc')
+    end
+
+    def refuse_lcty_msg!(f)
+      f.rewind
+      text = f.read
+      f.rewind
+      raise lcty_msg_error if ConvHtml.lcty_msg?(text)
     end
 
     # Give message lines without an id a UUIDv7 id (so the index stays sane even if a client forgets. LCTYSP-0003).
@@ -178,6 +193,7 @@ module Chatty
       end
       return if lines.empty?
       with_lock(existing_conv_path(id)) do |f|
+        refuse_lcty_msg!(f)
         size = f.size
         if size > 0
           f.seek(size - 1)
@@ -207,7 +223,9 @@ module Chatty
           next
         end
         f.rewind
-        entries = parse_lines(f.read.force_encoding(Encoding::UTF_8), id).map(&:first)
+        text = f.read.force_encoding(Encoding::UTF_8)
+        raise lcty_msg_error if ConvHtml.lcty_msg?(text)
+        entries = parse_lines(text, id).map(&:first)
         write_atomic(path, document(entries.reject { |o| o['type'] == 'title' } + [title_line]))
       end
     end
@@ -218,6 +236,7 @@ module Chatty
       raise HttpError.new(400, 'from must be an integer') unless from.is_a?(Integer) && from >= 0
       path = existing_conv_path(id)
       with_lock(path) do |f|
+        refuse_lcty_msg!(f)
         entries = parse_lines(f.read, id).map(&:first)
         messages = entries.each_index.select { |i| entries[i]['type'] == 'message' }
         return if from >= messages.size
