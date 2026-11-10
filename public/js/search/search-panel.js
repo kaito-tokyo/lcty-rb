@@ -4,16 +4,18 @@
 
 // Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0008).
 // With an empty box it lists newest first; otherwise it merges keyword search (server) and semantic search (browser) with RRF.
-// The list is the browser's copy of every conversation's meta (IndexedDB, api/meta-db.js): titles, dates, tags_hint as
-// the tags and messages_hint as the counts; it is read again whenever a sync has stored a new list. The rounds of each
+// The list is the browser's copies, which follow the server over /v1/rpc (LCTYSP-0014): the meta of every conversation
+// and its number of elements (api/meta-db.js, lcty_c) and its tags (api/lcty-t.js, t_has_many_c of lcty_t, in the
+// order of the tags' files); it is read again whenever this tab has stored a change of them. The rounds of each
 // conversation (message_ids, which semantic search needs to map a hit to its conversation) are fetched from
 // /v1/conversations only when a semantic search runs, and kept until the list changes.
 
 import {
-	onMetaDbChange,
-	readMetaDb,
-	requestMetaDbSync,
-} from "../api/meta-db.js";
+	getTags,
+	onTagsOfConversationsChange,
+	readTagsOfConversations,
+} from "../api/lcty-t.js";
+import { onMetaDbChange, readMetaDb } from "../api/meta-db.js";
 import {
 	fetchSnippets,
 	getDefaults,
@@ -22,11 +24,29 @@ import {
 } from "../api/storage.js";
 import { backendOf, showToast } from "../common.js";
 import { tr } from "../i18n.js";
-import { tagPart } from "../tag-names.js";
+import { tagPart, tagRef } from "../tag-names.js";
 import { embeddingConfig, embedQuery } from "./embed.js";
 import { createVectorStore } from "./vectors.js";
 
 const RRF_K = 60;
+
+// The references of the defined tags in the order of their files (t_full), or [] when they cannot be read
+async function tagOrder() {
+	try {
+		return (await getTags()).tags.map(tagRef);
+	} catch {
+		return [];
+	}
+}
+
+// A conversation's tags in the order of the tags' files; undefined ones after them, as they were
+function byOrder(tags, order) {
+	const at = (t) => {
+		const i = order.indexOf(t);
+		return i < 0 ? order.length : i;
+	};
+	return [...tags].sort((a, b) => at(a) - at(b));
+}
 
 /**
  * @param {object} o
@@ -217,16 +237,20 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		run();
 	}
 
-	// Read the list from the copy and show it (or rerun the search)
+	// Read the list from the copies and show it (or rerun the search)
 	async function load() {
 		try {
-			const { items, stale } = await readMetaDb();
+			const [{ items, counts, stale }, { byCid }, order] = await Promise.all([
+				readMetaDb(),
+				readTagsOfConversations(),
+				tagOrder(),
+			]);
 			state.all = items.map((m) => ({
-				id: m.id,
+				id: m.cid,
 				title: m.title,
-				updated_at_hint: m.updated_at_hint,
-				messages: m.messages_hint,
-				tags: m.tags_hint,
+				updated_at_hint: m.updatedAt,
+				messages: counts[m.cid],
+				tags: byOrder(byCid.get(m.cid) ?? [], order),
 			}));
 			state.stale = stale;
 			state.rounds = null; // the conversations may have changed
@@ -240,15 +264,12 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		run();
 	}
 
-	// A sync stored a new list (in this tab or another)
+	// This tab stored a change of the copies
 	onMetaDbChange(load);
+	onTagsOfConversationsChange(load);
 
-	/**
-	 * Reload the list (on opening a page, after saving or renaming) from the copy, and sync the copy when idle; the new
-	 * list then arrives through onMetaDbChange.
-	 */
+	/** Reload the list from the copies (on opening a page, after saving or renaming). */
 	async function refresh() {
-		requestMetaDbSync();
 		await load();
 	}
 

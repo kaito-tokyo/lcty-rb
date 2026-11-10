@@ -6,9 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0014: Browser copies and sync
 
-- Status: Draft. It is to supersede the part of [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#in-the-browser) about
-  keeping the browser's copies up to date, once the pages use [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md); until then
-  LCTYSP-0010 describes what the pages do.
+- Status: Draft. It supersedes the part of [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#in-the-browser) about
+  keeping the browser's copies of the list up to date, which now follow [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md).
 - Related: [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (the protocol),
   [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file),
   [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) and [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the copies and
@@ -18,9 +17,11 @@ SPDX-License-Identifier: Apache-2.0
   [LCTYSP-2002](LCTYSP-2002_conversation-page.feature); the server sends `c.batch.updated` (`lib/rpc/servlet.rb`),
   and what the pages rely on from it is tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature) and
   [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature); the server also answers `t.c.list` and sends `t.batch.updated`
-  (`lib/tag_store.rb`, tested by [LCTYSP-3005](LCTYSP-3005_tag-store.feature) and LCTYSP-3020). The sidebar does not
-  use `/v1/rpc` yet: it still reads `GET /v1/meta-all.json` (LCTYSP-0010), and the stores `sync`, `c_recordcount`
-  and `t_has_many_c` are not made yet.
+  (`lib/tag_store.rb`, tested by [LCTYSP-3005](LCTYSP-3005_tag-store.feature) and LCTYSP-3020). Every page with the
+  sidebar shares the tab's connection (`js/api/tab-rpc.js`), over which the sidebar follows the lists
+  (`js/ui/sidebar.js`, `js/api/meta-db.js` and `js/api/lcty-t.js`, [LCTYSP-1010](LCTYSP-1010_meta-db.feature) and
+  [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)); the workers keep the copies under the version rule
+  ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature)).
 
 ## Summary
 
@@ -34,11 +35,15 @@ the version they were last brought to, so that an older answer never overwrites 
 - **The page's module opens it** when the page is shown, at the site's `v1/rpc` (`siteUrl("v1/rpc")`, with `http:`
   replaced by `ws:` and `https:` by `wss:`), and sends `initialize` with the methods the page receives. A file opened
   directly (`file://`) has no module running and opens nothing.
+- **One connection for the parts of the page** (`js/api/tab-rpc.js`): the sidebar and the page register the
+  notifications they follow, the requests they answer and what to read when the connection opens, and then the page
+  opens it (`tabRpc()`); `initialize` declares all of them, so registering after that is refused.
 - **Not a SharedWorker:** the pages are separate documents, so a SharedWorker would end with each page of a tab that is
   left, and WebSocket connections are not limited like HTTP/1.1 connections to one host. One per tab is simpler.
-- **What each page receives:** every page `c.batch.updated` ([below](#one-notification-for-every-change-of-c)): the
-  sidebar's list from its `c_meta` and `c_recordcount` records, and on the conversation page also the `c_html` records
-  of the conversation it follows. The conversation page also receives `c.cmd.holds` (it runs commands).
+- **What each page receives:** every page `c.batch.updated` ([below](#one-notification-for-every-change-of-c)) and
+  `t.batch.updated`: the sidebar's list from their `c_meta`, `c_recordcount` and `t_has_many_c` records, and on the
+  conversation page also the `c_html` records of the conversation it follows. The conversation page of a file of
+  LCTYSP-0013 also receives `c.cmd.holds` (it runs commands).
 - **The `actorId`** that `initialize` returns is kept for the life of the connection. A notification with the page's own
   `actorId` is of its own change, which it has applied already when it sent it or applies once from the response.
 - **Reconnecting:** when the connection closes, the page opens a new one, waiting longer each time it fails (from 1 s up
@@ -66,25 +71,35 @@ the version they were last brought to, so that an older answer never overwrites 
   `c.batch.updated`.
 - **Each connection gets the records it follows:** `c_html` records go only to the connections that follow their
   conversation (`c.subscribe`), the others to every connection that receives `c.batch.updated`. The server leaves out
-  the records a connection does not get, and sends it nothing when none is left. A page declares `c.batch.updated`
-  alone in `receives`.
+  the records a connection does not get, and sends it nothing when none is left. A page declares in `receives` the
+  notifications themselves, not the stores.
 
 ## The version of a copy
 
-- **Each database records the version it holds:** `lcty_c` and `lcty_t` get a store `sync` with one row,
-  `{boot, seq}`, the global version (`<boot>.<seq>`, [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md#the-global-version)) of
-  the last data written into the database.
+- **Each copy records the version it holds:** `lcty_c` and `lcty_t` have a store `sync` with one row per copy that
+  follows the server, `{store, boot, seq}` (`c_meta`, `c_recordcount`, `t_has_many_c`), the global version
+  (`<boot>.<seq>`, [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md#the-global-version)) the copy was last brought to. One row
+  per copy, not per database: `c.list` and `c.recordcount.list` are two reads at two versions, and a change may touch
+  one store and not the other, so one version for both would refuse one of them.
 - **A write is applied only when it is newer, in the same transaction:** the worker opens one read-write transaction
-  over the store it changes and `sync`, reads the row, and writes only when the version it brings has the same `boot`
-  and a larger `seq`; it then stores that version. A version with another `boot` replaces everything (only a full read
-  brings one) and stores the new version.
+  over the store it changes and `sync`, reads the row, and checks the version it brings:
+  - a full read (`replace`) is written unless the copy holds a newer version of the same `boot` (the same version is
+    written again); a version of another `boot` replaces everything;
+  - a change (`apply`) is written only onto a copy of the same `boot` that holds an older version. A copy that holds no
+    version or one of another `boot` is missing what came before, and waits for the full read that every connection
+    makes.
+
+  It then stores that version.
+- **A tab writes in the order it received:** its operations on a database run one at a time, and the notifications that
+  arrive while the lists are being read are held and written after them. Otherwise a change received after `c.list`
+  could be written before the list, onto an old copy, and the list, older than the change, would then be refused.
 - **Gaps are not looked for:** versions number the changes of every resource, and a page receives only some of them
   (the notifications it declared and the conversation it follows), so the next version it gets is not always one more.
   Missing a change is only possible while disconnected, and every reconnection reads everything again.
 - **Why in IndexedDB and not in a tab:** read-write transactions over the same stores are serialised across the tabs
   and workers of the origin, so checking the version and writing in one transaction keeps a copy from going back,
   whichever tab answers last. No SharedWorker or lock between tabs is needed. A transaction cannot wait for the network,
-  so the worker fetches first and checks the version when it writes.
+  so the page reads first and the worker checks the version when it writes.
 
 ## The rows of `c_meta`
 
@@ -97,9 +112,9 @@ the version they were last brought to, so that an older answer never overwrites 
     [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)).
   - `updatedAt`: when the file was last changed (its modification time), which orders the list.
   - `createdAt`: `data-created-at` of line 4.
-- **Today's rows** (`id`, `title`, `created_at`, `updated_at_hint`, `setup_tags`, `tags_hint`, `messages_hint`, from
-  `GET /v1/meta-all.json`) are replaced by these when the pages use `/v1/rpc`; the database's version is raised and
-  the store recreated, nothing converted ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
+- **The rows of version 1** (`id`, `title`, `created_at`, `updated_at_hint`, `setup_tags`, `tags_hint`,
+  `messages_hint`, from `GET /v1/meta-all.json`) were replaced by these at version 2 of `lcty_c`; the store was
+  recreated, nothing converted ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)), and the endpoint is gone.
 
 ## What the sidebar shows besides the meta
 
@@ -124,16 +139,18 @@ the version they were last brought to, so that an older answer never overwrites 
   so a count is never read from a file being written. The count is answered from this table, never from the file: a
   conversation the table has no row for has its count answered as unknown (`null`), and the sidebar shows no number
   for it. The table is derived data like the rest of `_index.sqlite` ([LCTYSP-0007](LCTYSP-0007_search.md)) and is
-  filled at startup by counting the lines of the files. Today's `conv_stats` (the number of messages behind
-  `messages_hint`) goes with `messages_hint`.
-- **Today's `tags_hint` and `messages_hint`** (from the search index, in the rows of `GET /v1/meta-all.json`) go with
-  today's rows.
+  filled at startup by counting the lines of the files. The `conv_stats` of the search index (the number of messages
+  behind `messages_hint`) went with `messages_hint`.
+- **The `tags_hint` and `messages_hint` of version 1** (from the search index) went with those rows. A file of
+  LCTYSP-0003 not yet converted has no tags in the sidebar unless its tags were changed (`data-setup-tags` is not
+  read); `lcty.rb convert` writes them into `t_has_many_c`.
 
 ## Upgrading the databases
 
-While lcty-rb is being developed, the databases are upgraded roughly: adding `sync` and `c_recordcount`, or changing
-any store, raises the version of `lcty_c` or `lcty_t`, and the upgrade drops every store and recreates them
-empty; the next read fills them from the server. Nothing is converted, and no care is taken for pages of older code
+While lcty-rb is being developed, the databases are upgraded roughly: adding `sync` and `c_recordcount` raised
+`lcty_c` to version 2, adding `t_has_many_c` and `sync` raised `lcty_t` to version 3, and changing any store raises
+the version again; the upgrade drops every store and recreates them empty, and the next read fills them from the
+server. Nothing is converted, and no care is taken for pages of older code
 still open (they are closed by `versionchange` and read again when reloaded). Everything in them is a copy.
 
 ## Starting

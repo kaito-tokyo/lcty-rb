@@ -21,7 +21,25 @@
  *   ETag are always one set: "t_full" (key path "file"), one {@link Tag} per row, in key order, which is file-name
  *   order and so the order of the tags; and "t_set" (out-of-line keys), one {@link TagSet} under the key "set". The
  *   copy is derived: an upgrade drops every store and recreates them empty, and the next get syncs.
+ * - Two more stores follow the server over the page's /v1/rpc connection (LCTYSP-0014), as the copies of
+ *   lcty.v1.c.worker.cjs do and under the same version rule: "t_has_many_c" (key path ["tag", "cid"]), one
+ *   {@link TagHasC} per tag and conversation, filled by replace from t.c.list and changed by apply from t.batch.updated;
+ *   and "sync" (key path "store"), the version it was last brought to. The worker never reads them from the server
+ *   itself: the page posts what it got.
  */
+
+/** A row of "t_has_many_c": that the tag (a reference, the file-name part of a tag file) has the conversation cid. */
+export interface TagHasC {
+	tag: string;
+	cid: string;
+}
+
+/** A row of "sync": the global version "<boot>.<seq>" t_has_many_c was last brought to. */
+export interface SyncRow {
+	store: "t_has_many_c";
+	boot: string;
+	seq: number;
+}
 
 /**
  * A tag as GET /v1/tags gives it, with the file name (and the name of an invalid tag, which comes from its file name)
@@ -58,6 +76,24 @@ export interface Operations {
 	put: { payload: { tags: Tag[]; etag: string | null }; result: string | null };
 	/** POST v1/tags/:file/memory with body. The result is the server's JSON. */
 	addMemory: { payload: { file: string; body: unknown }; result: unknown };
+	/** Replace t_has_many_c with what t.c.list answered, unless it holds a newer version of the same boot. */
+	replace: {
+		payload: { store: "t_has_many_c"; version: string; rows: TagHasC[] };
+		result: { applied: boolean };
+	};
+	/** Apply the records of one t.batch.updated, only onto a copy of the same boot holding an older version. */
+	apply: {
+		payload: {
+			version: string;
+			records: { store: "t_has_many_c"; op: "put" | "delete"; row: TagHasC }[];
+		};
+		result: { applied: "t_has_many_c"[] };
+	};
+	/** Every row of t_has_many_c, by tag then cid; stale true when it has never been filled. */
+	get_has_many: {
+		payload: undefined;
+		result: { rows: TagHasC[]; stale: boolean };
+	};
 }
 
 /** A message to the worker. */

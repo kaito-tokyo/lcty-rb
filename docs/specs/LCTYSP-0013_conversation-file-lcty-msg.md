@@ -195,7 +195,7 @@ the user's data, and the pages of today show and write only the format of LCTYSP
   - The file is replaced atomically, with its modification time kept.
   - A file that cannot be converted is left as it was, and the others go on.
   - A file in this format is left as it is, so running the command again converts only the rest.
-- **After the conversion** the server still reads the file. `/v1/meta-all.json`, the search index and
+- **After the conversion** the server still reads the file. `c.list`, the search index and
   `Store.conversation` read `user` and `model` as the messages of today. The writes of the HTTP API of LCTYSP-0006
   (appending and popping) are refused with `409`, and only the title slot is still overwritten in place. A file in
   this format is never rewritten at startup.

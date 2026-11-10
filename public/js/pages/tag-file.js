@@ -10,6 +10,7 @@
 // the reorder page, /t/.
 
 import { getTags } from "../api/lcty-t.js";
+import { tabRpc } from "../api/tab-rpc.js";
 import { loadSettings, showToast } from "../common.js";
 import { tr } from "../i18n.js";
 import { tagFileOfPath } from "../tag-names.js";
@@ -31,6 +32,7 @@ export function initTagFilePage() {
 		// The tags dialog saved: show this tag as it is now (it may have been renamed or deleted there)
 		onTagsSaved: () => load(),
 	});
+	tabRpc(); // the sidebar follows the lists over it (LCTYSP-0014)
 
 	async function load() {
 		let tags;

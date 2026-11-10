@@ -268,36 +268,6 @@ module Chatty
       }
     end
 
-    # The meta of every conversation, newest first, from its head lines only (lines 1 to 4: the header, the title slot and
-    # <lcty-c>. LCTYSP-0003): they hold what a list needs, so the rest of each file is not read (GET /v1/meta-all.json).
-    # setup_tags are the tags at creation; later changes are in lcty_t.sqlite, which tags_hint reflects.
-    # updated_at_hint is only a hint (the file's mtime, which copying, syncing or editing by hand changes too), and so is
-    # tags_hint and messages_hint, the current tags and the number of messages as recorded in the search index (derived;
-    # LCTYSP-0007).
-    def meta_all
-      tags = INDEX.tags_hint
-      counts = INDEX.messages_hint
-      conversation_paths.map do |path|
-        begin
-          text = File.open(path, 'r:UTF-8') { |f| Array.new(ConvHtml::HEAD_LINES) { f.gets }.compact.join }
-          head = ConvHtml.head_lines(text)
-          unless head
-            warn "skip #{File.basename(path)}: no head lines"
-            next nil
-          end
-          meta = ConvHtml.frame_meta(head[3])
-          {
-            'id' => meta['id'], 'title' => ConvHtml.slot_title(head[2]).to_s, 'created_at' => meta['created_at'],
-            'updated_at_hint' => File.mtime(path).iso8601, 'setup_tags' => meta['tags'],
-            'tags_hint' => tags[meta['id']] || [], 'messages_hint' => counts[meta['id']]
-          }
-        rescue SystemCallError => e
-          warn "skip #{path}: #{e.class}: #{e.message}"
-          nil
-        end
-      end.compact.sort_by { |c| [c['updated_at_hint'].to_s, c['id'].to_s] }.reverse # the same order as the browser (LCTYSP-0010)
-    end
-
     # Conversation files. Skip names that are not valid conversation ids (copies like "… copy.html")
     def conversation_paths
       Dir.glob(File.join(CONV_DIR, '*.html')).select do |path|

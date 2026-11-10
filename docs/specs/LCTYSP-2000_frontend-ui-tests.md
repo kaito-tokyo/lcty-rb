@@ -41,7 +41,7 @@ The last column counts the Scenarios (an Examples row counts as one), each teste
 | -------------------------------------------------------- | --------------------------------------------------- | --------: |
 | [LCTYSP-2001](LCTYSP-2001_new-conversation-page.feature) | The new conversation page `/c/`                     |         7 |
 | [LCTYSP-2002](LCTYSP-2002_conversation-page.feature)     | The conversation page `/c/<id>.html`                |        16 |
-| [LCTYSP-2003](LCTYSP-2003_sidebar.feature)               | The sidebar of every page                           |         8 |
+| [LCTYSP-2003](LCTYSP-2003_sidebar.feature)               | The sidebar of every page                           |         9 |
 | [LCTYSP-2004](LCTYSP-2004_tag-pages.feature)             | The tag reorder page `/t/` and the tag files' pages |         7 |
 | [LCTYSP-2005](LCTYSP-2005_site-routing.feature)          | The paths of the site                               |        15 |
 

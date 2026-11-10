@@ -8,41 +8,52 @@
 Feature: LCTYSP-1019 The search panel of the sidebar
 
   createSearchPanel({list, box, status, getSettings}) gives the sidebar's <lcty-conv-list>, search box and status
-  their behaviour on every page. With an empty box the list is the browser's copy of every conversation's meta
-  (api/meta-db.js), newest first, read again whenever a sync stores a new list. tag:name terms filter by tag; other
-  text is searched by keywords on the server (POST /v1/search) and, when an embedding model is set, semantically in
-  the browser (the query embedded by llama-server, scored by the search worker against the distribution files), and
-  the two are merged with RRF, keeping the best round of each conversation. Rounds without a snippet get one from
-  POST /v1/snippets. The panel's refresh() reloads the list and asks for a sync, setQuery(q) searches at once, and
-  current marks the conversation of the page.
+  their behaviour on every page. With an empty box the list is the browser's copies of the list of conversations
+  (LCTYSP-0014): their meta and number of elements (api/meta-db.js, lcty_c) and their tags (api/lcty-t.js,
+  t_has_many_c of lcty_t, in the order of the tag files, undefined tags after), newest first, read again whenever this
+  tab has stored a change of them. tag:name terms filter by tag; other text is searched by keywords on the server
+  (POST /v1/search) and, when an embedding model is set, semantically in the browser (the query embedded by
+  llama-server, scored by the search worker against the distribution files), and the two are merged with RRF, keeping
+  the best round of each conversation. Rounds without a snippet get one from POST /v1/snippets. The panel's refresh()
+  reads the list from the copies again, setQuery(q) searches at once, and current marks the conversation of the page.
+  The tab's /v1/rpc connection is a stand-in here: the copies are filled through the modules' own functions.
 
   Background:
     Given a page on the server's origin
     And a search box, a status and a <lcty-conv-list> in the page
-    And GET /v1/meta-all.json, POST /v1/search, POST /v1/snippets, GET /v1/conversations, GET /v1/defaults.json, the distribution files and the embeddings of http://llm.test are answered by the test
-    And the copy of the meta will hold "a" (tags "x" and "y", newest), "b" (tag "x") and "c" (no tags, oldest)
+    And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations, GET /v1/defaults.json, the distribution files and the embeddings of http://llm.test are answered by the test
+    And GET /v1/tags defines the tags "y" and then "x"
+    And the lists of the tab's connection hold at the version "b007.1" "a" (4 elements, tags "w", "x" and "y", newest), "b" (2 elements, tag "x") and "c" (6 elements, no tags, oldest)
 
-  Scenario: Opening the panel waits for the first sync, then lists the copy
+  Scenario: Opening the panel waits for the first read of the lists, then lists the copies
     Given createSearchPanel has made the panel
-    When refresh() is called before there is a copy
+    When refresh() is called before the lists have been read
     Then the list is shown empty, with no message
-    And after the sync the browser runs when idle, the list shows "a", "b" and "c", newest first
-    And each item has its title, tags and number of messages
+    When the tab's connection reads c.list, c.recordcount.list and t.c.list into the copies
+    Then the list shows "a", "b" and "c", newest first
+    And each item has its title, its tags in the order of the tag files with the undefined "w" last, and its number of messages
 
   Scenario: An empty copy says there are no conversations
-    Given the copy of the meta will hold no conversations
-    And the panel has loaded the copy after a sync
+    Given the lists of the tab's connection hold no conversations
+    And the lists have been read into the copies and refresh() has shown them
     Then the list is shown empty with "No conversations yet"
 
+  Scenario: A change stored in the copies is shown at once
+    Given the lists have been read into the copies and refresh() has shown them
+    When c.batch.updated puts "d" (3 elements, the newest) at the version "b007.2"
+    Then the list shows "d", "a", "b" and "c"
+    When t.batch.updated gives "d" the tag "x" at the version "b007.2"
+    Then the item "d" has the tag "x" and 3 messages
+
   Scenario: The list marks the current conversation
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     When current is set to "b"
     Then the item "b" is marked as current
     When the list is shown again by a search
     Then the item "b" is still marked as current
 
   Scenario: tag: alone lists the conversations with every tag, newest first
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     When setQuery searches "tag:x"
     Then the list shows "a" and "b"
     When setQuery searches "tag:x tag:y"
@@ -50,24 +61,24 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     And the box holds "tag:x tag:y", the status is empty and nothing was sent to POST /v1/search
 
   Scenario: A tag no conversation has finds nothing
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     When setQuery searches "tag:none"
     Then the list is shown empty with "No matching conversations"
 
   Scenario: Clicking a tag of an item searches that tag
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     When the tag "y" of the item "a" is clicked
     Then the box holds "tag:y"
     And the list shows "a"
 
   Scenario: Clearing the box lists every conversation again
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And setQuery has searched "tag:y"
     When setQuery searches "  "
     Then the list shows "a", "b" and "c"
 
   Scenario: A keyword search shows the rounds the server found, in rank order
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And POST /v1/search returns the rounds "r-b" of "b" and "r-a" of "a" with snippets
     When setQuery searches "  hello   world  "
     Then POST /v1/search is sent the query "hello world", no tags and the limit 50
@@ -76,26 +87,26 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     And nothing was sent to GET /v1/defaults.json or POST /v1/snippets
 
   Scenario: A keyword search keeps the best round of each conversation in the list
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And POST /v1/search returns the rounds "r-a1" of "a", "r-z" of "z", which is not in the list, "r-a2" of "a" and "r-c" of "c"
     When setQuery searches "hello"
     Then the list shows "a" with the round "r-a1" and "c" with the round "r-c"
 
   Scenario: tag: filters are sent with the keyword search
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And POST /v1/search returns the rounds "r-a" of "a"
     When setQuery searches "tag:x hello tag: tag:y"
     Then POST /v1/search is sent the query "hello" and the tags "x" and "y"
 
   Scenario: A failed keyword search says why and keeps the list
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And POST /v1/search answers with the status 500 and "boom"
     When setQuery searches "hello"
     Then the status says "Search failed: 500 boom"
     And the list still shows "a", "b" and "c"
 
   Scenario: Typing searches once the box has been still for 250 ms
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And POST /v1/search returns the rounds "r-a" of "a"
     When "hel" and then "hello" are typed into the box within 250 ms
     Then nothing is sent to POST /v1/search before 250 ms have passed
@@ -103,14 +114,14 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     And the list shows "a"
 
   Scenario: An older search that ends later is dropped
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And POST /v1/search answers "first" late with the round "r-a" of "a" and "second" at once with the round "r-b" of "b"
     When setQuery searches "first" and then "second"
     And the answer to "first" arrives last
     Then the list shows "b"
 
   Scenario: Clearing the box drops a search still in flight
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And POST /v1/search answers "hello" late with the round "r-a" of "a"
     When setQuery searches "hello"
     And setQuery clears the box before the answer arrives
@@ -119,7 +130,7 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     And the status is empty
 
   Scenario: A semantic search is merged with the keyword search by RRF
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
     And GET /v1/conversations maps the rounds "r-a" to "a", "r-b" to "b" and "r-c" to "c"
     And the distribution files hold the rounds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
@@ -133,7 +144,7 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     And the status is empty
 
   Scenario: tag: filters limit the semantic hits to the conversations with the tags
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
     And GET /v1/conversations maps the rounds "r-a" to "a", "r-b" to "b" and "r-c" to "c"
     And the distribution files hold the rounds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
@@ -142,17 +153,17 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     Then the list shows "a" and "b"
 
   Scenario: The rounds of the conversations are fetched once until the list changes
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
     And GET /v1/conversations maps the rounds "r-a" to "a", "r-b" to "b" and "r-c" to "c"
     And the distribution files hold the rounds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
     When setQuery searches "hello" and then "world"
     Then GET /v1/conversations was fetched once
-    When a sync stores a new list
+    When the tab's connection reads c.list and c.recordcount.list again at the version "b007.2"
     Then the search runs again and GET /v1/conversations is fetched again
 
   Scenario Outline: Without semantic search the keyword results are shown with a notice
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
     And <failure>
     And POST /v1/search returns the rounds "r-a" of "a"
@@ -167,7 +178,7 @@ Feature: LCTYSP-1019 The search panel of the sidebar
       | GET /v1/defaults.json answers with the status 500 and "boom" | 500 boom                           |
 
   Scenario: Without an embedding model only the keywords are searched
-    Given the panel has loaded the copy after a sync
+    Given the lists have been read into the copies and refresh() has shown them
     And the settings have no embedding model
     And POST /v1/search returns the rounds "r-a" of "a"
     When setQuery searches "hello"

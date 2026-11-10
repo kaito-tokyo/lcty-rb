@@ -7,7 +7,6 @@
 
 import { siteUrl } from "../site.js";
 import { renderMarkdown } from "../ui/markdown.js";
-import { requestMetaDbSync } from "./meta-db.js";
 
 /** The error of a failed request: the message is "<status> <body>", and status is the HTTP status. */
 function httpError(status, body) {
@@ -33,15 +32,11 @@ async function request(method, path, body, { raw = false } = {}) {
 }
 
 /**
- * A request that changes conversations. The browser's copy of their meta is synced afterwards (api/meta-db.js), also
- * when the request failed (the server may have written part of it).
+ * A request that changes conversations. The browser's copies of the list hear of it from the server, over /v1/rpc
+ * (LCTYSP-0014), not from here.
  */
-async function write(method, url, body) {
-	try {
-		return await request(method, url, body);
-	} finally {
-		requestMetaDbSync();
-	}
+function write(method, url, body) {
+	return request(method, url, body);
 }
 
 function conv(id) {

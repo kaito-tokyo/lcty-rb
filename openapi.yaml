@@ -143,10 +143,6 @@ paths:
     get:
       tags: [API]
       summary: The default settings (LCTYSP-0010)
-  /v1/meta-all.json:
-    get:
-      tags: [API]
-      summary: The meta of every conversation, newest first
   /v1/tags:
     get:
       tags: [API]

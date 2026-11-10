@@ -622,32 +622,25 @@
 		});
 	}
 
-	// The list is filled from the browser's copy of every conversation's meta as soon as the sidebar is in the document,
-	// before any module has loaded (LCTYSP-0010): from IndexedDB ("lcty_c", store "c_meta"), asynchronously, through the
-	// worker that alone opens it (lcty.v1.c.worker.cjs, operation "get", which never creates the database; LCTYSP-0009). The worker is
-	// found from the page's URL: every page is one directory below the root of the site (LCTYSP-0005). Opened directly
-	// (file://) no worker can start, and the list stays empty. A module that has already shown its own items wins.
+	// The list is filled from the browser's copies of the list as soon as the sidebar is in the document, before any
+	// module has loaded (LCTYSP-0014): from IndexedDB ("lcty_c", stores "c_meta" and "c_recordcount"), asynchronously,
+	// through the worker that alone opens it (lcty.v1.c.worker.cjs, operation "get", which never creates the database;
+	// LCTYSP-0009). The tags of the conversations come with the module (they are in lcty_t). The worker is found from the
+	// page's URL: every page is one directory below the root of the site (LCTYSP-0005). Opened directly (file://) no
+	// worker can start, and the list stays empty. A module that has already shown its own items wins.
 	connectedCallback() {
 		if (this.#filled) return;
 		this.#filled = true;
 		this.#loadTagNames();
-		// The cached tags and count are tags_hint and messages_hint (as the server's index recorded them)
-		const newestFirst = (items) =>
+		const listOf = ({ items, counts }) =>
 			items
-				.filter((c) => c && typeof c === "object" && typeof c.id === "string") // broken entries are skipped
-				.map((c) => ({ ...c, tags: c.tags_hint, messages: c.messages_hint }))
-				// newest first by updated_at_hint, then by id: the same order as the module's list (LCTYSP-0010)
-				.sort((a, b) =>
-					a.updated_at_hint !== b.updated_at_hint
-						? a.updated_at_hint < b.updated_at_hint
-							? 1
-							: -1
-						: a.id < b.id
-							? 1
-							: a.id > b.id
-								? -1
-								: 0,
-				);
+				.filter((c) => c && typeof c === "object" && typeof c.cid === "string") // broken entries are skipped
+				.map((c) => ({
+					id: c.cid,
+					title: c.title,
+					updated_at_hint: c.updatedAt,
+					messages: counts?.[c.cid],
+				}));
 		let worker;
 		try {
 			worker = new Worker(
@@ -660,7 +653,7 @@
 			worker.terminate();
 			if (!data?.result || data.result.stale) return;
 			try {
-				this.list.showCached(newestFirst(data.result.items));
+				this.list.showCached(listOf(data.result)); // newest first, as the worker answers
 			} catch {} // the module shows the list when it has loaded
 		};
 		worker.onerror = (e) => {

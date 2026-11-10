@@ -158,28 +158,39 @@ function listIds(page, inSidebar = false) {
 	}, inSidebar);
 }
 
-const meta = (id, day, extra = {}) => ({
-	id,
-	title: `Conversation ${id}`,
-	created_at: "2026-11-01T00:00:00.000Z",
-	updated_at_hint: `2026-11-${day}T00:00:00.000Z`,
-	setup_tags: [],
-	tags_hint: [],
-	messages_hint: 1,
-	...extra,
+/** A row of c_meta as c.list gives it (LCTYSP-0014). */
+const meta = (cid, day) => ({
+	cid,
+	lang: "en",
+	title: `Conversation ${cid}`,
+	titleTypeId: "__40",
+	updatedAt: `2026-11-${day}T00:00:00.000Z`,
+	createdAt: "2026-11-01T00:00:00.000Z",
 });
 
-/** Create the database "lcty_c" at version 1 with c_meta holding items, as lcty.v1.c.worker.cjs leaves it. */
-function seedCMeta(page, items) {
+/**
+ * Create the database "lcty_c" at version 2 as lcty.v1.c.worker.cjs leaves it: c_meta holding items, c_recordcount
+ * holding counts ({cid: count}) and, when synced, the version of c_meta in sync (the list has been read).
+ */
+function seedLctyC(page, { items, counts = {}, synced = true }) {
 	return page.evaluate(
-		(items) =>
+		({ items, counts, synced }) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty_c", 1);
+				const req = indexedDB.open("lcty_c", 2);
 				req.onupgradeneeded = () => {
-					const store = req.result.createObjectStore("c_meta", {
-						keyPath: "id",
+					const db = req.result;
+					const rows = db.createObjectStore("c_meta", { keyPath: "cid" });
+					for (const item of items) rows.put(item);
+					const recordcount = db.createObjectStore("c_recordcount", {
+						keyPath: "cid",
 					});
-					for (const item of items) store.put(item);
+					for (const [cid, count] of Object.entries(counts))
+						recordcount.put({ cid, count });
+					const sync = db.createObjectStore("sync", { keyPath: "store" });
+					if (synced) {
+						sync.put({ store: "c_meta", boot: "b007", seq: 1 });
+						sync.put({ store: "c_recordcount", boot: "b007", seq: 1 });
+					}
 				};
 				req.onsuccess = () => {
 					req.result.close();
@@ -187,7 +198,7 @@ function seedCMeta(page, items) {
 				};
 				req.onerror = () => reject(req.error);
 			}),
-		items,
+		{ items, counts, synced },
 	);
 }
 
@@ -2229,28 +2240,51 @@ test("The sidebar's list is filled from IndexedDB", async ({
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given the database "lcty_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta"', () =>
-		seedCMeta(page, [
-			meta("a", "01", { tags_hint: ["ruby"], messages_hint: 4 }),
-			meta("b", "03"),
-			meta("c", "03"),
-		]));
+	await test.step('Given the database "lcty_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta", the count 4 of "a" in "c_recordcount" and the version of "c_meta" in "sync"', () =>
+		seedLctyC(page, {
+			items: [meta("a", "01"), meta("b", "03"), meta("c", "03")],
+			counts: { a: 4 },
+		}));
 	await whenSidebarPut(page);
 	await test.step('Then its list shows "c", "b" and "a", in that order', async () => {
 		await expect.poll(() => listIds(page, true)).toEqual(["c", "b", "a"]);
 	});
-	await test.step('And the item "a" shows its tags_hint as tags and its messages_hint as the count', async () => {
+	await test.step('And the item "a" shows no tags and its count from "c_recordcount", and the item "b" no count', async () => {
 		expect(
-			await page.evaluate(() => {
-				const a = document
-					.querySelector("lcty-sidebar")
-					.list.querySelector('a[data-id="a"]');
-				return [
-					[...a.querySelectorAll(".tag-name")].map((e) => e.textContent),
-					a.querySelector('[part="lcty-conv-list__meta"]').textContent,
-				];
-			}),
-		).toEqual([["ruby"], "2026-11-01 00:00 · 4 messages"]);
+			await page.evaluate(() =>
+				["a", "b"].map((id) => {
+					const item = document
+						.querySelector("lcty-sidebar")
+						.list.querySelector(`a[data-id="${id}"]`);
+					return [
+						[...item.querySelectorAll(".tag-name")].map((e) => e.textContent),
+						item.querySelector('[part="lcty-conv-list__meta"]').textContent,
+					];
+				}),
+			),
+		).toEqual([
+			[[], "2026-11-01 00:00 · 4 messages"],
+			[[], "2026-11-03 00:00"],
+		]);
+	});
+});
+
+test("The sidebar's list waits for the first read of the lists", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step('Given the database "lcty_c" holds "a" in "c_meta" but no version in "sync"', () =>
+		seedLctyC(page, { items: [meta("a", "01")], synced: false }));
+	await whenSidebarPut(page);
+	await test.step("Then its list is empty", async () => {
+		// the sidebar reads asynchronously: give it the time a read takes
+		await page.evaluate(() => new Promise((r) => setTimeout(r, 200)));
+		expect(
+			await page.evaluate(
+				() => document.querySelector("lcty-sidebar").list.children.length,
+			),
+		).toBe(0);
 	});
 });
 
@@ -2263,14 +2297,15 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 		page.evaluate(
 			() =>
 				new Promise((resolve, reject) => {
-					const req = indexedDB.open("lcty_t", 2); // the schema of lcty.v1.t.worker.cjs
+					const req = indexedDB.open("lcty_t", 3); // the schema of lcty.v1.t.worker.cjs
 					req.onupgradeneeded = () => {
-						const rows = req.result.createObjectStore("t_full", {
-							keyPath: "file",
-						});
+						const db = req.result;
+						const rows = db.createObjectStore("t_full", { keyPath: "file" });
 						rows.put({ file: "00010-c~23.html", name: "C#" });
 						rows.put({ file: "00020-ruby.html", name: "Ruby" });
-						req.result.createObjectStore("t_set").put({ etag: "e1" }, "set");
+						db.createObjectStore("t_set").put({ etag: "e1" }, "set");
+						db.createObjectStore("t_has_many_c", { keyPath: ["tag", "cid"] });
+						db.createObjectStore("sync", { keyPath: "store" });
 					};
 					req.onsuccess = () => {
 						req.result.close();

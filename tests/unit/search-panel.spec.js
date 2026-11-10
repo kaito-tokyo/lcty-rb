@@ -6,9 +6,12 @@
 // its Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the two read side by side.
 //
 // js/search/search-panel.js runs in a real browser on the test server's origin, on the empty unit page, with a real
-// <lcty-conv-list> (from /c/lcty.v1.js), the real copy of the meta (api/meta-db.js and its sync worker) and the real
-// semantic search worker (/fuzzy_search.worker.js). Every request is answered by a route the test sets (server.*), which
-// also records it: the meta, the keyword search, the snippets, the rounds of the conversations, the defaults, the
+// <lcty-conv-list> (from /c/lcty.v1.js), the real copies of the list (api/meta-db.js and api/lcty-t.js with their
+// workers, lcty_c and lcty_t) and the real semantic search worker (/fuzzy_search.worker.js). The tab's /v1/rpc
+// connection is a stand-in (window.rpc, answering window.lists) handed to readMetaDbFrom and
+// readTagsOfConversationsFrom, and the notifications are passed to applyMetaBatch and applyTagBatch, so the workers
+// store the copies as they do in a page. Every request is answered by a route the test sets (server.*), which also
+// records it: the tags, the keyword search, the snippets, the rounds of the conversations, the defaults, the
 // distribution files (one-hot rows, so the query's scores are known) and the embeddings of the fake llama-server.
 // What the panel shows is read from the list (its links) and from the items it gave list.show(), kept in window.shown.
 
@@ -32,23 +35,46 @@ const R = {
 	"r-z": "01900000-0000-7000-8000-00000000000f",
 };
 
-/** A conversation's meta as GET /v1/meta-all.json returns it (LCTYSP-0006). */
-function meta(id, updated, tags, messages) {
+/** A row of c_meta as c.list and c.batch.updated give it (LCTYSP-0014). */
+function metaRow(cid, day) {
 	return {
-		id,
-		title: `Conversation ${id}`,
-		created_at: "2026-11-01T00:00:00+09:00",
-		updated_at_hint: updated,
-		setup_tags: [],
-		tags_hint: tags,
-		messages_hint: messages,
+		cid,
+		lang: "en",
+		title: `Conversation ${cid}`,
+		titleTypeId: "__40",
+		updatedAt: `2026-11-0${day}T10:00:00.000Z`,
+		createdAt: "2026-11-01T00:00:00.000Z",
 	};
 }
 
-const COPY = [
-	meta("b", "2026-11-02T10:00:00+09:00", ["x"], 2),
-	meta("c", "2026-11-01T10:00:00+09:00", [], 6),
-	meta("a", "2026-11-03T10:00:00+09:00", ["x", "y"], 4),
+/** The conversations: [cid, day of updatedAt, number of elements, tags]. */
+const CONVERSATIONS = [
+	["b", 2, 2, ["x"]],
+	["c", 1, 6, []],
+	["a", 3, 4, ["w", "x", "y"]],
+];
+
+/** What c.list, c.recordcount.list and t.c.list answer at version for these conversations. */
+function listsOf(version, convs) {
+	return {
+		"c.list": { version, items: convs.map(([cid, day]) => metaRow(cid, day)) },
+		"c.recordcount.list": {
+			version,
+			items: convs.map(([cid, , count]) => ({ cid, count })),
+		},
+		"t.c.list": {
+			version,
+			items: convs.flatMap(([cid, , , tags]) =>
+				tags.map((tag) => ({ tag, cid })),
+			),
+		},
+	};
+}
+
+/** GET /v1/tags: "y" before "x" in the order of the files, so a conversation's tags are not shown by reference. */
+const TAGS = [
+	{ file: "00010-y.html", name: "y", ops: [], prompt: "", memory: [] },
+	{ file: "00020-x.html", name: "x", ops: [], prompt: "", memory: [] },
 ];
 
 /** The distribution files of these rounds: row i is the unit vector e_i (256 × f32 LE and 32 zero bytes). */
@@ -93,17 +119,21 @@ async function background(page, context) {
 				});
 			};
 			window.settings = null;
+			// The tab's /v1/rpc connection: answers what window.lists holds
+			window.lists = {};
+			window.rpc = {
+				call: async (method) => structuredClone(window.lists[method]),
+			};
 		});
 	});
 	const empty = distribution([]);
 	const server = {
-		copy: [],
+		tags: [],
 		searches: [],
 		snippets: [],
 		conversations: 0,
 		defaults: 0,
 		embeddings: [],
-		metaAll: (route) => route.fulfill({ json: server.copy }),
 		search: (route) => route.fulfill({ json: { results: [] } }),
 		snippet: (route) => route.fulfill({ json: {} }),
 		list: (route) => route.fulfill({ json: [] }),
@@ -116,9 +146,12 @@ async function background(page, context) {
 				json: { data: [{ index: 0, embedding: QUERY_EMBEDDING }] },
 			}),
 	};
-	await test.step("And GET /v1/meta-all.json, POST /v1/search, POST /v1/snippets, GET /v1/conversations, GET /v1/defaults.json, the distribution files and the embeddings of http://llm.test are answered by the test", async () => {
-		await context.route("**/v1/meta-all.json", (route) =>
-			server.metaAll(route),
+	await test.step("And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations, GET /v1/defaults.json, the distribution files and the embeddings of http://llm.test are answered by the test", async () => {
+		await context.route("**/v1/tags", (route) =>
+			route.fulfill({
+				headers: { ETag: '"t1"' },
+				json: { tags: server.tags },
+			}),
 		);
 		await context.route("**/v1/search", (route) => {
 			server.searches.push(route.request().postDataJSON());
@@ -152,10 +185,34 @@ async function background(page, context) {
 			return server.embed(route);
 		});
 	});
-	await test.step('And the copy of the meta will hold "a" (tags "x" and "y", newest), "b" (tag "x") and "c" (no tags, oldest)', () => {
-		server.copy = COPY;
+	await test.step('And GET /v1/tags defines the tags "y" and then "x"', () => {
+		server.tags = TAGS;
 	});
+	await test.step('And the lists of the tab\'s connection hold at the version "b007.1" "a" (4 elements, tags "w", "x" and "y", newest), "b" (2 elements, tag "x") and "c" (6 elements, no tags, oldest)', () =>
+		holdLists(page, listsOf("b007.1", CONVERSATIONS)));
 	return server;
+}
+
+/** What the stand-in of the tab's connection answers from now on. */
+function holdLists(page, lists) {
+	return page.evaluate((lists) => {
+		window.lists = lists;
+	}, lists);
+}
+
+/** Read the lists over the stand-in into the copies, as the sidebar does when the connection opens. */
+function readLists(page, which = ["meta", "tags"]) {
+	return page.evaluate(async (which) => {
+		const [{ readMetaDbFrom }, { readTagsOfConversationsFrom }] =
+			await Promise.all([
+				import("/js/api/meta-db.js"),
+				import("/js/api/lcty-t.js"),
+			]);
+		await Promise.all([
+			which.includes("meta") && readMetaDbFrom(window.rpc),
+			which.includes("tags") && readTagsOfConversationsFrom(window.rpc),
+		]);
+	}, which);
 }
 
 // ---- The panel ----
@@ -177,12 +234,12 @@ function shownTimes(page, n) {
 	return page.waitForFunction((n) => window.shown.length >= n, n);
 }
 
-async function givenTheLoadedPanel(page) {
-	await test.step("Given the panel has loaded the copy after a sync", async () => {
+// The lists are read before the panel is made, so refresh() is what shows them: list.show() has been called once
+async function givenTheLoadedPanel(page, keyword = "Given") {
+	await test.step(`${keyword} the lists have been read into the copies and refresh() has shown them`, async () => {
+		await readLists(page);
 		await createPanel(page);
-		await page.evaluate(async () => {
-			await (await import("/js/api/meta-db.js")).forceSyncMetaDb();
-		});
+		await page.evaluate(() => window.panel.refresh());
 		await shownTimes(page, 1);
 	});
 }
@@ -278,7 +335,7 @@ async function givenSemanticSearch(server, page) {
 
 // ---- Scenarios ----
 
-test("Opening the panel waits for the first sync, then lists the copy", async ({
+test("Opening the panel waits for the first read of the lists, then lists the copies", async ({
 	page,
 	context,
 }) => {
@@ -286,8 +343,7 @@ test("Opening the panel waits for the first sync, then lists the copy", async ({
 	await test.step("Given createSearchPanel has made the panel", () =>
 		createPanel(page));
 	let first;
-	await test.step("When refresh() is called before there is a copy", async () => {
-		// The list as refresh() left it, before the sync it asked for can run
+	await test.step("When refresh() is called before the lists have been read", async () => {
 		first = await page.evaluate(async () => {
 			await window.panel.refresh();
 			return {
@@ -304,18 +360,26 @@ test("Opening the panel waits for the first sync, then lists the copy", async ({
 			text: "",
 		});
 	});
-	await test.step('And after the sync the browser runs when idle, the list shows "a", "b" and "c", newest first', async () => {
-		await shownTimes(page, 2);
-		expect(await listIds(page)).toEqual(["a", "b", "c"]);
+	await test.step("When the tab's connection reads c.list, c.recordcount.list and t.c.list into the copies", () =>
+		readLists(page));
+	await test.step('Then the list shows "a", "b" and "c", newest first', async () => {
+		// Each copy that was stored shows the list again: wait for the one that has the tags too
+		await expect
+			.poll(async () => (await listItems(page)).map((i) => [i.id, i.tags]))
+			.toEqual([
+				["a", ["y", "x", "w"]],
+				["b", ["x"]],
+				["c", []],
+			]);
 	});
-	await test.step("And each item has its title, tags and number of messages", async () => {
+	await test.step('And each item has its title, its tags in the order of the tag files with the undefined "w" last, and its number of messages', async () => {
 		expect(await listItems(page)).toEqual([
 			{
 				id: "a",
 				href: "../c/a.html",
 				title: "Conversation a",
 				snippet: null,
-				tags: ["x", "y"],
+				tags: ["y", "x", "w"],
 				meta: "2026-11-03 10:00 · 4 messages",
 				current: false,
 			},
@@ -345,20 +409,57 @@ test("An empty copy says there are no conversations", async ({
 	page,
 	context,
 }) => {
-	const server = await background(page, context);
-	await test.step("Given the copy of the meta will hold no conversations", () => {
-		server.copy = [];
-	});
-	await test.step("And the panel has loaded the copy after a sync", async () => {
-		await createPanel(page);
-		await page.evaluate(async () => {
-			await (await import("/js/api/meta-db.js")).forceSyncMetaDb();
-		});
-		await shownTimes(page, 1);
-	});
+	await background(page, context);
+	await test.step("Given the lists of the tab's connection hold no conversations", () =>
+		holdLists(page, listsOf("b007.1", [])));
+	await givenTheLoadedPanel(page, "And");
 	await test.step('Then the list is shown empty with "No conversations yet"', async () => {
 		expect(await listItems(page)).toEqual([]);
 		expect(await emptyText(page)).toBe("No conversations yet");
+	});
+});
+
+test("A change stored in the copies is shown at once", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenTheLoadedPanel(page);
+	await test.step('When c.batch.updated puts "d" (3 elements, the newest) at the version "b007.2"', () =>
+		page.evaluate(
+			async ([row]) => {
+				(await import("/js/api/meta-db.js")).applyMetaBatch({
+					version: "b007.2",
+					actorId: "someone",
+					records: [
+						{ store: "c_meta", op: "put", row },
+						{ store: "c_recordcount", op: "put", row: { cid: "d", count: 3 } },
+					],
+				});
+			},
+			[metaRow("d", 4)],
+		));
+	await test.step('Then the list shows "d", "a", "b" and "c"', async () => {
+		await expect.poll(() => listIds(page)).toEqual(["d", "a", "b", "c"]);
+	});
+	await test.step('When t.batch.updated gives "d" the tag "x" at the version "b007.2"', () =>
+		page.evaluate(async () => {
+			(await import("/js/api/lcty-t.js")).applyTagBatch({
+				version: "b007.2",
+				actorId: "someone",
+				records: [
+					{ store: "t_has_many_c", op: "put", row: { tag: "x", cid: "d" } },
+				],
+			});
+		}));
+	await test.step('Then the item "d" has the tag "x" and 3 messages', async () => {
+		await expect
+			.poll(async () =>
+				(await listItems(page))
+					.filter((i) => i.id === "d")
+					.map(({ tags, meta }) => ({ tags, meta })),
+			)
+			.toEqual([{ tags: ["x"], meta: "2026-11-04 10:00 · 3 messages" }]);
 	});
 });
 
@@ -760,10 +861,9 @@ test("The rounds of the conversations are fetched once until the list changes", 
 		expect(server.conversations).toBe(1);
 		expect(server.embeddings).toHaveLength(2);
 	});
-	await test.step("When a sync stores a new list", async () => {
-		await page.evaluate(async () => {
-			await (await import("/js/api/meta-db.js")).forceSyncMetaDb();
-		});
+	await test.step('When the tab\'s connection reads c.list and c.recordcount.list again at the version "b007.2"', async () => {
+		await holdLists(page, listsOf("b007.2", CONVERSATIONS));
+		await readLists(page, ["meta"]);
 	});
 	await test.step("Then the search runs again and GET /v1/conversations is fetched again", async () => {
 		await expect.poll(() => server.conversations).toBe(2);

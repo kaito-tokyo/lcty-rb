@@ -58,8 +58,9 @@ async function background(page, context) {
 
 // ---- The database, from the page ----
 
-/** The database "lcty_t" as it is: {exists, version, stores, keyPath (of t_full), tags (the rows of t_full in key
- * order), etag (of the record "set" of t_set)}. Never creates it. */
+/** The database "lcty_t" as it is: {exists, version, stores, and of the stores it has: keyPath (of t_full), tags (the
+ * rows of t_full in key order), etag (of the record "set" of t_set), hasMany (the rows of t_has_many_c in key order),
+ * sync (the row "t_has_many_c" of sync, or null)}. Never creates it. */
 function readDb(page) {
 	return page.evaluate(
 		() =>
@@ -72,30 +73,35 @@ function readDb(page) {
 						: reject(req.error);
 				req.onsuccess = () => {
 					const db = req.result;
-					const result = {
-						exists: true,
-						version: db.version,
-						stores: [...db.objectStoreNames].sort(),
-					};
-					if (
-						!["t_full", "t_set"].every((s) => db.objectStoreNames.contains(s))
-					) {
+					const stores = [...db.objectStoreNames].sort();
+					const result = { exists: true, version: db.version, stores };
+					const known = ["t_full", "t_set", "t_has_many_c", "sync"].filter(
+						(s) => stores.includes(s),
+					);
+					if (known.length === 0) {
 						db.close();
 						resolve(result);
 						return;
 					}
-					const tx = db.transaction(["t_full", "t_set"]);
-					const { keyPath } = tx.objectStore("t_full");
-					const rows = tx.objectStore("t_full").getAll();
-					const set = tx.objectStore("t_set").get("set");
+					const tx = db.transaction(known);
+					const reqs = {};
+					if (known.includes("t_full")) {
+						result.keyPath = tx.objectStore("t_full").keyPath;
+						reqs.tags = tx.objectStore("t_full").getAll();
+					}
+					if (known.includes("t_set"))
+						reqs.set = tx.objectStore("t_set").get("set");
+					if (known.includes("t_has_many_c"))
+						reqs.hasMany = tx.objectStore("t_has_many_c").getAll();
+					if (known.includes("sync"))
+						reqs.sync = tx.objectStore("sync").get("t_has_many_c");
 					tx.oncomplete = () => {
 						db.close();
-						resolve({
-							...result,
-							keyPath,
-							tags: rows.result,
-							etag: set.result?.etag ?? null,
-						});
+						if (reqs.tags) result.tags = reqs.tags.result;
+						if (reqs.set) result.etag = reqs.set.result?.etag ?? null;
+						if (reqs.hasMany) result.hasMany = reqs.hasMany.result;
+						if (reqs.sync) result.sync = reqs.sync.result ?? null;
+						resolve(result);
 					};
 					tx.onerror = () => {
 						db.close();
@@ -106,18 +112,32 @@ function readDb(page) {
 	);
 }
 
-/** "lcty_t" at version 2, as the worker leaves it, holding the set {tags, etag}: the rows are put in the given order. */
-function seedSet(page, set) {
+/**
+ * "lcty_t" at version 3, as the worker leaves it, with its four stores, holding the set {tags, etag} when set is given
+ * and the tags of conversations {rows, version} when hasMany is: the rows are put in the given order.
+ */
+function seed(page, { set = null, hasMany = null }) {
 	return page.evaluate(
-		(set) =>
+		({ set, hasMany }) =>
 			new Promise((resolve, reject) => {
-				const req = indexedDB.open("lcty_t", 2);
+				const req = indexedDB.open("lcty_t", 3);
 				req.onupgradeneeded = () => {
-					const rows = req.result.createObjectStore("t_full", {
-						keyPath: "file",
+					const db = req.result;
+					const tags = db.createObjectStore("t_full", { keyPath: "file" });
+					const sets = db.createObjectStore("t_set");
+					const rows = db.createObjectStore("t_has_many_c", {
+						keyPath: ["tag", "cid"],
 					});
-					for (const t of set.tags) rows.put(t);
-					req.result.createObjectStore("t_set").put({ etag: set.etag }, "set");
+					const sync = db.createObjectStore("sync", { keyPath: "store" });
+					if (set) {
+						for (const t of set.tags) tags.put(t);
+						sets.put({ etag: set.etag }, "set");
+					}
+					if (hasMany) {
+						for (const r of hasMany.rows) rows.put(r);
+						const [boot, seq] = hasMany.version.split(".");
+						sync.put({ store: "t_has_many_c", boot, seq: Number(seq) });
+					}
 				};
 				req.onsuccess = () => {
 					req.result.close();
@@ -125,8 +145,17 @@ function seedSet(page, set) {
 				};
 				req.onerror = () => reject(req.error);
 			}),
-		set,
+		{ set, hasMany },
 	);
+}
+
+/** The rows {tag, cid} of ["tag", "cid"] pairs. */
+const rowsOf = (pairs) => pairs.map(([tag, cid]) => ({ tag, cid }));
+
+/** The row of "sync" that a version "<boot>.<seq>" of t_has_many_c is. */
+function syncRow(version) {
+	const [boot, seq] = version.split(".");
+	return { store: "t_has_many_c", boot, seq: Number(seq) };
 }
 
 /** "lcty_t" at version 1 as the worker before rows left it: t_full with out-of-line keys and one record "set". */
@@ -198,8 +227,56 @@ async function givenNoDatabase(page) {
 
 async function givenTFullHolds(page, files, etag) {
 	await test.step(`Given "t_full" holds the tags ${list(files)} and the ETag "${etag}"`, () =>
-		seedSet(page, { tags: files.map(tag), etag }));
+		seed(page, { set: { tags: files.map(tag), etag } }));
 }
+
+async function givenHasManyHolds(page, pairs, version) {
+	await test.step(`Given "t_has_many_c" holds ${list(pairs)} at "${version}"`, () =>
+		seed(page, { hasMany: { rows: rowsOf(pairs), version } }));
+}
+
+async function thenHasManyHolds(page, pairs, word = "And") {
+	await test.step(`${word} "t_has_many_c" holds exactly ${list(pairs)}`, async () => {
+		expect((await readDb(page)).hasMany).toEqual(rowsOf(pairs));
+	});
+}
+
+async function thenSyncAt(page, version) {
+	await test.step(`And "sync" holds "t_has_many_c" at "${version}"`, async () => {
+		expect((await readDb(page)).sync).toEqual(syncRow(version));
+	});
+}
+
+async function thenAnswersApplied(answer, applied) {
+	await test.step(`Then it answers {"applied": ${list(applied)}}`, () => {
+		expect(answer.message).toEqual({ result: { applied } });
+	});
+}
+
+/** The message of a replace of store with the rows of pairs (or rows as they are, when not an array) at version. */
+const replaceOf = (store, version, pairs) => ({
+	id: 1,
+	op: "replace",
+	payload: {
+		store,
+		version,
+		rows: Array.isArray(pairs) ? rowsOf(pairs) : pairs,
+	},
+});
+
+/** The message of an apply at version of records [op, ["tag", "cid"]] of t_has_many_c. */
+const applyOf = (version, records) => ({
+	id: 1,
+	op: "apply",
+	payload: {
+		version,
+		records: records.map(([op, [tag, cid]]) => ({
+			store: "t_has_many_c",
+			op,
+			row: { tag, cid },
+		})),
+	},
+});
 
 async function givenGetReturns(server, files, etag) {
 	await test.step(`And GET /v1/tags returns the tags ${list(files)} with the ETag "${etag}"`, () => {
@@ -254,11 +331,11 @@ async function thenTFullHolds(page, files, etag, composed = "") {
 	});
 }
 
-async function thenVersion2(page) {
-	await test.step('And the database "lcty_t" is at version 2 with only the stores "t_full" and "t_set"', async () => {
+async function thenVersion3(page) {
+	await test.step('And the database "lcty_t" is at version 3 with only the stores "sync", "t_full", "t_has_many_c" and "t_set"', async () => {
 		const db = await readDb(page);
-		expect(db.version).toBe(2);
-		expect(db.stores).toEqual(["t_full", "t_set"]);
+		expect(db.version).toBe(3);
+		expect(db.stores).toEqual(["sync", "t_full", "t_has_many_c", "t_set"]);
 	});
 }
 
@@ -285,7 +362,7 @@ test("A sync stores the set with NFC file names and the ETag", async ({
 		expect(answer.hasResult).toBe(true);
 		expect(answer.message).toEqual({ result: undefined });
 	});
-	await thenVersion2(page);
+	await thenVersion3(page);
 	await test.step('And "t_full" has one row per tag, keyed by its file name', async () => {
 		const db = await readDb(page);
 		expect(db.keyPath).toBe("file");
@@ -351,7 +428,7 @@ test("A database at version 1 is dropped and synced again", async ({
 	await thenRequests(server, "And the requests sent are GET /v1/tags", [
 		"GET /v1/tags",
 	]);
-	await thenVersion2(page);
+	await thenVersion3(page);
 });
 
 test("Getting answers the tags in the order of their file names", async ({
@@ -668,8 +745,255 @@ test("An endpoint on another origin is an error", async ({ page, context }) => {
 	await thenNoRequest(server);
 });
 
-// ---- Scenarios: js/api/lcty-t.js ----
+// ---- Scenarios: the worker, t_has_many_c ----
 
+test('A replace fills "t_has_many_c" and stores the version', async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenNoDatabase(page);
+	const answer = await whenPosted(
+		page,
+		'a replace of "t_has_many_c" with the rows [["ruby", "c2"], ["go", "c1"]] at "b1.5"',
+		replaceOf("t_has_many_c", "b1.5", [
+			["ruby", "c2"],
+			["go", "c1"],
+		]),
+	);
+	await thenAnswersApplied(answer, true);
+	await thenHasManyHolds(page, [
+		["go", "c1"],
+		["ruby", "c2"],
+	]);
+	await thenSyncAt(page, "b1.5");
+	await thenNoRequest(server);
+});
+
+for (const { held, read, applied, kept, version } of [
+	{
+		held: "b1.5",
+		read: "b1.5",
+		applied: true,
+		kept: [["ruby", "c2"]],
+		version: "b1.5",
+	},
+	{
+		held: "b1.7",
+		read: "b1.5",
+		applied: false,
+		kept: [["go", "c1"]],
+		version: "b1.7",
+	},
+	{
+		held: "b1.9",
+		read: "b2.1",
+		applied: true,
+		kept: [["ruby", "c2"]],
+		version: "b2.1",
+	},
+]) {
+	test(`A replace is written unless the copy is newer in the same boot (${held})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await givenHasManyHolds(page, [["go", "c1"]], held);
+		const answer = await whenPosted(
+			page,
+			`a replace of "t_has_many_c" with the rows [["ruby", "c2"]] at "${read}"`,
+			replaceOf("t_has_many_c", read, [["ruby", "c2"]]),
+		);
+		await thenAnswersApplied(answer, applied);
+		await thenHasManyHolds(page, kept);
+		await thenSyncAt(page, version);
+	});
+}
+
+test("A replace leaves the tags as they were", async ({ page, context }) => {
+	await background(page, context);
+	await givenTFullHolds(page, ["00010-a.html"], "e1");
+	const answer = await whenPosted(
+		page,
+		'a replace of "t_has_many_c" with the rows [["go", "c1"]] at "b1.5"',
+		replaceOf("t_has_many_c", "b1.5", [["go", "c1"]]),
+	);
+	await thenAnswersApplied(answer, true);
+	await thenTFullHolds(page, ["00010-a.html"], "e1");
+});
+
+test("A change is written onto an older copy of the same boot", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenHasManyHolds(
+		page,
+		[
+			["go", "c1"],
+			["go", "c2"],
+		],
+		"b1.5",
+	);
+	const answer = await whenPosted(
+		page,
+		'an apply at "b1.6" of a put of ["ruby", "c1"] and a delete of ["go", "c2"]',
+		applyOf("b1.6", [
+			["put", ["ruby", "c1"]],
+			["delete", ["go", "c2"]],
+		]),
+	);
+	await thenAnswersApplied(answer, ["t_has_many_c"]);
+	await thenHasManyHolds(page, [
+		["go", "c1"],
+		["ruby", "c1"],
+	]);
+	await thenSyncAt(page, "b1.6");
+});
+
+for (const { held, change } of [
+	{ held: "b1.6", change: "b1.6" },
+	{ held: "b1.6", change: "b1.5" },
+	{ held: "b1.6", change: "b2.7" },
+]) {
+	test(`A change is left when the copy is not older in the same boot (${change})`, async ({
+		page,
+		context,
+	}) => {
+		await background(page, context);
+		await givenHasManyHolds(page, [["go", "c1"]], held);
+		const answer = await whenPosted(
+			page,
+			`an apply at "${change}" of a put of ["ruby", "c1"]`,
+			applyOf(change, [["put", ["ruby", "c1"]]]),
+		);
+		await thenAnswersApplied(answer, []);
+		await thenHasManyHolds(page, [["go", "c1"]]);
+		await thenSyncAt(page, held);
+	});
+}
+
+test("A change onto a copy that was never filled is left", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenTFullHolds(page, ["00010-a.html"], "e1");
+	const answer = await whenPosted(
+		page,
+		'an apply at "b1.6" of a put of ["ruby", "c1"]',
+		applyOf("b1.6", [["put", ["ruby", "c1"]]]),
+	);
+	await thenAnswersApplied(answer, []);
+	await thenHasManyHolds(page, []);
+});
+
+test("A change of other stores only does not open the database", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenNoDatabase(page);
+	const answer = await whenPosted(
+		page,
+		'an apply at "b1.6" of a c_meta put only',
+		{
+			id: 1,
+			op: "apply",
+			payload: {
+				version: "b1.6",
+				records: [{ store: "c_meta", op: "put", row: { cid: "c1" } }],
+			},
+		},
+	);
+	await thenAnswersApplied(answer, []);
+	await test.step('And there is still no database "lcty_t"', async () => {
+		expect((await readDb(page)).exists).toBe(false);
+	});
+});
+
+for (const { payload, message, sent } of [
+	{
+		payload: 'a replace of "t_full" at "b1.5"',
+		message: "no such store: t_full",
+		sent: replaceOf("t_full", "b1.5", []),
+	},
+	{
+		payload: 'a replace of "t_has_many_c" at "5"',
+		message: "not a version: 5",
+		sent: replaceOf("t_has_many_c", "5", []),
+	},
+	{
+		payload: 'a replace of "t_has_many_c" at "b1.5" with the rows null',
+		message: "rows must be an array",
+		sent: replaceOf("t_has_many_c", "b1.5", null),
+	},
+	{
+		payload: 'an apply at "b1" of a put of ["ruby", "c1"]',
+		message: "not a version: b1",
+		sent: applyOf("b1", [["put", ["ruby", "c1"]]]),
+	},
+]) {
+	test(`A bad payload is an error (${payload})`, async ({ page, context }) => {
+		await background(page, context);
+		const answer = await whenPosted(page, payload, sent);
+		await thenAnswersError(answer, message, null);
+	});
+}
+
+async function thenAnswersRows(answer, pairs, stale) {
+	await test.step(`Then it answers the rows ${list(pairs)} and stale ${stale}`, () => {
+		expect(answer.message).toEqual({
+			result: { rows: rowsOf(pairs), stale },
+		});
+	});
+}
+
+test("Getting the tags of conversations answers the rows by tag, then conversation", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenHasManyHolds(
+		page,
+		[
+			["ruby", "c1"],
+			["go", "c2"],
+			["go", "c1"],
+		],
+		"b1.5",
+	);
+	const answer = await whenPosted(page, '{"id": 1, "op": "get_has_many"}', {
+		id: 1,
+		op: "get_has_many",
+	});
+	await thenAnswersRows(
+		answer,
+		[
+			["go", "c1"],
+			["go", "c2"],
+			["ruby", "c1"],
+		],
+		false,
+	);
+	await thenNoRequest(server);
+});
+
+test("Getting the tags of conversations before any replace is stale", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenNoDatabase(page);
+	const answer = await whenPosted(page, '{"id": 1, "op": "get_has_many"}', {
+		id: 1,
+		op: "get_has_many",
+	});
+	await thenAnswersRows(answer, [], true);
+	await thenNoRequest(server);
+});
+
+// ---- Scenarios: js/api/lcty-t.js ----
 test("The calls of a tab run one at a time, in order", async ({
 	page,
 	context,
@@ -737,5 +1061,182 @@ test("A call whose worker answers an error rejects with its status", async ({
 			message: "412 the tags have changed",
 			status: 412,
 		});
+	});
+});
+
+async function whenReadTagsOfConversations(page) {
+	let result;
+	await test.step("When readTagsOfConversations() is called", async () => {
+		result = await page.evaluate(async () => {
+			const t = await import("/js/api/lcty-t.js");
+			const { byCid, stale } = await t.readTagsOfConversations();
+			return {
+				isMap: byCid instanceof Map,
+				byCid: Object.fromEntries(byCid),
+				stale,
+			};
+		});
+	});
+	return result;
+}
+
+/** Register a listener with onTagsOfConversationsChange that counts its calls in window.lctyChanges. */
+async function givenListener(page) {
+	await test.step("And a listener is registered with onTagsOfConversationsChange", () =>
+		page.evaluate(async () => {
+			const t = await import("/js/api/lcty-t.js");
+			window.lctyChanges = 0;
+			t.onTagsOfConversationsChange(() => {
+				window.lctyChanges += 1;
+			});
+		}));
+}
+
+const changes = (page) => page.evaluate(() => window.lctyChanges);
+
+/**
+ * Call readTagsOfConversationsFrom(rpc) with an rpc whose call(method) records the method and answers {version, items:
+ * the rows of pairs}, after calling applyTagBatch(batch) when batch is given; resolves to the methods called.
+ */
+function readFrom(page, version, pairs, batch = null) {
+	return page.evaluate(
+		async ({ version, items, batch }) => {
+			const t = await import("/js/api/lcty-t.js");
+			const calls = [];
+			await t.readTagsOfConversationsFrom({
+				call: async (method) => {
+					calls.push(method);
+					if (batch) t.applyTagBatch(batch);
+					return { version, items };
+				},
+			});
+			return calls;
+		},
+		{ version, items: rowsOf(pairs), batch },
+	);
+}
+
+test("The tags of conversations are read by conversation", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenHasManyHolds(
+		page,
+		[
+			["go", "c1"],
+			["go", "c2"],
+			["ruby", "c1"],
+		],
+		"b1.5",
+	);
+	const result = await whenReadTagsOfConversations(page);
+	await test.step('Then it resolves to byCid {"c1": ["go", "ruby"], "c2": ["go"]} and stale false', () => {
+		expect(result).toEqual({
+			isMap: true,
+			byCid: { c1: ["go", "ruby"], c2: ["go"] },
+			stale: false,
+		});
+	});
+});
+
+test("The tags of conversations of a copy never filled are stale", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenNoDatabase(page);
+	const result = await whenReadTagsOfConversations(page);
+	await test.step("Then it resolves to byCid {} and stale true", () => {
+		expect(result).toEqual({ isMap: true, byCid: {}, stale: true });
+	});
+});
+
+test("A read over rpc replaces the copy and calls the listeners", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenHasManyHolds(page, [["go", "c1"]], "b1.5");
+	await givenListener(page);
+	let calls;
+	await test.step('When readTagsOfConversationsFrom(rpc) is called with an rpc whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"', async () => {
+		calls = await readFrom(page, "b1.6", [["ruby", "c2"]]);
+	});
+	await test.step('Then the rpc was called with "t.c.list" only', () => {
+		expect(calls).toEqual(["t.c.list"]);
+	});
+	await test.step("And the listener was called once", async () => {
+		expect(await changes(page)).toBe(1);
+	});
+	await thenHasManyHolds(page, [["ruby", "c2"]]);
+	await thenSyncAt(page, "b1.6");
+});
+
+test("A read over rpc of an older version calls no listener", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenHasManyHolds(page, [["go", "c1"]], "b1.7");
+	await givenListener(page);
+	await test.step('When readTagsOfConversationsFrom(rpc) is called with an rpc whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"', () =>
+		readFrom(page, "b1.6", [["ruby", "c2"]]));
+	await test.step("Then the listener was not called", async () => {
+		expect(await changes(page)).toBe(0);
+	});
+	await thenHasManyHolds(page, [["go", "c1"]]);
+});
+
+test("A batch is written onto the copy and calls the listeners", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenHasManyHolds(page, [["go", "c1"]], "b1.5");
+	await givenListener(page);
+	await test.step('When applyTagBatch is called with a put of ["ruby", "c1"] at "b1.6"', () =>
+		page.evaluate(
+			async (batch) => {
+				const t = await import("/js/api/lcty-t.js");
+				t.applyTagBatch(batch);
+			},
+			applyOf("b1.6", [["put", ["ruby", "c1"]]]).payload,
+		));
+	await test.step("Then the listener is called once", async () => {
+		await expect.poll(() => changes(page)).toBe(1);
+	});
+	await thenHasManyHolds(page, [
+		["go", "c1"],
+		["ruby", "c1"],
+	]);
+	await thenSyncAt(page, "b1.6");
+});
+
+test("A batch that arrives during a read is written after it", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenHasManyHolds(page, [["go", "c1"]], "b1.5");
+	await givenListener(page);
+	await test.step('When readTagsOfConversationsFrom(rpc) is called with an rpc whose "t.c.list" answers the rows [["go", "c2"]] at "b1.6", after applyTagBatch was called with a put of ["ruby", "c2"] at "b1.7"', () =>
+		readFrom(
+			page,
+			"b1.6",
+			[["go", "c2"]],
+			applyOf("b1.7", [["put", ["ruby", "c2"]]]).payload,
+		));
+	await thenHasManyHolds(
+		page,
+		[
+			["go", "c2"],
+			["ruby", "c2"],
+		],
+		"Then",
+	);
+	await thenSyncAt(page, "b1.7");
+	await test.step("And the listener was called twice", async () => {
+		expect(await changes(page)).toBe(2);
 	});
 });

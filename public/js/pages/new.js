@@ -10,8 +10,8 @@
 // With ?fork=<id>&at=<n> it forks; ?q=… puts a query into the sidebar's search box.
 
 import { getTags } from "../api/lcty-t.js";
-import { connectRpc } from "../api/rpc.js";
 import { appendLines, getConversation } from "../api/storage.js";
+import { tabRpc } from "../api/tab-rpc.js";
 import {
 	appIndexer,
 	convUrl,
@@ -66,6 +66,7 @@ export function initNewPage() {
 		getSettings: () => state.settings,
 		onTagsSaved: tagsSaved,
 	});
+	tabRpc(); // the sidebar follows the lists over it (LCTYSP-0014)
 	const indexer = appIndexer(() => state.settings);
 
 	// ---- Tags and the system prompt draft (LCTYSP-0009) ----
@@ -192,49 +193,45 @@ export function initNewPage() {
 	// message are appended one by one, and last the lcty-cmd send, which this tab's conversation page runs as its own
 	// (sessionStorage lcty.run.<id>). The tags at creation go to lcty_t.sqlite (the HTTP API's tags line).
 	async function create(id, title, text, at) {
-		const rpc = connectRpc();
-		try {
-			await rpc.call("c.create", {
-				cid: id,
-				createdAt: at,
-				title,
-				lang: document.documentElement.lang || "en",
-				titleMaxSize: TITLE_MAX_SIZE,
-				lctyVersion: "v1",
-			});
-			let after = null;
-			const append = async (method, attrs, innerHTML) => {
-				await rpc.call(method, { cid: id, after, attrs, innerHTML });
-				after = attrs.id;
-			};
-			const instructions = form.instructions.value;
-			if (instructions)
-				await append(
-					"c.append.msg",
-					msgAttrs("system", instructions),
-					replyArticle(instructions),
-				);
-			for (const m of state.fork?.messages ?? []) {
-				const role = m.role === "assistant" ? "model" : "user";
-				await append(
-					"c.append.msg",
-					msgAttrs(role, m.content, { at: m.at || at }),
-					role === "user" ? userArticle(m.content) : replyArticle(m.content),
-				);
-			}
+		const rpc = tabRpc(); // the tab's connection, which the sidebar uses too
+		await rpc.call("c.create", {
+			cid: id,
+			createdAt: at,
+			title,
+			lang: document.documentElement.lang || "en",
+			titleMaxSize: TITLE_MAX_SIZE,
+			lctyVersion: "v1",
+		});
+		let after = null;
+		const append = async (method, attrs, innerHTML) => {
+			await rpc.call(method, { cid: id, after, attrs, innerHTML });
+			after = attrs.id;
+		};
+		const instructions = form.instructions.value;
+		if (instructions)
 			await append(
 				"c.append.msg",
-				msgAttrs("user", text, { at }),
-				userArticle(text),
+				msgAttrs("system", instructions),
+				replyArticle(instructions),
 			);
-			const cmd = cmdAttrs("send", at);
-			await rpc.call("c.append.cmd", { cid: id, after, attrs: cmd });
-			try {
-				sessionStorage.setItem(`lcty.run.${id}`, cmd.id);
-			} catch {}
-		} finally {
-			rpc.close();
+		for (const m of state.fork?.messages ?? []) {
+			const role = m.role === "assistant" ? "model" : "user";
+			await append(
+				"c.append.msg",
+				msgAttrs(role, m.content, { at: m.at || at }),
+				role === "user" ? userArticle(m.content) : replyArticle(m.content),
+			);
 		}
+		await append(
+			"c.append.msg",
+			msgAttrs("user", text, { at }),
+			userArticle(text),
+		);
+		const cmd = cmdAttrs("send", at);
+		await rpc.call("c.append.cmd", { cid: id, after, attrs: cmd });
+		try {
+			sessionStorage.setItem(`lcty.run.${id}`, cmd.id);
+		} catch {}
 		if (state.tags.length)
 			await appendLines(id, [{ type: "tags", tags: state.tags, at }]);
 	}

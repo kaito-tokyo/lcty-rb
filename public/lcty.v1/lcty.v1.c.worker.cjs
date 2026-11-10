@@ -2,15 +2,17 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// lcty.v1.c.worker.cjs: the browser's copy of every conversation's meta (IndexedDB "lcty_c", LCTYSP-0010), an RPC
-// server that runs as a Worker or as a SharedWorker. The messages, the database and why it works this way are in
-// lcty.v1.c.worker.d.cts.
+// lcty.v1.c.worker.cjs: the browser's copies of c/ (IndexedDB "lcty_c", LCTYSP-0014), an RPC server that runs as a
+// Worker or as a SharedWorker. The messages, the database and why it works this way are in lcty.v1.c.worker.d.cts.
 
 "use strict";
 
 const DB_NAME = "lcty_c";
-const DB_VERSION = 1; // raised when what is stored changes
-const STORE = "c_meta";
+const DB_VERSION = 2; // raised when what is stored changes
+const META = "c_meta";
+const COUNTS = "c_recordcount";
+const SYNC = "sync";
+const COPIES = [META, COUNTS]; // the stores that follow the server, each keyed by cid
 
 /** The URL of the API (v1/) that a message names as its endpoint, checked (lcty.v1.c.worker.d.cts). */
 /*export*/ function endpointOf(endpoint) {
@@ -24,25 +26,22 @@ const STORE = "c_meta";
 	return url;
 }
 
-/** The error of a failed request, with the HTTP status as status. */
-/*export*/ function httpError(status, message) {
-	const e = new Error(message);
-	e.status = status;
-	return e;
+/** A global version "<boot>.<seq>" as {boot, seq}, or an error. */
+/*export*/ function parseVersion(version) {
+	const m = /^([0-9a-f]+)\.([0-9]+)$/.exec(String(version));
+	if (!m) throw new Error(`not a version: ${version}`);
+	return { boot: m[1], seq: Number(m[2]) };
 }
 
-/** Open the database at DB_VERSION, creating or upgrading it (only a sync does). Upgrading drops every other store. */
+/** Open the database at DB_VERSION, creating or upgrading it (only a write does). Upgrading drops every store. */
 /*export*/ function openForWrite() {
 	return new Promise((resolve, reject) => {
 		const req = indexedDB.open(DB_NAME, DB_VERSION);
 		req.onupgradeneeded = () => {
 			const db = req.result;
-			for (const name of [...db.objectStoreNames]) {
-				if (name !== STORE) db.deleteObjectStore(name);
-			}
-			if (!db.objectStoreNames.contains(STORE)) {
-				db.createObjectStore(STORE, { keyPath: "id" });
-			}
+			for (const name of [...db.objectStoreNames]) db.deleteObjectStore(name);
+			for (const name of COPIES) db.createObjectStore(name, { keyPath: "cid" });
+			db.createObjectStore(SYNC, { keyPath: "store" });
 		};
 		req.onsuccess = () => {
 			const db = req.result;
@@ -70,61 +69,120 @@ const STORE = "c_meta";
 	});
 }
 
-/*export*/ async function syncMeta(v1) {
-	const response = await fetch(new URL("meta-all.json", v1));
-	if (!response.ok)
-		throw httpError(
-			response.status,
-			`Failed to fetch /v1/meta-all.json: ${response.status}`,
-		);
-	const metaAllJson = await response.json();
-	if (!Array.isArray(metaAllJson)) throw new Error("meta-all.json is invalid");
+/** Run fn(tx) in one transaction over stores; resolves to what fn returned when the transaction completes. */
+function inTransaction(db, stores, mode, fn) {
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(stores, mode);
+		const out = fn(tx);
+		tx.oncomplete = () => resolve(out);
+		tx.onerror = () => reject(tx.error);
+		tx.onabort = () =>
+			reject(tx.error || new Error("the transaction was aborted"));
+	});
+}
 
+/**
+ * Replace a copy as a whole with what a full read answered: payload {store, version, rows}. Done when the store holds
+ * no version, one of another boot, or one not newer; answers {applied}.
+ */
+/*export*/ async function replace(_v1, { store, version, rows }) {
+	if (!COPIES.includes(store)) throw new Error(`no such store: ${store}`);
+	const v = parseVersion(version);
+	if (!Array.isArray(rows)) throw new Error("rows must be an array");
 	const db = await openForWrite();
 	try {
-		const tx = db.transaction(STORE, "readwrite");
-		const store = tx.objectStore(STORE);
-		store.clear();
-		for (const m of metaAllJson) {
-			store.put(m);
-		}
-		await new Promise((resolve, reject) => {
-			tx.oncomplete = () => resolve();
-			tx.onerror = () => reject(tx.error);
-			tx.onabort = () =>
-				reject(tx.error || new Error("the transaction was aborted"));
+		return await inTransaction(db, [store, SYNC], "readwrite", (tx) => {
+			const out = { applied: false };
+			const sync = tx.objectStore(SYNC);
+			sync.get(store).onsuccess = ({ target: { result: held } }) => {
+				if (held && held.boot === v.boot && held.seq > v.seq) return; // a newer one is stored already
+				const os = tx.objectStore(store);
+				os.clear();
+				for (const row of rows) os.put(row);
+				sync.put({ store, ...v });
+				out.applied = true;
+			};
+			return out;
 		});
 	} finally {
 		db.close();
 	}
 }
 
-// Newest first by updated_at_hint, then by id (it starts with the creation time): the same order as the server and
-// the sidebar (LCTYSP-0010)
+/**
+ * Apply the records of one change, as c.batch.updated sends it: payload {version, records}. Each store applies its
+ * records only when it holds a version of the same boot that is older; records of other stores (c_html) are left.
+ * Answers {applied}, the stores that applied them.
+ */
+/*export*/ async function apply(_v1, { version, records }) {
+	const v = parseVersion(version);
+	if (!Array.isArray(records)) throw new Error("records must be an array");
+	const stores = COPIES.filter((s) => records.some((r) => r?.store === s));
+	if (stores.length === 0) return { applied: [] };
+	const db = await openForWrite();
+	try {
+		return await inTransaction(db, [...stores, SYNC], "readwrite", (tx) => {
+			const out = { applied: [] };
+			const sync = tx.objectStore(SYNC);
+			for (const store of stores) {
+				sync.get(store).onsuccess = ({ target: { result: held } }) => {
+					// No full read of this boot yet: what came before is missing, so wait for one
+					if (!held || held.boot !== v.boot || held.seq >= v.seq) return;
+					const os = tx.objectStore(store);
+					for (const r of records) {
+						if (r.store !== store) continue;
+						if (r.op === "put") os.put(r.row);
+						else if (r.op === "delete") os.delete(r.row.cid);
+					}
+					sync.put({ store, ...v });
+					out.applied.push(store);
+				};
+			}
+			return out;
+		});
+	} finally {
+		db.close();
+	}
+}
+
+// Newest first by updatedAt, then by cid (it starts with the creation time): the order of c.list and the sidebar
 function newestFirst(a, b) {
-	if (a.updated_at_hint !== b.updated_at_hint)
-		return a.updated_at_hint < b.updated_at_hint ? 1 : -1;
-	return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+	if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
+	return a.cid < b.cid ? 1 : a.cid > b.cid ? -1 : 0;
 }
 
 /*export*/ async function get() {
+	const none = { items: [], counts: {}, stale: true };
 	const db = await openForRead();
-	if (!db) return { items: [], stale: true };
+	if (!db) return none;
 	try {
-		if (!db.objectStoreNames.contains(STORE)) return { items: [], stale: true };
-		const items = await new Promise((resolve, reject) => {
-			const req = db.transaction(STORE).objectStore(STORE).getAll();
-			req.onsuccess = () => resolve(req.result);
-			req.onerror = () => reject(req.error);
+		const all = [...COPIES, SYNC];
+		if (!all.every((s) => db.objectStoreNames.contains(s))) return none; // a database of an older version
+		const r = await inTransaction(db, all, "readonly", (tx) => {
+			const out = {};
+			tx.objectStore(META).getAll().onsuccess = (e) => {
+				out.items = e.target.result;
+			};
+			tx.objectStore(COUNTS).getAll().onsuccess = (e) => {
+				out.counts = e.target.result;
+			};
+			tx.objectStore(SYNC).get(META).onsuccess = (e) => {
+				out.synced = Boolean(e.target.result);
+			};
+			return out;
 		});
-		return { items: items.sort(newestFirst), stale: false };
+		return {
+			items: r.items.sort(newestFirst),
+			counts: Object.fromEntries(r.counts.map((c) => [c.cid, c.count])),
+			stale: !r.synced,
+		};
 	} finally {
 		db.close();
 	}
 }
 
 /*non-worker-ignore-begin*/
-const OPS = { sync_meta: syncMeta, get };
+const OPS = { replace, apply, get };
 
 var onmessage = async ({
 	data: { id, op, endpoint, payload },

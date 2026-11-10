@@ -2,110 +2,89 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/js/api/meta-db.js (LCTYSP-0010; the sync worker it starts is LCTYSP-1001). Each Scenario is a
-# test of the same title in tests/unit/meta-db.spec.js, whose steps are the lines below.
+# The behaviour of public/js/api/meta-db.js (LCTYSP-0014, LCTYSP-0010; the worker it starts is LCTYSP-1001). Each
+# Scenario is a test of the same title in tests/unit/meta-db.spec.js, whose steps are the lines below.
 
-Feature: LCTYSP-1010 The browser's copy of the meta
+Feature: LCTYSP-1010 The browser's copies of the list of conversations
 
-  The module keeps the browser's copy of every conversation's meta, the store "c_meta" of the IndexedDB database
-  "lcty_c". A sync posts {"id": n, "op": "sync_meta"} to the worker /lcty.v1.c.worker.cjs (LCTYSP-1001), which replaces
-  the store with GET /v1/meta-all.json; then the module calls the listeners of onMetaDbChange. requestMetaDbSync()
-  syncs when the browser is idle (the pages call it on loading the list and after sending a change),
-  forceSyncMetaDb() syncs at once (every page when it is shown, and the sidebar's refresh button), and readMetaDb()
-  reads the copy newest first through the worker ({"id": n, "op": "get"}), which never creates the database. In a tab
-  at most one sync runs: syncs requested while one runs share one more sync after it.
+  The module keeps the browser's copies of the list of conversations, the stores "c_meta" and "c_recordcount" of the
+  IndexedDB database "lcty_c", through the worker /lcty.v1/lcty.v1.c.worker.cjs (LCTYSP-1001), which alone opens it.
+  readMetaDbFrom(rpc) calls c.list and then c.recordcount.list on the page's /v1/rpc connection and posts each answer
+  to the worker as a replace; applyMetaBatch(params) posts the records of a c.batch.updated as an apply, after the
+  lists when they are being read; readMetaDb() reads the copies through the worker ({items, counts, stale}). In a tab
+  the operations run one at a time, in order. The listeners of onMetaDbChange are called once the worker has stored
+  something. In the steps "the connection" is a fake rpc whose answers the test gives, and versions are written
+  "<boot>.<seq>".
 
   Background:
     Given a page on the server's origin
-    And GET /v1/meta-all.json is answered by the test
+    And a connection whose answers to c.list and c.recordcount.list the test gives
 
-  Scenario: Reading before any sync finds no copy
+  Scenario: Reading before any list finds no copy
     Given there is no database "lcty_c"
-    When readMetaDb() reads the copy
-    Then it returns no items and stale true
+    When readMetaDb() reads the copies
+    Then it returns no items, no counts and stale true
     And there is still no database "lcty_c"
 
-  Scenario: Reading returns the copy newest first
-    Given "c_meta" holds the conversations "a" updated at 10:00, "b" at 12:00, "c" at 11:00 and "d" at 12:00
-    When readMetaDb() reads the copy
-    Then it returns "d", "b", "c" and "a" in that order, as stored, and stale false
-
-  Scenario: Reading leaves no connection open
-    Given "c_meta" holds the conversation "a"
-    When readMetaDb() reads the copy
-    Then the database "lcty_c" can be opened at version 2 without being blocked
-
-  Scenario: A forced sync syncs at once
-    Given there is no database "lcty_c"
-    And GET /v1/meta-all.json returns the conversations "a" and "b"
+  Scenario: Reading the lists stores the meta and the counts
+    Given c.list answers "a" updated at 10:00 and "b" at 12:00, and c.recordcount.list 2 of "a", both at "b1.5"
     And a listener is registered with onMetaDbChange
-    When forceSyncMetaDb() is called
-    Then it resolves after GET /v1/meta-all.json was requested once
-    And readMetaDb() returns the conversations "a" and "b" and stale false
+    When readMetaDbFrom(the connection) is called
+    Then it resolves after c.list and then c.recordcount.list were called once each
+    And readMetaDb() returns "b" and "a" in that order, the counts 2 of "a", and stale false
     And the listener was called once
 
-  Scenario Outline: A failed forced sync rejects with the worker's error and keeps the copy
-    Given "c_meta" holds the conversations "a" and "b"
+  Scenario: A notification that arrives while the lists are read is written after them
+    Given c.list is held until the test answers it
+    When readMetaDbFrom(the connection) is called
+    And applyMetaBatch() is given a c_meta put of "c" at "b1.6"
+    And c.list answers "a" at "b1.5" and c.recordcount.list nothing at "b1.5"
+    Then readMetaDbFrom resolves
+    And readMetaDb() returns "c" and "a"
+
+  Scenario: A notification after the lists is written and calls the listeners
+    Given the lists have been read with "a" at "b1.5"
     And a listener is registered with onMetaDbChange
-    And GET /v1/meta-all.json <answer>
-    When forceSyncMetaDb() is called
-    Then it rejects with an error whose message has "<message>" and does not start with "Uncaught"
-    And readMetaDb() returns the conversations "a" and "b"
+    When applyMetaBatch() is given a c_meta put of "b" at "b1.6" and a c_recordcount put of 3 of "b"
+    Then readMetaDb() returns "b" and "a" and the counts 3 of "b"
+    And the listener was called once
+
+  Scenario: A notification older than the copy is left and calls no listener
+    Given the lists have been read with "a" at "b1.6"
+    And a listener is registered with onMetaDbChange
+    When applyMetaBatch() is given a c_meta put of "b" at "b1.5"
+    And readMetaDb() has been called after it
+    Then readMetaDb() returns only "a"
     And the listener was not called
 
-    Examples:
-      | answer                        | message                                |
-      | answers with the status 500   | Failed to fetch /v1/meta-all.json: 500 |
-      | returns an object, not a list | meta-all.json is invalid               |
-
-  Scenario: Forced syncs made during a sync share one sync after it
-    Given GET /v1/meta-all.json is held until the test answers it
-    When forceSyncMetaDb() is called three times
-    Then GET /v1/meta-all.json has been requested once
-    And the second and the third call return the same promise
-    When the first request is answered with the conversation "a"
-    Then GET /v1/meta-all.json is requested a second time
-    When the second request is answered with the conversation "b"
-    Then all three calls resolve
-    And readMetaDb() returns only the conversation "b"
-
-  Scenario: A sync queued after a failed one still runs
-    Given GET /v1/meta-all.json answers with the status 500 first and returns the conversation "a" next
-    When forceSyncMetaDb() is called twice at once
-    Then the first call rejects and the second resolves
-    And readMetaDb() returns only the conversation "a"
-
-  Scenario: Requests made before the browser is idle share one sync
-    Given GET /v1/meta-all.json returns the conversation "a"
+  Scenario: A failed read rejects and keeps the copies
+    Given the lists have been read with "a" at "b1.5"
     And a listener is registered with onMetaDbChange
-    When requestMetaDbSync() is called three times
-    Then the listener is called once
-    And GET /v1/meta-all.json was requested once
-    And readMetaDb() returns only the conversation "a"
-
-  Scenario: A request after a finished sync syncs again
-    Given GET /v1/meta-all.json returns the conversation "a" first and the conversations "a" and "b" next
-    And a listener is registered with onMetaDbChange
-    When requestMetaDbSync() is called and the listener has been called
-    And requestMetaDbSync() is called again
-    Then the listener is called a second time
-    And GET /v1/meta-all.json was requested twice
-    And readMetaDb() returns the conversations "a" and "b" and stale false
-
-  Scenario: A failed requested sync is only logged
-    Given "c_meta" holds the conversation "a"
-    And GET /v1/meta-all.json answers with the status 500
-    And a listener is registered with onMetaDbChange
-    When requestMetaDbSync() is called
-    Then the warning "the meta of the conversations could not be synced" is logged
+    And c.list fails with "the connection was lost"
+    When readMetaDbFrom(the connection) is called
+    Then it rejects with "the connection was lost"
+    And readMetaDb() returns only "a"
     And the listener was not called
-    And readMetaDb() returns only the conversation "a"
+
+  Scenario: A notification held during a failed read is still written
+    Given the lists have been read with "a" at "b1.5"
+    And c.list is held until the test answers it
+    When readMetaDbFrom(the connection) is called
+    And applyMetaBatch() is given a c_meta put of "b" at "b1.6"
+    And c.list fails with "the connection was lost"
+    Then readMetaDbFrom rejects
+    And readMetaDb() returns "b" and "a"
 
   Scenario: A listener that throws does not stop the others
     Given a listener that throws is registered with onMetaDbChange
     And a second listener is registered with onMetaDbChange
-    And GET /v1/meta-all.json returns the conversation "a"
-    When forceSyncMetaDb() is called
+    And c.list answers "a" and c.recordcount.list nothing, both at "b1.5"
+    When readMetaDbFrom(the connection) is called
     Then it resolves
     And the second listener was called once
     And the error of the first listener is logged as a warning
+
+  Scenario: Reading leaves no connection open
+    Given the lists have been read with "a" at "b1.5"
+    When readMetaDb() reads the copies
+    Then the database "lcty_c" can be opened at version 3 without being blocked

@@ -10,8 +10,8 @@ Feature: LCTYSP-3004 The search index
   Chatty::SearchIndex keeps the derived index of the conversations in a SQLite file. SearchIndex.rounds_for turns the
   messages of a conversation into rounds (a user message and the reply that follows), and sync and full_sync bring the
   index in line with the files. keyword_search finds rounds by trigrams of the terms of three or more characters and
-  requires the shorter terms in the text, snippets gives the snippets of rounds found elsewhere, and tags_hint,
-  messages_hint and convs_with_tags answer from the tags and the number of messages recorded on every sync.
+  requires the shorter terms in the text, snippets gives the snippets of rounds found elsewhere, and convs_with_tags
+  answers from the tags recorded on every sync.
 
   Scenario: A user message and the reply that follows make a round
     Given a user message "u1" with "Hello" at "2026-01-01T00:00:00Z" and a reply "Hi there" at "2026-01-01T00:00:05Z"
@@ -139,13 +139,12 @@ Feature: LCTYSP-3004 The search index
     Then a warning names the message and both conversations
     And the round still belongs to "c1"
 
-  Scenario: Sync records the tags and the number of messages
+  Scenario: Sync records the tags
     Given a new index with a listener
     When a conversation of three messages, one inherited, is synced with the tags "b" and "a"
-    Then tags_hint gives it the tags "b" and "a" in that order
-    And messages_hint gives it 3 messages
+    Then convs_with_tags finds it for "b" and for "a"
     When it is synced again with only the tag "c"
-    Then tags_hint gives it only the tag "c"
+    Then convs_with_tags finds it for "c" and no longer for "b"
     And the listener was called only for the first sync, which added a round
 
   Scenario: Conversations with all the given tags are found
@@ -160,17 +159,17 @@ Feature: LCTYSP-3004 The search index
     Given a new index with a listener and the synced conversations "c1" and "c2", both tagged
     When a full sync is given only "c1", without tags
     Then the round of "c2" is not found
-    And tags_hint and messages_hint no longer have "c2"
-    And tags_hint no longer has "c1"
+    And convs_with_tags finds nothing for the tag of "c2"
+    And nothing for the tag "c1" had before
     And the listener is called
 
   Scenario: Removing a deleted conversation leaves nothing of it
     Given a new index with a listener and the synced conversations "c1" and "c2", both tagged
     When "c2" is removed
     Then the round of "c2" is not found
-    And tags_hint and messages_hint have only "c1"
+    And convs_with_tags finds "c1" for its tag and nothing for the tag of "c2"
     And the listener is called once
-    And removing "c2" again, or the never indexed "c9", leaves the hints as they are without calling the listener
+    And removing "c2" again, or the never indexed "c9", leaves "c1" as it is without calling the listener
 
   Scenario: An index is kept when it is opened again
     Given an index with a synced round about "persimmons"

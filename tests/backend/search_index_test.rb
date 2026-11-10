@@ -378,7 +378,7 @@ class SearchIndexTest < Lcty::Scenarios
     end
   end
 
-  scenario 'Sync records the tags and the number of messages' do
+  scenario 'Sync records the tags' do
     index = messages = nil
     calls = 0
     step('Given a new index with a listener') do
@@ -389,10 +389,13 @@ class SearchIndexTest < Lcty::Scenarios
       messages = [{ 'role' => 'system', 'content' => 'inherited', 'inherited' => true }] + round('u1', 'q', 'a')
       index.sync('c1', messages, %w[b a])
     end
-    step('Then tags_hint gives it the tags "b" and "a" in that order') { assert_equal %w[b a], index.tags_hint['c1'] }
-    step('And messages_hint gives it 3 messages') { assert_equal({ 'c1' => 3 }, index.messages_hint) }
+    step('Then convs_with_tags finds it for "b" and for "a"') do
+      assert_equal [%w[c1], %w[c1]], [index.convs_with_tags(%w[b]), index.convs_with_tags(%w[a])]
+    end
     step('When it is synced again with only the tag "c"') { index.sync('c1', messages, ['c']) }
-    step('Then tags_hint gives it only the tag "c"') { assert_equal({ 'c1' => ['c'] }, index.tags_hint) }
+    step('Then convs_with_tags finds it for "c" and no longer for "b"') do
+      assert_equal [%w[c1], []], [index.convs_with_tags(%w[c]), index.convs_with_tags(%w[b])]
+    end
     step('And the listener was called only for the first sync, which added a round') { assert_equal 1, calls }
   end
 
@@ -422,11 +425,8 @@ class SearchIndexTest < Lcty::Scenarios
     end
     step('When a full sync is given only "c1", without tags') { index.full_sync('c1' => [c1, nil]) }
     step('Then the round of "c2" is not found') { assert_equal ['u1'], ids_of(index.keyword_search('mango')) }
-    step('And tags_hint and messages_hint no longer have "c2"') do
-      refute index.tags_hint.key?('c2')
-      assert_equal({ 'c1' => 2 }, index.messages_hint)
-    end
-    step('And tags_hint no longer has "c1"') { assert_equal({}, index.tags_hint) }
+    step('And convs_with_tags finds nothing for the tag of "c2"') { assert_equal [], index.convs_with_tags(%w[y]) }
+    step('And nothing for the tag "c1" had before') { assert_equal [], index.convs_with_tags(%w[x]) }
     step('And the listener is called') { assert_equal 1, calls }
   end
 
@@ -441,16 +441,15 @@ class SearchIndexTest < Lcty::Scenarios
     end
     step('When "c2" is removed') { index.remove('c2') }
     step('Then the round of "c2" is not found') { assert_equal ['u1'], ids_of(index.keyword_search('mango')) }
-    step('And tags_hint and messages_hint have only "c1"') do
-      assert_equal({ 'c1' => ['x'] }, index.tags_hint)
-      assert_equal({ 'c1' => 2 }, index.messages_hint)
+    step('And convs_with_tags finds "c1" for its tag and nothing for the tag of "c2"') do
+      assert_equal [%w[c1], []], [index.convs_with_tags(%w[x]), index.convs_with_tags(%w[y])]
     end
     step('And the listener is called once') { assert_equal 1, calls }
-    step('And removing "c2" again, or the never indexed "c9", leaves the hints as they are without calling the listener') do
+    step('And removing "c2" again, or the never indexed "c9", leaves "c1" as it is without calling the listener') do
       index.remove('c2')
       index.remove('c9')
-      assert_equal({ 'c1' => ['x'] }, index.tags_hint)
-      assert_equal({ 'c1' => 2 }, index.messages_hint)
+      assert_equal %w[c1], index.convs_with_tags(%w[x])
+      assert_equal ['u1'], ids_of(index.keyword_search('mango'))
       assert_equal 1, calls
     end
   end

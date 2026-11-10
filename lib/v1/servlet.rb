@@ -51,8 +51,6 @@ module Chatty
         case [method, parts.join('/')]
         when ['GET', 'defaults.json']
           return json(res, 200, V1.defaults)
-        when ['GET', 'meta-all.json']
-          return json(res, 200, Store.meta_all)
         when ['GET', 'vectors/pending']
           model = query_model(req.query)
           limit = [[(req.query['limit'] || 16).to_i, 1].max, MAX_PUT_IDS].min

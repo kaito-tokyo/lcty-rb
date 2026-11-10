@@ -8,10 +8,12 @@
 "use strict";
 
 const DB_NAME = "lcty_t";
-const DB_VERSION = 2; // raised when what is stored changes
+const DB_VERSION = 3; // raised when what is stored changes
 const TAGS = "t_full";
 const SET = "t_set";
 const SET_KEY = "set";
+const HAS_MANY = "t_has_many_c"; // which conversations each tag has, followed over /v1/rpc (LCTYSP-0014)
+const SYNC = "sync";
 
 /** The URL of the API (v1/) that a message names as its endpoint, checked (lcty.v1.c.worker.d.cts). */
 /*export*/ function endpointOf(endpoint) {
@@ -51,6 +53,8 @@ function openDb() {
 			for (const name of [...db.objectStoreNames]) db.deleteObjectStore(name);
 			db.createObjectStore(TAGS, { keyPath: "file" });
 			db.createObjectStore(SET);
+			db.createObjectStore(HAS_MANY, { keyPath: ["tag", "cid"] });
+			db.createObjectStore(SYNC, { keyPath: "store" });
 		};
 		req.onsuccess = () => {
 			const db = req.result;
@@ -149,8 +153,101 @@ const readCopy = () =>
 		return r.json();
 	});
 
+// ---- t_has_many_c: a copy that follows the server under the version rule (LCTYSP-0014) ----
+
+/** A global version "<boot>.<seq>" as {boot, seq}, or an error. */
+/*export*/ function parseVersion(version) {
+	const m = /^([0-9a-f]+)\.([0-9]+)$/.exec(String(version));
+	if (!m) throw new Error(`not a version: ${version}`);
+	return { boot: m[1], seq: Number(m[2]) };
+}
+
+/** Run fn(tx) in one transaction over t_has_many_c and sync; resolves to what fn returned when it completes. */
+async function withHasMany(mode, fn) {
+	const db = await openDb();
+	try {
+		return await new Promise((resolve, reject) => {
+			const tx = db.transaction([HAS_MANY, SYNC], mode);
+			const out = fn(tx.objectStore(HAS_MANY), tx.objectStore(SYNC));
+			tx.oncomplete = () => resolve(out);
+			tx.onerror = () => reject(tx.error);
+			tx.onabort = () =>
+				reject(tx.error || new Error("the transaction was aborted"));
+		});
+	} finally {
+		db.close();
+	}
+}
+
+/**
+ * Replace t_has_many_c with what t.c.list answered: payload {store, version, rows}. Done unless the copy holds a newer
+ * version of the same boot; answers {applied}.
+ */
+/*export*/ function replace(_v1, { store, version, rows }) {
+	if (store !== HAS_MANY) throw new Error(`no such store: ${store}`);
+	const v = parseVersion(version);
+	if (!Array.isArray(rows)) throw new Error("rows must be an array");
+	return withHasMany("readwrite", (os, sync) => {
+		const out = { applied: false };
+		sync.get(HAS_MANY).onsuccess = ({ target: { result: held } }) => {
+			if (held && held.boot === v.boot && held.seq > v.seq) return;
+			os.clear();
+			for (const { tag, cid } of rows) os.put({ tag, cid });
+			sync.put({ store: HAS_MANY, ...v });
+			out.applied = true;
+		};
+		return out;
+	});
+}
+
+/**
+ * Apply the records of one t.batch.updated: payload {version, records}, only onto a copy of the same boot holding an
+ * older version. Answers {applied}, the stores that applied them.
+ */
+/*export*/ function apply(_v1, { version, records }) {
+	const v = parseVersion(version);
+	if (!Array.isArray(records)) throw new Error("records must be an array");
+	const mine = records.filter((r) => r?.store === HAS_MANY);
+	if (mine.length === 0) return { applied: [] };
+	return withHasMany("readwrite", (os, sync) => {
+		const out = { applied: [] };
+		sync.get(HAS_MANY).onsuccess = ({ target: { result: held } }) => {
+			if (!held || held.boot !== v.boot || held.seq >= v.seq) return;
+			for (const { op, row } of mine) {
+				if (op === "put") os.put({ tag: row.tag, cid: row.cid });
+				else if (op === "delete") os.delete([row.tag, row.cid]);
+			}
+			sync.put({ store: HAS_MANY, ...v });
+			out.applied.push(HAS_MANY);
+		};
+		return out;
+	});
+}
+
+/** Every row of t_has_many_c, ordered by tag then cid; stale true when it has never been filled. */
+/*export*/ function getHasMany() {
+	return withHasMany("readonly", (os, sync) => {
+		const out = { rows: [], stale: true };
+		os.getAll().onsuccess = (e) => {
+			out.rows = e.target.result;
+		};
+		sync.get(HAS_MANY).onsuccess = (e) => {
+			out.stale = !e.target.result;
+		};
+		return out;
+	});
+}
+
 /*non-worker-ignore-begin*/
-const OPS = { sync_full: syncFull, get, put, addMemory };
+const OPS = {
+	sync_full: syncFull,
+	get,
+	put,
+	addMemory,
+	replace,
+	apply,
+	get_has_many: getHasMany,
+};
 
 var onmessage = async ({
 	data: { id, op, endpoint, payload },
