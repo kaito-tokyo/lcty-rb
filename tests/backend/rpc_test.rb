@@ -37,9 +37,16 @@ class RpcTest < Lcty::Scenarios
 
   [['as a WebSocket', 'http://evil.example'], ['as a WebSocket', 'http://allowed.test:1']].each do |how, origin|
     scenario "A request of an origin that is not allowed is refused (#{how}, #{origin})" do
-      status = nil
-      step("When a request is sent #{how} with Origin \"#{origin}\"") { status = Page.status_of(port, origin) }
+      status = err = nil
+      step("When a request is sent #{how} with Origin \"#{origin}\"") do
+        port # started before stderr is captured
+        _, err = capture_io { status = Page.status_of(port, origin) }
+      end
       step('Then the status is 403') { assert_equal '403', status }
+      step("And the server logs that it refused the Origin \"#{origin}\", with the allowed origin \"http://allowed.test\"") do
+        assert_includes err, "lcty-rb: /v1/rpc refused the Origin #{origin.inspect}; allowed: http://allowed.test " \
+                             '(add it to LCTY_ALLOWED_ORIGIN)'
+      end
     end
   end
 
