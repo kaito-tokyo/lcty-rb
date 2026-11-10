@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # LCTYSP-0013: Conversation file (`lcty-msg`)
 
 - Status: Draft. It is to supersede [LCTYSP-0003](LCTYSP-0003_conversation-file.md), which describes the files of
-  today, once the pages write this format; the RPC prototype writes it already, into `c-next/`.
+  today, once the pages write this format; the RPC prototype writes it already, into `c/`.
 - Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md) (the current format, and the rules this one keeps: the head,
   the title slot, characters XML cannot represent, the presentation allowlist),
   [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (the protocol that writes it)

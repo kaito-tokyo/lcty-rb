@@ -157,6 +157,7 @@ methods:
       - $ref: "#/components/errors/Locked"
       - $ref: "#/components/errors/Invalid"
       - $ref: "#/components/errors/NotFound"
+      - $ref: "#/components/errors/Former"
 
   - name: c.append.thinking
     x-receiver: server
@@ -200,6 +201,7 @@ methods:
       - $ref: "#/components/errors/Locked"
       - $ref: "#/components/errors/Invalid"
       - $ref: "#/components/errors/NotFound"
+      - $ref: "#/components/errors/Former"
 
   - name: c.append.cmd
     x-receiver: server
@@ -238,6 +240,7 @@ methods:
       - $ref: "#/components/errors/Locked"
       - $ref: "#/components/errors/Invalid"
       - $ref: "#/components/errors/NotFound"
+      - $ref: "#/components/errors/Former"
 
   - name: c.unappend
     x-receiver: server
@@ -259,6 +262,7 @@ methods:
     errors:
       - $ref: "#/components/errors/Conflict"
       - $ref: "#/components/errors/NotFound"
+      - $ref: "#/components/errors/Former"
 
   - name: c.subscribe
     x-receiver: server
@@ -342,6 +346,75 @@ methods:
             type: array
             items:
               $ref: "#/components/schemas/RecordCount"
+
+  - name: c.stats.put
+    x-receiver: server
+    summary: Record what was measured of a reply
+    description: >-
+      timings, usage and client of a reply, which LCTYSP-0013 keeps out of the conversation file, go to lcty_c.sqlite,
+      keyed by the id of the reply's model lcty-msg; what was recorded for it is replaced. It may be sent before or
+      after the reply is appended. It is not a change of a copy of the pages, so it has no version and no notification:
+      the pages read the stats with c.stats.list.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: id
+        required: true
+        schema:
+          description: msg-m- and a UUIDv7, the id of the reply
+          type: string
+      - name: timings
+        schema:
+          type: [object, "null"]
+      - name: usage
+        schema:
+          type: [object, "null"]
+      - name: client
+        schema:
+          type: [object, "null"]
+    result:
+      name: recorded
+      schema:
+        type: object
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.stats.list
+    x-receiver: server
+    summary: What was measured of every reply of a conversation
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+    result:
+      name: stats
+      schema:
+        type: object
+        required: [items]
+        properties:
+          items:
+            description: Ordered by id; timings, usage and client are null when not measured
+            type: array
+            items:
+              type: object
+              required: [id, timings, usage, client]
+              properties:
+                id:
+                  type: string
+                timings:
+                  type: [object, "null"]
+                usage:
+                  type: [object, "null"]
+                client:
+                  type: [object, "null"]
+    errors:
+      - $ref: "#/components/errors/NotFound"
 
   - name: c.update.title
     x-receiver: server
@@ -627,3 +700,11 @@ components:
     Exists:
       code: 5
       message: the conversation exists
+    Former:
+      code: 6
+      message: the conversation is in the format of LCTYSP-0003; convert it with lcty.rb convert
+      data:
+        type: object
+        properties:
+          cid:
+            type: string

@@ -31,6 +31,8 @@ module RpcSupport
       # A search index of its own, in a folder of its own, for the cache of the counts (c_recordcount)
       index_dir = Dir.mktmpdir('lcty-rpc-index-')
       Rpc.index = Chatty::SearchIndex.new(File.join(index_dir, '_index.sqlite'))
+      # and a CStore of its own for c.stats.put and c.stats.list
+      Rpc.c_store = Chatty::CStore.new(File.join(index_dir, 'lcty_c.sqlite'))
       Minitest.after_run { FileUtils.rm_rf(index_dir) }
       server = WEBrick::HTTPServer.new(BindAddress: '127.0.0.1', Port: 0, Logger: WEBrick::Log.new(File::NULL),
                                        AccessLog: [], DoNotReverseLookup: true)

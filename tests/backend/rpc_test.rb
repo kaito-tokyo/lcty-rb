@@ -241,6 +241,83 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
+  scenario 'A conversation of LCTYSP-0003 is never written but its title' do
+    cid = before = u = errors = nil
+    step('Given a conversation file of LCTYSP-0003 in c/ with a user message') do
+      cid = new_cid
+      u = Chatty::Uuid.v7
+      FileUtils.mkdir_p(Rpc::ConvStore::DIR)
+      File.write(Rpc::ConvStore.path(cid), Chatty::ConvHtml.document(
+        [{ 'type' => 'meta', 'id' => cid, 'created_at' => '2026-11-09T12:00:00+09:00', 'tags' => [], 'instructions' => 'sys' },
+         { 'type' => 'message', 'id' => u, 'role' => 'user', 'at' => '2026-11-09T12:00:00+09:00', 'content' => 'q' }]
+      ))
+      before = File.read(Rpc::ConvStore.path(cid))
+    end
+    step('When a message is appended to it and its last element is unappended') do
+      errors = [append(cid, "c-msg-#{u}", user_attrs)['error'], unappend(cid, "c-msg-#{u}")['error']]
+    end
+    step('Then both are refused with error 6 and the file has not changed') do
+      assert_equal [6, 6], errors.map { |e| e['code'] }
+      assert_equal({ 'cid' => cid }, errors[0]['data'])
+      assert_equal before, File.read(Rpc::ConvStore.path(cid))
+    end
+    step('And c.update.title still changes its title') do
+      assert_equal 'New', rpc('c.update.title', 'cid' => cid, 'title' => 'New')['result']['title']
+      assert_equal before.lines.drop(3), File.read(Rpc::ConvStore.path(cid)).lines.drop(3)
+    end
+  end
+
+  scenario 'A user or model message brings the search index up to date' do
+    cid = m = nil
+    hits = -> { Rpc.index.keyword_search('zebrafish').map { |h| h['conv_id'] } }
+    step('Given a conversation') { cid = create }
+    step('When a user message and a model message are appended') do
+      u = user_attrs('q')
+      m = model_attrs('zebrafish')
+      append(cid, nil, u)
+      append(cid, u['id'], m)
+    end
+    step('Then the search index finds the round by a word of the reply') { assert_equal [cid], hits.() }
+    step('When the model message is unappended') { unappend(cid, m['id']) }
+    step('Then the search index no longer finds it') { assert_equal [], hits.() }
+  end
+
+  # ---- What was measured of a reply ----
+
+  scenario 'c.stats.put records what was measured of a reply and c.stats.list returns it' do
+    cid = id = nil
+    step('Given a conversation') { cid = create }
+    step('When c.stats.put records timings and usage for a model message') do
+      id = "msg-m-#{Chatty::Uuid.v7}"
+      r = rpc('c.stats.put', 'cid' => cid, 'id' => id, 'timings' => { 'prompt_n' => 3 }, 'usage' => { 'output_tokens' => 2 })
+      assert_equal({}, r['result'])
+    end
+    step('Then c.stats.list returns them for its id, with client null') do
+      assert_equal [{ 'id' => id, 'timings' => { 'prompt_n' => 3 }, 'usage' => { 'output_tokens' => 2 }, 'client' => nil }],
+                   rpc('c.stats.list', 'cid' => cid)['result']['items']
+    end
+    step('And c.stats.put again replaces them') do
+      rpc('c.stats.put', 'cid' => cid, 'id' => id, 'client' => { 'ttft_ms' => 5 })
+      assert_equal [{ 'id' => id, 'timings' => nil, 'usage' => nil, 'client' => { 'ttft_ms' => 5 } }],
+                   rpc('c.stats.list', 'cid' => cid)['result']['items']
+    end
+  end
+
+  {
+    'an id that is not a reply' => [->(cid) { { 'cid' => cid, 'id' => "msg-u-#{Chatty::Uuid.v7}" } }, 3],
+    'timings that are not object' => [->(cid) { { 'cid' => cid, 'id' => "msg-m-#{Chatty::Uuid.v7}", 'timings' => 'x' } }, 3],
+    'an unknown conversation' => [->(_cid) { { 'cid' => new_cid, 'id' => "msg-m-#{Chatty::Uuid.v7}" } }, 4]
+  }.each do |what, (params, code)|
+    scenario "c.stats.put refuses a bad request (#{what})" do
+      cid = r = nil
+      step('Given a conversation') { cid = create }
+      step('When c.stats.put is called with the params of the example') do
+        r = rpc('c.stats.put', instance_exec(cid, &params))
+      end
+      step("Then the error is #{code}") { assert_equal code, r['error']['code'] }
+    end
+  end
+
   # ---- Following a conversation ----
 
   scenario 'Element notifications go only to the page following the conversation' do

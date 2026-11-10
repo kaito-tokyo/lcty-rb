@@ -281,6 +281,16 @@ module Lcty
         { 'version' => version, 'items' => items }
       end,
 
+      # Record what was measured of a reply: {cid, id, timings, usage, client}. Not a change of a copy of the pages
+      # (they read it with c.stats.list), so it has no version and no notification.
+      'c.stats.put' => lambda do |p, _peer|
+        ConvStore.put_stats(p)
+        {}
+      end,
+
+      # What was measured of every reply of a conversation: {cid}
+      'c.stats.list' => ->(p, _peer) { { 'items' => ConvStore.list_stats(p['cid']) } },
+
       # Change the title: {cid, title}. The server fits it into the slot; the result is the title as written.
       'c.update.title' => lambda do |p, peer|
         title = nil

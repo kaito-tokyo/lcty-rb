@@ -23,8 +23,12 @@ JSON-RPC 2.0. A page keeps a WebSocket open to it: it sends requests and gets th
 notification of every change to every connection that receives it, numbered by a global version. The WebSocket is the
 only transport: a page always has one, and so do tools and tests. Reading everything at once stays plain `GET`.
 
-The prototype writes conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) into a
-directory of its own, `c-next/` of the data directory, so it never touches the real conversations.
+The prototype writes conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) into
+`c/` of the data directory, with every other conversation. A file of
+[LCTYSP-0003](LCTYSP-0003_conversation-file.md) there, not converted yet (`lcty.rb convert`), is read but never
+written, except its title slot. Every write that appends or removes a `user` or `model` message also brings the
+search index up to date ([LCTYSP-0007](LCTYSP-0007_search.md)), as the HTTP API does for the files it writes; the
+other elements change no round of the index.
 
 ## Transports
 
@@ -63,6 +67,8 @@ Every message follows [JSON-RPC 2.0](https://www.jsonrpc.org/specification):
   - `3` invalid: the element breaks a rule of the format; `message` says which.
   - `4` not found: there is no such conversation.
   - `5` exists: the conversation already exists.
+  - `6` former: the conversation is in the format of LCTYSP-0003, which is never appended to or removed from here;
+    `data.cid` is its id. Converting it (`lcty.rb convert`) makes it writable.
 
 ## The global version
 
@@ -141,6 +147,12 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
 - **The title** is changed with `c.update.title`, which the server fits into the slot and answers as written. The slot
   is in the middle of the file, so no id guards it: the last title written wins, which is enough for a value that is
   only shown. It is allowed while an `lcty-cmd` holds the conversation, and sends a `c_meta` record.
+- **What was measured of a reply** (`timings`, `usage`, `client`) is kept out of the file
+  ([LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md#moving-existing-files)), in `message_stats` of
+  `lcty_c.sqlite`. `c.stats.put {cid, id, timings, usage, client}` records it for the reply whose `model` element has
+  the id `id` (`msg-m-…`), replacing what was there, before or after the reply is appended. `c.stats.list {cid}`
+  returns it for every reply of a conversation. It is not a copy of the pages, so it gets no version and no
+  notification: another tab sees it when it reads it again.
 - **A page follows one conversation.** `c_html` records go only to the connections that follow their conversation,
   set by `c.subscribe {cid, last}`; a page shows one conversation, so a connection follows at most one, and a new
   `c.subscribe` replaces the old one (`cid: null` follows none). The other records go to every connection that

@@ -18,6 +18,7 @@ require_relative 'tag_store'
 require_relative 'tag_files'
 require_relative 'search_index'
 require_relative 'v1/vector_db'
+require_relative 'c_store'
 
 module Chatty
   module Store
@@ -337,7 +338,7 @@ module Chatty
 
   # At startup: bring the files of the layout before to this one (tags.sqlite renamed to lcty_t.sqlite, the vectors of
   # the old _index.sqlite carried over to lcty_fuzzy_search.sqlite), discard _index.sqlite, open the stores (TAG_FILES,
-  # TAGS, INDEX, VECTORS), fill the index from the files, garbage-collect vectors and delete the cache files of the
+  # TAGS, C_STORE, INDEX, VECTORS), fill the index from the files, garbage-collect vectors and delete the cache files of the
   # former layout (LCTYSP-0015).
   def self.open_data
     FileUtils.mkdir_p(CONV_DIR)
@@ -346,6 +347,7 @@ module Chatty
     SearchIndex.discard(INDEX_PATH)
     const_set(:TAG_FILES, TagFiles.new(TAG_DIR, TAG_LOCK_PATH))
     const_set(:TAGS, TagStore.new(TAGS_DB_PATH))
+    const_set(:C_STORE, CStore.new(C_DB_PATH))
     const_set(:INDEX, SearchIndex.new(INDEX_PATH))
     const_set(:VECTORS, V1::VectorDB.new(INDEX, DATA_DIR))
     Store.migrate_heads
