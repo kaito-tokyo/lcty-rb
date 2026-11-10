@@ -3,18 +3,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { getTags } from "../js/api/lcty-t.js";
+import { connectRpc, RpcError } from "../js/api/rpc.js";
 import {
 	appendLines,
 	deleteConversation,
 	getConversation,
-	popMessages,
-	toLine,
 } from "../js/api/storage.js";
 import {
 	appIndexer,
 	backendOf,
 	loadSettings,
-	newMsgId,
 	nowIso,
 	showToast,
 } from "../js/common.js";
@@ -23,32 +21,41 @@ import { stream } from "../js/llm/client.js";
 import { buildRequest } from "../js/llm/history.js";
 import { sortTags, tagRef } from "../js/tag-names.js";
 import { openMemoryDialog, proposeMemory } from "../js/tags.js";
-import { appendCommand, defineCommands } from "../js/ui/lcty-cmd.js";
+import { defineCommands } from "../js/ui/lcty-cmd.js";
 // Element features (the structure comes from the custom elements in /lcty.v1/lcty.v1.cjs, which expose their inner elements as fields. LCTYSP-0005)
 import {
 	appendMessage,
 	appendText,
 	appendThinking,
+	describeTimings,
 	finishMessage,
 	focusComposer,
 	initConversationElements,
 	isLctyMsgFile,
-	messageOf,
-	readLctyMsgs,
 	readMessages,
-	removeFrom,
 	setComposerBusy,
 	setComposerValue,
 } from "../js/ui/lcty-elements.js";
+import {
+	cmdAttrs,
+	elementOf,
+	historyOf,
+	lastElement,
+	msgAttrs,
+	replyArticle,
+	thinkingAttrs,
+	userArticle,
+} from "../js/ui/lcty-msg.js";
 // lcty.v1.async.mjs: the entry of the conversation page /c/<id>.html (LCTYSP-0005). Line 2 of a conversation file loads
 // lcty.v1.js (redirected to lcty.v1.cjs: the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese
 // texts) and links lcty.v1.css. <lcty-c> imports this module once the page has loaded, so it never blocks rendering; it
 // then attaches the event listeners and features the page needs. Served as it is from public/lcty.v1/, not bundled: the browser imports the modules
 // in public/js/ through the paths below (../js/…, js/ of the site), so the features work over HTTP only.
 //
-// The conversation file itself (data/c/<id>.html); the conversation is rebuilt from the elements in <lcty-c>. New
-// conversations are made on the new conversation page, /c/ next to it ("./", js/pages/new.js). Saving is append-only;
-// the one exception is popping the last turn (LCTYSP-0004).
+// The conversation file itself (data/c/<id>.html), of LCTYSP-0013 (lcty-msg): the page writes it through /v1/rpc, one
+// element at a time at its end, and puts into its document the same element it sent (LCTYSP-0012, LCTYSP-0014). A
+// file of LCTYSP-0003 is shown read-only until lcty.rb convert converts it. New conversations are made on the new
+// conversation page, /c/ next to it ("./", js/pages/new.js).
 import { initSidebar } from "../js/ui/sidebar.js";
 import { textAttr } from "../js/ui/text-attr.js";
 import { UUID_RE } from "../js/uuid.js";
@@ -56,20 +63,23 @@ import { UUID_RE } from "../js/uuid.js";
 // The frame and the message list are <lcty-c> (built by lcty.v1.cjs during parsing. LCTYSP-0005). Its inner elements are taken from fields
 const log = document.querySelector("lcty-c");
 const { composer } = log;
-// A file of LCTYSP-0013 (lcty-msg) is shown read-only until the pages write it through /v1/rpc: the writes of
-// /v1/conversations would add elements of LCTYSP-0003 to it, so the server refuses them (409). The title, the tags and
-// deleting still work.
-const readOnly = isLctyMsgFile(log);
+// A file of LCTYSP-0003 is only shown: /v1/rpc refuses to write it (error 6), and the pages no longer write the HTTP API's
+// lines. The title, the tags and deleting still work.
+const former = !isLctyMsgFile(log);
+const cid = log.id.replace(/^c-/, ""); // id="c-<conversation id>" (LCTYSP-0003)
+// The lcty-cmd the new conversation page appended, which this tab runs as its own (js/pages/new.js)
+const RUN_KEY = `lcty.run.${cid}`;
 
 const state = {
 	settings: null,
 	conv: null, // { meta, title, messages, tags }
-	persisted: false, // Whether the file has been read (always true once started: the file exists before this page opens)
 	busy: false,
 	abort: null,
-	running: null,
 	tagDefs: [],
 	tagDefsLoaded: false,
+	outOfSync: false, // the file no longer follows the server (LCTYSP-0014): nothing more is written
+	cmdId: null, // the lcty-cmd this page holds while it generates (answered to c.cmd.holds)
+	writes: Promise.resolve(), // writes are sent one after another, each naming the last element of the one before
 };
 
 const backend = () => backendOf(state.settings);
@@ -79,7 +89,7 @@ const panel = initSidebar(log.sidebar, {
 	getSettings: () => state.settings,
 	// A round of this conversation: scroll to it instead of reloading
 	onSelect: ({ id, chunkId }) => {
-		if (id !== state.conv?.meta.id || !state.persisted) return false;
+		if (id !== cid) return false;
 		if (chunkId) focusMessage(chunkId);
 		return true;
 	},
@@ -91,61 +101,173 @@ const panel = initSidebar(log.sidebar, {
 	},
 });
 const indexer = appIndexer(() => state.settings);
-const lastIndex = (msgs, role) => {
-	for (let i = msgs.length - 1; i >= 0; i--)
-		if (msgs[i].role === role) return i;
-	return -1;
-};
 const splitTags = (s) => (s || "").split(/\s+/).filter(Boolean);
 
 // ---- Building the conversation ----
 
-/** Build the conversation from the elements of the conversation file (LCTYSP-0003). */
+/**
+ * The conversation as the features need it, from the document: {meta, title, tags, messages}. For a file of
+ * LCTYSP-0013 the instructions and messages are what the model is sent (historyOf); for one of LCTYSP-0003 the
+ * lcty-setup and the lcty-message elements.
+ */
 function convFromDom() {
-	// The meta is <lcty-c>'s attributes and the first lcty-setup, written once at creation (LCTYSP-0003)
-	if (!log.id) return null;
 	const d = log.dataset;
-	const setup = log.querySelector(":scope > lcty-setup");
-	const meta = {
-		id: log.id.replace(/^c-/, ""), // id="c-<conversation id>" (LCTYSP-0003)
-		created_at: d.createdAt,
-		instructions: (setup && textAttr(setup, "data-instructions")) ?? "",
-	};
-	// The tags at creation are data-setup-tags. The current tags are not in the file (tags.sqlite, LCTYSP-0009): they
-	// start as the tags at creation and are loaded from the server at startup (loadConvTags)
-	meta.tags = splitTags(d.setupTags);
+	const tags = state.conv?.tags ?? splitTags(d.setupTags);
+	let instructions;
+	let messages;
+	if (former) {
+		const setup = log.querySelector(":scope > lcty-setup");
+		instructions = (setup && textAttr(setup, "data-instructions")) ?? "";
+		messages = readMessages(log);
+	} else ({ instructions, messages } = historyOf(log));
 	return {
-		meta,
-		title: document.querySelector("title")?.textContent || "", // the <title> on line 2, in the head (LCTYSP-0003)
-		tags: meta.tags,
-		messages: readOnly ? readLctyMsgs(log) : readMessages(log),
+		meta: { id: cid, created_at: d.createdAt, instructions, tags },
+		title:
+			state.conv?.title ?? document.querySelector("title")?.textContent ?? "",
+		tags,
+		messages,
 	};
 }
 
-// ---- Saving (serialized; each line's content is fixed at call time) ----
+// ---- Writing through /v1/rpc (LCTYSP-0012) ----
 
-let saveChain = Promise.resolve();
-function enqueue(task) {
-	saveChain = saveChain
-		.then(task)
-		.catch((e) =>
+const rpc = former
+	? null
+	: connectRpc({
+			onNotify: { "c.batch.updated": onBatch },
+			onRequest: {
+				// whether this page holds the lcty-cmd another page found at the end (LCTYSP-0014)
+				"c.cmd.holds": ({ cid: c, id }) => ({
+					holds: c === cid && state.cmdId === id,
+				}),
+			},
+			onOpen: subscribe,
+		});
+
+/** Follow this conversation, and check that the document is still the file (LCTYSP-0014, Starting). */
+async function subscribe() {
+	try {
+		const r = await rpc.call("c.subscribe", {
+			cid,
+			last: lastElement(log)?.id ?? null,
+		});
+		if (!r.current) outOfSync();
+	} catch (e) {
+		showToast(
+			tr("saveFailed", "Failed to save: {error}", { error: e.message }),
+		);
+	}
+}
+
+// A change of this conversation made by another page: the document no longer follows the file (LCTYSP-0014). The
+// page's own changes are already in its document.
+function onBatch({ actorId, records }) {
+	if (actorId === rpc.actorId) return;
+	if (records.some((r) => r.store === "c_html" && r.row.cid === cid))
+		outOfSync();
+	else panel.refresh();
+}
+
+/** The document no longer follows the file: nothing more is written, and the user is asked to reload (LCTYSP-0014). */
+function outOfSync() {
+	if (state.outOfSync) return;
+	state.outOfSync = true;
+	state.abort?.abort();
+	disableComposer(
+		tr(
+			"outOfSync",
+			"This conversation changed in another tab. Reload the page.",
+		),
+	);
+	showToast(
+		tr(
+			"outOfSync",
+			"This conversation changed in another tab. Reload the page.",
+		),
+	);
+}
+
+function disableComposer(placeholder) {
+	composer.input.disabled = true;
+	composer.sendButton.disabled = true;
+	composer.input.placeholder = placeholder;
+	log.toggleAttribute("data-read-only", true);
+}
+
+/**
+ * Run write after the writes before it. A conflict or a lock it did not expect means another page wrote (LCTYSP-0014):
+ * the page is out of sync. Any other failure is shown. Rejects as write did.
+ */
+function serial(write) {
+	const run = state.writes.then(() => {
+		if (state.outOfSync)
+			throw new Error(
+				tr(
+					"outOfSync",
+					"This conversation changed in another tab. Reload the page.",
+				),
+			);
+		return write();
+	});
+	state.writes = run.catch(() => {});
+	return run.catch((e) => {
+		if (e instanceof RpcError && (e.code === 1 || e.code === 2)) outOfSync();
+		else if (!state.outOfSync)
 			showToast(
 				tr("saveFailed", "Failed to save: {error}", { error: e.message }),
-			),
+			);
+		throw e;
+	});
+}
+
+/** Append one element after the last one, and put it into the document as written. Returns the element. */
+async function append(method, tag, attrs, innerHTML = "") {
+	const r = await rpc.call(method, {
+		cid,
+		after: lastElement(log)?.id ?? null,
+		attrs,
+		...(tag === "lcty-cmd" ? {} : { innerHTML }),
+	});
+	const el = elementOf(tag, r.attrs, innerHTML);
+	log.append(el);
+	markLast();
+	return el;
+}
+
+/** Remove the last element of the file, and from the document. */
+async function unappend() {
+	const el = lastElement(log);
+	if (!el) return;
+	await rpc.call("c.unappend", { cid, id: el.id });
+	el.remove();
+	markLast();
+}
+
+/** Change the title: the server fits it into the slot and answers it as written. */
+async function setTitle(title) {
+	const r = await rpc.call("c.update.title", { cid, title });
+	state.conv.title = r.title;
+	renderHeader();
+	panel.refresh();
+}
+
+// Undo shows on the last user message only and regenerate on the last reply when it ends the conversation
+// (lcty.v1.css): CSS cannot select them, so they are marked
+function markLast() {
+	const msgs = [
+		...log.querySelectorAll(
+			':scope > lcty-msg:is([data-role="user"], [data-role="model"])',
+		),
+	];
+	const lastUser = msgs.findLast((m) => m.dataset.role === "user");
+	const last = msgs[msgs.length - 1];
+	for (const m of msgs) {
+		m.toggleAttribute("data-last-user", m === lastUser);
+		m.toggleAttribute(
+			"data-last-model",
+			m === last && m.dataset.role === "model" && lastElement(log) === m,
 		);
-	return saveChain;
-}
-
-/** Append lines to the conversation file. */
-function persist(lines) {
-	const id = state.conv.meta.id;
-	const snapshot = structuredClone(lines);
-	return enqueue(() => appendLines(id, snapshot));
-}
-
-function pop(from) {
-	const id = state.conv.meta.id;
-	return enqueue(() => popMessages(id, from));
+	}
 }
 
 // ---- Rendering ----
@@ -178,16 +300,24 @@ function renderTags() {
 			state.tagDefs.map((t) => t.name).join(" "),
 		);
 	}
+	// A file of LCTYSP-0013 has no data-setup-tags, from which the frame draws its chips: they are the current tags
+	if (!former) log.dataset.setupTags = state.conv.tags.join(" ");
 	log.proposeMemoryButton.disabled =
 		state.busy || (state.tagDefsLoaded && !state.conv.tags.some(knownTag));
 }
 
+// The tags are kept in lcty_t.sqlite, not in the file (LCTYSP-0009): the HTTP API's tags line, for either format
 function setConvTags(tags) {
 	const conv = state.conv;
 	conv.tags = sortTags(state.tagDefs, tags);
-	const line = { type: "tags", tags: conv.tags, at: nowIso() }; // the server keeps it in tags.sqlite, not in the file
 	renderTags();
-	if (state.persisted) persist([line]).then(() => panel.refresh());
+	appendLines(cid, [{ type: "tags", tags: conv.tags, at: nowIso() }])
+		.then(() => panel.refresh())
+		.catch((e) =>
+			showToast(
+				tr("saveFailed", "Failed to save: {error}", { error: e.message }),
+			),
+		);
 }
 
 log.tags.addEventListener("click", (e) => {
@@ -214,11 +344,9 @@ function setBusy(b) {
 
 /** Scroll to the round matched by search (the user message id) and highlight it briefly. */
 function focusMessage(msgId) {
-	const el = readOnly
-		? document.getElementById(`msg-u-${msgId}`)
-		: [...log.querySelectorAll(":scope > lcty-message")].find(
-				(c) => messageOf(c).id === msgId,
-			);
+	const el = document.getElementById(
+		former ? `c-msg-${msgId}` : `msg-u-${msgId}`,
+	);
 	if (!el) return;
 	el.scrollIntoView({ block: "start" });
 	for (const t of [el, el.nextElementSibling]) {
@@ -231,21 +359,45 @@ function focusMessage(msgId) {
 
 // ---- Sending and generating ----
 
+const canWrite = () => !former && !state.outOfSync && !state.busy;
+
 async function onSend(text) {
-	if (state.busy) return;
-	const conv = state.conv;
-	const firstTitle = !conv.title;
-	if (firstTitle) conv.title = text.trim().split("\n")[0].slice(0, 30);
-	const user = { id: newMsgId(), role: "user", content: text, at: nowIso() };
-	conv.messages.push(user);
-	appendMessage(log, user);
-	setComposerValue(composer, "");
-	renderHeader();
-	const lines = [toLine(user)];
-	if (firstTitle)
-		lines.unshift({ type: "title", title: conv.title, at: nowIso() });
-	persist(lines);
-	appendCommand(log, "send"); // in memory only: generates now, nothing to resume after the page closes (LCTYSP-0004)
+	if (!canWrite() || lastElement(log)?.localName === "lcty-cmd") return;
+	setBusy(true);
+	try {
+		await serial(async () => {
+			const firstTitle = !state.conv.title;
+			await append(
+				"c.append.msg",
+				"lcty-msg",
+				msgAttrs("user", text, { at: nowIso() }),
+				userArticle(text),
+			);
+			setComposerValue(composer, "");
+			if (firstTitle) await setTitle(text.trim().split("\n")[0].slice(0, 30));
+		});
+	} catch {
+		setBusy(false);
+		return;
+	}
+	setBusy(false);
+	startCommand();
+}
+
+/**
+ * Take the lock (LCTYSP-0013): append an lcty-cmd send, which runs at once as this page's own (defineCommands below)
+ * and generates the reply.
+ */
+function startCommand() {
+	if (!canWrite()) return;
+	return serial(async () => {
+		const el = await append(
+			"c.append.cmd",
+			"lcty-cmd",
+			cmdAttrs("send", nowIso()),
+		);
+		state.cmdId = el.id;
+	}).catch(() => {});
 }
 
 /**
@@ -258,128 +410,219 @@ function titleFromReply(content) {
 	return title || null;
 }
 
-/** Generate a reply (the send command runs this). controller aborts it: the command's stop button and the composer's both do. */
-async function generate(controller = new AbortController()) {
-	const conv = state.conv;
-	const req = buildRequest({ ...conv.meta, messages: conv.messages }); // built before the generating assistant message is added
+/**
+ * Generate a reply: the operation of this page's lcty-cmd send. The reply streams into a draft shown after the
+ * lcty-cmd, which is never written. When it has finished, the lcty-cmd is removed and the thinking and the reply are
+ * appended, then what was measured is recorded (c.stats.put). When it is stopped or fails, the lcty-cmd is replaced by
+ * one with data-error, which stays until the user retries or removes it, and the draft is dropped.
+ */
+async function generate(cmd, controller) {
+	state.cmdId = cmd.id;
+	const { instructions, messages } = historyOf(log);
+	const req = buildRequest({ instructions, messages });
 	const msg = {
-		id: newMsgId(),
 		role: "assistant",
 		content: "",
 		thinking: "",
 		status: "streaming",
 	};
-
 	state.abort = controller;
 	setBusy(true);
 	const t0 = performance.now();
 	let tFirst = null;
-
-	const iter = stream({
-		backend: backend(),
-		...req,
-		signal: state.abort.signal,
-	});
-	let next = iter.next();
-	conv.messages.push(msg);
-	const el = appendMessage(log, msg);
-
-	const run = (async () => {
-		try {
-			for (;;) {
-				const { value: ev, done } = await next;
-				if (done) break;
-				if (ev.type === "text") {
-					tFirst ??= performance.now();
-					msg.content += ev.delta;
-					appendText(el, ev.delta);
-				} else if (ev.type === "thinking") {
-					tFirst ??= performance.now();
-					msg.thinking += ev.delta;
-					appendThinking(el, ev.delta);
-				} else if (ev.type === "done") {
-					msg.status = ev.incomplete ? "incomplete" : "completed";
-					if (ev.timings) msg.timings = ev.timings;
-					if (ev.usage) msg.usage = ev.usage;
-				} else if (ev.type === "error") {
-					throw new Error(ev.message);
-				}
-				next = iter.next();
-			}
-			if (msg.status === "streaming") msg.status = "incomplete";
-		} catch (e) {
-			msg.status = "incomplete";
-			if (e.name !== "AbortError") msg.error = e.message;
-		} finally {
-			if (!msg.thinking) delete msg.thinking;
-			msg.client = {
-				ttft_ms: tFirst == null ? null : Math.round(tFirst - t0),
-				total_ms: Math.round(performance.now() - t0),
-			};
-			msg.at = nowIso();
-			finishMessage(el);
-			const lines = [toLine(msg)];
-			const heading = titleFromReply(msg.content);
-			if (heading && heading !== conv.title) {
-				conv.title = heading;
-				lines.push({ type: "title", title: heading, at: msg.at });
-				renderHeader();
-			}
-			const saved = persist(lines);
-			state.abort = null;
-			state.running = null;
-			setBusy(false);
-			saved.then(() => {
-				panel.current = state.conv.meta.id;
-				panel.refresh();
-				indexer.kick();
-			});
+	let error = null;
+	const draft = appendMessage(log, msg);
+	draft.toggleAttribute("data-draft", true);
+	try {
+		for await (const ev of stream({
+			backend: backend(),
+			...req,
+			signal: controller.signal,
+		})) {
+			if (ev.type === "text") {
+				tFirst ??= performance.now();
+				msg.content += ev.delta;
+				appendText(draft, ev.delta);
+			} else if (ev.type === "thinking") {
+				tFirst ??= performance.now();
+				msg.thinking += ev.delta;
+				appendThinking(draft, ev.delta);
+			} else if (ev.type === "done") {
+				if (ev.incomplete) error = tr("incomplete", "The reply was cut off");
+				msg.timings = ev.timings;
+				msg.usage = ev.usage;
+			} else if (ev.type === "error") throw new Error(ev.message);
 		}
-	})();
-	state.running = run;
-	await run;
+	} catch (e) {
+		error = e.name === "AbortError" ? tr("stopped", "Stopped") : e.message;
+	}
+	if (controller.signal.aborted && !error) error = tr("stopped", "Stopped");
+	finishMessage(draft);
+	const at = nowIso();
+	const client = {
+		ttft_ms: tFirst == null ? null : Math.round(tFirst - t0),
+		total_ms: Math.round(performance.now() - t0),
+	};
+	try {
+		await serial(async () => {
+			draft.remove();
+			await unappend(); // the lcty-cmd
+			state.cmdId = null;
+			if (error != null) {
+				await append("c.append.cmd", "lcty-cmd", cmdAttrs("send", at, error));
+				return;
+			}
+			if (msg.thinking)
+				await append(
+					"c.append.thinking",
+					"lcty-thinking",
+					thinkingAttrs(msg.thinking, at),
+					replyArticle(msg.thinking),
+				);
+			const reply = await append(
+				"c.append.msg",
+				"lcty-msg",
+				msgAttrs("model", msg.content, { at }),
+				replyArticle(msg.content),
+			);
+			await rpc.call("c.stats.put", {
+				cid,
+				id: reply.id,
+				timings: msg.timings ?? null,
+				usage: msg.usage ?? null,
+				client,
+			});
+			showStats(reply, { timings: msg.timings, client });
+			const heading = titleFromReply(msg.content);
+			if (heading && heading !== state.conv.title) await setTitle(heading);
+		});
+	} catch {
+		// shown by serial
+	} finally {
+		draft.remove();
+		state.cmdId = null;
+		state.abort = null;
+		setBusy(false);
+		panel.refresh();
+		indexer.kick();
+	}
+}
+
+// ---- What was measured of the replies (lcty_c.sqlite, LCTYSP-0013) ----
+
+/** Show a reply's ⓘ with its timings (part of <lcty-msg>, lcty.v1.cjs), when there are any. */
+function showStats(el, stats) {
+	if (!el.foot) return;
+	const text = describeTimings(stats);
+	el.timings.textContent = text;
+	el.foot.hidden = !text;
+}
+
+/** Read what was measured of every reply of the conversation, and show it. */
+async function loadStats() {
+	const { items } = await rpc.call("c.stats.list", { cid });
+	for (const s of items) {
+		const el = document.getElementById(s.id);
+		if (el?.localName === "lcty-msg") showStats(el, s);
+	}
+}
+
+// ---- A lock at the end that this page did not start (LCTYSP-0013, LCTYSP-0014) ----
+
+// Wire Retry and Remove of an lcty-cmd that failed or that nobody holds: Remove takes it away, Retry also takes the lock
+// again
+function wireCmd(cmd) {
+	cmd.removeButton.onclick = () => {
+		if (canWrite()) serial(unappend).catch(() => {});
+	};
+	cmd.retryButton.onclick = () => {
+		if (!canWrite()) return;
+		serial(unappend)
+			.then(() => startCommand())
+			.catch(() => {});
+	};
+}
+
+/** The lcty-cmd at the end when the page opens: run it (this tab made it), or ask who holds it. */
+// Before <lcty-cmd> is defined: the lcty-cmd at the end runs only when this tab made it; any other one (but a failed one,
+// which shows itself so) is marked stale, so it does not run. Returns it, or null.
+function markLock() {
+	const cmd = lastElement(log);
+	if (cmd?.localName !== "lcty-cmd") return null;
+	let mine = false;
+	try {
+		mine = sessionStorage.getItem(RUN_KEY) === cmd.id;
+		sessionStorage.removeItem(RUN_KEY);
+	} catch {}
+	if (mine || cmd.hasAttribute("data-error")) return null; // runs, or shows itself as failed
+	cmd.setAttribute("state", "stale");
+	return cmd;
+}
+
+// Once it is defined (its label exists): ask whether another tab holds it (c.cmd.held)
+async function checkLock(cmd) {
+	cmd.label.textContent = tr("cmdStale", "A reply was left unfinished");
+	const { held } = await rpc.call("c.cmd.held", { cid, id: cmd.id });
+	if (held) {
+		cmd.setAttribute("state", "held");
+		cmd.label.textContent = tr(
+			"cmdHeld",
+			"A reply is being made in another tab",
+		);
+	} else cmd.label.textContent = tr("cmdStale", "A reply was left unfinished");
 }
 
 // ---- Undo, regenerate, fork (LCTYSP-0004) ----
 
-function onUndo() {
-	if (state.busy) return;
-	const msgs = state.conv.messages;
-	const i = lastIndex(msgs, "user");
-	if (i < 0) return;
-	const text = msgs[i].content;
-	pop(i);
-	msgs.length = i;
-	removeFrom(log, i);
-	renderHeader();
-	setComposerValue(composer, text);
-	focusComposer(composer);
+/** Remove the last turn: every element from the last user message on, one at a time from the end. */
+function onUndo(userEl) {
+	if (!canWrite()) return;
+	const text = textAttr(userEl, "data-content") ?? "";
+	serial(async () => {
+		while (lastElement(log) && lastElement(log) !== userEl) await unappend();
+		await unappend();
+		setComposerValue(composer, text);
+		focusComposer(composer);
+	}).catch(() => {});
 }
 
-async function onRegenerate() {
-	if (state.busy) return;
-	const msgs = state.conv.messages;
-	const i = msgs.length - 1;
-	if (i < 0 || msgs[i].role !== "assistant") return;
-	pop(i);
-	msgs.length = i;
-	removeFrom(log, i);
-	appendCommand(log, "send"); // in memory only (LCTYSP-0004)
+/** Generate the last reply again: remove what follows the last user message, then take the lock. */
+function onRegenerate() {
+	if (!canWrite()) return;
+	const users = log.querySelectorAll(':scope > lcty-msg[data-role="user"]');
+	const lastUser = users[users.length - 1];
+	if (!lastUser) return;
+	serial(async () => {
+		while (lastElement(log) && lastElement(log) !== lastUser) await unappend();
+	})
+		.then(() => startCommand())
+		.catch(() => {});
 }
 
-async function onFork(message) {
+function onFork(userEl) {
 	if (state.busy) return;
-	const i = state.conv.messages.indexOf(message);
+	const i = historyOf(log).messages.findIndex(
+		(m) => `msg-u-${m.id}` === userEl.id,
+	);
 	if (i < 0) return;
-	await saveChain;
-	location.href = `./?fork=${encodeURIComponent(state.conv.meta.id)}&at=${i}`;
+	location.href = `./?fork=${encodeURIComponent(cid)}&at=${i}`;
 }
+
+// The buttons of the messages: one listener for all, since the page appends messages as it goes
+log.addEventListener("click", (e) => {
+	const path = e.composedPath();
+	const el = path.find((n) => n.localName === "lcty-msg");
+	if (!el || former) return;
+	if (path.includes(el.undoButton)) onUndo(el);
+	else if (path.includes(el.forkButton)) onFork(el);
+	else if (path.includes(el.regenerateButton)) onRegenerate();
+});
 
 // ---- Memory proposals (LCTYSP-0009) ----
 
 async function onProposeMemory() {
-	if (state.busy || !state.persisted) return;
-	const conv = state.conv;
+	if (state.busy) return;
+	const conv = convFromDom();
 	const btn = log.proposeMemoryButton;
 	state.abort = new AbortController();
 	setBusy(true);
@@ -396,7 +639,7 @@ async function onProposeMemory() {
 			dialog: log.memoryDialog,
 			proposals,
 			tags,
-			source: { conv_id: conv.meta.id, msg_id: last?.id },
+			source: { conv_id: cid, msg_id: last?.id },
 			toast: showToast,
 			onDone: async () => (state.tagDefs = (await getTags()).tags),
 		});
@@ -416,36 +659,25 @@ async function onProposeMemory() {
 
 // ---- Events ----
 
-// Composer and message buttons (attached by initConversationElements at startup)
-const handlers = {
-	onSend: (text) => onSend(text),
-	onStop: () => state.abort?.abort(),
-	onUndo: () => onUndo(),
-	onRegenerate: () => onRegenerate(),
-	onFork: (el) => onFork(messageOf(el)),
-};
 log.proposeMemoryButton.addEventListener("click", onProposeMemory);
 log.titleInput.addEventListener("change", (e) => {
 	const title = e.target.value.trim();
-	if (title === state.conv.title) return;
-	state.conv.title = title;
-	showTitle(title);
-	persist([{ type: "title", title, at: nowIso() }]).then(() => panel.refresh());
+	if (title === state.conv.title || former || state.outOfSync) return;
+	serial(() => setTitle(title)).catch(() => {});
 });
 log.deleteButton.addEventListener("click", async () => {
-	const conv = state.conv;
 	if (
 		!confirm(
 			tr("confirmDelete", 'Delete "{title}"?', {
-				title: conv.title || tr("untitled", "(untitled)"),
+				title: state.conv.title || tr("untitled", "(untitled)"),
 			}),
 		)
 	)
 		return;
 	state.abort?.abort();
 	try {
-		await saveChain;
-		await deleteConversation(conv.meta.id);
+		await state.writes;
+		await deleteConversation(cid);
 		location.href = "./";
 	} catch (e) {
 		showToast(
@@ -464,28 +696,30 @@ window.addEventListener("beforeunload", (e) => {
 
 (async () => {
 	// The layout is settled by lcty.v1.cjs and the scroll position is the browser's; the module only wires the elements
-	// up. The messages (feet, thinking summaries) and the header are
-	// prepared synchronously, before the settings and the tags are waited for.
-	state.conv = convFromDom();
-	if (!state.conv)
+	// up. The messages (feet, thinking summaries) and the header are prepared synchronously, before the settings and
+	// the tags are waited for.
+	if (!log.id)
 		return showToast(
 			tr(
 				"convLoadFailed",
 				"Could not read the conversation file (<lcty-c> has no id)",
 			),
 		);
-	state.persisted = true;
-	if (readOnly) {
-		composer.input.disabled = true;
-		composer.sendButton.disabled = true;
-		composer.input.placeholder = tr(
-			"lctyMsgReadOnly",
-			"This conversation is in the new format (lcty-msg); it cannot be continued yet.",
+	state.conv = convFromDom();
+	initConversationElements(log, {
+		onSend: (text) => onSend(text),
+		onStop: () => state.abort?.abort(),
+	});
+	if (former)
+		disableComposer(
+			tr(
+				"formerReadOnly",
+				"This conversation is in the former format. Convert it with lcty.rb convert to continue it.",
+			),
 		);
-	} else initConversationElements(log, handlers);
+	markLast();
 	renderHeader();
-	// #c-msg-<UUIDv7> (the message element's id; #msg-u-<UUIDv7> in a file of LCTYSP-0013); a bare #<UUIDv7> from older
-	// links still works
+	// #msg-u-<UUIDv7> (#c-msg-<UUIDv7> in a file of LCTYSP-0003); a bare #<UUIDv7> from older links still works
 	const hashId = decodeURIComponent(location.hash.slice(1)).replace(
 		/^(?:c-msg-|msg-u-)/,
 		"",
@@ -494,10 +728,8 @@ window.addEventListener("beforeunload", (e) => {
 	state.settings = await loadSettings();
 	if (!state.settings) return;
 	try {
-		// The current tags (tags.sqlite), which the file does not have
-		state.conv.tags = (await getConversation(state.conv.meta.id)).tags;
-		// A file of LCTYSP-0013 has no data-setup-tags, from which the frame draws its chips: they are the current tags
-		if (readOnly) log.dataset.setupTags = state.conv.tags.join(" ");
+		// The current tags (lcty_t.sqlite), which the file does not have
+		state.conv.tags = (await getConversation(cid)).tags;
 	} catch (e) {
 		showToast(
 			tr("tagsLoadFailed", "Failed to load the tags: {error}", {
@@ -516,18 +748,27 @@ window.addEventListener("beforeunload", (e) => {
 		);
 	}
 	renderHeader(); // again, with the tag definitions (the tag picker)
-	// Commands (<lcty-cmd>, LCTYSP-0004): defining the element now upgrades the ones in the file; one that is still the last
-	// element (a conversation just created on /, or a creation that was interrupted) runs. send generates a reply to the
-	// last user message. A read-only file runs none: its <lcty-cmd> stays an element of the file.
-	if (!readOnly)
-		defineCommands({
-			send: async (_cmd, controller) => {
-				const msgs = state.conv.messages;
-				if (state.busy || msgs[msgs.length - 1]?.role !== "user") return;
-				await generate(controller);
-			},
-		});
-	panel.current = state.persisted ? state.conv.meta.id : null;
+	if (!former) {
+		loadStats().catch((e) => console.warn("c.stats.list failed", e));
+		// Commands (<lcty-cmd>, LCTYSP-0004): defining the element now upgrades the one at the end of the file; it runs
+		// only when this tab made it (the new conversation page); one that failed or that nobody holds shows Retry and
+		// Remove. send generates a reply to the last user message.
+		const stale = markLock();
+		defineCommands({ send: (cmd, controller) => generate(cmd, controller) });
+		for (const cmd of log.querySelectorAll(":scope > lcty-cmd")) wireCmd(cmd);
+		new MutationObserver((changes) => {
+			for (const c of changes)
+				for (const n of c.addedNodes)
+					if (n.localName === "lcty-cmd") wireCmd(n);
+		}).observe(log, { childList: true });
+		if (stale)
+			checkLock(stale).catch((e) =>
+				showToast(
+					tr("saveFailed", "Failed to save: {error}", { error: e.message }),
+				),
+			);
+	}
+	panel.current = cid;
 	panel.refresh();
 	indexer.kick();
 })();

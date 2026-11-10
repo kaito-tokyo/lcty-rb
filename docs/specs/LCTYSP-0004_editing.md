@@ -52,6 +52,41 @@ only). **If `n` is before the last user message, it is rejected with 409.**
 
 ## Sequences
 
+### Through /v1/rpc (LCTYSP-0013)
+
+The pages write conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) through
+`/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), one element at a time at the end of the file, each naming the
+last element it expects. A file of LCTYSP-0003 is read-only until `lcty.rb convert` converts it; the sequences after
+this section are those of such files, kept for reference.
+
+```
+One turn
+User → UI:      send
+UI   → rpc:     c.append.msg  user lcty-msg (and c.update.title, the first time)
+UI   → rpc:     c.append.cmd  lcty-cmd send: the lock, which runs at once as this page's own
+UI   → llm:     POST /v1/responses (stream), drawn into a draft after the lock, never written
+UI   → rpc:     c.unappend    the lock
+UI   → rpc:     c.append.thinking, c.append.msg model, c.stats.put (and c.update.title from a heading)
+
+Stopped or failed
+UI   → rpc:     c.unappend    the lock;  c.append.cmd  lcty-cmd send with data-error (the draft is dropped)
+User → UI:      Retry (c.unappend, then the lock again) or Remove (c.unappend)
+
+Undo / regenerate
+UI   → rpc:     c.unappend, one element at a time from the end, back to the last user message (undo: it too;
+                regenerate: then the lock again)
+
+Starting a conversation (and a fork)
+UI   → rpc:     c.create, then c.append.msg for the system prompt, the copied messages with new ids (a fork), the
+                first message, and c.append.cmd for the lock; sessionStorage lcty.run.<id> marks the lock as this tab's
+UI   → storage: POST …/lines [tags]   the tags at creation, to lcty_t.sqlite
+UI:             moves to /c/<id>.html, which runs the lock because this tab made it
+```
+
+- A request that names an element that is no longer the last one (`1`) or a lock it did not expect (`2`) means another
+  tab wrote: the page is out of sync and asks for a reload ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
+- A lock the page did not start is not run: the page asks `c.cmd.held` and offers Retry and Remove when no tab holds it.
+
 ### One turn
 
 ```

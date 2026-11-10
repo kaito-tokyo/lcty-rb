@@ -22,8 +22,8 @@ LctyT.addLang("ja", {
 		"タグ（選ぶと、タグのプロンプトとメモリからシステムプロンプトの下書きが入ります）",
 	systemPrompt: "システムプロンプト",
 	memoryOf: "メモリ",
-	lctyMsgReadOnly:
-		"この会話は新しい形式（lcty-msg）です。続きを書くことはまだできません。",
+	formerReadOnly:
+		"この会話は古い形式です。lcty.rb convert で変換すると、続きを書けます。",
 	none: "（なし）",
 	recompose: "タグから作り直す",
 	setupHint:
@@ -116,6 +116,14 @@ LctyT.addLang("ja", {
 	selectAll: "すべて選択",
 	toEnd: "一番下へ",
 	generating: "生成中…",
+	retry: "やり直す",
+	remove: "削除",
+	cmdFailed: "中断しました: {error}",
+	incomplete: "返信が途中で切れました",
+	cmdStale: "返信が途中のまま残っています",
+	cmdHeld: "別のタブで返信を作っています",
+	outOfSync:
+		"この会話はほかのタブで変わりました。ページを再読み込みしてください。",
 	noConversations: "会話はまだありません",
 	noMatches: "一致する会話はありません",
 	semanticUnavailable:

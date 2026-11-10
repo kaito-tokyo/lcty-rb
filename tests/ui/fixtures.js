@@ -137,11 +137,121 @@ export function uniqueWord(prefix = "word") {
 	return `${prefix}${randomBytes(4).toString("hex")}`;
 }
 
+/** The origin of the server the tests run against (the WebSocket of /v1/rpc must send it, LCTYSP-0012). */
+function serverOrigin() {
+	return new URL(base.info().project.use.baseURL).origin;
+}
+
+/** Call methods of /v1/rpc on one connection of its own: fn gets call(method, params) and resolves to the results. */
+export async function withRpc(fn) {
+	const ws = new WebSocket(`${serverOrigin().replace(/^http/, "ws")}/v1/rpc`, {
+		headers: { Origin: serverOrigin() },
+	});
+	const pending = new Map();
+	let n = 0;
+	ws.onmessage = (e) => {
+		const m = JSON.parse(e.data);
+		if (typeof m.id !== "number") return; // a notification or a request of the server: these tests receive none
+		const settle = pending.get(m.id);
+		if (typeof settle !== "function") return;
+		pending.delete(m.id);
+		settle(m);
+	};
+	await new Promise((resolve, reject) => {
+		ws.onopen = resolve;
+		ws.onerror = () => reject(new Error("could not open /v1/rpc"));
+	});
+	const call = (method, params = {}) =>
+		new Promise((resolve, reject) => {
+			n += 1;
+			pending.set(n, (m) =>
+				m.error
+					? reject(new Error(`${method}: ${JSON.stringify(m.error)}`))
+					: resolve(m.result),
+			);
+			ws.send(JSON.stringify({ jsonrpc: "2.0", id: n, method, params }));
+		});
+	try {
+		await call("initialize", { capabilities: { receives: [] } });
+		return await fn(call);
+	} finally {
+		ws.close();
+	}
+}
+
+const escapeText = (s) =>
+	s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
 /**
- * Create a conversation through the API. messages: [["user", "…"], ["assistant", "…"], …].
- * Returns { id, messages } (messages with their ids).
+ * Create a conversation through /v1/rpc, in the format of LCTYSP-0013 as the new conversation page does: c.create,
+ * the system prompt, then the messages ([["user", "…"], ["assistant", "…"], …]; a reply's article is its text as one
+ * paragraph). The tags go to lcty_t.sqlite through the HTTP API. Returns { id, messages } (messages with their ids).
  */
 export async function createConversation(
+	request,
+	{ title = "テスト会話", messages = [], instructions = "", tags = [] } = {},
+) {
+	const id = `t-${randomBytes(6).toString("hex")}`;
+	const at = new Date().toISOString();
+	const msgs = messages.map(([role, content]) => ({
+		id: uuidv7(),
+		role,
+		content,
+		at,
+	}));
+	await withRpc(async (call) => {
+		await call("c.create", {
+			cid: id,
+			createdAt: at,
+			title,
+			lang: "ja",
+			titleMaxSize: 512,
+			lctyVersion: "v1",
+		});
+		let after = null;
+		const append = async (attrs, innerHTML) => {
+			await call("c.append.msg", { cid: id, after, attrs, innerHTML });
+			after = attrs.id;
+		};
+		if (instructions)
+			await append(
+				{
+					"data-role": "system",
+					id: `sys-${uuidv7()}`,
+					"data-content": instructions,
+				},
+				`<article><p>${escapeText(instructions)}</p></article>`,
+			);
+		for (const m of msgs) {
+			const user = m.role === "user";
+			await append(
+				{
+					"data-role": user ? "user" : "model",
+					id: `${user ? "msg-u-" : "msg-m-"}${m.id}`,
+					"data-at": at,
+					"data-content": m.content,
+				},
+				user
+					? `<article>${escapeText(m.content)}</article>`
+					: `<article><p>${escapeText(m.content)}</p></article>`,
+			);
+		}
+	});
+	if (tags.length) {
+		const res = await request.post(
+			`/v1/conversations/${encodeURIComponent(id)}/lines`,
+			{ data: [{ type: "tags", tags, at }] },
+		);
+		expect(res.ok(), await res.text()).toBeTruthy();
+	}
+	return { id, messages: msgs };
+}
+
+/**
+ * Create a conversation in the format of LCTYSP-0003 through the HTTP API (as before lcty.rb convert), which the pages
+ * show read-only. Arguments and result as createConversation.
+ */
+export async function createFormerConversation(
 	request,
 	{ title = "テスト会話", messages = [], instructions = "", tags = [] } = {},
 ) {
@@ -212,17 +322,32 @@ export function composerInput(page) {
 	return page.locator('[part~="lcty-composer__input"]');
 }
 
+/**
+ * The messages of the conversation page, user and model <lcty-msg> (LCTYSP-0013); role "user" or "assistant" (the
+ * model). A reply being generated is a draft of its own (draft()), not among them.
+ */
 export function messages(page, role) {
+	const roles = { user: "user", assistant: "model" };
 	return page.locator(
 		role
-			? `lcty-c > lcty-message[data-role="${role}"]`
-			: "lcty-c > lcty-message",
+			? `lcty-c > lcty-msg[data-role="${roles[role]}"]`
+			: 'lcty-c > lcty-msg:is([data-role="user"], [data-role="model"])',
 	);
 }
 
-/** The text of a user message (its Light DOM body; the head and foot are Shadow DOM). */
+/** The reply being generated: an <lcty-message> shown after the lcty-cmd, never written (data-draft). */
+export function draft(page) {
+	return page.locator("lcty-c > lcty-message[data-draft]");
+}
+
+/** The lcty-cmd at the end of the conversation (the lock, LCTYSP-0013). */
+export function lock(page) {
+	return page.locator("lcty-c > lcty-cmd");
+}
+
+/** The text of a user message (its Light DOM <article>; the head is Shadow DOM). */
 export function userText(message) {
-	return message.locator(":scope > .user-text");
+	return message.locator(":scope > article");
 }
 
 /**
@@ -231,7 +356,7 @@ export function userText(message) {
  */
 export async function messageAction(message, name) {
 	await message.hover();
-	return message.locator(`[part~="lcty-message__action--${name}"]`);
+	return message.locator(`[part~="lcty-msg__action--${name}"]`);
 }
 
 /** Open the new conversation page /c/ and wait until js/pages/new.js has started (the tag list ends with its ⚙︎ button). */
@@ -261,11 +386,28 @@ export async function sendFirstMessage(page, text) {
 	await composerInput(page).fill(text);
 	await composerInput(page).press("Enter");
 	await page.waitForURL(/\/c\/[^/]+\.html$/);
-	await expect(messages(page, "assistant").last()).toHaveAttribute(
-		"data-status",
-		"completed",
-	);
+	await waitForReply(page);
 	return conversationIdOf(page);
+}
+
+/**
+ * Wait until the reply has been written: the page has appended a model message after the last user message, and
+ * neither the lock nor the draft is left.
+ */
+export async function waitForReply(page) {
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const c = document.querySelector("lcty-c");
+				const last = c.lastElementChild;
+				return (
+					last?.localName === "lcty-msg" &&
+					last.dataset.role === "model" &&
+					!c.querySelector(":scope > lcty-cmd, :scope > [data-draft]")
+				);
+			}),
+		)
+		.toBe(true);
 }
 
 /** Open / and start a conversation with a first message (see sendFirstMessage). */

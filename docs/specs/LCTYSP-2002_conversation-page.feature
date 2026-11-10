@@ -37,7 +37,7 @@ Feature: LCTYSP-2002 The conversation page
     When "三番目の質問" is sent
     Then the composer is emptied
     And the page shows six messages
-    And the last reply is completed with the text "三番目の答え"
+    And the last reply is written with the text "三番目の答え", and neither the lock nor the draft is left
     And the whole history went to llama-server
     And the server has saved six messages
     And after a reload the page shows six messages
@@ -61,7 +61,7 @@ Feature: LCTYSP-2002 The conversation page
     Given a conversation of two finished turns is open
     And llama-server will reply with bold text, code, a raw <img> with an onerror, a javascript: link and an https link
     When "Markdown を返して" is sent
-    Then the last reply is completed
+    Then the last reply is written
     And the bold text is a <strong> and the code a <code>
     And the reply has no <img> and shows the raw <img> as text
     And the reply has no javascript: link, and the https link is a link with its text
@@ -71,8 +71,8 @@ Feature: LCTYSP-2002 The conversation page
     Given a conversation of two finished turns is open
     And llama-server will reply with the thinking "まず考えます。" and the text "考えた結果です。"
     When "考えて" is sent
-    Then the last reply has the thinking "まず考えます。" in data-thinking
-    And its thinking is shown, collapsed
+    Then an lcty-thinking of "まず考えます。" is written just before the last reply
+    And it is shown collapsed, under "思考（7 文字）"
 
   Scenario: Suggested next messages are buttons that fill the composer
     Given a conversation of two finished turns is open
@@ -131,24 +131,52 @@ Feature: LCTYSP-2002 The conversation page
 
   # ---- Stopping and errors (LCTYSP-0004) ----
 
-  Scenario: The stop button ends the generation and keeps the reply as incomplete
+  Scenario: The stop button ends the generation and leaves the lock with the error
     Given a conversation of two finished turns is open
     And llama-server will never answer
     When "止める質問" is sent
-    Then the last reply is streaming and <lcty-c> is busy
+    Then the draft reply is streaming after the lock and <lcty-c> is busy
     When the stop button is clicked
-    Then the last reply is incomplete, without an error
-    And its status reads "停止しました"
+    Then the lock is the last element with the error "停止しました", and the draft is gone
+    And it reads "中断しました: 停止しました" with Retry and Remove
     And <lcty-c> is no longer busy
-    And the server has saved six messages
+    And the server has saved five messages
 
-  Scenario: An error from llama-server is shown on the reply
+  Scenario: An error from llama-server leaves the lock with the error
     Given a conversation of two finished turns is open
     And llama-server will answer the status 500 with the error "model is not loaded"
     When "失敗する質問" is sent
-    Then the last reply is incomplete with the error "model is not loaded"
-    And its status shows "model is not loaded"
+    Then the lock is the last element with an error that holds "model is not loaded"
+    And the server has saved five messages
+    When Remove is clicked
+    Then the lock is gone and the last element is the user message "失敗する質問"
+
+  Scenario: Retry takes the lock again and generates the reply
+    Given a conversation of two finished turns is open
+    And llama-server will answer the status 500 with the error "model is not loaded" and then reply "やり直した答え"
+    When "やり直す質問" is sent and Retry is clicked once the lock shows its error
+    Then the last reply is written with the text "やり直した答え"
     And the server has saved six messages
+
+  # ---- Locks and other tabs (LCTYSP-0013, LCTYSP-0014) ----
+
+  Scenario: A lock that no tab holds is shown with Retry and Remove
+    Given a conversation of one user message whose file ends with an lcty-cmd send that no page holds
+    When it is opened
+    Then the lock reads "返信が途中のまま残っています" with Retry and Remove
+    And llama-server is sent nothing
+
+  Scenario: A change by another tab makes the page ask for a reload
+    Given a conversation of two finished turns is open
+    When another connection appends a user message to it through /v1/rpc
+    Then the composer is disabled and asks for a reload
+    And the page sends nothing more when "送らない質問" is typed and Enter is pressed
+
+  Scenario: A conversation of the format before lcty-msg is shown read-only
+    Given a conversation of two finished turns created through the HTTP API, in the format of LCTYSP-0003
+    When it is opened
+    Then the page shows its four messages
+    And the composer is disabled and says that the conversation is in the former format
 
   # ---- Deleting ----
 

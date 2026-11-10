@@ -75,5 +75,5 @@ Feature: LCTYSP-2001 The new conversation page /c/
     Then the browser moves to the new conversation's page
     And the page shows four messages, the last user message being "書き換えた二番目の質問"
     And the new conversation is not the source
-    And the server has saved four messages, of which the first two are inherited
+    And the server has saved four messages, the first two copies of the source's with ids of their own
     And the source still has its four messages

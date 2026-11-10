@@ -183,14 +183,22 @@ Feature: LCTYSP-1016 The elements of a conversation file
 
   Scenario Outline: A user or model message has a head with who wrote it and its article
     Given the body holds <lcty-msg data-role="<role>" data-content="Hi"><article>Hi</article></lcty-msg>
-    Then its Shadow DOM is the head (part lcty-msg__head) holding the who "<who>" (part lcty-msg__who), its field who, and a <slot>
+    Then its Shadow DOM starts with the head (part lcty-msg__head) holding the who "<who>" (part lcty-msg__who), its field who, and a <slot>
+    And the head's actions (part lcty-msg__actions) are <actions>, its fields <fields>, with the parts lcty-msg__action, lcty-msg__action--<name> and lcty-button
     And its fields details and summary are null
     And the <slot> shows the <article>
 
     Examples:
-      | role  | who       |
-      | user  | You       |
-      | model | Assistant |
+      | role  | who       | actions                     | fields                    | name          |
+      | user  | You       | "Undo" and "Fork from here" | undoButton and forkButton | undo and fork |
+      | model | Assistant | "Regenerate"                | regenerateButton          | regenerate    |
+
+  Scenario: A model message has a hidden foot with the ⓘ of its timings
+    Given the body holds <lcty-msg data-role="model" data-content="Hi"><article>Hi</article></lcty-msg>
+    Then the last of its Shadow DOM is the foot (part lcty-msg__foot), its field foot, which is hidden
+    And the foot holds the ⓘ, its field info, a button labelled "Timings" (part lcty-msg__info) whose popovertarget is "timings"
+    And the <div id="timings"> with popover="auto" (part lcty-msg__timings), its field timings
+    And a user message has no foot: its fields foot, info and timings are null
 
   Scenario Outline: A system or memory message is collapsed under its kind and its tag
     Given the body holds <lcty-msg <attributes> data-content="Be brief."><article>Be brief.</article></lcty-msg>

@@ -57,6 +57,8 @@ for the backend ones).
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | Tags, drafts and memory                       | `tests/unit/tags.test.js`, `tests/unit/tags.spec.js`         |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | The search panel of the sidebar               | `tests/unit/search-panel.spec.js`                            |
 | [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | The tags in the browser: lcty.v1.t.worker.cjs | `tests/unit/lcty-t.spec.js`                                  |
+| [LCTYSP-1022](LCTYSP-1022_rpc-client.feature)                 | The client of /v1/rpc                         | `tests/unit/rpc.test.js`                                     |
+| [LCTYSP-1023](LCTYSP-1023_lcty-msg-elements.feature)          | The elements of lcty-msg built by the page    | `tests/unit/lcty-msg.spec.js`                                |
 | [LCTYSP-2001](LCTYSP-2001_new-conversation-page.feature)      | The new conversation page /c/                 | `tests/ui/new-conversation.spec.js`                          |
 | [LCTYSP-2002](LCTYSP-2002_conversation-page.feature)          | The conversation page                         | `tests/ui/conversation.spec.js`                              |
 | [LCTYSP-2003](LCTYSP-2003_sidebar.feature)                    | The sidebar                                   | `tests/ui/sidebar.spec.js`                                   |

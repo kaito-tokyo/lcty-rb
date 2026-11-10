@@ -11,7 +11,10 @@
 import {
 	composerInput,
 	createConversation,
+	createFormerConversation,
+	draft,
 	expect,
+	lock,
 	messageAction,
 	messages,
 	openConversation,
@@ -19,7 +22,10 @@ import {
 	savedMessages,
 	test,
 	uniqueWord,
+	uuidv7,
+	waitForReply,
 	waitForSaved,
+	withRpc,
 } from "./fixtures.js";
 
 // Tag definitions are global: leave none behind for the other tests
@@ -127,11 +133,8 @@ test("A message sent on the conversation page gets a reply and both are saved", 
 	await test.step("And the page shows six messages", async () => {
 		await expect(messages(page)).toHaveCount(6);
 	});
-	await test.step('And the last reply is completed with the text "三番目の答え"', async () => {
-		await expect(messages(page, "assistant").last()).toHaveAttribute(
-			"data-status",
-			"completed",
-		);
+	await test.step('And the last reply is written with the text "三番目の答え", and neither the lock nor the draft is left', async () => {
+		await waitForReply(page);
 		await expect(
 			messages(page, "assistant").last().locator("article"),
 		).toHaveText("三番目の答え");
@@ -218,12 +221,7 @@ test("Markdown is rendered and raw HTML or script URLs never reach the DOM", asy
 	await test.step('When "Markdown を返して" is sent', () =>
 		send(page, "Markdown を返して"));
 	const article = messages(page, "assistant").last().locator("article");
-	await test.step("Then the last reply is completed", async () => {
-		await expect(messages(page, "assistant").last()).toHaveAttribute(
-			"data-status",
-			"completed",
-		);
-	});
+	await test.step("Then the last reply is written", () => waitForReply(page));
 	await test.step("And the bold text is a <strong> and the code a <code>", async () => {
 		await expect(article.locator("strong")).toHaveText("太字");
 		await expect(article.locator("code")).toHaveText("コード");
@@ -253,14 +251,27 @@ test("A reply's thinking is shown collapsed", async ({
 		llm.reply({ thinking: "まず考えます。", text: "考えた結果です。" });
 	});
 	await test.step('When "考えて" is sent', () => send(page, "考えて"));
-	const reply = messages(page, "assistant").last();
-	await test.step('Then the last reply has the thinking "まず考えます。" in data-thinking', async () => {
-		await expect(reply).toHaveAttribute("data-thinking", "まず考えます。");
+	const thinking = page.locator("lcty-c > lcty-thinking").last();
+	await test.step('Then an lcty-thinking of "まず考えます。" is written just before the last reply', async () => {
+		await waitForReply(page);
+		await expect(thinking).toHaveAttribute("data-content", "まず考えます。");
+		expect(
+			await thinking.evaluate(
+				(el) =>
+					el.nextElementSibling ===
+					el.parentElement.querySelector(
+						':scope > lcty-msg[data-role="model"]:last-of-type',
+					),
+			),
+		).toBe(true);
 	});
-	await test.step("And its thinking is shown, collapsed", async () => {
-		const details = reply.locator('[part~="lcty-message__thinking"]');
+	await test.step('And it is shown collapsed, under "思考（7 文字）"', async () => {
+		const details = thinking.locator('[part~="lcty-thinking__details"]');
 		await expect(details).toBeVisible();
 		await expect(details).not.toHaveAttribute("open", /.*/);
+		await expect(
+			thinking.locator('[part~="lcty-thinking__summary"]'),
+		).toHaveText("思考（7 文字）");
 	});
 });
 
@@ -357,7 +368,7 @@ test("The actions show only while the message is hovered", async ({
 	await test.step(TWO_TURNS, () => openTwoTurns(page, request));
 	const fork = messages(page, "user")
 		.first()
-		.locator('[part~="lcty-message__action--fork"]');
+		.locator('[part~="lcty-msg__action--fork"]');
 	await test.step("When the mouse is moved to the top left corner of the page", () =>
 		page.mouse.move(0, 0));
 	await test.step("Then the fork button of the first user message is hidden", async () => {
@@ -446,7 +457,20 @@ test("Fork from here moves to the new conversation page /c/ with the source and 
 
 // ---- Stopping and errors (LCTYSP-0004) ----
 
-test("The stop button ends the generation and keeps the reply as incomplete", async ({
+/** The last element of <lcty-c>, as {tag, role, error, state}. */
+function lastOf(page) {
+	return page.evaluate(() => {
+		const el = document.querySelector("lcty-c").lastElementChild;
+		return {
+			tag: el?.localName ?? null,
+			role: el?.dataset.role ?? null,
+			error: el?.dataset.error ?? null,
+			state: el?.getAttribute("state") ?? null,
+		};
+	});
+}
+
+test("The stop button ends the generation and leaves the lock with the error", async ({
 	page,
 	request,
 	llm,
@@ -456,30 +480,41 @@ test("The stop button ends the generation and keeps the reply as incomplete", as
 		llm.reply({ hang: true });
 	});
 	await test.step('When "止める質問" is sent', () => send(page, "止める質問"));
-	const reply = messages(page, "assistant").last();
-	await test.step("Then the last reply is streaming and <lcty-c> is busy", async () => {
-		await expect(reply).toHaveAttribute("data-status", "streaming");
+	await test.step("Then the draft reply is streaming after the lock and <lcty-c> is busy", async () => {
+		await expect(draft(page)).toHaveAttribute("data-status", "streaming");
+		await expect(lock(page)).toHaveAttribute("state", "running");
 		await expect(page.locator("lcty-c")).toHaveAttribute("busy", "");
 	});
 	await test.step("When the stop button is clicked", () =>
 		page.locator('[part~="lcty-composer__stop"]').click());
-	await test.step("Then the last reply is incomplete, without an error", async () => {
-		await expect(reply).toHaveAttribute("data-status", "incomplete");
-		await expect(reply).not.toHaveAttribute("data-error", /.*/);
+	await test.step('Then the lock is the last element with the error "停止しました", and the draft is gone', async () => {
+		await expect
+			.poll(() => lastOf(page))
+			.toEqual({
+				tag: "lcty-cmd",
+				role: null,
+				error: "停止しました",
+				state: "failed",
+			});
+		await expect(draft(page)).toHaveCount(0);
 	});
-	await test.step('And its status reads "停止しました"', async () => {
-		await expect(reply.locator('[part~="lcty-message__status"]')).toHaveText(
-			"停止しました",
+	await test.step('And it reads "中断しました: 停止しました" with Retry and Remove', async () => {
+		await expect(lock(page).locator('[part~="lcty-cmd__label"]')).toHaveText(
+			"中断しました: 停止しました",
 		);
+		await expect(lock(page).locator('[part~="lcty-cmd__retry"]')).toBeVisible();
+		await expect(
+			lock(page).locator('[part~="lcty-cmd__remove"]'),
+		).toBeVisible();
 	});
 	await test.step("And <lcty-c> is no longer busy", async () => {
 		await expect(page.locator("lcty-c")).not.toHaveAttribute("busy", /.*/);
 	});
-	await test.step("And the server has saved six messages", () =>
-		waitForSaved(request, conv.id, 6));
+	await test.step("And the server has saved five messages", () =>
+		waitForSaved(request, conv.id, 5));
 });
 
-test("An error from llama-server is shown on the reply", async ({
+test("An error from llama-server leaves the lock with the error", async ({
 	page,
 	request,
 	llm,
@@ -490,18 +525,154 @@ test("An error from llama-server is shown on the reply", async ({
 	});
 	await test.step('When "失敗する質問" is sent', () =>
 		send(page, "失敗する質問"));
-	const reply = messages(page, "assistant").last();
-	await test.step('Then the last reply is incomplete with the error "model is not loaded"', async () => {
-		await expect(reply).toHaveAttribute("data-status", "incomplete");
-		await expect(reply).toHaveAttribute("data-error", /model is not loaded/);
+	await test.step('Then the lock is the last element with an error that holds "model is not loaded"', async () => {
+		await expect
+			.poll(async () => (await lastOf(page)).error ?? "")
+			.toContain("model is not loaded");
+		expect((await lastOf(page)).tag).toBe("lcty-cmd");
 	});
-	await test.step('And its status shows "model is not loaded"', async () => {
-		await expect(reply.locator('[part~="lcty-message__status"]')).toContainText(
-			"model is not loaded",
+	await test.step("And the server has saved five messages", () =>
+		waitForSaved(request, conv.id, 5));
+	await test.step("When Remove is clicked", () =>
+		lock(page).locator('[part~="lcty-cmd__remove"]').click());
+	await test.step('Then the lock is gone and the last element is the user message "失敗する質問"', async () => {
+		await expect(lock(page)).toHaveCount(0);
+		await expect(messages(page).last()).toHaveAttribute(
+			"data-content",
+			"失敗する質問",
 		);
+	});
+});
+
+test("Retry takes the lock again and generates the reply", async ({
+	page,
+	request,
+	llm,
+}) => {
+	const conv = await test.step(TWO_TURNS, () => openTwoTurns(page, request));
+	await test.step('And llama-server will answer the status 500 with the error "model is not loaded" and then reply "やり直した答え"', () => {
+		llm.reply({ status: 500, error: "model is not loaded" });
+		llm.reply("やり直した答え");
+	});
+	await test.step('When "やり直す質問" is sent and Retry is clicked once the lock shows its error', async () => {
+		await send(page, "やり直す質問");
+		await expect(lock(page)).toHaveAttribute("state", "failed");
+		await lock(page).locator('[part~="lcty-cmd__retry"]').click();
+	});
+	await test.step('Then the last reply is written with the text "やり直した答え"', async () => {
+		await waitForReply(page);
+		await expect(
+			messages(page, "assistant").last().locator("article"),
+		).toHaveText("やり直した答え");
 	});
 	await test.step("And the server has saved six messages", () =>
 		waitForSaved(request, conv.id, 6));
+});
+
+// ---- Locks and other tabs (LCTYSP-0013, LCTYSP-0014) ----
+
+test("A lock that no tab holds is shown with Retry and Remove", async ({
+	page,
+	request,
+	llm,
+}) => {
+	let conv;
+	await test.step("Given a conversation of one user message whose file ends with an lcty-cmd send that no page holds", async () => {
+		conv = await createConversation(request, { messages: [["user", "問い"]] });
+		await withRpc((call) =>
+			call("c.append.cmd", {
+				cid: conv.id,
+				after: `msg-u-${conv.messages[0].id}`,
+				attrs: {
+					id: `cmd-${uuidv7()}`,
+					"data-op": "send",
+					"data-at": new Date().toISOString(),
+				},
+			}),
+		);
+	});
+	await test.step("When it is opened", () => openConversation(page, conv.id));
+	await test.step('Then the lock reads "返信が途中のまま残っています" with Retry and Remove', async () => {
+		await expect(lock(page).locator('[part~="lcty-cmd__label"]')).toHaveText(
+			"返信が途中のまま残っています",
+		);
+		await expect(lock(page)).toHaveAttribute("state", "stale");
+		await expect(lock(page).locator('[part~="lcty-cmd__retry"]')).toBeVisible();
+		await expect(
+			lock(page).locator('[part~="lcty-cmd__remove"]'),
+		).toBeVisible();
+	});
+	await test.step("And llama-server is sent nothing", () => {
+		expect(llm.requests).toHaveLength(0);
+	});
+});
+
+test("A change by another tab makes the page ask for a reload", async ({
+	page,
+	request,
+	llm,
+}) => {
+	const conv = await test.step(TWO_TURNS, () => openTwoTurns(page, request));
+	await test.step("When another connection appends a user message to it through /v1/rpc", () =>
+		withRpc((call) =>
+			call("c.append.msg", {
+				cid: conv.id,
+				after: `msg-m-${conv.messages[3].id}`,
+				attrs: {
+					"data-role": "user",
+					id: `msg-u-${uuidv7()}`,
+					"data-at": new Date().toISOString(),
+					"data-content": "別のタブから",
+				},
+				innerHTML: "<article>別のタブから</article>",
+			}),
+		));
+	await test.step("Then the composer is disabled and asks for a reload", async () => {
+		await expect(composerInput(page)).toBeDisabled();
+		await expect(composerInput(page)).toHaveAttribute(
+			"placeholder",
+			/再読み込み/,
+		);
+	});
+	await test.step('And the page sends nothing more when "送らない質問" is typed and Enter is pressed', async () => {
+		await page.evaluate(() => {
+			const input = document.querySelector("lcty-c").composer.input;
+			input.disabled = false;
+			input.value = "送らない質問";
+		});
+		await composerInput(page).press("Enter");
+		await page.waitForTimeout(300);
+		expect(llm.requests).toHaveLength(0);
+		expect(await savedMessages(request, conv.id)).toHaveLength(5);
+	});
+});
+
+test("A conversation of the format before lcty-msg is shown read-only", async ({
+	page,
+	request,
+}) => {
+	let conv;
+	await test.step("Given a conversation of two finished turns created through the HTTP API, in the format of LCTYSP-0003", async () => {
+		conv = await createFormerConversation(request, {
+			messages: [
+				["user", "古い質問"],
+				["assistant", "古い答え"],
+				["user", "古い質問2"],
+				["assistant", "古い答え2"],
+			],
+		});
+	});
+	await test.step("When it is opened", () => openConversation(page, conv.id));
+	await test.step("Then the page shows its four messages", async () => {
+		await expect(page.locator("lcty-c > lcty-message")).toHaveCount(4);
+	});
+	await test.step("And the composer is disabled and says that the conversation is in the former format", async () => {
+		await expect(composerInput(page)).toBeDisabled();
+		await expect(composerInput(page)).toHaveAttribute(
+			"placeholder",
+			/古い形式/,
+		);
+	});
 });
 
 // ---- Deleting ----

@@ -209,7 +209,8 @@ function fmtSec(ms) {
 	return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)}s`;
 }
 
-function describeTimings(m) {
+/** The text of a reply's timings popover, one item per line, from its {timings, client} ("" when there is none). */
+export function describeTimings(m) {
 	const parts = [];
 	const t = m.timings;
 	if (t) {
@@ -464,14 +465,16 @@ export function initConversationElements(container, h = {}) {
 		btn.textContent = tr("selectAll", "Select all");
 	// Suggested next messages (<suggestion-for-user-turn> in a reply): put the text into the composer to edit and send
 	container.addEventListener("click", (e) => {
-		const btn = e.target.closest?.("lcty-message > article button.suggestion");
+		const btn = e.target.closest?.(
+			":is(lcty-message, lcty-msg) > article button.suggestion",
+		);
 		if (!btn) return;
 		setComposerValue(container.composer, btn.textContent);
 		textareaOf(container.composer).focus();
 	});
 	container.addEventListener("click", (e) => {
 		const btn = e.target.closest?.(
-			"lcty-message > article .codebar :is(button.select, button.copy)",
+			":is(lcty-message, lcty-msg) > article .codebar :is(button.select, button.copy)",
 		);
 		if (!btn) return;
 		const code = btn.closest(".codeblock")?.querySelector("code");
