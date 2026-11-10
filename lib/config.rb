@@ -27,6 +27,9 @@ module Chatty
   # One SQLite file per resource, cut as the browser's IndexedDB databases are (LCTYSP-0015)
   TAGS_DB_PATH = File.join(DATA_DIR, 'lcty_t.sqlite') # Source of truth (the current tags of conversations)
   FORMER_TAGS_DB_PATH = File.join(DATA_DIR, 'tags.sqlite') # Renamed to TAGS_DB_PATH at startup
+  C_DB_PATH = File.join(DATA_DIR, 'lcty_c.sqlite') # Source of truth (what the conversation files of c/ do not hold)
+  # Where `lcty.rb convert` keeps every conversation file as it was before converting it to LCTYSP-0013; never deleted
+  FORMER_CONV_DIR = File.join(DATA_DIR, 'c-former')
   # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-0010); _index.sqlite is
   # discarded and made anew at every start
   INDEX_PATH = File.join(DATA_DIR, '_index.sqlite')

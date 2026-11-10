@@ -617,6 +617,62 @@ class StoreTest < Lcty::Scenarios
     end
   end
 
+  # A conversation file in the lcty-msg format (LCTYSP-0013) with body after its head, as /v1/rpc writes it for lang;
+  # returns its id
+  def lcty_msg_file(body, lang: 'ja')
+    id = new_id
+    script = lang == 'ja' ? '<script src="lcty.v1.lang-ja.js"></script>' : ''
+    File.write(path_of(id),
+               %(<!DOCTYPE html><html lang="#{lang}" />\n) +
+               %(<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />) +
+               %(<script src="lcty.v1.js"></script>#{script}<link rel="stylesheet" href="lcty.v1.css" /></head>\n) +
+               ConvHtml.title_line('T') + "\n" + %(<lcty-c id="c-#{id}" data-created-at="#{AT}" />\n) + body)
+    id
+  end
+
+  def lcty_msg_round(u, m)
+    %(<lcty-msg data-role="user" id="msg-u-#{u}" data-at="#{AT}" data-content="q"><article>q</article></lcty-msg>\n) +
+      %(<lcty-msg data-role="model" id="msg-m-#{m}" data-at="#{AT}" data-content="a"><article>a</article></lcty-msg>\n)
+  end
+
+  scenario 'Files in the lcty-msg format are left as they are at startup' do
+    background
+    id = before = nil
+    step('Given a conversation file in the lcty-msg format whose head loads no language file') do
+      id = lcty_msg_file(lcty_msg_round(Chatty::Uuid.v7, Chatty::Uuid.v7), lang: 'en')
+      before = [read(id), File.mtime(path_of(id))]
+    end
+    step('When Store.migrate_heads runs') { capture_io { Store.migrate_heads } }
+    step('Then the file has not changed') { assert_equal before, [read(id), File.mtime(path_of(id))] }
+  end
+
+  scenario 'A file in the lcty-msg format is written only through /v1/rpc' do
+    background
+    id = before = errors = nil
+    u = Chatty::Uuid.v7
+    step('Given a conversation file in the lcty-msg format with a user message and a model message') do
+      id = lcty_msg_file(lcty_msg_round(u, Chatty::Uuid.v7))
+      before = read(id)
+    end
+    step('When a message is appended to it and the last turn is popped') do
+      errors = [http_error { Store.append(id, [user('more')]) }, http_error { Store.pop(id, 0) }]
+    end
+    step('Then both are refused with 409 and the file has not changed') do
+      message = 'the conversation is in the lcty-msg format (LCTYSP-0013); it is written only through /v1/rpc'
+      errors.each { |e| assert_error(409, message, e) }
+      assert_equal before, read(id)
+    end
+    step('And Store.conversation reads its messages') do
+      assert_equal [%w[user q], %w[assistant a]], Store.conversation(id)['messages'].map { |m| [m['role'], m['content']] }
+      assert_equal u, Store.conversation(id)['messages'][0]['id']
+    end
+    step('And appending a title overwrites the slot in place and leaves the elements as they are') do
+      Store.append(id, [{ 'type' => 'title', 'title' => 'New' }])
+      assert_equal 'New', Store.conversation(id)['title']
+      assert_equal before.lines.drop(ConvHtml::HEAD_LINES), read(id).lines.drop(ConvHtml::HEAD_LINES)
+    end
+  end
+
   scenario 'A whole file is replaced atomically' do
     background
     dir = Dir.mktmpdir('lcty-store-')

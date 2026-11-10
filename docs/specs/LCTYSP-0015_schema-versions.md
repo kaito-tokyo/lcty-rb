@@ -41,8 +41,11 @@ sides.
   - `lcty_t.sqlite`: `conversation_tags`, source data ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
   - `lcty_fuzzy_search.sqlite`: `vectors`, which only the browser can make again
     ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)). It has no leading `_`, so backups keep it.
-  - `lcty_c.sqlite`: not made yet; nothing of `c/` needs migrating today (the conversation files are the source of
-    truth, and everything derived from them is in `_index.sqlite`).
+  - `lcty_c.sqlite`: `message_stats`, source data, version 1: what was measured of a reply (`data-timings`,
+    `data-usage` and `data-client`), which the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)
+    moved out of the conversation file. `lcty.rb convert` makes it; the server does not open it yet. The conversation
+    files are still the source of truth of everything else of `c/`, and what is derived from them is in
+    `_index.sqlite`.
 - **The browser's databases** have the names of the resources, `lcty_c` and `lcty_t`
   ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)), the names and versions they had
   before they were named after the version of the files (`lcty_v1_c`, `lcty_v1_t`) for a time.

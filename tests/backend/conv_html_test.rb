@@ -576,4 +576,55 @@ class ConvHtmlTest < Lcty::Scenarios
       assert_equal({}, ConvHtml.current_meta([{ 'type' => 'title', 'title' => 'x' }]))
     end
   end
+
+  # ---- The lcty-msg format (LCTYSP-0013) ----
+
+  # A file in the lcty-msg format: the head as /v1/rpc writes it (no data-setup-tags), then body
+  def lcty_msg_file(body = '')
+    ConvHtml::HEADER + ConvHtml.title_line('T') + "\n" + %(<lcty-c id="c-conv-n" data-created-at="#{AT}" />\n) + body
+  end
+
+  scenario 'A file in the lcty-msg format is read as messages and lines of its own' do
+    objs = text = nil
+    step('Given a file in the lcty-msg format with a system message, a user message, a thinking, a model message and an lcty-cmd') do
+      text = lcty_msg_file(
+        %(<lcty-msg data-role="system" id="sys-#{ID1}" data-tag="ruby" data-content="be brief"><article>be brief</article></lcty-msg>\n) +
+        %(<lcty-msg data-role="user" id="msg-u-#{ID1}" data-at="#{AT}" data-content="hi"><article>hi</article></lcty-msg>\n) +
+        %(<lcty-thinking id="think-#{ID2}" data-at="#{AT}" data-content="hmm"><article>hmm</article></lcty-thinking>\n) +
+        %(<lcty-msg data-role="model" id="msg-m-#{ID2}" data-at="#{AT}" data-content="hello"><article><p>hello</p></article></lcty-msg>\n) +
+        %(<lcty-cmd id="cmd-#{ID2}" data-op="send" data-at="#{AT}" data-error="stopped"></lcty-cmd>\n)
+      )
+    end
+    step('When ConvHtml.decode reads it') { objs = ConvHtml.decode(text).map(&:first) }
+    step('Then the user and model messages are messages of the roles user and assistant, with the bare ids') do
+      assert_equal [{ 'type' => 'message', 'id' => ID1, 'role' => 'user', 'at' => AT, 'content' => 'hi' },
+                    { 'type' => 'message', 'id' => ID2, 'role' => 'assistant', 'at' => AT, 'content' => 'hello' }],
+                   messages(objs)
+    end
+    step('And the system message is a system line, the thinking a thinking line and the lcty-cmd a cmd line with its bare id') do
+      assert_equal({ 'type' => 'system', 'id' => ID1, 'role' => 'system', 'tag' => 'ruby', 'content' => 'be brief' },
+                   objs.find { |o| o['type'] == 'system' })
+      assert_equal({ 'type' => 'thinking', 'id' => ID2, 'at' => AT, 'content' => 'hmm' }, objs.find { |o| o['type'] == 'thinking' })
+      assert_equal({ 'type' => 'cmd', 'op' => 'send', 'at' => AT, 'id' => ID2, 'error' => 'stopped' },
+                   objs.find { |o| o['type'] == 'cmd' })
+    end
+    step('And the meta has no tags') do
+      assert_equal [], ConvHtml.current_meta(objs)['tags']
+    end
+  end
+
+  {
+    'a document ConvHtml.document wrote' => [-> { ConvHtml.document([meta]) }, false],
+    'a file of the head before 2026-11-07' => [-> { %(<!doctype html><html data-lcty-tlrange="0x0000,0x0000"><head></head>\n) }, false],
+    'a file of lcty-msg elements' => [lambda {
+      lcty_msg_file(%(<lcty-msg data-role="user" id="msg-u-#{ID1}" data-at="#{AT}" data-content="a"><article>a</article></lcty-msg>\n))
+    }, true],
+    'a file with nothing after the head' => [-> { lcty_msg_file }, true]
+  }.each do |label, (make, answer)|
+    scenario "ConvHtml.lcty_msg? tells the lcty-msg format from the one before (#{label})" do
+      text = nil
+      step("Given #{label}") { text = instance_exec(&make) }
+      step("Then ConvHtml.lcty_msg? is #{answer}") { assert_equal answer, ConvHtml.lcty_msg?(text) }
+    end
+  end
 end

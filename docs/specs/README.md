@@ -78,6 +78,7 @@ for the backend ones).
 | [LCTYSP-3020](LCTYSP-3020_rpc.feature)                        | The RPC protocol                              | `tests/backend/rpc_test.rb`                                  |
 | [LCTYSP-3021](LCTYSP-3021_openapi.feature)                    | The paths of openapi.yaml                     | `tests/backend/openapi_test.rb`                              |
 | [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)                  | Several pages over /v1/rpc                    | `tests/backend/rpc_pages_test.rb`                            |
+| [LCTYSP-3023](LCTYSP-3023_convert.feature)                    | Converting the conversation files             | `tests/backend/convert_c_test.rb`                            |
 ### Withdrawn features
 
 These numbers were used by features that were removed with what they tested. They are not reused; the features are in

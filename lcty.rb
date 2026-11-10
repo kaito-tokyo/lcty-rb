@@ -107,4 +107,33 @@ module Lcty
   end
 end
 
-Lcty.run if $PROGRAM_NAME == __FILE__
+module Lcty
+  # `lcty.rb convert`, with the server stopped: convert the conversation files of c/ to LCTYSP-0013 once
+  # (lib/convert_c.rb). Returns whether every file could be converted.
+  def self.convert(out = $stderr)
+    require_relative 'lib/c_store'
+    require_relative 'lib/convert_c'
+    Chatty::TagStore.rename_former(Chatty::FORMER_TAGS_DB_PATH, Chatty::TAGS_DB_PATH)
+    tags = Chatty::TagStore.new(Chatty::TAGS_DB_PATH)
+    c_store = Chatty::CStore.new(Chatty::C_DB_PATH)
+    begin
+      r = Chatty::ConvertC.run(tags: tags, c_store: c_store, out: out)
+    ensure
+      c_store.close
+    end
+    out.puts "lcty-rb convert: #{r[:converted].size} converted, #{r[:current].size} already lcty-msg, " \
+             "#{r[:failed].size} failed (the files as they were are in #{Chatty::FORMER_CONV_DIR})"
+    r[:failed].empty?
+  end
+
+  # The command line: no argument starts the server; `convert` converts the conversation files
+  def self.main(argv)
+    case argv
+    when [] then run
+    when ['convert'] then exit(convert ? 0 : 1)
+    else abort "usage: #{File.basename($PROGRAM_NAME)} [convert]"
+    end
+  end
+end
+
+Lcty.main(ARGV) if $PROGRAM_NAME == __FILE__
