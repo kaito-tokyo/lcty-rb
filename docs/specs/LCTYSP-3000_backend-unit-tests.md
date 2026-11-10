@@ -42,7 +42,7 @@ changed.
 | [LCTYSP-3005](LCTYSP-3005_tag-store.feature)         | `lib/tag_store.rb`: `tags.sqlite`                    |
 | [LCTYSP-3006](LCTYSP-3006_vector-records.feature)    | `lib/v1/vector_records.rb`: the vector binary format |
 | [LCTYSP-3007](LCTYSP-3007_vector-db.feature)         | `lib/v1/vector_db.rb`: the vector DB                 |
-| [LCTYSP-3008](LCTYSP-3008_server-settings.feature)   | `lib/config.rb`: the environment variables           |
+| [LCTYSP-3008](LCTYSP-3008_server-settings.feature)   | `lib/config.rb`: the server's settings               |
 | [LCTYSP-3012](LCTYSP-3012_http-api.feature)          | `lib/v1/servlet.rb`: the HTTP API `/v1/`             |
 | [LCTYSP-3014](LCTYSP-3014_tag-files.feature)         | `lib/tag_files.rb`: the tag files in `t/`            |
 | [LCTYSP-3016](LCTYSP-3016_file-types.feature)        | `lcty.rb`: the types of the files served             |

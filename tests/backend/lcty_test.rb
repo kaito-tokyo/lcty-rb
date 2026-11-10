@@ -80,6 +80,23 @@ class LctyTest < Lcty::Scenarios
     end
   end
 
+  scenario 'A settings file that cannot be used stops lcty.rb with its message' do
+    dir = Dir.mktmpdir('lcty-settings-')
+    path = File.join(dir, 'server_settings.json')
+    err = status = nil
+    step('Given a data directory whose server_settings.json is {"prot": 8080}') { File.write(path, '{"prot": 8080}') }
+    step('When lcty.rb is loaded') do
+      _, err, status = Open3.capture3({ 'LCTY_DATA_DIR' => dir }, RbConfig.ruby, '-e', "require #{LCTY_RB.dump}",
+                                      chdir: REPO_ROOT)
+    end
+    step('Then it exits with the status 1 and prints "lcty-rb: " and the message of the settings file, without a backtrace') do
+      assert_equal 1, status.exitstatus
+      assert_equal "lcty-rb: #{path}: unknown setting \"prot\" (known: port, host, base_url, allowed_origins)\n", err
+    end
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
   # ---- Lcty.mount_all ----
 
   js = '"text/javascript; charset=utf-8"'

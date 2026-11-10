@@ -29,6 +29,11 @@ Feature: LCTYSP-3019 The entry point
       | "/lcty/"  | "/lcty/" |
       | "/a//b/"  | "/a/b/"  |
 
+  Scenario: A settings file that cannot be used stops lcty.rb with its message
+    Given a data directory whose server_settings.json is {"prot": 8080}
+    When lcty.rb is loaded
+    Then it exits with the status 1 and prints "lcty-rb: " and the message of the settings file, without a backtrace
+
   Scenario Outline: Every path of the site is mounted
     Given Lcty.mount_all on a WEBrick server
     When <path> is requested

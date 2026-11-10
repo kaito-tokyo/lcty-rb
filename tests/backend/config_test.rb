@@ -18,9 +18,11 @@ require 'rbconfig'
 class ConfigTest < Lcty::Scenarios
   CONFIG = File.expand_path('../../lib/config.rb', __dir__)
   REPO_ROOT = File.expand_path('../..', __dir__)
-  SETTINGS = %w[PORT LCTY_HOST LCTY_DATA_DIR XDG_DATA_HOME].freeze
+  SETTINGS = %w[PORT LCTY_HOST LCTY_DATA_DIR XDG_DATA_HOME LCTY_BASE_URL LCTY_ALLOWED_ORIGIN].freeze
   CONSTANTS = %w[ROOT PUBLIC_DIR XDG_DATA_HOME DEFAULT_DATA_DIR DATA_DIR CONV_DIR TAG_DIR TAG_LOCK_PATH TAGS_DB_PATH
-                 FORMER_TAGS_DB_PATH INDEX_PATH PORT BIND BIND_URL_HOST].freeze
+                 FORMER_TAGS_DB_PATH INDEX_PATH PORT BIND BIND_URL_HOST SETTINGS_PATH BASE_URL_SETTING
+                 ALLOWED_ORIGINS_SETTING].freeze
+  FILE = '{"port": 8080, "host": "0.0.0.0", "base_url": "/lcty/", "allowed_origins": ["http://a.test:8080"]}'
   # Prints the constants of lib/config.rb and the platform of the process as JSON
   SCRIPT = "require #{CONFIG.dump}; require 'json'; " \
            "puts JSON.generate(Hash[#{CONSTANTS.inspect}.map { |n| [n, Chatty.const_get(n)] }]" \
@@ -45,6 +47,18 @@ class ConfigTest < Lcty::Scenarios
     out, err, status = Open3.capture3(env, RbConfig.ruby, '-e', SCRIPT, chdir: @cwd)
     return { status: status, err: err } unless status.success?
     JSON.parse(out)
+  end
+
+  # A data directory of its own for the scenario, with server_settings.json holding content (none when nil)
+  def given_data_dir(content)
+    @data = File.join(@tmp, 'data')
+    FileUtils.mkdir_p(@data)
+    File.write(File.join(@data, 'server_settings.json'), content) if content
+    @env['LCTY_DATA_DIR'] = @data
+  end
+
+  def settings_of(c)
+    c.values_at('PORT', 'BIND', 'BASE_URL_SETTING', 'ALLOWED_ORIGINS_SETTING')
   end
 
   def mac_or_windows?(c)
@@ -110,6 +124,67 @@ class ConfigTest < Lcty::Scenarios
     step('Given LCTY_HOST is "localhost"') { @env = { 'LCTY_HOST' => 'localhost' } }
     step('When lib/config.rb is loaded') { c = load_config }
     step('Then BIND_URL_HOST is "localhost"') { assert_equal 'localhost', c['BIND_URL_HOST'] }
+  end
+
+  # ---- server_settings.json of the data directory ----
+
+  scenario 'The settings file of the data directory sets the port, the address, the base URL and the allowed origins' do
+    c = nil
+    step("Given a data directory whose server_settings.json is #{FILE}") { given_data_dir(FILE) }
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then PORT is 8080, BIND is "0.0.0.0", BASE_URL_SETTING is "/lcty/" and ALLOWED_ORIGINS_SETTING is ["http://a.test:8080"]') do
+      assert_equal [8080, '0.0.0.0', '/lcty/', ['http://a.test:8080']], settings_of(c)
+    end
+    step('And SETTINGS_PATH is its "server_settings.json"') do
+      assert_equal File.join(@data, 'server_settings.json'), c['SETTINGS_PATH']
+    end
+  end
+
+  scenario 'Without a settings file every setting takes its default' do
+    c = nil
+    step('Given a data directory without server_settings.json') { given_data_dir(nil) }
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then PORT is 45280, BIND is "127.0.0.1", BASE_URL_SETTING is "/" and ALLOWED_ORIGINS_SETTING is nil') do
+      assert_equal [45280, '127.0.0.1', '/', nil], settings_of(c)
+    end
+    step('And no server_settings.json has been created') do
+      refute File.exist?(File.join(@data, 'server_settings.json'))
+    end
+  end
+
+  scenario 'An environment variable that is set and not empty overrides the file' do
+    c = nil
+    step("Given a data directory whose server_settings.json is #{FILE}") { given_data_dir(FILE) }
+    step('And PORT is "9090", LCTY_HOST is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test, http://c.test"') do
+      @env.merge!('PORT' => '9090', 'LCTY_HOST' => '', 'LCTY_BASE_URL' => '/x/',
+                  'LCTY_ALLOWED_ORIGIN' => 'http://b.test, http://c.test')
+    end
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then PORT is 9090, BIND is "0.0.0.0", BASE_URL_SETTING is "/x/" and ALLOWED_ORIGINS_SETTING is ["http://b.test", "http://c.test"]') do
+      assert_equal [9090, '0.0.0.0', '/x/', ['http://b.test', 'http://c.test']], settings_of(c)
+    end
+  end
+
+  [
+    ['{port: 1}', 'not JSON:'],
+    ['[1, 2]', 'must be a JSON object'],
+    ['{"prot": 8080}', 'unknown setting "prot" (known: port, host, base_url, allowed_origins)'],
+    ['{"port": "8080"}', 'port must be an integer from 1 to 65535'],
+    ['{"port": 70000}', 'port must be an integer from 1 to 65535'],
+    ['{"host": ""}', 'host must be a non-empty string'],
+    ['{"base_url": 1}', 'base_url must be a string'],
+    ['{"allowed_origins": "http://a"}', 'allowed_origins must be an array of non-empty strings']
+  ].each do |content, message|
+    scenario "A settings file that cannot be used stops the server (#{content})" do
+      c = nil
+      step("Given a data directory whose server_settings.json is #{content}") { given_data_dir(content) }
+      step('When lib/config.rb is loaded') { c = load_config }
+      step("Then loading fails with a SettingsError that starts with the path of the file and \"#{message}\"") do
+        refute c[:status].success?
+        assert_includes c[:err], "#{File.join(@data, 'server_settings.json')}: #{message}"
+        assert_includes c[:err], 'Chatty::SettingsError'
+      end
+    end
   end
 
   scenario 'An absolute LCTY_DATA_DIR is the data directory' do

@@ -12,6 +12,9 @@
 #   LCTY_HOST=192.168.1.10 /usr/bin/ruby lcty.rb     # => http://192.168.1.10:45280 (that address only)
 #   LCTY_BASE_URL=/lcty/ /usr/bin/ruby lcty.rb       # => the site under /lcty/
 #
+# The settings are kept in server_settings.json of the data directory (port, host, base_url, allowed_origins); the
+# environment variables above override them, and LCTY_DATA_DIR says where the data directory is (LCTYSP-0010).
+#
 # Start it in the root of the repository: the files of the site are found from the working directory (public/…). This
 # file only wires the servlets together; the code lives in lib/ (lib/servlets.rb for the site, lib/v1/ for the API,
 # LCTYSP-0005).
@@ -22,15 +25,20 @@ Encoding.default_external = Encoding::UTF_8
 require 'fileutils'
 require 'securerandom'
 require 'webrick'
-require_relative 'lib/config'
+begin
+  require_relative 'lib/config'
+rescue Chatty::SettingsError => e # a server_settings.json that cannot be used (LCTYSP-0010)
+  abort "lcty-rb: #{e.message}"
+end
 require_relative 'lib/store'
 require_relative 'lib/v1/servlet'
 require_relative 'lib/servlets'
 require_relative 'lib/rpc/servlet'
 
 module Lcty
-  # The path the site is served under: LCTY_BASE_URL, starting and ending with "/" ("/" when it is unset or empty)
-  BASE_URL = "/#{ENV['LCTY_BASE_URL'].to_s.delete_prefix('/').delete_suffix('/')}/".squeeze('/').freeze
+  # The path the site is served under: base_url of server_settings.json or LCTY_BASE_URL (Chatty::BASE_URL_SETTING),
+  # starting and ending with "/" ("/" when it is unset or empty)
+  BASE_URL = "/#{Chatty::BASE_URL_SETTING.to_s.delete_prefix('/').delete_suffix('/')}/".squeeze('/').freeze
 
   # The files of /lcty.v1/ (LCTYSP-0005): each under its own name, which the pages and the scripts load, and the names
   # of version 1 that conversation files and tag files load next to themselves (C and T redirect them here)
@@ -108,7 +116,9 @@ module Lcty
     %w[INT TERM].each { |sig| trap(sig) { s.shutdown } }
     $stderr.puts "lcty-rb: http://#{Chatty::BIND_URL_HOST}:#{Chatty::PORT}#{BASE_URL}  (data: #{Chatty::DATA_DIR})"
     # A page opened from another origin cannot use /v1/rpc (LCTYSP-0012): say which ones can
-    $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (LCTY_ALLOWED_ORIGIN)"
+    $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (allowed_origins)"
+    settings = File.exist?(Chatty::SETTINGS_PATH) ? Chatty::SETTINGS_PATH : "none (#{Chatty::SETTINGS_PATH} does not exist)"
+    $stderr.puts "lcty-rb: settings: #{settings}"
     s.start
   end
 end
