@@ -18,6 +18,7 @@ require 'net/http'
 require 'open3'
 require 'rbconfig'
 require File.expand_path('../../lcty.rb', __dir__)
+require_relative 'rpc_support' # its Page, a WebSocket client of /v1/rpc
 
 class LctyTest < Lcty::Scenarios
   REPO_ROOT = File.expand_path('../..', __dir__)
@@ -136,6 +137,55 @@ class LctyTest < Lcty::Scenarios
     end
   ensure
     FileUtils.rm_rf(dir)
+  end
+
+  # ---- Stopping ----
+
+  # A port free a moment ago on 127.0.0.1
+  def free_port
+    s = TCPServer.new('127.0.0.1', 0)
+    s.addr[1]
+  ensure
+    s&.close
+  end
+
+  %w[INT TERM].each do |signal|
+    scenario "The server stops on a signal while a page keeps /v1/rpc open (#{signal})" do
+      dir = Dir.mktmpdir('lcty-stop-')
+      port = free_port
+      pid = pg = status = nil
+      begin
+        step('Given lcty.rb is running, with a page connected to /v1/rpc that never closes its end') do
+          env = { 'LCTY_DATA_DIR' => dir, 'LCTY_PORT' => port.to_s, 'PORT' => nil, 'LCTY_BIND_IP' => nil,
+                  'LCTY_BASE_URL' => nil, 'LCTY_ALLOWED_ORIGIN' => nil }
+          pid = Process.spawn(env, RbConfig.ruby, LCTY_RB, chdir: REPO_ROOT, out: File::NULL, err: File::NULL)
+          deadline = Time.now + 30
+          begin
+            TCPSocket.new('127.0.0.1', port).close
+          rescue SystemCallError
+            flunk 'lcty.rb did not start' if Time.now > deadline
+            sleep 0.1
+            retry
+          end
+          pg = RpcSupport::Page.new(port, origin: "http://127.0.0.1:#{port}")
+        end
+        step("When the server is sent #{signal}") { Process.kill(signal, pid) }
+        step('Then it exits with the status 0 within 5 seconds') do
+          deadline = Time.now + 5
+          sleep 0.05 until (status = Process.wait2(pid, Process::WNOHANG)&.last) || Time.now > deadline
+          refute_nil status, 'lcty.rb is still running'
+          assert_equal 0, status.exitstatus
+        end
+        step('And the page got a close frame with the code 1001') { assert_equal 1001, pg.close_code }
+      ensure
+        pg&.close
+        if pid && status.nil?
+          Process.kill('KILL', pid) rescue nil
+          Process.wait(pid) rescue nil
+        end
+        FileUtils.rm_rf(dir)
+      end
+    end
   end
 
   # ---- Lcty.listen ----

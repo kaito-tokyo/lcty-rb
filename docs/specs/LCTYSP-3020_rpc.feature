@@ -273,6 +273,21 @@ Feature: LCTYSP-3020 The RPC protocol
 
   # ---- Pages that stop reading ----
 
+  # ---- The server stopping (Ctrl-C, or launchd's TERM; LCTYSP-3019) ----
+
+  Scenario: When the server stops every page gets a close frame of 1001 and is let go
+    Given two pages that close their end when the server closes, and a grace of 2 seconds
+    When the hub closes every connection
+    Then it answers 2, well before the grace is over
+    And both pages got a close frame with the code 1001
+    And neither is a connection of the hub any more
+
+  Scenario: A page that keeps its connection open is dropped after the grace
+    Given a page that never closes its end, and a grace of 0.3 seconds
+    When the hub closes every connection
+    Then it answers 1 once the grace is over
+    And the page got a close frame with the code 1001, and its connection is closed
+
   Scenario: A page that stops reading is dropped without holding up the others
     Given a page that receives every notification, follows a conversation and never reads
     When more changes are made than its queue holds

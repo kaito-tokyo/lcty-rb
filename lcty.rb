@@ -135,6 +135,13 @@ module Lcty
     raise PortError, "no free port from #{ports.first} to #{ports.last} (set one with LCTY_PORT or PORT)"
   end
 
+  # Stop server: it accepts nothing more, then every /v1/rpc connection is closed (Rpc::HUB.close_all), since WEBrick
+  # waits for the thread of every request and a page left open would otherwise keep the server running (LCTYSP-0012)
+  def self.stop(server)
+    server.shutdown
+    Rpc::HUB.close_all
+  end
+
   def self.run
     Chatty.open_data
     Rpc.index = Chatty::INDEX # c_recordcount of /v1/rpc lives in _index.sqlite with every other cache
@@ -150,7 +157,9 @@ module Lcty
       abort "lcty-rb: #{e.message}"
     end
     mount_all(s)
-    %w[INT TERM].each { |sig| trap(sig) { s.shutdown } }
+    # Ctrl-C (INT) and launchd's TERM. A trap handler may not take a Mutex, which closing the connections does, so the
+    # stop runs on a thread of its own
+    %w[INT TERM].each { |sig| trap(sig) { Thread.new { stop(s) } } }
     urls = Chatty.bind_ips.map { |ip| "http://#{Chatty.url_host(ip)}:#{Chatty.port}#{base_url}" }
     $stderr.puts "lcty-rb: #{urls.join(' ')}  (data: #{Chatty::DATA_DIR})"
     # A page opened from another origin cannot use /v1/rpc (LCTYSP-0012): say which ones can
