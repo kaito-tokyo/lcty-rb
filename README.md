@@ -68,8 +68,9 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
     - `--allowed-origin`: an origin whose pages may use `/v1/rpc`, once per origin. Add the URL you open the site with
       when it is not one of the addresses listened on or `localhost` (a `.local` name, say); the server logs the
       Origin it refused.
-    - The environment variables `LCTY_BIND_IP`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override the file, and the
-      command line overrides both.
+    - For a quick start the environment variables `LCTY_BIND_IP`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override
+      the file with one value each (several addresses or origins go in the file or on the command line), and the
+      command line overrides both. `LCTY_DATA_DIR` is an environment variable only.
 - Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 

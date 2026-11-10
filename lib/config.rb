@@ -6,9 +6,9 @@
 # Server settings (LCTYSP-0010). Two are environment variables only: LCTY_DATA_DIR, where the data directory is, and
 # the port (LCTY_PORT, else PORT; without either lcty.rb takes the first free port from 45280). The others are options
 # of lcty.rb (--bind-ip, --base-url, --allowed-origin), written one per line in server_settings.txt of the data
-# directory or given on the command line; an environment variable that is set and not empty overrides the file
-# (LCTY_BIND_IP, LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN), and the command line overrides both. Everything else is a browser
-# setting.
+# directory or given on the command line; an environment variable that is set and not empty overrides the file with
+# one value (LCTY_BIND_IP, LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN: the environment is for starting quickly), and the
+# command line overrides both. Everything else is a browser setting.
 
 require 'ipaddr'
 require 'optparse'
@@ -85,9 +85,11 @@ module Chatty
   SETTINGS_PATH = File.join(DATA_DIR, 'server_settings.txt')
   # Each setting and the environment variable that overrides the file
   SETTING_ENV = { bind_ips: 'LCTY_BIND_IP', base_url: 'LCTY_BASE_URL', allowed_origins: 'LCTY_ALLOWED_ORIGIN' }.freeze
-  # The settings whose environment variable holds several values, separated by commas or spaces
+  # The settings that take several values (once per option); their environment variable takes one only, since the
+  # environment is for starting the server quickly, and more are given as options (LCTYSP-0010)
   SETTING_LISTS = %i[bind_ips allowed_origins].freeze
   SETTING_DEFAULTS = { bind_ips: ['127.0.0.1'].freeze, base_url: '/', allowed_origins: nil }.freeze
+  OPTION_OF = { bind_ips: '--bind-ip', allowed_origins: '--allowed-origin' }.freeze
 
   # The options of lcty.rb, the same for the file and the command line; what they set goes into into
   def self.option_parser(into)
@@ -103,6 +105,10 @@ module Chatty
       # Each server of a machine needs a port of its own, so it is not kept with the data (LCTYSP-0010)
       o.on('--port=PORT', 'not an option: set LCTY_PORT or PORT') do
         raise SettingsError, 'the port is not an option; set LCTY_PORT or PORT'
+      end
+      # The data directory holds server_settings.txt, so it is said before any option is read (LCTYSP-0010)
+      o.on('--data-dir=DIR', 'not an option: set LCTY_DATA_DIR') do
+        raise SettingsError, 'the data directory is not an option; set LCTY_DATA_DIR'
       end
     end
   end
@@ -134,15 +140,19 @@ module Chatty
     end
   end
 
-  # What the environment variables set when they are set and not empty; LCTY_BIND_IP and LCTY_ALLOWED_ORIGIN separate
-  # their values by commas or spaces
+  # What the environment variables set when they are set and not empty, one value each: LCTY_BIND_IP one address,
+  # LCTY_ALLOWED_ORIGIN one origin. A value with a comma or whitespace in it is refused, so a list is never taken apart
+  # one way here and another way elsewhere.
   def self.env_settings
     SETTING_ENV.each_with_object({}) do |(key, var), set|
       v = ENV[var].to_s
       next if v.empty?
-      set[key] = SETTING_LISTS.include?(key) ? v.split(/[\s,]+/).reject(&:empty?) : v
-      bad = key == :bind_ips && set[key].find { |ip| !ip_address?(ip) }
-      raise SettingsError, "#{var}: not an IP address to listen on: #{bad.inspect}" if bad
+      next set[key] = v unless SETTING_LISTS.include?(key)
+      if v.match?(/[\s,]/)
+        raise SettingsError, "#{var}: one value only; give more with #{OPTION_OF[key]} in server_settings.txt"
+      end
+      raise SettingsError, "#{var}: not an IP address to listen on: #{v.inspect}" if key == :bind_ips && !ip_address?(v)
+      set[key] = [v]
     end
   end
 

@@ -135,9 +135,10 @@ talks to the LLM ([LCTYSP-0001](LCTYSP-0001_architecture.md)), so the endpoint, 
 browser.
 
 - **Two settings are environment variables only:**
-  - `LCTY_DATA_DIR` says where the data directory is, so it cannot be kept in it. Default:
-    `~/Library/Application Support/tokyo.kaito.lcty-rb/Data` on macOS, and `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data`
-    elsewhere (below).
+  - `LCTY_DATA_DIR` says where the data directory is, so it cannot be kept in it, nor given as an option: the
+    directory holds `server_settings.txt`, so it is known before any option is read, and `--data-dir` is refused with
+    a pointer to `LCTY_DATA_DIR`. Default: `~/Library/Application Support/tokyo.kaito.lcty-rb/Data` on macOS, and
+    `$XDG_DATA_HOME/tokyo.kaito.lcty-rb/Data` elsewhere (below).
   - The port is `LCTY_PORT`, else `PORT` (an integer from 1 to 65535). Each server of a machine needs a port of its
     own, so the port is not kept with the data. A port asked for that is taken stops the server (the pages, bookmarks
     and allowed origins name it). Without either, the server listens on the first free port from 45280 to 45379, and
@@ -172,16 +173,21 @@ browser.
   awkward to edit and to reload. The data directory is where the data already is, and the file is backed up with it.
   Its name has no leading `_`, so it is source-of-truth data. Lines of options, not JSON: the same parser and the
   same names as the command line, comments, and nothing to quote.
-- **Order:** the default, then the file, then the environment variables that are set and not empty (`LCTY_BIND_IP`
-  and `LCTY_ALLOWED_ORIGIN`, their values separated by commas or spaces, and `LCTY_BASE_URL`), then the command line,
-  each replacing the ones before (the addresses or origins of one source replace those of another; within one they
-  add up). The
+- **Order:** the default, then the file, then the environment variables that are set and not empty (`LCTY_BIND_IP`,
+  `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN`), then the command line, each replacing the ones before (the addresses or
+  origins of one source replace those of another; within the file or the command line they add up).
+- **An environment variable holds one value:** one address in `LCTY_BIND_IP`, one origin in `LCTY_ALLOWED_ORIGIN`.
+  The environment is for starting the server quickly; several addresses or origins are written as options, in the
+  file or on the command line. A value with a comma or whitespace in it stops the server
+  (`LCTY_BIND_IP: one value only; give more with --bind-ip in server_settings.txt`), so a list is never split one way
+  here and another way elsewhere. The
   tests and the container of CI set environment variables, and nothing has to be written into a data directory for
   that.
 - **The file is read once, when the server starts.** A changed file applies after a restart. When there is no file,
   every setting takes its default, and nothing is created. A `server_settings.json` of an earlier version is not read.
 - **A setting that cannot be used stops the server:** an option that is not one (so a typo never passes unseen), one
-  without its value, `--port`, an address to listen on that is not an IP address, or a port that is not a number. lcty.rb prints
+  without its value, `--port` or `--data-dir`, an address to listen on that is not an IP address, an environment
+  variable of several values, or a port that is not a number. lcty.rb prints
   `lcty-rb: <where>: <what is wrong>` (the path of the file, or "the command line" with the usage) and exits with the
   status 1 ([LCTYSP-3008](LCTYSP-3008_server-settings.feature)).
 - **At startup the server prints** the URL of every address at its port, the data directory, the origins whose pages may use

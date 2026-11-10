@@ -23,7 +23,7 @@ class ConfigTest < Lcty::Scenarios
   CONSTANTS = %w[ROOT PUBLIC_DIR XDG_DATA_HOME DEFAULT_DATA_DIR DATA_DIR CONV_DIR TAG_DIR TAG_LOCK_PATH TAGS_DB_PATH
                  FORMER_TAGS_DB_PATH INDEX_PATH PORT SETTINGS_PATH].freeze
   # The lines of a server_settings.txt that sets every setting of the file
-  FILE = ['# a comment', '', '--bind-ip=0.0.0.0', '--bind-ip ::1', '--base-url /lcty/',
+  FILE = ['# a comment', '', '--bind-ip=0.0.0.0', '--bind-ip ::1', '--bind-ip=0.0.0.0', '--base-url /lcty/',
           '--allowed-origin=http://a.test:8080', '--allowed-origin=http://b.test:8080'].freeze
   # Prints the constants of lib/config.rb (PORTS_TRIED as its first and last port), the settings after
   # Chatty.configure was given the JSON array LCTY_TEST_ARGS (none by default) and what it returned, and the platform of
@@ -125,16 +125,32 @@ class ConfigTest < Lcty::Scenarios
     end
   end
 
-  scenario 'LCTY_BIND_IP sets the addresses to listen on, each once' do
+  scenario 'LCTY_BIND_IP sets the one address to listen on' do
     c = nil
-    step('Given LCTY_BIND_IP is "0.0.0.0, ::1 0.0.0.0"') { @env = { 'LCTY_BIND_IP' => '0.0.0.0, ::1 0.0.0.0' } }
+    step('Given LCTY_BIND_IP is "::1"') { @env = { 'LCTY_BIND_IP' => '::1' } }
     step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind_ips is ["0.0.0.0", "::1"]') { assert_equal ['0.0.0.0', '::1'], c['bind_ips'] }
+    step('Then Chatty.bind_ips is ["::1"]') { assert_equal ['::1'], c['bind_ips'] }
+  end
+
+  [
+    ['LCTY_BIND_IP', '0.0.0.0, ::1', '--bind-ip'],
+    ['LCTY_ALLOWED_ORIGIN', 'http://a.test http://b.test', '--allowed-origin']
+  ].each do |variable, value, option|
+    scenario "An environment variable takes one value only (#{variable})" do
+      c = nil
+      step("Given #{variable} is \"#{value}\"") { @env = { variable => value } }
+      step('When lib/config.rb is loaded') { c = load_config }
+      message = "#{variable}: one value only; give more with #{option} in server_settings.txt"
+      step("Then loading fails with the SettingsError \"#{message}\"") do
+        refute c[:status].success?
+        assert_includes c[:err], "#{message} (Chatty::SettingsError)"
+      end
+    end
   end
 
   scenario 'LCTY_BIND_IP that is not an IP address stops the server' do
     c = nil
-    step('Given LCTY_BIND_IP is "127.0.0.1,localhost"') { @env = { 'LCTY_BIND_IP' => '127.0.0.1,localhost' } }
+    step('Given LCTY_BIND_IP is "localhost"') { @env = { 'LCTY_BIND_IP' => 'localhost' } }
     step('When lib/config.rb is loaded') { c = load_config }
     step('Then loading fails with the SettingsError "LCTY_BIND_IP: not an IP address to listen on: "localhost""') do
       refute c[:status].success?
@@ -180,12 +196,12 @@ class ConfigTest < Lcty::Scenarios
     c = nil
     lines = ['--bind-ip=0.0.0.0', '--base-url=/lcty/', '--allowed-origin=http://a.test:8080']
     step("Given a data directory whose server_settings.txt has the lines #{quoted(lines)}") { given_data_dir(lines) }
-    step('And LCTY_BIND_IP is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test, http://c.test"') do
-      @env.merge!('LCTY_BIND_IP' => '', 'LCTY_BASE_URL' => '/x/', 'LCTY_ALLOWED_ORIGIN' => 'http://b.test, http://c.test')
+    step('And LCTY_BIND_IP is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test"') do
+      @env.merge!('LCTY_BIND_IP' => '', 'LCTY_BASE_URL' => '/x/', 'LCTY_ALLOWED_ORIGIN' => 'http://b.test')
     end
     step('When lib/config.rb is loaded') { c = load_config }
-    step('Then Chatty.bind_ips is ["0.0.0.0"], Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test", "http://c.test"]') do
-      assert_equal [['0.0.0.0'], '/x/', ['http://b.test', 'http://c.test']], settings_of(c)
+    step('Then Chatty.bind_ips is ["0.0.0.0"], Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test"]') do
+      assert_equal [['0.0.0.0'], '/x/', ['http://b.test']], settings_of(c)
     end
   end
 
@@ -211,6 +227,7 @@ class ConfigTest < Lcty::Scenarios
     ['--bind-ip', 'missing argument: --bind-ip'],
     ['bind-ip=1', 'not an option: bind-ip=1'],
     ['--port=8080', 'the port is not an option; set LCTY_PORT or PORT'],
+    ['--data-dir=/tmp/x', 'the data directory is not an option; set LCTY_DATA_DIR'],
     ['--bind-ip=', 'not an IP address to listen on: ""'],
     ['--bind-ip=localhost', 'not an IP address to listen on: "localhost"'],
     ['--bind-ip=10.0.0.0/8', 'not an IP address to listen on: "10.0.0.0/8"']

@@ -14,12 +14,13 @@ Feature: LCTYSP-3008 Server settings
   not an integer from 1 to 65535 stops the server. The other settings are the options of lcty.rb, parsed by one
   OptionParser: --bind-ip and --allowed-origin (each once per value) and --base-url. Chatty.configure(argv) takes them
   from server_settings.txt of the data directory (one option per line, blank lines and # comments left out), then from
-  the environment variables that are set and not empty (LCTY_BIND_IP, LCTY_BASE_URL and LCTY_ALLOWED_ORIGIN; the
-  lists separated by commas or spaces), then from argv, each replacing the ones before, and returns the other
-  arguments; lib/config.rb runs it with no argv when it is loaded. Without any a setting takes its default: the
+  the environment variables that are set and not empty (LCTY_BIND_IP, LCTY_BASE_URL and LCTY_ALLOWED_ORIGIN, one value
+  each: the environment is for starting quickly, and a value with a comma or whitespace stops the server), then from
+  argv, each replacing the ones before, and returns the other arguments; lib/config.rb runs it with no argv when it is loaded. Without any a setting takes its default: the
   address 127.0.0.1 (Chatty.bind_ips, the IP addresses to listen on, an address given twice listed once), the base URL
   "/" (Chatty.base_url) and the server's own origins (Chatty.allowed_origins nil). An option that is not one (the --host of before
-  among them), lacks its value or is --port, or an address to listen on that is not an IP address, stops the server,
+  among them), lacks its value or is --port or --data-dir (LCTY_DATA_DIR is an environment variable only, since the
+  data directory holds the file), or an address to listen on that is not an IP address, stops the server,
   named after the file, the variable or the command line. Chatty.url_host writes an address as a URL does. A relative LCTY_DATA_DIR is resolved against the repository root, and the conversations,
   the tag files and their lock, the tags of conversations and the search index live at fixed places in the data
   directory. It also defines the patterns of ids and tag references, and HttpError, the error that carries an HTTP status. Each setting is read in a new Ruby process that
@@ -59,13 +60,23 @@ Feature: LCTYSP-3008 Server settings
       | 0     |
       | 70000 |
 
-  Scenario: LCTY_BIND_IP sets the addresses to listen on, each once
-    Given LCTY_BIND_IP is "0.0.0.0, ::1 0.0.0.0"
+  Scenario: LCTY_BIND_IP sets the one address to listen on
+    Given LCTY_BIND_IP is "::1"
     When lib/config.rb is loaded
-    Then Chatty.bind_ips is ["0.0.0.0", "::1"]
+    Then Chatty.bind_ips is ["::1"]
+
+  Scenario Outline: An environment variable takes one value only
+    Given <variable> is "<value>"
+    When lib/config.rb is loaded
+    Then loading fails with the SettingsError "<variable>: one value only; give more with <option> in server_settings.txt"
+
+    Examples:
+      | variable            | value                       | option           |
+      | LCTY_BIND_IP        | 0.0.0.0, ::1                | --bind-ip        |
+      | LCTY_ALLOWED_ORIGIN | http://a.test http://b.test | --allowed-origin |
 
   Scenario: LCTY_BIND_IP that is not an IP address stops the server
-    Given LCTY_BIND_IP is "127.0.0.1,localhost"
+    Given LCTY_BIND_IP is "localhost"
     When lib/config.rb is loaded
     Then loading fails with the SettingsError "LCTY_BIND_IP: not an IP address to listen on: "localhost""
 
@@ -76,7 +87,7 @@ Feature: LCTYSP-3008 Server settings
   # ---- server_settings.txt of the data directory, and the command line ----
 
   Scenario: The settings file of the data directory sets the addresses, the base URL and the allowed origins
-    Given a data directory whose server_settings.txt has the lines "# a comment", "", "--bind-ip=0.0.0.0", "--bind-ip ::1", "--base-url /lcty/", "--allowed-origin=http://a.test:8080" and "--allowed-origin=http://b.test:8080"
+    Given a data directory whose server_settings.txt has the lines "# a comment", "", "--bind-ip=0.0.0.0", "--bind-ip ::1", "--bind-ip=0.0.0.0", "--base-url /lcty/", "--allowed-origin=http://a.test:8080" and "--allowed-origin=http://b.test:8080"
     When lib/config.rb is loaded
     Then Chatty.bind_ips is ["0.0.0.0", "::1"], Chatty.base_url is "/lcty/" and Chatty.allowed_origins is ["http://a.test:8080", "http://b.test:8080"]
     And SETTINGS_PATH is its "server_settings.txt"
@@ -89,9 +100,9 @@ Feature: LCTYSP-3008 Server settings
 
   Scenario: An environment variable that is set and not empty overrides the file
     Given a data directory whose server_settings.txt has the lines "--bind-ip=0.0.0.0", "--base-url=/lcty/" and "--allowed-origin=http://a.test:8080"
-    And LCTY_BIND_IP is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test, http://c.test"
+    And LCTY_BIND_IP is empty, LCTY_BASE_URL is "/x/" and LCTY_ALLOWED_ORIGIN is "http://b.test"
     When lib/config.rb is loaded
-    Then Chatty.bind_ips is ["0.0.0.0"], Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test", "http://c.test"]
+    Then Chatty.bind_ips is ["0.0.0.0"], Chatty.base_url is "/x/" and Chatty.allowed_origins is ["http://b.test"]
 
   Scenario: The command line overrides the environment and the file, and the other arguments are returned
     Given a data directory whose server_settings.txt has the lines "--bind-ip=0.0.0.0" and "--allowed-origin=http://a.test:8080"
@@ -112,6 +123,7 @@ Feature: LCTYSP-3008 Server settings
       | --bind-ip           | missing argument: --bind-ip                      |
       | bind-ip=1           | not an option: bind-ip=1                         |
       | --port=8080         | the port is not an option; set LCTY_PORT or PORT |
+      | --data-dir=/tmp/x   | the data directory is not an option; set LCTY_DATA_DIR |
       | --bind-ip=          | not an IP address to listen on: ""               |
       | --bind-ip=localhost | not an IP address to listen on: "localhost"      |
       | --bind-ip=10.0.0.0/8 | not an IP address to listen on: "10.0.0.0/8"    |
