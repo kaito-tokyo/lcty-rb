@@ -49,7 +49,8 @@ the layout before that (`_vectors.*`).
 | `c/lcty.v1.js`, `c/lcty.v1.css`               | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                                                                                      |
 | `lcty_t.sqlite`                               | Source (the current tags of conversations, `t_has_many_c`; tag definitions and memory are `t/`, below)                           | —                                                                                                                                                      |
 | `lcty_c.sqlite`                               | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `lcty.rb convert`)                   | —                                                                                                                                                      |
-| `server_settings.txt`                         | Source (the options of lcty.rb, one per line; [below](#settings))                                                                | —                                                                                                                                                      |
+| `server_settings.txt`                         | Source (the options of lcty.rb, one per line; [below](#settings))                                                                |
+| `htdigest`                                    | Source (the users of Digest authentication, as Apache's htdigest writes them; [below](#authentication))                          | —                                                                                                                                                      |
 | `c-former/*.html`                             | Source (every conversation file as it was before `lcty.rb convert` converted it; never deleted)                                  | —                                                                                                                                                      |
 | `lcty_fuzzy_search.sqlite` (+ `-wal`, `-shm`) | The vectors of every embedding model: derived, but only the browser can make them again, so they are kept and backed up          | Re-embedded by the browser while a page is open, when lost ([LCTYSP-0008](LCTYSP-0008_vector-binary.md))                                               |
 | `_index.sqlite` (+ `-wal`, `-shm`)            | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
@@ -191,7 +192,34 @@ browser.
   `lcty-rb: <where>: <what is wrong>` (the path of the file, or "the command line" with the usage) and exits with the
   status 1 ([LCTYSP-3008](LCTYSP-3008_server-settings.feature)).
 - **At startup the server prints** the URL of every address at its port, the data directory, the origins whose pages may use
-  `/v1/rpc`, and the settings file it read, or that there is none.
+  `/v1/rpc`, the settings file it read, or that there is none, and the htdigest file it uses with its realm, or that
+  there is none.
+
+### Authentication
+
+- **An `htdigest` file in the data directory turns on HTTP Digest authentication;** without one no request needs
+  credentials. There is no option for it: the file is the setting, and it is backed up with the data.
+- **The file is as Apache's `htdigest` writes it,** one `user:realm:hash` per line (the hash the MD5 of
+  `user:realm:password`), for example:
+
+  ```bash
+  htdigest -c "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/htdigest" lcty-rb alice
+  ```
+
+  Every line names one realm, the one the browser asks the password for. A file that is not this, holds no user or
+  names two realms stops the server (`lcty-rb: <path>: <what is wrong>`), so it never starts without the protection
+  it was given. WEBrick reads the file again when it changes: a user added or a password changed applies at once,
+  another realm after a restart.
+- **Every request is checked before any servlet sees it** (WEBrick's `RequestCallback`), the WebSocket of `/v1/rpc`
+  included: the browser sends the credentials it was given for the page on the handshake too, and so do the workers'
+  requests. A request without valid credentials is answered `401` with a Digest challenge (`algorithm=MD5-sess`,
+  `qop="auth"`). Basic credentials are refused.
+- **The log** leaves out the challenge of a first request, which carries no credentials yet, and keeps a wrong
+  password or an unknown user.
+- **Only Digest:** Basic sends the password itself on every request. Digest sends none, but it is MD5 and encrypts
+  nothing, so from outside the machine TLS goes in front (a reverse proxy). `/v1/rpc` still checks `Origin`: the
+  browser would send the credentials for a page of another site as well.
+- A conversation file opened directly (`file://`) does not go through the server and is not affected.
 
 - **The data directory is outside the repository** by default, in the per-user application data folder (named by the
   reverse-DNS id `tokyo.kaito.lcty-rb`), so a checkout can be moved, cleaned or replaced without touching the data. It

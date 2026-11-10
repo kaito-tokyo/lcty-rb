@@ -45,6 +45,43 @@ Feature: LCTYSP-3019 The entry point
     When lcty.rb is run with "--help"
     Then it exits with the status 0 and prints the usage with --bind-ip, --base-url and --allowed-origin
 
+  # Digest authentication (LCTYSP-0010): an htdigest file in the data directory turns it on for every request
+  Scenario: Without an htdigest file no request needs credentials
+    Given a data directory without htdigest
+    When Lcty.digest_auth is called
+    Then it returns nil
+
+  Scenario: With an htdigest file every request needs one of its users
+    Given a data directory whose htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
+    And a server listening with Lcty.digest_auth, the site mounted
+    When /c/ is requested without credentials
+    Then it is answered 401 with a Digest challenge of the realm "lcty-rb"
+    When /c/ is requested with the Digest response of "alice" and "secret-pass"
+    Then it is answered 200
+    When /c/ is requested with the Digest response of "alice" and "wrong"
+    Then it is answered 401
+    When /c/ is requested with Basic credentials of "alice" and "secret-pass"
+    Then it is answered 401
+
+  Scenario: The WebSocket of /v1/rpc needs the credentials too
+    Given a data directory whose htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
+    And a server listening with Lcty.digest_auth, the site mounted
+    When the WebSocket of /v1/rpc is opened without credentials
+    Then the handshake is answered 401
+    When it is opened with the Digest response of "alice" and "secret-pass"
+    Then the handshake is answered 101
+
+  Scenario Outline: An htdigest file that cannot be used stops the server
+    Given a data directory whose htdigest is <content>
+    When Lcty.digest_auth is called
+    Then it raises a SettingsError that starts with the path of the file and "<message>"
+
+    Examples:
+      | content                                                                        | message                                          |
+      | the line "alice:secret"                                                        | not a line of htdigest (user:realm:md5): "alice:secret" |
+      | empty                                                                          | no user (add one with htdigest)                  |
+      | the users "alice" of the realm "a" and "bob" of the realm "b"                  | one realm only, not "a", "b"                     |
+
   # WEBrick waits for the thread of every request, and a /v1/rpc connection's thread reads until the page closes it
   Scenario Outline: The server stops on a signal while a page keeps /v1/rpc open
     Given lcty.rb is running, with a page connected to /v1/rpc that never closes its end

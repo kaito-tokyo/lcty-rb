@@ -103,20 +103,39 @@ module Lcty
   # No port to listen on: the one asked for is taken, or every one tried is
   class PortError < StandardError; end
 
+  # WEBrick's log at WARN without the lines of a Digest challenge: a browser's first request carries no credentials and
+  # is answered with the challenge, so these two lines would come with every page opened. A wrong password or an
+  # unknown user is still logged.
+  class Log < WEBrick::Log
+    QUIET = ['WEBrick::HTTPStatus::Unauthorized', 'no credentials in the request.'].freeze
+
+    def initialize
+      super($stderr, WEBrick::Log::WARN)
+    end
+
+    def error(msg)
+      super unless QUIET.any? { |q| msg.to_s.end_with?(q) }
+    end
+  end
+
   # A WEBrick server listening on every address of ips (Chatty.bind_ips) at one port: the port asked for (LCTY_PORT or
   # PORT), or else the first one of ports, in order, that is free on every address (LCTYSP-0010); Chatty.port is set
   # to it. A port asked for that is taken is not replaced by another: the pages, bookmarks and allowed origins name it.
-  # Raises PortError when there is none, and at once for an address that is not one of this machine.
-  def self.listen(asked = Chatty::PORT, ports = Chatty::PORTS_TRIED, ips = Chatty.bind_ips)
+  # Raises PortError when there is none, and at once for an address that is not one of this machine. auth (digest_auth)
+  # checks every request before any servlet sees it, the WebSocket of /v1/rpc included.
+  def self.listen(asked = Chatty::PORT, ports = Chatty::PORTS_TRIED, ips = Chatty.bind_ips, auth: nil)
     (asked ? [asked] : ports).each do |port|
-      server = WEBrick::HTTPServer.new(
+      config = {
         DoNotListen: true, # every address is listened on below, at the same port
         Port: port,
         MimeTypes: Servlets::MIME_TYPES,
-        Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN),
+        Logger: Log.new,
         AccessLog: [],
         DoNotReverseLookup: true
-      )
+      }
+      # A request without valid credentials is answered 401 with a Digest challenge (WEBrick raises it as a status)
+      config[:RequestCallback] = ->(req, res) { auth.authenticate(req, res) } if auth
+      server = WEBrick::HTTPServer.new(config)
       begin
         ips.each do |ip|
           server.listen(ip, port)
@@ -133,6 +152,25 @@ module Lcty
       raise PortError, "the port #{port} (LCTY_PORT or PORT) is in use" if asked
     end
     raise PortError, "no free port from #{ports.first} to #{ports.last} (set one with LCTY_PORT or PORT)"
+  end
+
+  # Digest authentication with the users of path (Chatty::HTDIGEST_PATH, the htdigest of the data directory), or nil when
+  # there is no such file: then no request needs credentials. The file is as Apache's htdigest writes it, one
+  # user:realm:hash per line, every line of one realm, which is the realm the browser is asked for (LCTYSP-0010). A file
+  # that is not one, holds no user or names two realms raises Chatty::SettingsError: the server does not start
+  # without the protection it was given. WEBrick reads the file again when it changes, so users are added without a
+  # restart (a new realm needs one).
+  def self.digest_auth(path = Chatty::HTDIGEST_PATH)
+    return nil unless File.exist?(path)
+    entries = File.readlines(path, mode: 'r:UTF-8').map(&:chomp).reject(&:empty?).map { |l| l.split(':', 3) }
+    bad = entries.find { |e| e.size != 3 || e[0].empty? || !/\A\h{32}\z/.match?(e[2]) }
+    raise Chatty::SettingsError, "#{path}: not a line of htdigest (user:realm:md5): #{bad.join(':').inspect}" if bad
+    raise Chatty::SettingsError, "#{path}: no user (add one with htdigest)" if entries.empty?
+    realms = entries.map { |e| e[1] }.uniq
+    raise Chatty::SettingsError, "#{path}: one realm only, not #{realms.map(&:inspect).join(', ')}" if realms.size > 1
+    WEBrick::HTTPAuth::DigestAuth.new(
+      UserDB: WEBrick::HTTPAuth::Htdigest.new(path), Realm: realms.first, Logger: Log.new
+    )
   end
 
   # Stop server: it accepts nothing more, then every /v1/rpc connection is closed (Rpc::HUB.close_all), since WEBrick
@@ -152,8 +190,9 @@ module Lcty
     Rpc::ConvStore.fill_record_counts
     publish_offline
     s = begin
-      listen
-    rescue PortError => e
+      auth = digest_auth
+      listen(auth: auth)
+    rescue PortError, Chatty::SettingsError => e
       abort "lcty-rb: #{e.message}"
     end
     mount_all(s)
@@ -166,6 +205,8 @@ module Lcty
     $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (--allowed-origin)"
     settings = File.exist?(Chatty::SETTINGS_PATH) ? Chatty::SETTINGS_PATH : "none (#{Chatty::SETTINGS_PATH} does not exist)"
     $stderr.puts "lcty-rb: settings: #{settings}"
+    digest = auth ? "#{Chatty::HTDIGEST_PATH} (realm #{auth.realm.inspect})" : "none (#{Chatty::HTDIGEST_PATH} does not exist)"
+    $stderr.puts "lcty-rb: digest authentication: #{digest}"
     s.start
   end
 end
