@@ -85,7 +85,7 @@ Two principles drive the design:
 
 - Listens on `127.0.0.1` by default; `--bind-ip` (or `LCTY_BIND_IP`) names other addresses, one or more
   ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
-  Without an `htdigest` file in the data directory there is no authentication, so an address other than loopback makes
+  Without a `.htdigest` file in the data directory there is no authentication, so an address other than loopback makes
   the conversations readable and writable by anyone who can reach it. With one, every request, the WebSocket of
   `/v1/rpc` included, needs one of its users (HTTP Digest authentication,
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#authentication)). Digest sends no password, but it is MD5 and does not

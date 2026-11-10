@@ -142,11 +142,11 @@ class LctyTest < Lcty::Scenarios
 
   # ---- Digest authentication ----
 
-  # A data directory of its own, with an htdigest of lines (none when nil)
+  # A data directory of its own, with a .htdigest of lines (none when nil)
   def htdigest_dir(lines)
     @auth_dir = Dir.mktmpdir('lcty-auth-')
-    File.write(File.join(@auth_dir, 'htdigest'), lines.map { |l| "#{l}\n" }.join) if lines
-    File.join(@auth_dir, 'htdigest')
+    File.write(File.join(@auth_dir, '.htdigest'), lines.map { |l| "#{l}\n" }.join) if lines
+    File.join(@auth_dir, '.htdigest')
   end
 
   def htdigest_line(user, realm, password)
@@ -197,16 +197,16 @@ class LctyTest < Lcty::Scenarios
     s&.close
   end
 
-  ALICE = 'Given a data directory whose htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"'
+  ALICE = 'Given a data directory whose .htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"'
 
-  scenario 'Without an htdigest file no request needs credentials' do
+  scenario 'Without a .htdigest file no request needs credentials' do
     path = r = nil
-    step('Given a data directory without htdigest') { path = htdigest_dir(nil) }
+    step('Given a data directory without .htdigest') { path = htdigest_dir(nil) }
     step('When Lcty.digest_auth is called') { r = Lcty.digest_auth(path) }
     step('Then it returns nil') { assert_nil r }
   end
 
-  scenario 'With an htdigest file every request needs one of its users' do
+  scenario 'With a .htdigest file every request needs one of its users' do
     port = status = challenge = nil
     path = nil
     step(ALICE) { path = htdigest_dir([htdigest_line('alice', 'lcty-rb', 'secret-pass')]) }
@@ -254,9 +254,9 @@ class LctyTest < Lcty::Scenarios
     ['the users "alice" of the realm "a" and "bob" of the realm "b"',
      ['alice:a:0123456789abcdef0123456789abcdef', 'bob:b:0123456789abcdef0123456789abcdef'], 'one realm only, not "a", "b"']
   ].each do |content, lines, message|
-    scenario "An htdigest file that cannot be used stops the server (#{content})" do
+    scenario "A .htdigest file that cannot be used stops the server (#{content})" do
       path = r = nil
-      step("Given a data directory whose htdigest is #{content}") { path = htdigest_dir(lines) }
+      step("Given a data directory whose .htdigest is #{content}") { path = htdigest_dir(lines) }
       step('When Lcty.digest_auth is called') do
         r = Lcty.digest_auth(path)
       rescue Chatty::SettingsError => e

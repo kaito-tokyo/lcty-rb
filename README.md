@@ -71,11 +71,12 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
     - For a quick start the environment variables `LCTY_BIND_IP`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override
       the file with one value each (several addresses or origins go in the file or on the command line), and the
       command line overrides both. `LCTY_DATA_DIR` is an environment variable only.
-  - Authentication: put an `htdigest` file in the data directory, and every request needs one of its users (HTTP
-    Digest; Basic is not offered). Make it with Apache's `htdigest`, one realm for every user:
+  - Authentication: put a `.htdigest` file in the data directory, as Apache names it, and every request needs one of
+    its users (HTTP Digest; Basic is not offered). Make it with Apache's `htdigest`, one realm for every user (a
+    hidden file: `ls -a` shows it):
 
     ```bash
-    htdigest -c "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/htdigest" lcty-rb alice
+    htdigest -c "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/.htdigest" lcty-rb alice
     ```
 
     Digest does not encrypt what is sent; from outside the machine, put TLS in front of the server.
