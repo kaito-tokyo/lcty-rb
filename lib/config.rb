@@ -3,12 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# Server settings (LCTYSP-0010). LCTY_DATA_DIR, an environment variable, says where the data directory is; the other
-# settings are in its server_settings.json (port, host, base_url, allowed_origins), and an environment variable that is
-# set and not empty overrides one (PORT, LCTY_HOST, LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN). Everything else is a browser
-# setting. lcty.rb uses BASE_URL_SETTING, lib/rpc/servlet.rb ALLOWED_ORIGINS_SETTING.
+# Server settings (LCTYSP-0010). Two are environment variables only: LCTY_DATA_DIR, where the data directory is, and
+# the port (LCTY_PORT, else PORT; without either lcty.rb takes the first free port from 45280). The others are options
+# of lcty.rb (--host, --base-url, --allowed-origin), written one per line in server_settings.txt of the data directory
+# or given on the command line; an environment variable that is set and not empty overrides the file (LCTY_HOST,
+# LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN), and the command line overrides both. Everything else is a browser setting.
 
-require 'json'
+require 'optparse'
 
 module Chatty
   class << self
@@ -50,62 +51,122 @@ module Chatty
   # discarded and made anew at every start
   INDEX_PATH = File.join(DATA_DIR, '_index.sqlite')
 
-  # ---- server_settings.json ----
-
-  # Source of truth (no leading _), read once when this file is loaded. A missing file means every default; nothing is
-  # created.
-  SETTINGS_PATH = File.join(DATA_DIR, 'server_settings.json')
-  # Each key of the file and the environment variable that overrides it
-  SETTING_ENV = {
-    'port' => 'PORT', 'host' => 'LCTY_HOST', 'base_url' => 'LCTY_BASE_URL', 'allowed_origins' => 'LCTY_ALLOWED_ORIGIN'
-  }.freeze
-
-  # A server_settings.json that cannot be used: the server does not start (lcty.rb prints the message)
+  # A setting that cannot be used: the server does not start (lcty.rb prints the message)
   class SettingsError < StandardError; end
 
-  # The settings of the file at path, checked: {} when there is no file. A file that is not JSON, not an object, has a
-  # key that is not a setting or a value of the wrong type raises SettingsError naming the file, so a typo never
-  # passes unseen.
-  def self.read_settings(path)
-    return {} unless File.exist?(path)
-    s = begin
-      JSON.parse(File.read(path, mode: 'r:UTF-8'))
-    rescue JSON::ParserError => e
-      raise SettingsError, "#{path}: not JSON: #{e.message.lines.first.to_s.strip}"
+  # ---- The port: environment variables only ----
+
+  # The port asked for: LCTY_PORT, else PORT (set and not empty), or nil when neither is (then lcty.rb takes the first
+  # free one of PORTS_TRIED). A port that is not an integer from 1 to 65535 stops the server.
+  PORT = [ENV['LCTY_PORT'], ENV['PORT']].map(&:to_s).find { |v| !v.empty? }&.yield_self do |v|
+    port = Integer(v, 10) rescue nil
+    raise SettingsError, "the port must be an integer from 1 to 65535: #{v.inspect}" unless port && (1..65_535).cover?(port)
+    port
+  end
+  PORTS_TRIED = (45_280..45_379).freeze # tried in order when no port is asked for
+
+  class << self
+    # The port the server listens on, which lcty.rb sets once it is listening; before that PORT, or the first of
+    # PORTS_TRIED
+    attr_writer :port
+
+    def port
+      @port || PORT || PORTS_TRIED.first
     end
-    raise SettingsError, "#{path}: must be a JSON object" unless s.is_a?(Hash)
-    unknown = s.keys - SETTING_ENV.keys
-    unless unknown.empty?
-      raise SettingsError, "#{path}: unknown setting #{unknown.map(&:inspect).join(', ')} (known: #{SETTING_ENV.keys.join(', ')})"
-    end
-    bad = lambda { |key, what| raise SettingsError, "#{path}: #{key} must be #{what}" }
-    bad.call('port', 'an integer from 1 to 65535') if s.key?('port') && !(s['port'].is_a?(Integer) && (1..65_535).cover?(s['port']))
-    bad.call('host', 'a non-empty string') if s.key?('host') && !(s['host'].is_a?(String) && !s['host'].empty?)
-    bad.call('base_url', 'a string') if s.key?('base_url') && !s['base_url'].is_a?(String)
-    if s.key?('allowed_origins') &&
-       !(s['allowed_origins'].is_a?(Array) && s['allowed_origins'].all? { |o| o.is_a?(String) && !o.empty? })
-      bad.call('allowed_origins', 'an array of non-empty strings')
-    end
-    s
   end
 
-  SETTINGS = read_settings(SETTINGS_PATH).freeze
+  # ---- The other settings: server_settings.txt, the environment and the command line ----
 
-  # The environment variable of key when it is set and not empty, else the file's value (nil when neither has one)
-  def self.setting(key)
-    env = ENV[SETTING_ENV.fetch(key)].to_s
-    env.empty? ? SETTINGS[key] : env
+  # Source of truth (no leading _): the options of lcty.rb, one per line (`--host=0.0.0.0`, or the option and its value
+  # separated by spaces), as they would be written on the command line; blank lines and lines starting with # are
+  # left out. A missing file means every default; nothing is created.
+  SETTINGS_PATH = File.join(DATA_DIR, 'server_settings.txt')
+  # Each setting and the environment variable that overrides the file
+  SETTING_ENV = { host: 'LCTY_HOST', base_url: 'LCTY_BASE_URL', allowed_origins: 'LCTY_ALLOWED_ORIGIN' }.freeze
+  SETTING_DEFAULTS = { host: '127.0.0.1', base_url: '/', allowed_origins: nil }.freeze
+
+  # The options of lcty.rb, the same for the file and the command line; what they set goes into into
+  def self.option_parser(into)
+    OptionParser.new do |o|
+      o.banner = 'usage: lcty.rb [options] [convert]'
+      o.on('--host=ADDRESS', 'the address to listen on (default 127.0.0.1)') do |v|
+        raise SettingsError, 'the host must not be empty' if v.empty?
+        into[:host] = v
+      end
+      o.on('--base-url=PATH', 'the path the site is served under (default /)') { |v| into[:base_url] = v }
+      o.on('--allowed-origin=ORIGIN', 'an origin whose pages may use /v1/rpc, once per origin (default: the ' \
+                                      "server's own)") { |v| (into[:allowed_origins] ||= []) << v }
+      # Each server of a machine needs a port of its own, so it is not kept with the data (LCTYSP-0010)
+      o.on('--port=PORT', 'not an option: set LCTY_PORT or PORT') do
+        raise SettingsError, 'the port is not an option; set LCTY_PORT or PORT'
+      end
+    end
   end
 
-  PORT = Integer(setting('port') || 45280)
-  BIND = setting('host') || '127.0.0.1' # The address to listen on
-  BASE_URL_SETTING = setting('base_url') || '/' # The path the site is served under, as written (lcty.rb)
-  # The origins whose pages may use /v1/rpc as written, or nil for the server's own (lib/rpc/servlet.rb). In the
-  # environment variable they are separated by commas or spaces
-  ALLOWED_ORIGINS_SETTING = setting('allowed_origins').yield_self do |o|
-    o.is_a?(String) ? o.split(/[\s,]+/).reject(&:empty?) : o
+  # What the options args set, {setting => value}; args loses the options it had and keeps the other arguments. An
+  # option that is not one, or lacks its value, raises SettingsError naming source.
+  def self.parse_options(args, source)
+    set = {}
+    option_parser(set).parse!(args)
+    set
+  rescue OptionParser::ParseError, SettingsError => e
+    raise SettingsError, "#{source}: #{e.message}"
   end
-  BIND_URL_HOST = BIND.include?(':') ? "[#{BIND}]" : BIND # As written in a URL (an IPv6 address in brackets)
+
+  # The arguments the lines of the file at path stand for ([] when there is none). A line that is not an option is an
+  # error: the file holds options only.
+  def self.file_args(path)
+    return [] unless File.exist?(path)
+    File.read(path, mode: 'r:UTF-8').each_line.map(&:strip).reject { |l| l.empty? || l.start_with?('#') }.flat_map do |l|
+      raise SettingsError, "#{path}: not an option: #{l}" unless l.start_with?('--')
+      l.split(/\s+/, 2)
+    end
+  end
+
+  # What the environment variables set when they are set and not empty; LCTY_ALLOWED_ORIGIN separates its origins by
+  # commas or spaces
+  def self.env_settings
+    SETTING_ENV.each_with_object({}) do |(key, var), set|
+      v = ENV[var].to_s
+      next if v.empty?
+      set[key] = key == :allowed_origins ? v.split(/[\s,]+/).reject(&:empty?) : v
+    end
+  end
+
+  # Compute the settings: the defaults, then server_settings.txt, then the environment, then the options of argv (the
+  # command line), each replacing the ones before. argv loses its options; the other arguments are returned. A setting
+  # that cannot be used raises SettingsError. lib/config.rb runs it with no arguments when it is loaded, and lcty.rb
+  # again with its command line.
+  def self.configure(argv = [])
+    file = parse_options(file_args(SETTINGS_PATH), SETTINGS_PATH)
+    command_line = parse_options(argv, 'the command line')
+    @settings = SETTING_DEFAULTS.merge(file).merge(env_settings).merge(command_line).freeze
+    argv
+  end
+
+  class << self
+    # The address to listen on
+    def bind
+      @settings[:host]
+    end
+
+    # The address as written in a URL (an IPv6 address in brackets)
+    def bind_url_host
+      bind.include?(':') ? "[#{bind}]" : bind
+    end
+
+    # The path the site is served under, as written (lcty.rb makes it start and end with /)
+    def base_url
+      @settings[:base_url]
+    end
+
+    # The origins whose pages may use /v1/rpc as written, or nil for the server's own (lib/rpc/servlet.rb)
+    def allowed_origins
+      @settings[:allowed_origins]
+    end
+  end
+
+  configure
   ID_RE = /\A[A-Za-z0-9_-]{1,80}\z/
   # A reference from a conversation to a tag: the file-name part of its tag file (`c~23` for C#), derived by the browser
   # (LCTYSP-0009). Checked mechanically only, never rewritten: no whitespace (data-setup-tags is space separated, and

@@ -8,12 +8,15 @@
 # lcty-rb: static file server + JSON document store.
 # Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the LLM (LCTYSP-0001).
 #
-#   /usr/bin/ruby lcty.rb                            # => http://127.0.0.1:45280
-#   LCTY_HOST=192.168.1.10 /usr/bin/ruby lcty.rb     # => http://192.168.1.10:45280 (that address only)
-#   LCTY_BASE_URL=/lcty/ /usr/bin/ruby lcty.rb       # => the site under /lcty/
+#   /usr/bin/ruby lcty.rb                            # => http://127.0.0.1:45280, or the next free port up to 45379
+#   LCTY_PORT=8080 /usr/bin/ruby lcty.rb             # => http://127.0.0.1:8080 (that port only; PORT if unset)
+#   /usr/bin/ruby lcty.rb --host=192.168.1.10        # => http://192.168.1.10:45280 (that address only)
+#   /usr/bin/ruby lcty.rb --base-url=/lcty/          # => the site under /lcty/
+#   /usr/bin/ruby lcty.rb --help                     # => every option
 #
-# The settings are kept in server_settings.json of the data directory (port, host, base_url, allowed_origins); the
-# environment variables above override them, and LCTY_DATA_DIR says where the data directory is (LCTYSP-0010).
+# The port is an environment variable only (LCTY_PORT, else PORT), and LCTY_DATA_DIR says where the data directory is.
+# The options can also be written one per line in server_settings.txt of the data directory; LCTY_HOST, LCTY_BASE_URL
+# and LCTY_ALLOWED_ORIGIN override the file, and the command line overrides both (LCTYSP-0010).
 #
 # Start it in the root of the repository: the files of the site are found from the working directory (public/…). This
 # file only wires the servlets together; the code lives in lib/ (lib/servlets.rb for the site, lib/v1/ for the API,
@@ -27,7 +30,7 @@ require 'securerandom'
 require 'webrick'
 begin
   require_relative 'lib/config'
-rescue Chatty::SettingsError => e # a server_settings.json that cannot be used (LCTYSP-0010)
+rescue Chatty::SettingsError => e # a server_settings.txt or an environment variable that cannot be used (LCTYSP-0010)
   abort "lcty-rb: #{e.message}"
 end
 require_relative 'lib/store'
@@ -36,9 +39,11 @@ require_relative 'lib/servlets'
 require_relative 'lib/rpc/servlet'
 
 module Lcty
-  # The path the site is served under: base_url of server_settings.json or LCTY_BASE_URL (Chatty::BASE_URL_SETTING),
-  # starting and ending with "/" ("/" when it is unset or empty)
-  BASE_URL = "/#{Chatty::BASE_URL_SETTING.to_s.delete_prefix('/').delete_suffix('/')}/".squeeze('/').freeze
+  # The path the site is served under (Chatty.base_url: --base-url or LCTY_BASE_URL), starting and ending with "/"
+  # ("/" when it is unset or empty)
+  def self.base_url
+    "/#{Chatty.base_url.to_s.delete_prefix('/').delete_suffix('/')}/".squeeze('/')
+  end
 
   # The files of /lcty.v1/ (LCTYSP-0005): each under its own name, which the pages and the scripts load, and the names
   # of version 1 that conversation files and tag files load next to themselves (C and T redirect them here)
@@ -82,8 +87,8 @@ module Lcty
     end
   end
 
-  # Mount every servlet of the site on server, under base (LCTY_BASE_URL)
-  def self.mount_all(server, base = BASE_URL)
+  # Mount every servlet of the site on server, under base (the base URL)
+  def self.mount_all(server, base = base_url)
     server.mount "#{base}v1", Chatty::V1::Servlet
     server.mount "#{base}v1/rpc", Rpc::Servlet # prototype (JSON-RPC 2.0 over WebSocket or POST)
     server.mount "#{base}c", Servlets::C, Chatty::CONV_DIR
@@ -95,6 +100,30 @@ module Lcty
     server
   end
 
+  # No port to listen on: the one asked for is taken, or every one tried is
+  class PortError < StandardError; end
+
+  # A WEBrick server listening on Chatty.bind at the port asked for (LCTY_PORT or PORT), or else at the first free one
+  # of ports, in order (LCTYSP-0010); Chatty.port is set to it. A port asked for that is taken is not replaced by
+  # another: the pages, bookmarks and allowed origins name it. Raises PortError when there is none.
+  def self.listen(asked = Chatty::PORT, ports = Chatty::PORTS_TRIED)
+    (asked ? [asked] : ports).each do |port|
+      server = WEBrick::HTTPServer.new(
+        BindAddress: Chatty.bind,
+        Port: port,
+        MimeTypes: Servlets::MIME_TYPES,
+        Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN),
+        AccessLog: [],
+        DoNotReverseLookup: true
+      )
+      Chatty.port = port
+      return server
+    rescue Errno::EADDRINUSE
+      raise PortError, "the port #{port} (LCTY_PORT or PORT) is in use" if asked
+    end
+    raise PortError, "no free port from #{ports.first} to #{ports.last} (set one with LCTY_PORT or PORT)"
+  end
+
   def self.run
     Chatty.open_data
     Rpc.index = Chatty::INDEX # c_recordcount of /v1/rpc lives in _index.sqlite with every other cache
@@ -104,19 +133,16 @@ module Lcty
     Chatty.committer = ->(method, &block) { Rpc::HUB.commit(nil, method, &block) }
     Rpc::ConvStore.fill_record_counts
     publish_offline
-    s = WEBrick::HTTPServer.new(
-      BindAddress: Chatty::BIND,
-      Port: Chatty::PORT,
-      MimeTypes: Servlets::MIME_TYPES,
-      Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN),
-      AccessLog: [],
-      DoNotReverseLookup: true
-    )
+    s = begin
+      listen
+    rescue PortError => e
+      abort "lcty-rb: #{e.message}"
+    end
     mount_all(s)
     %w[INT TERM].each { |sig| trap(sig) { s.shutdown } }
-    $stderr.puts "lcty-rb: http://#{Chatty::BIND_URL_HOST}:#{Chatty::PORT}#{BASE_URL}  (data: #{Chatty::DATA_DIR})"
+    $stderr.puts "lcty-rb: http://#{Chatty.bind_url_host}:#{Chatty.port}#{base_url}  (data: #{Chatty::DATA_DIR})"
     # A page opened from another origin cannot use /v1/rpc (LCTYSP-0012): say which ones can
-    $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (allowed_origins)"
+    $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (--allowed-origin)"
     settings = File.exist?(Chatty::SETTINGS_PATH) ? Chatty::SETTINGS_PATH : "none (#{Chatty::SETTINGS_PATH} does not exist)"
     $stderr.puts "lcty-rb: settings: #{settings}"
     s.start
@@ -142,12 +168,18 @@ module Lcty
     r[:failed].empty?
   end
 
-  # The command line: no argument starts the server; `convert` converts the conversation files
+  # The command line: its options (those of server_settings.txt, LCTYSP-0010) override the file and the environment;
+  # no other argument starts the server, and `convert` converts the conversation files
   def self.main(argv)
-    case argv
+    args = begin
+      Chatty.configure(argv.dup)
+    rescue Chatty::SettingsError => e
+      abort "lcty-rb: #{e.message}\n#{Chatty.option_parser({}).help}"
+    end
+    case args
     when [] then run
     when ['convert'] then exit(convert ? 0 : 1)
-    else abort "usage: #{File.basename($PROGRAM_NAME)} [convert]"
+    else abort Chatty.option_parser({}).help
     end
   end
 end

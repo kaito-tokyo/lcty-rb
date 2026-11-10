@@ -10,8 +10,8 @@
 # lcty.rb is loaded without running (Lcty.run only runs when it is the program). Lcty.mount_all mounts the site on a
 # WEBrick server on 127.0.0.1 (a free port), at / and, for one Scenario, at /base/ on another server. The data
 # directory is the tests' own (helper.rb), opened as the server opens it. The files of the site are found from the
-# working directory, the repository's root. Lcty::BASE_URL is read when lcty.rb is loaded, so it is checked in a new
-# Ruby process given only the environment of the Scenario.
+# working directory, the repository's root. The settings are read when lcty.rb is loaded, so Lcty.base_url, the
+# settings file and the command line are checked in a new Ruby process given only the environment of the Scenario.
 
 require_relative 'helper'
 require 'net/http'
@@ -57,9 +57,13 @@ class LctyTest < Lcty::Scenarios
 
   def teardown
     (@remove || []).each { |path| File.delete(path) if File.exist?(path) }
+    # Lcty.listen's scenarios: the server it started, the ports the test took, and Chatty.port as it was
+    @listener&.shutdown
+    @taken&.each(&:close)
+    Chatty.port = @port_before if defined?(@port_before)
   end
 
-  # ---- Lcty::BASE_URL ----
+  # ---- Lcty.base_url ----
 
   [
     ['unset', nil, '"/"'],
@@ -72,29 +76,120 @@ class LctyTest < Lcty::Scenarios
       env = out = nil
       step("Given LCTY_BASE_URL is #{label}") { env = { 'LCTY_BASE_URL' => value, 'LCTY_DATA_DIR' => Chatty::DATA_DIR } }
       step('When lcty.rb is loaded') do
-        script = "require #{LCTY_RB.dump}; print Lcty::BASE_URL"
+        script = "require #{LCTY_RB.dump}; print Lcty.base_url"
         out, err, status = Open3.capture3(env, RbConfig.ruby, '-e', script, chdir: REPO_ROOT)
         assert status.success?, err
       end
-      step("Then Lcty::BASE_URL is #{base}") { assert_equal base.delete('"'), out }
+      step("Then Lcty.base_url is #{base}") { assert_equal base.delete('"'), out }
     end
+  end
+
+  # lcty.rb run as the program in a new process with LCTY_DATA_DIR dir (and no other setting) and args: [out, err,
+  # status]
+  def run_lcty(dir, *args)
+    env = { 'LCTY_DATA_DIR' => dir, 'LCTY_HOST' => nil, 'LCTY_BASE_URL' => nil, 'LCTY_ALLOWED_ORIGIN' => nil }
+    Open3.capture3(env, RbConfig.ruby, LCTY_RB, *args, chdir: REPO_ROOT)
+  end
+
+  def usage
+    Chatty.option_parser({}).help
   end
 
   scenario 'A settings file that cannot be used stops lcty.rb with its message' do
     dir = Dir.mktmpdir('lcty-settings-')
-    path = File.join(dir, 'server_settings.json')
+    path = File.join(dir, 'server_settings.txt')
     err = status = nil
-    step('Given a data directory whose server_settings.json is {"prot": 8080}') { File.write(path, '{"prot": 8080}') }
+    step('Given a data directory whose server_settings.txt is the line "--prot=8080"') { File.write(path, "--prot=8080\n") }
     step('When lcty.rb is loaded') do
       _, err, status = Open3.capture3({ 'LCTY_DATA_DIR' => dir }, RbConfig.ruby, '-e', "require #{LCTY_RB.dump}",
                                       chdir: REPO_ROOT)
     end
     step('Then it exits with the status 1 and prints "lcty-rb: " and the message of the settings file, without a backtrace') do
       assert_equal 1, status.exitstatus
-      assert_equal "lcty-rb: #{path}: unknown setting \"prot\" (known: port, host, base_url, allowed_origins)\n", err
+      assert_equal "lcty-rb: #{path}: invalid option: --prot=8080\n", err
     end
   ensure
     FileUtils.rm_rf(dir)
+  end
+
+  scenario 'An option of the command line that is not one stops lcty.rb with the usage' do
+    dir = Dir.mktmpdir('lcty-settings-')
+    err = status = nil
+    step('Given a data directory without server_settings.txt') {}
+    step('When lcty.rb is run with "--prot"') { _, err, status = run_lcty(dir, '--prot') }
+    step('Then it exits with the status 1 and prints "lcty-rb: the command line: invalid option: --prot" and the usage') do
+      assert_equal 1, status.exitstatus
+      assert_equal "lcty-rb: the command line: invalid option: --prot\n#{usage}", err
+    end
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  scenario '--help prints every option' do
+    dir = Dir.mktmpdir('lcty-settings-')
+    out = status = nil
+    step('When lcty.rb is run with "--help"') { out, _, status = run_lcty(dir, '--help') }
+    step('Then it exits with the status 0 and prints the usage with --host, --base-url and --allowed-origin') do
+      assert_equal 0, status.exitstatus
+      assert_equal usage, out
+      %w[--host=ADDRESS --base-url=PATH --allowed-origin=ORIGIN].each { |o| assert_includes out, o }
+    end
+  ensure
+    FileUtils.rm_rf(dir)
+  end
+
+  # ---- Lcty.listen ----
+
+  # n ports that were free a moment ago, each taken by a TCPServer of the test on Chatty.bind; release frees them
+  def taken_ports(n)
+    servers = Array.new(n) { TCPServer.new(Chatty.bind, 0) }
+    @taken = (@taken || []) + servers
+    servers.map { |s| s.addr[1] }
+  end
+
+  def release(port)
+    s = @taken.find { |t| t.addr[1] == port }
+    s.close
+    @taken.delete(s)
+  end
+
+  # Lcty.listen(asked, ports): the server, or the PortError it raised. teardown stops it and puts Chatty.port back
+  def listen(asked, ports)
+    @port_before = Chatty.port
+    @listener = Lcty.listen(asked, ports)
+  rescue Lcty::PortError => e
+    e
+  end
+
+  scenario 'Without a port asked for, the server listens on the first free port tried' do
+    first = second = server = nil
+    step('Given two free ports, the first of them taken by another server') do
+      first, second = taken_ports(2)
+      release(second)
+    end
+    step('When Lcty.listen is given no port to ask for and the two ports to try') { server = listen(nil, [first, second]) }
+    step('Then it listens on the second port') { assert_equal second, server.config[:Port] }
+    step('And Chatty.port is the second port') { assert_equal second, Chatty.port }
+  end
+
+  scenario 'A port asked for that is taken stops the server' do
+    port = r = nil
+    step('Given a port taken by another server') { port = taken_ports(1).first }
+    step('When Lcty.listen is given that port to ask for') { r = listen(port, [port + 1]) }
+    step('Then it raises Lcty::PortError "the port <port> (LCTY_PORT or PORT) is in use"') do
+      assert_kind_of Lcty::PortError, r
+      assert_equal "the port #{port} (LCTY_PORT or PORT) is in use", r.message
+    end
+  end
+
+  scenario 'When every port tried is taken the server stops' do
+    ports = r = nil
+    step('Given two ports taken by another server') { ports = taken_ports(2) }
+    step('When Lcty.listen is given no port to ask for and the two ports to try') { r = listen(nil, ports) }
+    step('Then it raises Lcty::PortError "no free port from <first> to <second> (set one with LCTY_PORT or PORT)"') do
+      assert_kind_of Lcty::PortError, r
+      assert_equal "no free port from #{ports.first} to #{ports.last} (set one with LCTY_PORT or PORT)", r.message
+    end
   end
 
   # ---- Lcty.mount_all ----
