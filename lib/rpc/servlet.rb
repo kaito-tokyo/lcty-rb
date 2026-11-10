@@ -419,9 +419,22 @@ module Lcty
       Rpc.allowed_origins.include?(Rpc.normalize_origin(origin))
     end
 
+    # The line logged when a page's Origin is refused: the Origin as sent (quoted, at most 200 characters, since the page
+    # chose it) and the allowed origins, so that the one to add to LCTY_ALLOWED_ORIGIN can be read from the log. The
+    # page gets only "cross-origin".
+    def refusal(origin)
+      "lcty-rb: /v1/rpc refused the Origin #{origin.to_s[0, 200].inspect}; allowed: " \
+        "#{Rpc.allowed_origins.join(' ')} (add it to LCTY_ALLOWED_ORIGIN)"
+    end
+
     class Servlet < WEBrick::HTTPServlet::AbstractServlet
       def do_GET(req, res)
-        raise WEBrick::HTTPStatus::Forbidden, 'cross-origin' unless Rpc.origin_ok?(req)
+        unless Rpc.origin_ok?(req)
+          warn Rpc.refusal(req['origin'])
+          res.status = 403
+          res.body = 'cross-origin'
+          return
+        end
         unless WebSocket.upgrade?(req)
           res.status = 426
           res['Upgrade'] = 'websocket'

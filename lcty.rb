@@ -107,6 +107,8 @@ module Lcty
     mount_all(s)
     %w[INT TERM].each { |sig| trap(sig) { s.shutdown } }
     $stderr.puts "lcty-rb: http://#{Chatty::BIND_URL_HOST}:#{Chatty::PORT}#{BASE_URL}  (data: #{Chatty::DATA_DIR})"
+    # A page opened from another origin cannot use /v1/rpc (LCTYSP-0012): say which ones can
+    $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (LCTY_ALLOWED_ORIGIN)"
     s.start
   end
 end

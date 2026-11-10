@@ -35,6 +35,7 @@ Feature: LCTYSP-3020 The RPC protocol
   Scenario Outline: A request of an origin that is not allowed is refused
     When a request is sent <how> with Origin <origin>
     Then the status is 403
+    And the server logs that it refused the Origin <origin>, with the allowed origin "http://allowed.test"
 
     Examples:
       | how             | origin                    |

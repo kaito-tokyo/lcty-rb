@@ -40,7 +40,9 @@ other elements change no round of the index.
   notifications, no `c.subscribe`), and every client has a WebSocket.
 - **Origin.** A WebSocket handshake whose `Origin` is not one of the allowed origins is refused with `403`. The allowed origins are `LCTY_ALLOWED_ORIGIN` (origins separated by commas or
   spaces, such as `http://192.168.1.10:45280`), or else the server's own address (`http://<LCTY_HOST>:<PORT>`, and
-  `http://localhost:<PORT>` when it listens on `127.0.0.1`). A request without `Origin` is accepted: it does not come
+  `http://localhost:<PORT>` when it listens on `127.0.0.1`). The server prints the allowed origins when it starts, and
+  logs every refusal with the `Origin` it refused (quoted, at most 200 characters) and the allowed origins, so the one
+  to add to `LCTY_ALLOWED_ORIGIN` can be read from the log; the page gets only `cross-origin`. A request without `Origin` is accepted: it does not come
   from a page, and no page can make a browser send it. WebSocket is not covered by CORS, so without this check any page
   on the web could write to the user's conversations through the user's browser. Comparing `Origin` with `Host` is not
   enough: after DNS rebinding a page of another site reaches this server under its own name, and the browser sends that
