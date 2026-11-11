@@ -104,7 +104,9 @@ In order. Each step is one pull request with its tests, and each leaves the serv
 ### 2. Answer with protective headers
 
 The baseline is the configuration the OWASP Secure Headers Project proposes ([below](#owasp-secure-headers-project)),
-changed only where lcty-rb needs it, and each change says why.
+checked against OWASP's HTTP Security Response Headers Cheat Sheet
+([below](#owasp-http-security-response-headers-cheat-sheet)) and changed only where lcty-rb needs it; each change says
+why.
 
 On every response:
 
@@ -123,9 +125,13 @@ On every response:
   `/v1/`, an error), as OWASP advises for an API: a response opened as a document runs nothing.
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`, for browsers that do not know `frame-ancestors`
-- `Referrer-Policy: no-referrer`
+- `Referrer-Policy: no-referrer` (the Cheat Sheet: `strict-origin-when-cross-origin`, the browsers' default). No page
+  needs a `Referer`, and with the default a link in a reply would tell the site it leads to the address lcty-rb is
+  reached at, a name of the local network among them.
 - `Cross-Origin-Opener-Policy: same-origin`
-- `Cross-Origin-Resource-Policy: same-origin`, so another site cannot load a response as a script or an image
+- `Cross-Origin-Resource-Policy: same-origin` (the Cheat Sheet: `same-site`), so another site cannot load a response
+  as a script or an image. No other host of the same site loads lcty-rb's resources, and on a local network the "site"
+  of an address is not one the user chose.
 - `Cross-Origin-Embedder-Policy: require-corp`: every resource of a page is of its own origin, and llama-server is
   fetched with CORS, which `require-corp` allows; to be checked with the workers in Safari, and left out if it breaks
   them
@@ -134,8 +140,14 @@ On every response:
 - `X-Permitted-Cross-Domain-Policies: none`
 - `X-DNS-Prefetch-Control: off` (Chromium): a presentation that slipped a link past the allowlist could not leak
   through a DNS lookup
+- `X-Robots-Tag: noindex, nofollow` (the Cheat Sheet, for private content): a crawler that reaches a server
+  published without users indexes nothing of it.
 - No `Server` header (OWASP lists it among the headers to remove); an error is answered with a short body of its own
   (JSON for `/v1/`, plain text otherwise) in UTF-8.
+- A `Content-Type` on every response with a body, with `charset=utf-8` on every text type (the Cheat Sheet: the
+  charset of an HTML page guards against XSS; ASVS 5.0 4.1.1). The site's own types already have it
+  (`Servlets::MIME_TYPES`); WEBrick's error pages (`ISO-8859-1`) and any type it would fall back to do not. A binary
+  file is `application/octet-stream` (the vectors are already).
 - The realm of Basic authentication (`WWW-Authenticate: Basic realm="…"`) is the base URL (`Lcty.base_url`, `/`
   by default), not `lcty-rb`: it does not name the software, as OWASP advises, and the servers one host serves under
   paths of their own (`/lcty-a/`, `/lcty-b/` behind one proxy) are protection spaces of their own, so a browser never
@@ -157,7 +169,8 @@ What may be kept:
   directory holds the conversations in plain text on the server's machine, which is often the same one, and a program
   that reads the browser's cache reads its IndexedDB and settings, the API key among them, as well. On a phone the
   browser's cache is closed to other apps. `no-store` would cost a full read of every conversation opened, and the
-  back-forward cache in some browsers, for no guard.
+  back-forward cache in some browsers, for no guard. The Cheat Sheet notes that `private` and `no-cache` still let
+  the browser store a response; that is what is wanted here. No page uses the Cache API, which ignores these headers.
 
 Left out, with the reason:
 
@@ -167,6 +180,10 @@ Left out, with the reason:
   the browser's settings and its copies of the conversations (LCTYSP-0014).
 - `Integrity-Policy`: OWASP does not propose it, since every script would need its Subresource Integrity; the scripts
   are of the same origin.
+- `X-XSS-Protection`: the Cheat Sheet says not to send it (or to send `0`), since the filter it turns on can itself
+  open holes; the policy above allows no inline script. WEBrick does not send it.
+- `Expect-CT` and `Public-Key-Pins`: obsolete; the Cheat Sheet says not to use them.
+- `Access-Control-Allow-Origin` and the other CORS headers: no other origin is given access (step 1).
 
 A conversation file opened directly (`file://`) gets no header and is not affected.
 
@@ -186,8 +203,9 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
 - Each check and header has a backend scenario, run against a server with its settings.
 - The UI tests fail on any report of the Content Security Policy (`securitypolicyviolation`), in Chromium and WebKit,
   so a policy that breaks a page is found before it ships.
-- The headers are compared with OWASP's lists (`ci/headers_add.json` and `ci/headers_remove.json` of its repository)
-  when this spec is revised: a header added there is either sent here or listed above as left out, with the reason.
+- The headers are compared with OWASP's lists (`ci/headers_add.json` and `ci/headers_remove.json` of the Secure
+  Headers Project) and with its HTTP Security Response Headers Cheat Sheet when this spec is revised: a header added
+  there is either sent here or listed above as left out, with the reason.
 - LCTYSP-0001 points here, and the README says what lcty-rb guards against and what is left to the proxy.
 
 ## Decisions to make
@@ -233,3 +251,27 @@ Its other advice that this plan follows:
 
 Its advice that this plan does not follow: keeping sensitive responses out of the browser's cache (`no-store`), for
 the reasons above.
+
+## OWASP HTTP Security Response Headers Cheat Sheet
+
+The [HTTP Security Response Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)
+of the OWASP Cheat Sheet Series (`cheatsheets/HTTP_Headers_Cheat_Sheet.md` of
+[OWASP/CheatSheetSeries](https://github.com/OWASP/CheatSheetSeries), as of 2026-10-04) explains each header and
+recommends a value. Where it differs from the Secure Headers Project, or adds to it:
+
+- `Referrer-Policy: strict-origin-when-cross-origin`: not taken; `no-referrer`, above.
+- `Cross-Origin-Resource-Policy: same-site`: not taken; `same-origin`, above.
+- `Content-Type` with the right type and `charset` on every response: taken, above.
+- `X-Robots-Tag: noindex, nofollow` for private content: taken, above.
+- `X-XSS-Protection`: not to be sent, or `0`: followed (not sent).
+- `Expect-CT` and `Public-Key-Pins`: not to be used: followed.
+- `Server` removed or made non-informative, and no `X-Powered-By`: followed (WEBrick sends no `X-Powered-By`).
+- `Cache-Control`: `no-store` for sensitive responses, `private` to keep them out of shared caches, with the warning
+  that `no-cache` lets a response be stored: `private, no-cache`, for the reasons above.
+- CSP: the Content Security Policy Cheat Sheet is the guide for its details, and a CSP may be meaningless on a REST
+  API's responses; the plan sends the short `default-src 'none'` one there anyway, as the Secure Headers Project
+  advises.
+- `Access-Control-Allow-Origin`: set to a fixed origin if used at all: not used.
+- `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`: left to the HTTPS proxy, above.
+- File downloads: `Content-Disposition: attachment` and `application/octet-stream` for files users provide. lcty-rb
+  serves none for download: a conversation file is a page, and the vectors are `application/octet-stream`.
