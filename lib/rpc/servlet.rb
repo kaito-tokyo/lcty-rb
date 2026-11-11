@@ -120,6 +120,7 @@ module Lcty
         @seq = 0
         @conns = Set.new
         @lock = Mutex.new
+        @closing = false # close_all has run: no connection is taken any more
       end
 
       def version
@@ -137,8 +138,19 @@ module Lcty
         @lock.synchronize { @conns.select { |c| c.receives.include?(method) } }
       end
 
+      # Take an open connection; false when the server is stopping (close_all has run), and the connection is to be
+      # closed at once: its handshake was answered as the server stopped, after close_all took the list it closes
       def add(conn)
-        @lock.synchronize { @conns << conn }
+        @lock.synchronize do
+          next false if @closing
+          @conns << conn
+          true
+        end
+      end
+
+      # Take connections again after close_all (the tests, which stop the hub more than once in one process)
+      def reopen
+        @lock.synchronize { @closing = false }
       end
 
       def remove(conn)
@@ -149,9 +161,13 @@ module Lcty
       # open after grace seconds is dropped. WEBrick waits for the thread of every request before it stops, and a
       # connection's thread reads until the page closes it, so without this a page left open kept the server running.
       # Each close frame is sent on a thread of its own: a sender stuck writing to a page that stopped reading holds
-      # the write lock, and dropping needs no lock.
+      # the write lock, and dropping needs no lock. From then on no connection is taken (add): one whose handshake was
+      # answered as the server stopped would otherwise be missed here and keep the server running.
       def close_all(grace = Rpc.close_grace)
-        peers = @lock.synchronize { @conns.to_a }
+        peers = @lock.synchronize do
+          @closing = true
+          @conns.to_a
+        end
         peers.each { |p| Thread.new { p.conn.close(1001) } }
         deadline = Time.now + grace
         sleep 0.05 while Time.now < deadline && peers.any? { |p| @lock.synchronize { @conns.include?(p) } }
@@ -484,8 +500,10 @@ module Lcty
         # before closing it, and the client waits for that close: end the connection as soon as the WebSocket ends
         res.keep_alive = false
         peer = Peer.new(conn)
-        HUB.add(peer)
         begin
+          # The server is stopping (Hub#close_all ran before this connection was taken): going away, at once
+          return conn.close(1001) unless HUB.add(peer)
+
           while (msg = conn.read_message)
             type, data = msg
             next conn.close(1003) unless type == :text

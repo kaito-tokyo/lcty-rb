@@ -55,7 +55,9 @@ other elements change no round of the index.
 - **Stopping.** When the server stops (Ctrl-C, or launchd's `TERM`), it accepts no more connections and sends every
   open one a close frame with `1001` (going away); one the page has not closed within a second is dropped. WEBrick
   waits for the thread of every request before it ends, and a connection's thread reads until the page closes it, so
-  without this a page left open kept the server running ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)). The page
+  without this a page left open kept the server running ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)). A
+  connection whose handshake was answered as the server stopped, before it joined the connections being closed, gets
+  the close frame at once instead. The page
   reconnects as it does after any close, and finds the server again when it is started.
 
 ## Messages

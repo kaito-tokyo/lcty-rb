@@ -717,11 +717,14 @@ class RpcTest < Lcty::Scenarios
     Rpc::HUB.instance_variable_get(:@conns).to_a
   end
 
-  # The hub's answer to close_all with the grace, and the seconds it took
+  # The hub's answer to close_all with the grace, and the seconds it took. The hub takes connections again afterwards,
+  # for the tests that follow in this process
   def close_all(grace)
     wait_until(5, 'pages of earlier tests are still connected') { hub_conns.size == @pages.size }
     t = Time.now
     [Rpc::HUB.close_all(grace), Time.now - t]
+  ensure
+    Rpc::HUB.reopen
   end
 
   scenario 'When the server stops every page gets a close frame of 1001 and is let go' do
@@ -753,6 +756,25 @@ class RpcTest < Lcty::Scenarios
       wait_until { pg.close_code }
       assert_equal 1001, pg.close_code
       wait_until { hub_conns.empty? }
+    end
+  end
+
+  scenario 'A page whose handshake is answered as the server stops is closed at once' do
+    pg = n = nil
+    step('Given the hub has closed every connection, as the server stopping does') do
+      wait_until(5, 'pages of earlier tests are still connected') { hub_conns.empty? }
+      n = Rpc::HUB.close_all(0.1)
+    end
+    begin
+      step('When a page opens /v1/rpc') { pg = page }
+      step('Then it gets a close frame with the code 1001') do
+        assert_equal 0, n
+        wait_until { pg.close_code }
+        assert_equal 1001, pg.close_code
+      end
+      step('And it is no connection of the hub') { assert_empty hub_conns }
+    ensure
+      Rpc::HUB.reopen
     end
   end
 
