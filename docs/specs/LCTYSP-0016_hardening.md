@@ -119,21 +119,27 @@ why.
 
 On every response:
 
-- `Content-Security-Policy`, for a page:
-  - `default-src 'self'`; `script-src 'self'`; `worker-src 'self'`
+- `Content-Security-Policy`, for a page: everything closed, then opened for what the pages load, as the Content
+  Security Policy Cheat Sheet tightens its basic policy ([below](#owasp-content-security-policy-cheat-sheet)):
+  - `default-src 'none'`: no fonts, media, frames, manifests or objects, which no page uses
+  - `script-src 'self'`; `worker-src 'self'`: the scripts and workers are files of the site
   - `style-src 'self'`, and the inline style of tables (decision 1)
-  - `img-src 'self' data:`; `font-src 'self'`
+  - `img-src 'self'`: no page shows an image; the browser may ask for `/favicon.ico`
   - `connect-src 'self' http: https:`: the pages connect to llama-server, wherever the user set it (`'self'` covers
     the WebSocket of `/v1/rpc`; to be checked in Safari)
-  - `object-src 'none'`; `base-uri 'none'` (OWASP: `'self'`; no page has a `<base>`); `form-action 'self'`, which
-    does not fall back to `default-src`; `frame-ancestors 'none'`
+  - `object-src 'none'`; `base-uri 'none'` (OWASP: `'self'`; no page has a `<base>`); `form-action 'self'` and
+    `frame-ancestors 'none'`, which do not fall back to `default-src`
   - Not `upgrade-insecure-requests` (OWASP proposes it): lcty-rb and llama-server are reached over plain HTTP on the
     machine or the local network, and upgrading their requests would break them. Behind an HTTPS proxy the proxy may
     add it.
+  - `'self'` and nothing else: no nonce, no hash, no Subresource Integrity, no `'strict-dynamic'`. The Cheat Sheet
+    calls a strict policy current practice ([below](#owasp-content-security-policy-cheat-sheet)); for lcty-rb
+    `'self'` alone is the stricter one, and pinning the site's own scripts would guard nothing.
 - `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` for a response that is not a page (the JSON of
   `/v1/`, an error), as OWASP advises for an API: a response opened as a document runs nothing.
 - `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: DENY`, for browsers that do not know `frame-ancestors`
+- `X-Frame-Options: DENY`, for browsers that do not know `frame-ancestors` (the CSP Cheat Sheet calls it obsolete
+  where `frame-ancestors` is known; it costs nothing where it is)
 - `Referrer-Policy: no-referrer` (the Cheat Sheet: `strict-origin-when-cross-origin`, the browsers' default). No page
   needs a `Referer`, and with the default a link in a reply would tell the site it leads to the address lcty-rb is
   reached at, a name of the local network among them.
@@ -213,8 +219,8 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
 - The UI tests fail on any report of the Content Security Policy (`securitypolicyviolation`), in Chromium and WebKit,
   so a policy that breaks a page is found before it ships.
 - The headers are compared with OWASP's lists (`ci/headers_add.json` and `ci/headers_remove.json` of the Secure
-  Headers Project) and with its HTTP Security Response Headers Cheat Sheet when this spec is revised: a header added
-  there is either sent here or listed above as left out, with the reason.
+  Headers Project) and with its HTTP Security Response Headers, CSRF Prevention and Content Security Policy Cheat
+  Sheets when this spec is revised: what they add is either done here or listed as not taken, with the reason.
 - LCTYSP-0001 points here, and the README says what lcty-rb guards against and what is left to the proxy.
 
 ## Decisions to make
@@ -315,3 +321,46 @@ so the same attack applies. How the plan follows it:
   - `SameSite` cookies: lcty-rb sets no cookie.
   - Asking the user again (re-authentication, a confirmation) before a write: every write is the user's own action
     on a page already, and deleting asks first.
+
+## OWASP Content Security Policy Cheat Sheet
+
+The [Content Security Policy Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
+(`cheatsheets/Content_Security_Policy_Cheat_Sheet.md` of OWASP/CheatSheetSeries, as of 2026-10-04). How the policy of
+step 2 follows it:
+
+- **Delivered as a header on every response,** not only on the pages, and not as `X-Content-Security-Policy` or
+  `X-WebKit-CSP`, which are obsolete.
+- **Its tightened basic policy** (`default-src 'none'` and only what is used) is the shape of the page policy:
+  same-origin scripts, workers, styles and connections, no inline script or `eval`, no framing, no form sent
+  elsewhere. lcty-rb also allows connections to any HTTP(S) origin, for llama-server, and keeps `frame-ancestors`
+  at `'none'` (the Cheat Sheet's sample: `'self'`; no page frames another).
+- **A strict policy (nonces or hashes with `strict-dynamic`): not taken.** The Cheat Sheet prefers it to an
+  allowlist, since an allowlist is bypassed through a listed host that serves attacker-controlled script (a CDN, a
+  JSONP endpoint). For lcty-rb, `script-src 'self'` is the policy:
+  - The format of the files leaves no place for Subresource Integrity. A conversation file is appended to and kept
+    ([LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)); its head names `lcty.v1.js` as it was when the file
+    was made, and an `integrity` written there would be wrong after every new version of `lcty.v1`. Pinning by hash
+    needs that integrity (below), so the site's scripts are allowed by `'self'`.
+  - It lists no other host, and a script never passes its trust on: `'strict-dynamic'` would let any script that a
+    trusted one creates run, wherever it comes from.
+  - Nonces are for HTML and scripts made per response. lcty-rb is designed to need none: its pages and scripts are
+    static files, and a nonce would also defeat the `ETag` of every page.
+  - Pinning the site's own scripts by hash needs Subresource Integrity on them (a hash matches an external script only
+    through its `integrity`; without it, Chromium and WebKit both refuse it). Integrity guards a script against the
+    host that serves it, and here that host is the one that serves the page with the hashes: whoever can change one
+    can change the other. Checked on 2026-11-11, WebKit also refuses a statically imported module pinned by the
+    `integrity` of an import map, which Chromium allows, and neither pins a worker.
+  - What a hash would still stop, an injected `<script src>` pointing at a script of the site, needs an injection,
+    which the allowlist of presentations and pages that make their own presentation leave no place for; and the site
+    serves nothing an attacker controls as a script (exact types and `nosniff`).
+
+  To be looked at again if a page ever needs an inline script or a script from another host.
+- **The `object-src 'none'` and `base-uri 'none'` of its strict samples:** taken.
+- **`style-src-attr`:** the directive decision 1 is about.
+- **`Content-Security-Policy-Report-Only` first, and `report-to`:** not taken. There is no endpoint to collect
+  reports, and one would be another way to write to the server; instead the UI tests fail on any violation in
+  Chromium and WebKit (step 4), before a policy ships.
+- **A `<meta http-equiv="Content-Security-Policy">`:** the Cheat Sheet's way when headers cannot be set. A
+  conversation file opened directly (`file://`) gets no header, and a meta tag in its head would give it the same
+  policy but `frame-ancestors`. It changes the head of LCTYSP-0013, so it is left for later.
+- **`upgrade-insecure-requests`:** for a site moving to HTTPS; not taken, as above.
