@@ -37,7 +37,9 @@ other elements change no round of the index.
   sides may send at any time: the page sends requests, the server sends responses and notifications.
 - **Anything else** at `/v1/rpc` is refused: a `GET` without `Upgrade` gets `426`, and every other method `405`. There
   is no `POST`: a second transport would need the same checks again and would have no session (no `actorId`, no
-  notifications, no `c.subscribe`), and every client has a WebSocket.
+  notifications, no `c.subscribe`), and every client has a WebSocket. The `405` says `Allow: GET`, and a body of up to
+  64 KiB is read before it: the connection is closed after the answer, and closed with data unread it would be reset,
+  which a client could get before the `405`.
 - **Origin.** A WebSocket handshake whose `Origin` is not one of the allowed origins is refused with `403`. The allowed origins are the `--allowed-origin` options (of
   `server_settings.txt` or the command line) or `LCTY_ALLOWED_ORIGIN` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md#settings); such as
   `http://192.168.1.10:45280`), or else the server's own address (`http://<host>:<port>`, and

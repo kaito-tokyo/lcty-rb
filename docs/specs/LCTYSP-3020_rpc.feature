@@ -28,9 +28,11 @@ Feature: LCTYSP-3020 The RPC protocol
     When it sends initialize
     Then the result has the protocol, the version and an actorId that is a UUID
 
+  # Its body is read before the answer, so the connection is closed, not reset before the client reads the 405
   Scenario: POST is not a transport
     When a request is sent with POST
     Then the status is 405
+    And Allow is GET
 
   Scenario Outline: A request of an origin that is not allowed is refused
     When a request is sent <how> with Origin <origin>

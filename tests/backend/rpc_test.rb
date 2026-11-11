@@ -33,6 +33,7 @@ class RpcTest < Lcty::Scenarios
       res = Net::HTTP.post(URI("http://127.0.0.1:#{port}/v1/rpc"), body, 'Content-Type' => 'application/json')
     end
     step('Then the status is 405') { assert_equal '405', res.code }
+    step('And Allow is GET') { assert_equal 'GET', res['allow'] }
   end
 
   [['as a WebSocket', 'http://evil.example'], ['as a WebSocket', 'http://allowed.test:1']].each do |how, origin|
@@ -718,7 +719,9 @@ class RpcTest < Lcty::Scenarios
       Rpc::Peer.queue_max = 1024
     end
     step("Then every change is answered at once, and the page's connection is closed") do
-      assert_operator times.max, :<, 1.0
+      # Held up by the page, a change would wait until the page reads, which it never does; a loaded machine takes
+      # about a second for one of these (three suites at once did), so the bound leaves room for that
+      assert_operator times.max, :<, 5.0
       sock = stalled.instance_variable_get(:@sock)
       eof = false
       Timeout.timeout(10) do
