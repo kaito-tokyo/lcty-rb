@@ -4,6 +4,7 @@
 
 // Runs the GFM parts: a text, whole or streamed, block by block, then the inlines (converter.d.ts).
 
+import { HtmlSink, writeCommitted } from "./committed.js";
 import { BlockParser, isSpaceOrTab, isThematicBreak } from "./gfm_blocks.js";
 import { InlineParser } from "./gfm_inlines.js";
 
@@ -35,6 +36,14 @@ export function parseGfm(text, decodeName, options = {}) {
 	nodes.compact();
 	spans.compact();
 	return { nodes, spans };
+}
+
+/** The whole of text as LCTYSP-0017's output, an HTML string. */
+export function gfmHtml(text, decodeName, { selectAll, ...options } = {}) {
+	const { nodes, spans } = parseGfm(text, decodeName, options);
+	const sink = new HtmlSink();
+	writeCommitted({ source: text, nodes, spans, selectAll }, 0, sink);
+	return sink.html;
 }
 
 // What BlockWatch takes the first block of a head to be, from its first line

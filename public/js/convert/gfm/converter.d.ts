@@ -2,8 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// converter.js: what runs the parts of GFM 0.29-gfm (LCTYSP-0017); the document tree's types are gfm_blocks.d.ts's and
-// gfm_inlines.d.ts's. The implementation carries one-line comments only; its documentation is this file.
+// converter.js: what runs the parts of GFM 0.29-gfm (LCTYSP-0017) and the committed converter (LCTYSP-0018); the
+// document tree's types are gfm_blocks.d.ts's and gfm_inlines.d.ts's. The implementation carries one-line comments
+// only; its documentation is this file.
 //
 // A whole text is read as a streamed one is, a top-level block at a time (BlockParser's advance), and then the inlines
 // of each paragraph, heading and table cell, with every link reference definition known: the two phases of the spec's
@@ -49,6 +50,18 @@ export function parseGfm(
 	decodeName: DecodeName,
 	options?: ParseOptions,
 ): Document;
+
+/** What gfmHtml takes besides the parser's options: the label of a code block's button (committed.d.ts). */
+export interface HtmlOptions extends ParseOptions {
+	selectAll?: string;
+}
+
+/** The whole of text as LCTYSP-0017's output, an HTML string: parsed, then every block written (committed.d.ts). */
+export function gfmHtml(
+	text: string,
+	decodeName: DecodeName,
+	options?: HtmlOptions,
+): string;
 
 /**
  * The weak half of reading a stream: whether the head may have ended its first block, so that BlockParser's advance,

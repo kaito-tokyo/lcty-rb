@@ -117,6 +117,7 @@ for (const { label, unit } of [
 	{ label: "www autolinks", unit: "www.a.b " },
 	{ label: "email addresses", unit: "a@b.c " },
 	{ label: "lists and quotes by turns", unit: "- a\n> b\n" },
+	{ label: "emphasis before links", unit: "*a* [b](u)\n" },
 ]) {
 	scenario(
 		`A pathological text is parsed in about linear time (${label})`,

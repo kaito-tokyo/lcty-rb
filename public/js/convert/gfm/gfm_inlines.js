@@ -595,7 +595,8 @@ export class InlineParser {
 	/** Match the delimiter runs above stackBottom into emphasis and strikethrough, marking their items. */
 	processEmphasis(stackBottom) {
 		const openersBottom = new Map();
-		let closer = this.delimiters;
+		// the lowest run above stackBottom; none when stackBottom is the top, so the walk never goes below it
+		let closer = this.delimiters === stackBottom ? null : this.delimiters;
 		while (closer !== null && closer.previous !== stackBottom)
 			closer = closer.previous;
 		while (closer !== null) {
