@@ -94,7 +94,8 @@ Two principles drive the design:
 - Requests are not otherwise checked: there is no `Host` check, `Origin` is checked only by `/v1/rpc`
   ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), and no headers are added to every response. The server
   is meant for the user's own machine and mostly serves static files, whose caching is the browser's default (WEBrick
-  sends `ETag` and `Last-Modified`).
+  sends `ETag` and `Last-Modified`). This leaves cross-site writes and DNS rebinding open;
+  [LCTYSP-0016](LCTYSP-0016_hardening.md) is the plan that closes them.
 - Conversation ids are limited to `[A-Za-z0-9_-]{1,80}`.
 
 ## Encoding
