@@ -6,7 +6,7 @@
 // its Scenario (an Examples row is added in parentheses) and one step per line of it, the Background first, so the two
 // read side by side.
 //
-// js/convert/gfm/parse.js runs in Node.js (node-unit.js). The examples, the entity table and the reference HTML are
+// js/convert/gfm/converter.js runs in Node.js (node-unit.js). The examples, the entity table and the reference HTML are
 // those of tests/unit/gfm-reference.js.
 
 import {
@@ -16,7 +16,15 @@ import {
 } from "./gfm-reference.js";
 import { expect, publicUrl, scenario } from "./node-unit.js";
 
-const { parseGfm } = await import(publicUrl("js/convert/gfm/parse.js"));
+const { BlockWatch, parseBlocks, parseGfm } = await import(
+	publicUrl("js/convert/gfm/converter.js")
+);
+const { BLOCK_QUOTE, BlockParser, PARAGRAPH } = await import(
+	publicUrl("js/convert/gfm/gfm_blocks.js")
+);
+const { InlineParser } = await import(
+	publicUrl("js/convert/gfm/gfm_inlines.js")
+);
 
 async function background(step) {
 	let examples;
@@ -109,6 +117,7 @@ for (const { label, unit } of [
 	{ label: "unclosed link destinations", unit: "[](" },
 	{ label: "www autolinks", unit: "www.a.b " },
 	{ label: "email addresses", unit: "a@b.c " },
+	{ label: "lists and quotes by turns", unit: "- a\n> b\n" },
 ]) {
 	scenario(
 		`A pathological text is parsed in about linear time (${label})`,
@@ -145,9 +154,9 @@ scenario(
 			() => {
 				let depth = 0;
 				for (
-					let n = doc.firstChild;
-					n?.type === "block_quote";
-					n = n.firstChild
+					let n = doc.children[0];
+					n?.type === BLOCK_QUOTE;
+					n = n.children[0]
 				) {
 					depth++;
 					inner = n;
@@ -158,11 +167,103 @@ scenario(
 		await step(
 			'And the innermost holds a paragraph of "> > > > > > > > a"',
 			() => {
-				const p = inner.firstChild;
-				expect(p.type).toBe("paragraph");
-				expect(p.children.map((n) => n.literal).join("")).toBe(
+				const p = inner.children[0];
+				expect(p.type).toBe(PARAGRAPH);
+				expect(p.children.map((n) => n.view.join("")).join("")).toBe(
 					"> > > > > > > > a",
 				);
+			},
+		);
+	},
+);
+
+/** The examples without a link reference definition, whose blocks are parsed on their own alike. */
+function withoutDefinitions(examples) {
+	return examples.filter(
+		(e) => parseBlocks(e.markdown, decodeNameFromTable).refmap.size === 0,
+	);
+}
+
+/**
+ * Example e pushed a character at a time into one BlockParser, the inlines of each block its advance takes parsed at
+ * once and the block written as GFM's reference HTML, the rest taken with end at the end: the HTML of the blocks, one
+ * after another, and of the whole example. advance is tried after each character until it needs more text, or, with a
+ * BlockWatch, only when the watch says the head may have ended its block.
+ */
+function pushed(e, watch = null) {
+	const parser = new BlockParser(decodeNameFromTable);
+	const inlines = new InlineParser(decodeNameFromTable, parser.refmap, {
+		autolink: e.extension === "autolink",
+	});
+	let got = "";
+	const take = (step) => {
+		for (const leaf of step[3]) inlines.parse(leaf, leaf.view.join("\n"));
+		if (step[2] !== null)
+			got += referenceHtml(step[2], { tagfilter: e.extension === "tagfilter" });
+	};
+	let head = "";
+	for (const c of e.markdown) {
+		head += c;
+		while (watch === null || watch.mayEnd(head)) {
+			const step = parser.advance(head);
+			if (step === undefined) {
+				if (watch === null) break;
+				continue;
+			}
+			watch?.reset();
+			head = step[0];
+			if (step[1] === undefined) break;
+			take(step);
+		}
+	}
+	for (;;) {
+		const step = parser.advance(head, true);
+		if (step[1] === undefined) break;
+		head = step[0];
+		take(step);
+	}
+	return { number: e.number, got, want: render(e) };
+}
+
+scenario(
+	"A text pushed a character at a time gives, block by block, the HTML of the whole text",
+	async ({ step }) => {
+		const examples = await background(step);
+		let results;
+		await step(
+			"When each of the 594 examples without a link reference definition is pushed a character at a time into one BlockParser, the inlines of each block its advance takes parsed at once, and the rest taken with end at the end",
+			() => {
+				const plain = withoutDefinitions(examples);
+				expect(plain).toHaveLength(594);
+				results = plain.map((e) => pushed(e));
+			},
+		);
+		await step(
+			"Then the HTML of the blocks, one after another, is the HTML of the whole example, byte for byte",
+			() => {
+				expect(results.filter((r) => r.got !== r.want)).toEqual([]);
+			},
+		);
+	},
+);
+
+scenario(
+	"With BlockWatch deciding when to try advance, the HTML is still that of the whole text",
+	async ({ step }) => {
+		const examples = await background(step);
+		let results;
+		await step(
+			"When each of the 594 examples is pushed a character at a time, advance tried only when BlockWatch says the head may have ended its block",
+			() => {
+				const plain = withoutDefinitions(examples);
+				expect(plain).toHaveLength(594);
+				results = plain.map((e) => pushed(e, new BlockWatch()));
+			},
+		);
+		await step(
+			"Then the HTML of the blocks, one after another, is the HTML of the whole example, byte for byte",
+			() => {
+				expect(results.filter((r) => r.got !== r.want)).toEqual([]);
 			},
 		);
 	},

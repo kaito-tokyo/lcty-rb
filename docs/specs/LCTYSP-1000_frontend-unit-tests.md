@@ -63,7 +63,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1022](LCTYSP-1022_rpc-client.feature)                 | `js/api/rpc.js`: the client of `/v1/rpc`                    |       9 |       0 |
 | [LCTYSP-1023](LCTYSP-1023_lcty-msg-elements.feature)          | `js/ui/lcty-msg.js`: the elements the page builds           |       0 |       7 |
 | [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | `js/api/tab-rpc.js`: the tab's connection                   |       5 |       0 |
-| [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)                 | `js/convert/gfm/parse.js`: parsing GFM                      |      13 |       0 |
+| [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)                 | `js/convert/gfm/converter.js`: parsing GFM                  |      16 |       0 |
 
 ## How a feature is written
 

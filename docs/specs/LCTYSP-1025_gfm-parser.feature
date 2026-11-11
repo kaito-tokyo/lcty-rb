@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/js/convert/gfm/parse.js and the modules beside it (LCTYSP-0017, "Input: GFM is the only
+# The behaviour of public/js/convert/gfm/converter.js and the modules beside it (LCTYSP-0017, "Input: GFM is the only
 # grammar" and "Limits"). Each Scenario is a test of the same title in tests/unit/gfm-parser.test.js (in Node.js), whose
 # steps are the lines below.
 
@@ -33,19 +33,32 @@ Feature: LCTYSP-1025 Parsing GitHub Flavored Markdown
     Then it takes less than 5 seconds
 
     Examples:
-      | text                        | unit       |
-      | nested brackets             | "["        |
-      | unclosed brackets           | "[a"       |
-      | star runs                   | "*a"       |
-      | underscore runs             | "_a_ "     |
-      | backticks                   | "`a"       |
-      | nested block quotes         | "> "       |
-      | nested list items           | "- "       |
-      | unclosed link destinations  | "[]("      |
-      | www autolinks               | "www.a.b " |
-      | email addresses             | "a@b.c "   |
+      | text                       | unit         |
+      | nested brackets            | "["          |
+      | unclosed brackets          | "[a"         |
+      | star runs                  | "*a"         |
+      | underscore runs            | "_a_ "       |
+      | backticks                  | "`a"         |
+      | nested block quotes        | "> "         |
+      | nested list items          | "- "         |
+      | unclosed link destinations | "[]("        |
+      | www autolinks              | "www.a.b "   |
+      | email addresses            | "a@b.c "     |
+      | lists and quotes by turns  | "- a\n> b\n" |
 
   Scenario: Block quotes and list items nest at most 32 deep
     When a line of 40 "> " and then "a" is parsed
     Then the document holds 32 block quotes, one in another
     And the innermost holds a paragraph of "> > > > > > > > a"
+
+  # A BlockParser's one operation is advance: it takes the first top-level block of its head once the lines after it
+  # end it, and a client pushing text into the head parses the inlines of each block as it is taken. A definition read
+  # later is not known then, so the examples with one are left out.
+  Scenario: A text pushed a character at a time gives, block by block, the HTML of the whole text
+    When each of the 594 examples without a link reference definition is pushed a character at a time into one BlockParser, the inlines of each block its advance takes parsed at once, and the rest taken with end at the end
+    Then the HTML of the blocks, one after another, is the HTML of the whole example, byte for byte
+
+  # BlockWatch is the weak half: it says when advance is worth a try, and may say so when it is not
+  Scenario: With BlockWatch deciding when to try advance, the HTML is still that of the whole text
+    When each of the 594 examples is pushed a character at a time, advance tried only when BlockWatch says the head may have ended its block
+    Then the HTML of the blocks, one after another, is the HTML of the whole example, byte for byte
