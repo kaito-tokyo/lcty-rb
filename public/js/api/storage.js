@@ -2,13 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Client for the lcty.rb storage API (LCTYSP-0006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-0003).
-// The paths are relative to the root of the site (v1/…), which siteUrl() turns into URLs (LCTYSP-0005).
+// Client for the lcty.rb storage API (LCTYSP-0006, LCTYSP-0003, LCTYSP-0005).
 
 import { renderMarkdown } from "../convert/markdown.js";
 import { siteUrl } from "../site.js";
 
-/** The error of a failed request: the message is "<status> <body>", and status is the HTTP status. */
+/** The error of a failed request, with the HTTP status as status. */
 function httpError(status, body) {
 	const e = new Error(`${status} ${body.slice(0, 200)}`);
 	e.status = status;
@@ -31,10 +30,7 @@ async function request(method, path, body, { raw = false } = {}) {
 	return raw ? r.text() : r.json();
 }
 
-/**
- * A request that changes conversations. The browser's copies of the list hear of it from the server, over /v1/rpc
- * (LCTYSP-0014), not from here.
- */
+/** A request that changes conversations (the copies of the list hear of it over /v1/rpc, LCTYSP-0014). */
 function write(method, url, body) {
 	return request(method, url, body);
 }
@@ -43,10 +39,7 @@ function conv(id) {
 	return `v1/conversations/${encodeURIComponent(id)}`;
 }
 
-/**
- * Message → line to append. Replies carry presentation HTML (content_html) (dual recording. LCTYSP-0003).
- * It is rendered with the same markdown.js as the screen, so what is saved matches what is shown.
- */
+/** Message → line to append; replies also carry content_html (LCTYSP-0003). */
 export function toLine(m) {
 	const line = { type: "message", ...m };
 	if (m.role === "assistant")
@@ -68,14 +61,14 @@ export function createConversation(meta, lines) {
 export function appendLines(id, lines) {
 	return write("POST", `${conv(id)}/lines`, lines);
 }
-/** Delete messages from index from. One call may go back at most the last turn (LCTYSP-0004). */
+/** Delete messages from index from, at most the last turn (LCTYSP-0004). */
 export function popMessages(id, from) {
 	return write("POST", `${conv(id)}/pop`, { from });
 }
 export function deleteConversation(id) {
 	return write("DELETE", conv(id));
 }
-/** Defaults of the browser settings (LCTYSP-0010). Changes are kept in localStorage, not on the server. */
+/** Defaults of the browser settings (LCTYSP-0010). */
 export function getDefaults() {
 	return request("GET", "v1/defaults.json");
 }
@@ -88,10 +81,7 @@ export function vectorsPending(model, limit = 16) {
 		`v1/vectors/pending?model=${encodeURIComponent(model)}&limit=${limit}`,
 	);
 }
-/**
- * revs: [[id, rev], …], records: { body: registration vector binary, size: bytes per vector, count: number of records }.
- * The vectors of the ids sent are replaced by those in the body (LCTYSP-0008). The server checks magic, size and entry_count in the query against the body
- */
+/** Replace the vectors of the ids in revs with those in body (LCTYSP-0008). */
 export async function putVectors(model, revs, { body, size, count }) {
 	const rev = revs.map(([id, r]) => `${id}:${r}`).join(",");
 	const qs = `model=${encodeURIComponent(model)}&magic=lctyvLE0&size=${size}&entry_count=${count}&rev=${rev}`;

@@ -2,11 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The presentation of a message, the <article> of the file, from its text (LCTYSP-0013): the second of the two forms a
-// message is kept in, made from the first, the text of its attributes (convert/text-attr.js).
-//
-//   userArticle(text)    the <article> of a user message: its text alone, escaped
-//   replyArticle(text)   the <article> of the others: the text rendered as Markdown (convert/markdown.js)
+// The presentation of a message, the <article> of the file, made from its text (LCTYSP-0013).
 
 import { renderMarkdown } from "./markdown.js";
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Server-Sent Events parser. Turns a fetch ReadableStream into a sequence of {event, data}.
+// Server-Sent Events parser: a fetch ReadableStream to a sequence of {event, data}.
 
 export async function* parseSSE(body) {
 	const reader = body.pipeThrough(new TextDecoderStream()).getReader();

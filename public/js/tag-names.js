@@ -2,10 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Tag names, tag file names and references (LCTYSP-0009). A tag is a file t/NNNNN-<part>.html on the server; NNNNN is
-// the draft order and <part> is derived from the display name here: all Unicode handling is the browser's, and the
-// server only checks file names mechanically. Conversations refer to a tag by its part. No imports, so search and
-// the reorder page can use it without the rest of js/tags.js.
+// Tag names, tag file names t/NNNNN-<part>.html and references, with no imports (LCTYSP-0009).
 
 /** The longest display name, in code points (after NFC). */
 export const TAG_NAME_MAX = 40;
@@ -16,10 +13,7 @@ const ESCAPED_RE = /[!#$%&()*<>?[\]^{}]/g;
 /** The largest order number: five digits. */
 const MAX_NUMBER = 99999;
 
-/**
- * Why the display name cannot be used, or null. The name is checked as it will be saved: NFC, then 1 to TAG_NAME_MAX
- * code points, with no character of the categories Z and C and none of : ; / " ' ` ~ \ |.
- */
+/** Why the display name cannot be used ("length" or "character"), or null, checked as it will be saved. */
 export function tagNameError(name) {
 	const n = String(name).normalize("NFC");
 	const length = [...n].length;
@@ -28,11 +22,7 @@ export function tagNameError(name) {
 	return null;
 }
 
-/**
- * The file-name part of a display name, which is also how conversations refer to the tag: NFC, lowercase (final sigma
- * as sigma), NFC again, then the ASCII symbols that mean something to shells, URLs, globs or Windows escaped as ~xx.
- * C# → c~23, Ruby → ruby. Applying it to a part gives the same part.
- */
+/** The file-name part of a display name, also the tag's reference (C# → c~23, Ruby → ruby). */
 export function tagPart(name) {
 	const part = String(name)
 		.normalize("NFC")
@@ -73,11 +63,7 @@ export function sortTags(defs, refs) {
 	);
 }
 
-/**
- * The file names of tags edited in order: a tag keeps its number (the order is changed on the reorder page) and takes
- * the part of its name; a new tag gets the number after the largest (largest + 10). Throws "full" when that would need
- * more than five digits. An invalid tag (a file without <lcty-t>) keeps its file name as it is.
- */
+/** The file names of tags edited in order: numbers kept, a new tag largest + 10; throws "full" past five digits. */
 export function assignFileNames(tags) {
 	let last = Math.max(
 		0,
@@ -95,10 +81,7 @@ export function assignFileNames(tags) {
 	});
 }
 
-/**
- * The file name of a tag file's page from its URL path (/t/00010-ruby.html): the last segment, percent-decoded and
- * composed to NFC as the tags' file names are. A segment that cannot be decoded is returned as it is.
- */
+/** The file name of a tag file's page from its URL path (/t/00010-ruby.html): the last segment, decoded, NFC. */
 export function tagFileOfPath(path) {
 	const last = path.split("/").pop();
 	try {

@@ -2,12 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// New conversation (/, the top page. LCTYSP-0004, LCTYSP-0005). Plain HTML (the creation card in public/index.html) plus
-// the interactive components <lcty-sidebar> and <lcty-composer>. Sending decides the conversation id, creates the file
-// through /v1/rpc in the format of LCTYSP-0013 (the head, the system prompt, for a fork the messages it copies, and the
-// first message), ending with an <lcty-cmd data-op="send">, and moves to /c/<id>.html, which generates the reply because
-// this tab made that command.
-// With ?fork=<id>&at=<n> it forks; ?q=… puts a query into the sidebar's search box.
+// New conversation page (/): creates the conversation file and moves to it (LCTYSP-0004, LCTYSP-0005, LCTYSP-0013).
 
 import { getTags } from "../api/lcty-t.js";
 import { appendLines, getConversation } from "../api/storage.js";
@@ -77,8 +72,7 @@ export function initNewPage() {
 
 	function renderTags() {
 		const picker = form.tags;
-		// One checkbox per tag definition, then ⚙︎, laid out as inline content separated by spaces (no CSS of its own).
-		// Rebuilt only when the definitions change, so focus stays on the box
+		// One checkbox per tag definition, then ⚙︎; rebuilt only when the definitions change
 		const names = JSON.stringify(state.tagDefs.map((t) => [t.file, t.name]));
 		if (picker.dataset.names !== names) {
 			picker.dataset.names = names;
@@ -115,8 +109,7 @@ export function initNewPage() {
 		);
 	}
 
-	// After saving: the chosen tags that no longer exist are dropped (tags never defined, e.g. from a fork, stay), and an
-	// untouched draft is composed again from the new prompts and memory
+	// After saving: drop the chosen tags that no longer exist and recompose an untouched draft
 	function tagsSaved(defs) {
 		const before = new Set(state.tagDefs.map(tagRef));
 		const after = new Set(defs.map(tagRef));
@@ -184,10 +177,7 @@ export function initNewPage() {
 
 	// ---- Sending: decide the id, create the file, move to the conversation page ----
 
-	// The conversation is created through /v1/rpc in the format of LCTYSP-0013 (LCTYSP-0012): c.create writes the head,
-	// then the system prompt, the messages of a fork (with new ids: a fork shares none, LCTYSP-0013) and the user
-	// message are appended one by one, and last the lcty-cmd send, which this tab's conversation page runs as its own
-	// (sessionStorage lcty.run.<id>). The tags at creation go to lcty_t.sqlite (the HTTP API's tags line).
+	// Create the conversation through /v1/rpc, ending with the lcty-cmd send (LCTYSP-0012, LCTYSP-0013)
 	async function create(id, title, text, at) {
 		const rpc = tabRpc(); // the tab's connection, which the sidebar uses too
 		await rpc.call("c.create", {

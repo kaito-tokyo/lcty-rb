@@ -65,15 +65,14 @@ export function backendOf(settings, id) {
 	);
 }
 
-// The URL of a conversation, c/<id>.html of the site (LCTYSP-0005). msgId links to the message element itself
-// (id="c-msg-<UUIDv7>". LCTYSP-0003)
+// The URL of a conversation, c/<id>.html, or of its message msgId (LCTYSP-0005, LCTYSP-0003).
 export function convUrl(id, msgId) {
 	return siteUrl(
 		`c/${encodeURIComponent(id)}.html${msgId ? `#c-msg-${msgId}` : ""}`,
 	).href;
 }
 
-/** Index registration (LCTYSP-0007). Every page calls kick() after saving and on open. */
+/** The page's indexer for index registration (LCTYSP-0007). */
 export function appIndexer(getSettings) {
 	let shown = false;
 	return createIndexer({
@@ -91,9 +90,7 @@ export function appIndexer(getSettings) {
 	});
 }
 
-// ---- Settings (LCTYSP-0010) ----
-// The server only provides defaults (/v1/defaults.json). Changes made on /settings are kept in localStorage, and only the
-// values that differ from the defaults are stored, so changed defaults still apply to everything left untouched.
+// ---- Settings (LCTYSP-0010): only the values that differ from the defaults, in localStorage ----
 const SETTINGS_KEY = "lcty.settings.v1";
 
 /** The stored changes ({} when none or unreadable). */
@@ -106,7 +103,7 @@ function storedSettings() {
 	}
 }
 
-/** Store values, keeping only the keys whose value differs from defaults. Returns what was stored. */
+/** Store values, keeping only the keys whose value differs from defaults, and return what was stored. */
 export function storeSettings(values, defaults) {
 	const diff = Object.fromEntries(
 		Object.keys(defaults)
@@ -119,7 +116,7 @@ export function storeSettings(values, defaults) {
 	return diff;
 }
 
-/** Defaults overlaid with the stored changes. Keys the defaults do not know, or values of another type, are ignored. */
+/** Defaults overlaid with the stored changes of known keys and the same type. */
 export function mergeSettings(defaults, stored = storedSettings()) {
 	return Object.fromEntries(
 		Object.entries(defaults).map(([k, d]) => [

@@ -2,13 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The sidebar shared by every page (LCTYSP-0005, LCTYSP-0007): <lcty-sidebar> and its <lcty-conv-list> (structure in
-// /lcty.v1/lcty.v1.cjs) get the search box, the list's items and handlers, the tags dialog (LCTYSP-0009), the refresh
-// button and the settings dialog (LCTYSP-0010) here.
-//
-// The list follows the server over the tab's /v1/rpc connection (LCTYSP-0014): initSidebar registers c.batch.updated
-// and t.batch.updated and, whenever the connection opens, reads c.list, c.recordcount.list and t.c.list again. The
-// page opens the connection (tabRpc()) once it has registered what it receives itself.
+// The sidebar shared by every page (LCTYSP-0005, LCTYSP-0007, LCTYSP-0009, LCTYSP-0010, LCTYSP-0014).
 
 import {
 	applyTagBatch,
@@ -25,15 +19,7 @@ import { tagRef } from "../tag-names.js";
 import { initTagsDialog } from "../tags.js";
 import { initSettingsDialog } from "./settings-dialog.js";
 
-/**
- * @param {LctySidebarElement} sidebar
- * @param {object} o
- * @param {() => object} o.getSettings
- * @param {(detail: {id: string, chunkId: string | null}) => boolean | void} [o.onSelect]
- *   called when a conversation is chosen; return true when it was handled (otherwise the item's link is followed)
- * @param {(defs: object[]) => void} [o.onTagsSaved] called with the new tag definitions after the tags dialog saved them
- * @returns the search panel ({refresh, setQuery, current, …})
- */
+/** Attach the sidebar's features to sidebar and return its search panel. */
 export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
 	const panel = createSearchPanel({
 		list: sidebar.list,
@@ -81,10 +67,7 @@ export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
 	getTags()
 		.then(({ tags }) => showTagNames(sidebar.list, tags))
 		.catch(() => {}); // the chips keep their references
-	// Every page has the sidebar: the browser's copy of the tag definitions is replaced with the server's (sync_full)
-	// whenever the page is shown: at once when it loads, and again when it comes back from the back/forward cache
-	// (pageshow with persisted), where no script runs anew (LCTYSP-0009). The lists of conversations follow /v1/rpc
-	// instead, whose connection is opened again after the cache closed it.
+	// The tag definitions are synced whenever the page is shown, also from the back/forward cache (LCTYSP-0009)
 	const forceSync = () => {
 		forceSyncTags()
 			.then(getTags)
@@ -99,10 +82,7 @@ export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
 	return panel;
 }
 
-/**
- * The list's tag chips show display names: data-tag-defs holds the references of the defined tags and data-tag-names
- * their names, in the same order (LCTYSP-0009). Names contain no whitespace.
- */
+/** Give the list the defined tags' references and names, so its tag chips show display names (LCTYSP-0009). */
 function showTagNames(list, defs) {
 	list.setAttribute("data-tag-names", defs.map((t) => t.name).join(" "));
 	list.setAttribute("data-tag-defs", defs.map(tagRef).join(" "));

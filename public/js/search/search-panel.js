@@ -2,13 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0008).
-// With an empty box it lists newest first; otherwise it merges keyword search (server) and semantic search (browser) with RRF.
-// The list is the browser's copies, which follow the server over /v1/rpc (LCTYSP-0014): the meta of every conversation
-// and its number of elements (api/meta-db.js, lcty_c) and its tags (api/lcty-t.js, t_has_many_c of lcty_t, in the
-// order of the tags' files); it is read again whenever this tab has stored a change of them. The rounds of each
-// conversation (message_ids, which semantic search needs to map a hit to its conversation) are fetched from
-// /v1/conversations only when a semantic search runs, and kept until the list changes.
+// Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0008, LCTYSP-0014).
 
 import {
 	getTags,
@@ -48,16 +42,10 @@ function byOrder(tags, order) {
 	return [...tags].sort((a, b) => at(a) - at(b));
 }
 
-/**
- * @param {object} o
- * @param {HTMLElement} o.list   <lcty-conv-list>
- * @param {HTMLInputElement} o.box  search box
- * @param {HTMLElement} o.status  status display
- * @param {() => object} o.getSettings
- */
+/** Wire the sidebar's search box to its conversation list. */
 export function createSearchPanel({ list, box, status, getSettings }) {
 	const vectors = createVectorStore(); // One per page: each page creates one search panel
-	// all: the list (from the copy); stale: the copy is out of date; rounds: {convOf, idsOf} from /v1/conversations, on demand
+	// all: the list; stale: the copy is out of date; rounds: {convOf, idsOf}, on demand
 	const state = {
 		all: [],
 		stale: false,
@@ -109,8 +97,7 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 			rounds(),
 			vectors.refresh(),
 		]);
-		// With tag: filters the worker selects among the rounds of the matching conversations; otherwise it only drops
-		// rounds whose conversation is not in the list
+		// With tag: filters, only the rounds of the matching conversations are allowed
 		const allow = filtered
 			? state.all
 					.filter((c) => hasTags(c.id))
