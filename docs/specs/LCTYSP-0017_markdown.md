@@ -83,7 +83,7 @@ table wins.
 | Text                                                        | its characters, escaped (see [Output text](#output-text))                                                                                                     |
 | Code span                                                   | `<code>…</code>`                                                                                                                                              |
 | Emphasis                                                    | `<em>…</em>`                                                                                                                                                  |
-| Strong emphasis                                             | `<strong>…</strong>`                                                                                                                                          |
+| Strong emphasis                                             | `<strong>…</strong>`; right inside another strong emphasis, its contents alone (as GFM's reference writes it)                                                 |
 | Strikethrough                                               | `<del>…</del>`                                                                                                                                                |
 | Link, autolink, extended autolink                           | `<a href="url" target="_blank" rel="noopener noreferrer">…</a>` when the URL is allowed; otherwise its text alone                                             |
 | Image                                                       | a link: `<a href="url" target="_blank" rel="noopener noreferrer">alt</a>` when the URL is allowed; otherwise the alt text alone (see [Decisions](#decisions)) |
@@ -147,8 +147,13 @@ this one: **once the end is given, the DOM is the one this spec gives for the wh
 
 - Rendering takes time linear in the text, or close to it: GFM's pathological inputs (deeply nested brackets, long runs
   of delimiters, deep block quotes and lists) must not make it quadratic.
-- Blocks nested more than 32 deep (quotes and list items) are read as GFM reads them, but the levels beyond 32 are
-  written as paragraphs of their text, so the output has a bounded depth.
+- Block quotes and list items nest at most 32 deep: a `>` or a list marker that would open a 33rd level is not read as
+  one, and stays text of the paragraph it is in. The output has a bounded depth, which an HTML parser reading it back
+  keeps as it is (browsers flatten a tree past a few hundred levels).
+- A link destination holds at most 32 levels of unescaped parentheses; one with more is not a destination. GFM lets an
+  implementation set such a limit (it asks for at least three levels).
+- The tests run every example of the GFM spec and pathological texts of 100000 repetitions
+  ([LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)).
 
 ## Decisions
 
