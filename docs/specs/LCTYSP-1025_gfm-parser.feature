@@ -33,18 +33,19 @@ Feature: LCTYSP-1025 Parsing GitHub Flavored Markdown
     Then it takes less than 5 seconds
 
     Examples:
-      | text                       | unit         |
-      | nested brackets            | "["          |
-      | unclosed brackets          | "[a"         |
-      | star runs                  | "*a"         |
-      | underscore runs            | "_a_ "       |
-      | backticks                  | "`a"         |
-      | nested block quotes        | "> "         |
-      | nested list items          | "- "         |
-      | unclosed link destinations | "[]("        |
-      | www autolinks              | "www.a.b "   |
-      | email addresses            | "a@b.c "     |
-      | lists and quotes by turns  | "- a\n> b\n" |
+      | text                       | unit           |
+      | nested brackets            | "["            |
+      | unclosed brackets          | "[a"           |
+      | star runs                  | "*a"           |
+      | underscore runs            | "_a_ "         |
+      | backticks                  | "`a"           |
+      | nested block quotes        | "> "           |
+      | nested list items          | "- "           |
+      | unclosed link destinations | "[]("          |
+      | www autolinks              | "www.a.b "     |
+      | email addresses            | "a@b.c "       |
+      | lists and quotes by turns  | "- a\n> b\n"   |
+      | emphasis before links      | "*a* [b](u)\n" |
 
   Scenario: Block quotes and list items nest at most 32 deep
     When a line of 40 "> " and then "a" is parsed
