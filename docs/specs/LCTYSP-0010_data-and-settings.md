@@ -50,7 +50,7 @@ the layout before that (`_vectors.*`).
 | `lcty_t.sqlite`                               | Source (the current tags of conversations, `t_has_many_c`; tag definitions and memory are `t/`, below)                           | —                                                                                                                                                      |
 | `lcty_c.sqlite`                               | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `lcty.rb convert`)                   | —                                                                                                                                                      |
 | `server_settings.txt`                         | Source (the options of lcty.rb, one per line; [below](#settings))                                                                |
-| `.htdigest`                                   | Source (the users of Digest authentication, as Apache's htdigest writes them; [below](#authentication))                          | —                                                                                                                                                      |
+| `.htdigest`                                   | Not read (the Digest users of an older version: the server does not start with it, [below](#authentication))                     | —                                                                                                                                                      |
 | `c-former/*.html`                             | Source (every conversation file as it was before `lcty.rb convert` converted it; never deleted)                                  | —                                                                                                                                                      |
 | `lcty_fuzzy_search.sqlite` (+ `-wal`, `-shm`) | The vectors of every embedding model: derived, but only the browser can make them again, so they are kept and backed up          | Re-embedded by the browser while a page is open, when lost ([LCTYSP-0008](LCTYSP-0008_vector-binary.md))                                               |
 | `_index.sqlite` (+ `-wal`, `-shm`)            | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
@@ -154,6 +154,8 @@ browser.
   - `--allowed-origin=ORIGIN`: an origin whose pages may use `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)),
     once per origin. Default: `http://<address>:<port>` of every address listened on, and `http://localhost:<port>`
     when one of them is `127.0.0.1`.
+  - `--basic-auth=USER:HASH`: a user of Basic authentication ([below](#authentication)), once per user, as
+    `lcty.rb hash-password USER` prints it. Default: none, and no request needs credentials.
   - `--help` lists them; `--port` is refused with a pointer to `LCTY_PORT`.
   - Not `--host`: it named an address to listen on with a word that reads as a host to connect to, and took one
     address only. `--bind-ip` replaced it (and `LCTY_BIND_IP` replaced `LCTY_HOST`) without an alias.
@@ -175,10 +177,11 @@ browser.
   Its name has no leading `_`, so it is source-of-truth data. Lines of options, not JSON: the same parser and the
   same names as the command line, comments, and nothing to quote.
 - **Order:** the default, then the file, then the environment variables that are set and not empty (`LCTY_BIND_IP`,
-  `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN`), then the command line, each replacing the ones before (the addresses or
-  origins of one source replace those of another; within the file or the command line they add up).
-- **An environment variable holds one value:** one address in `LCTY_BIND_IP`, one origin in `LCTY_ALLOWED_ORIGIN`.
-  The environment is for starting the server quickly; several addresses or origins are written as options, in the
+  `LCTY_BASE_URL`, `LCTY_ALLOWED_ORIGIN` and `LCTY_BASIC_AUTH`), then the command line, each replacing the ones before
+  (the addresses, origins or users of one source replace those of another; within the file or the command line they
+  add up).
+- **An environment variable holds one value:** one address in `LCTY_BIND_IP`, one origin in `LCTY_ALLOWED_ORIGIN`,
+  one user in `LCTY_BASIC_AUTH`. The environment is for starting the server quickly; several are written as options, in the
   file or on the command line. A value with a comma or whitespace in it stops the server
   (`LCTY_BIND_IP: one value only; give more with --bind-ip in server_settings.txt`), so a list is never split one way
   here and another way elsewhere. The
@@ -187,50 +190,55 @@ browser.
 - **The file is read once, when the server starts.** A changed file applies after a restart. When there is no file,
   every setting takes its default, and nothing is created. A `server_settings.json` of an earlier version is not read.
 - **A setting that cannot be used stops the server:** an option that is not one (so a typo never passes unseen), one
-  without its value, `--port` or `--data-dir`, an address to listen on that is not an IP address, an environment
-  variable of several values, or a port that is not a number. lcty.rb prints
+  without its value, `--port` or `--data-dir`, an address to listen on that is not an IP address, a `--basic-auth`
+  that is not `USER:HASH` or names a user twice, an environment variable of several values, or a port that is not a
+  number. lcty.rb prints
   `lcty-rb: <where>: <what is wrong>` (the path of the file, or "the command line" with the usage) and exits with the
   status 1 ([LCTYSP-3008](LCTYSP-3008_server-settings.feature)).
 - **At startup the server prints** the URL of every address at its port, the data directory, the origins whose pages may use
-  `/v1/rpc`, the settings file it read, or that there is none, and the `.htdigest` file it uses with its realm, or that
-  there is none.
+  `/v1/rpc`, the settings file it read, or that there is none, and the users of Basic authentication with the realm,
+  or that there are none.
 
 ### Authentication
 
-- **A `.htdigest` file in the data directory turns on HTTP Digest authentication;** without one no request needs
-  credentials. There is no option for it: the file is the setting, and it is backed up with the data. It is named as
-  Apache names it, so it is a hidden file (`ls -a` shows it); it is the one file of the data directory named so.
-- **The file is as Apache's `htdigest` writes it,** one `user:realm:hash` per line (the hash the MD5 of
-  `user:realm:password`), for example:
+- **A user of `--basic-auth` turns on HTTP Basic authentication** for every request; without one no request needs
+  credentials. Each user is one option, `--basic-auth=<user>:<hash>`, in `server_settings.txt` (or on the command
+  line, or one in `LCTY_BASIC_AUTH`), and `lcty.rb hash-password <user>` prints that line: it asks for the password
+  twice without echo on a terminal, and else reads the first line of its input.
 
   ```bash
-  htdigest -c "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/.htdigest" lcty-rb alice
+  /usr/bin/ruby lcty.rb hash-password alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
   ```
 
-  Every line names one realm, the one the browser asks the password for. A file that is not this, holds no user or
-  names two realms stops the server (`lcty-rb: <path>: <what is wrong>`), so it never starts without the protection
-  it was given. WEBrick reads the file again when it changes: a user added or a password changed applies at once,
-  another realm after a restart.
+  A user or password changed applies after a restart, as every setting does.
+- **HTTPS protects the password, not the server:** Basic sends the password itself, in Base64, with every request.
+  From anywhere but the machine itself, put a reverse proxy with TLS in front. This is the rule rather than Digest,
+  which sends no password but is MD5, encrypts nothing either, and kept failing in WebKit: WEBrick makes a new
+  `opaque` at every challenge, which WebKit does not take when its nonce goes stale (every 30 minutes and at every
+  restart), so Safari was shut out, the WebSocket of `/v1/rpc` included, until the browser restarted.
+- **The hash is PBKDF2-HMAC-SHA256** ([LCTYSP-3024](LCTYSP-3024_password.feature)) with OWASP's 600,000
+  iterations, a random salt of 16 bytes and 32 bytes of output, written as a PHC string,
+  `$pbkdf2-sha256$i=600000$<salt>$<hash>` (Base64 without padding), so a hash made with other parameters is still
+  checked with its own. It needs only the OpenSSL of Ruby: macOS's Ruby has no bcrypt, and its `crypt()` knows only
+  DES, so `htpasswd` files are not used. A password has at least 15 characters (NIST SP 800-63B-4, for a password
+  used on its own) and at most 1024 bytes of UTF-8; a user name has no `:`, space or control character.
 - **Every request is checked before any servlet sees it** (WEBrick's `RequestCallback`), the WebSocket of `/v1/rpc`
   included: the browser sends the credentials it was given for the page on the handshake too, and so do the workers'
-  requests. A request without valid credentials is answered `401` with a Digest challenge (`algorithm=MD5-sess`,
-  `qop="auth"`). Basic credentials are refused.
-- **The log** leaves out the challenge of a first request, which carries no credentials yet, and keeps a wrong
-  password or an unknown user.
-- **Only Digest:** Basic sends the password itself on every request. Digest sends none, but it is MD5 and encrypts
-  nothing, so from outside the machine TLS goes in front (a reverse proxy). `/v1/rpc` still checks `Origin`: the
-  browser would send the credentials for a page of another site as well.
-- A conversation file opened directly (`file://`) does not go through the server and is not affected.
-- **Moving to Basic authentication:** the users will be options of the settings, one line each,
-  `--basic-auth=<user>:<hash>`, and HTTPS (a reverse proxy) is what protects the password on the way. The first step
-  is the hash: `lcty.rb hash-password <user>` asks for the password twice without echo (on a terminal; else it reads
-  the first line of its input) and prints the line. The server does not take `--basic-auth` yet.
-  - **The hash is PBKDF2-HMAC-SHA256** with OWASP's 600,000 iterations, a random salt of 16 bytes and 32 bytes of
-    output, written as a PHC string, `$pbkdf2-sha256$i=600000$<salt>$<hash>` (Base64 without padding), so a hash
-    made with other parameters is still checked with its own. It needs only the OpenSSL of Ruby: macOS's Ruby has no
-    bcrypt, and its `crypt()` knows only DES, so `htpasswd` files are not used.
-  - **A password has at least 15 characters** (NIST SP 800-63B-4, for a password used on its own) and at most 1024
-    bytes of UTF-8. A user name has no `:`, space or control character.
+  requests ([LCTYSP-3025](LCTYSP-3025_basic-auth.feature)). A request without valid credentials is answered `401`
+  with `WWW-Authenticate: Basic realm="lcty-rb", charset="UTF-8"` (the browser sends the password in UTF-8,
+  RFC 7617).
+- **A hash takes about 0.2 s to check** and the browser sends the credentials with every request, so a user and
+  password that were accepted are remembered, as an HMAC with a key made at startup (not the password, nor a hash that
+  is quick to guess at; 256 of them at most). Others are checked one at a time, so guessing takes one core at most,
+  and refused after a second. An unknown user is checked against a hash of its own, so the time does not tell which
+  users there are.
+- **The log** names a refused user, never the password, and leaves out the line WEBrick writes for every `401`: a
+  browser's first request carries no credentials.
+- **A `.htdigest` of an older version stops the server** (`lcty-rb: <path>: Digest authentication is gone; …`): its
+  users are not read any more, and the server must not start without the protection the file gave it. Give the users
+  with `--basic-auth`, then remove the file.
+- `/v1/rpc` still checks `Origin`: the browser would send the credentials for a page of another site as well. A
+  conversation file opened directly (`file://`) does not go through the server and is not affected.
 
 - **The data directory is outside the repository** by default, in the per-user application data folder (named by the
   reverse-DNS id `tokyo.kaito.lcty-rb`), so a checkout can be moved, cleaned or replaced without touching the data. It

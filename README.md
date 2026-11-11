@@ -71,15 +71,16 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
     - For a quick start the environment variables `LCTY_BIND_IP`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override
       the file with one value each (several addresses or origins go in the file or on the command line), and the
       command line overrides both. `LCTY_DATA_DIR` is an environment variable only.
-  - Authentication: put a `.htdigest` file in the data directory, as Apache names it, and every request needs one of
-    its users (HTTP Digest; Basic is not offered). Make it with Apache's `htdigest`, one realm for every user (a
-    hidden file: `ls -a` shows it):
+  - Authentication: give a user with `--basic-auth` and every request needs one of the users (HTTP Basic).
+    `lcty.rb hash-password` asks for the password (15 characters or more) and prints the line, to add to
+    `server_settings.txt`:
 
     ```bash
-    htdigest -c "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/.htdigest" lcty-rb alice
+    /usr/bin/ruby lcty.rb hash-password alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
     ```
 
-    Digest does not encrypt what is sent; from outside the machine, put TLS in front of the server.
+    Basic sends the password itself; from outside the machine, put HTTPS in front of the server (a reverse proxy). A
+    `.htdigest` of an older version stops the server: give its users with `--basic-auth`, then remove it.
 - Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 

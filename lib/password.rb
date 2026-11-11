@@ -10,7 +10,7 @@
 #
 # (salt and hash in Base64 without padding), so that a hash made with other parameters is still checked with its own.
 # It needs only the OpenSSL of Ruby, which macOS's Ruby and the Linux images have alike. `lcty.rb hash-password` makes
-# the line of a user for the settings; the server does not take --basic-auth yet.
+# the line of a user for the settings, and lib/basic_auth.rb checks the requests with them.
 
 require 'openssl'
 

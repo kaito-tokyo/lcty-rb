@@ -12,9 +12,11 @@ Feature: LCTYSP-3008 Server settings
   Support on macOS and Windows, $XDG_DATA_HOME or ~/.local/share elsewhere), and LCTY_PORT, else PORT, the port; without
   either PORT is nil and lcty.rb takes the first free port of PORTS_TRIED, 45280 to 45379 (LCTYSP-3019). A port that is
   not an integer from 1 to 65535 stops the server. The other settings are the options of lcty.rb, parsed by one
-  OptionParser: --bind-ip and --allowed-origin (each once per value) and --base-url. Chatty.configure(argv) takes them
+  OptionParser: --bind-ip, --allowed-origin and --basic-auth (each once per value) and --base-url. --basic-auth is
+  USER:HASH, a user of Basic authentication with a hash of lib/password.rb (Chatty.basic_users, {user => hash}, empty
+  by default); one that is not this, or a user given twice, stops the server. Chatty.configure(argv) takes them
   from server_settings.txt of the data directory (one option per line, blank lines and # comments left out), then from
-  the environment variables that are set and not empty (LCTY_BIND_IP, LCTY_BASE_URL and LCTY_ALLOWED_ORIGIN, one value
+  the environment variables that are set and not empty (LCTY_BIND_IP, LCTY_BASE_URL, LCTY_ALLOWED_ORIGIN and LCTY_BASIC_AUTH, one value
   each: the environment is for starting quickly, and a value with a comma or whitespace stops the server), then from
   argv, each replacing the ones before, and returns the other arguments; lib/config.rb runs it with no argv when it is loaded. Without any a setting takes its default: the
   address 127.0.0.1 (Chatty.bind_ips, the IP addresses to listen on, an address given twice listed once), the base URL
@@ -127,6 +129,30 @@ Feature: LCTYSP-3008 Server settings
       | --bind-ip=          | not an IP address to listen on: ""               |
       | --bind-ip=localhost | not an IP address to listen on: "localhost"      |
       | --bind-ip=10.0.0.0/8 | not an IP address to listen on: "10.0.0.0/8"    |
+      | --basic-auth=alice  | --basic-auth: not USER:HASH, as `lcty.rb hash-password USER` prints it |
+      | --basic-auth=alice:secret | --basic-auth: the user "alice": not a password hash ($pbkdf2-sha256$i=<iterations>$<salt>$<hash>) |
+
+  # The users of Basic authentication (LCTYSP-0010), as `lcty.rb hash-password USER` prints them (LCTYSP-3024)
+  Scenario: The settings file gives the users of Basic authentication
+    Given a data directory whose server_settings.txt has --basic-auth for "alice" and for "bob"
+    When lib/config.rb is loaded
+    Then Chatty.basic_users has "alice" and "bob" with their hashes
+
+  Scenario: Without --basic-auth there is no user
+    Given a data directory without server_settings.txt
+    When lib/config.rb is loaded
+    Then Chatty.basic_users is empty
+
+  Scenario: A user given twice stops the server
+    Given a data directory whose server_settings.txt has --basic-auth for "alice" twice
+    When lib/config.rb is loaded
+    Then loading fails with a SettingsError that starts with the path of the file and "--basic-auth: the user "alice" is given twice"
+
+  Scenario: LCTY_BASIC_AUTH gives one user, instead of those of the file
+    Given a data directory whose server_settings.txt has --basic-auth for "alice"
+    And LCTY_BASIC_AUTH is "bob" and a hash
+    When lib/config.rb is loaded
+    Then Chatty.basic_users has "bob" only
 
   Scenario: An option of the command line that is not one stops the server
     Given a data directory without server_settings.txt

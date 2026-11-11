@@ -67,42 +67,40 @@ Feature: LCTYSP-3019 The entry point
     When lcty.rb is run with "--help"
     Then it exits with the status 0 and prints the usage with --bind-ip, --base-url and --allowed-origin
 
-  # Digest authentication (LCTYSP-0010): a .htdigest file in the data directory turns it on for every request
-  Scenario: Without a .htdigest file no request needs credentials
-    Given a data directory without .htdigest
-    When Lcty.digest_auth is called
+  # Basic authentication (LCTYSP-0010, LCTYSP-3025): a user of --basic-auth turns it on for every request
+  Scenario: Without --basic-auth no request needs credentials
+    Given no user of --basic-auth and a data directory without .htdigest
+    When Lcty.basic_auth is called
     Then it returns nil
 
-  Scenario: With a .htdigest file every request needs one of its users
-    Given a data directory whose .htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
-    And a server listening with Lcty.digest_auth, the site mounted
+  Scenario: With --basic-auth every request needs one of its users
+    Given Lcty.basic_auth with the user "alice" and the password "correct horse battery"
+    And a server listening with it, the site mounted
     When /c/ is requested without credentials
-    Then it is answered 401 with a Digest challenge of the realm "lcty-rb"
-    When /c/ is requested with the Digest response of "alice" and "secret-pass"
+    Then it is answered 401 with the challenge 'Basic realm="lcty-rb", charset="UTF-8"'
+    When /c/ is requested with the Basic credentials of "alice" and "correct horse battery"
     Then it is answered 200
-    When /c/ is requested with the Digest response of "alice" and "wrong"
-    Then it is answered 401
-    When /c/ is requested with Basic credentials of "alice" and "secret-pass"
+    When /c/ is requested with the Basic credentials of "alice" and "wrong horse battery"
     Then it is answered 401
 
   Scenario: The WebSocket of /v1/rpc needs the credentials too
-    Given a data directory whose .htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"
-    And a server listening with Lcty.digest_auth, the site mounted
+    Given Lcty.basic_auth with the user "alice" and the password "correct horse battery"
+    And a server listening with it, the site mounted
     When the WebSocket of /v1/rpc is opened without credentials
     Then the handshake is answered 401
-    When it is opened with the Digest response of "alice" and "secret-pass"
+    When it is opened with the Basic credentials of "alice" and "correct horse battery"
     Then the handshake is answered 101
 
-  Scenario Outline: A .htdigest file that cannot be used stops the server
-    Given a data directory whose .htdigest is <content>
-    When Lcty.digest_auth is called
-    Then it raises a SettingsError that starts with the path of the file and "<message>"
+  # A browser's first request carries no credentials, so a 401 comes with every page opened
+  Scenario: The log leaves out the line of every 401 and keeps the other errors
+    When Lcty::Log is given the error WEBrick::HTTPStatus::Unauthorized and the error "boom"
+    Then it logs "boom" only
 
-    Examples:
-      | content                                                                        | message                                          |
-      | the line "alice:secret"                                                        | not a line of htdigest (user:realm:md5): "alice:secret" |
-      | empty                                                                          | no user (add one with htdigest)                  |
-      | the users "alice" of the realm "a" and "bob" of the realm "b"                  | one realm only, not "a", "b"                     |
+  # Its users are not read any more, and the server must not start without the protection the file gave it
+  Scenario: A .htdigest of an older version stops the server
+    Given a data directory with a .htdigest
+    When Lcty.basic_auth is called, with or without users
+    Then it raises a SettingsError that starts with the path of the file and "Digest authentication is gone"
 
   # WEBrick waits for the thread of every request, and a /v1/rpc connection's thread reads until the page closes it
   Scenario Outline: The server stops on a signal while a page keeps /v1/rpc open

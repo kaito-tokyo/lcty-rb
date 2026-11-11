@@ -19,7 +19,10 @@ class ConfigTest < Lcty::Scenarios
   CONFIG = File.expand_path('../../lib/config.rb', __dir__)
   REPO_ROOT = File.expand_path('../..', __dir__)
   SETTINGS = %w[LCTY_PORT PORT LCTY_BIND_IP LCTY_DATA_DIR XDG_DATA_HOME LCTY_BASE_URL LCTY_ALLOWED_ORIGIN
-                LCTY_TEST_ARGS].freeze
+                LCTY_BASIC_AUTH LCTY_TEST_ARGS].freeze
+  # Hashes of lib/password.rb for the users of Basic authentication (few iterations, made once)
+  HASH_A = Chatty::Password.create('correct horse battery', iterations: 1000)
+  HASH_B = Chatty::Password.create('staple battery horse', iterations: 1000)
   CONSTANTS = %w[ROOT PUBLIC_DIR XDG_DATA_HOME DEFAULT_DATA_DIR DATA_DIR CONV_DIR TAG_DIR TAG_LOCK_PATH TAGS_DB_PATH
                  FORMER_TAGS_DB_PATH INDEX_PATH PORT SETTINGS_PATH].freeze
   # The lines of a server_settings.txt that sets every setting of the file
@@ -33,7 +36,8 @@ class ConfigTest < Lcty::Scenarios
            "puts JSON.generate(Hash[#{CONSTANTS.inspect}.map { |n| [n, Chatty.const_get(n)] }]" \
            ".merge('PORTS_TRIED' => [Chatty::PORTS_TRIED.first, Chatty::PORTS_TRIED.last], " \
            "'bind_ips' => Chatty.bind_ips, 'base_url' => Chatty.base_url, " \
-           "'allowed_origins' => Chatty.allowed_origins, 'rest' => rest, 'RUBY_PLATFORM' => RUBY_PLATFORM))".freeze
+           "'allowed_origins' => Chatty.allowed_origins, 'basic_users' => Chatty.basic_users, 'rest' => rest, " \
+           "'RUBY_PLATFORM' => RUBY_PLATFORM))".freeze
 
   def setup
     @tmp = Dir.mktmpdir('lcty-config-')
@@ -230,7 +234,10 @@ class ConfigTest < Lcty::Scenarios
     ['--data-dir=/tmp/x', 'the data directory is not an option; set LCTY_DATA_DIR'],
     ['--bind-ip=', 'not an IP address to listen on: ""'],
     ['--bind-ip=localhost', 'not an IP address to listen on: "localhost"'],
-    ['--bind-ip=10.0.0.0/8', 'not an IP address to listen on: "10.0.0.0/8"']
+    ['--bind-ip=10.0.0.0/8', 'not an IP address to listen on: "10.0.0.0/8"'],
+    ['--basic-auth=alice', '--basic-auth: not USER:HASH, as `lcty.rb hash-password USER` prints it'],
+    ['--basic-auth=alice:secret', '--basic-auth: the user "alice": not a password hash ' \
+                                  '($pbkdf2-sha256$i=<iterations>$<salt>$<hash>)']
   ].each do |line, message|
     scenario "A settings file that cannot be used stops the server (#{line})" do
       c = nil
@@ -241,6 +248,47 @@ class ConfigTest < Lcty::Scenarios
         assert_includes c[:err], "#{File.join(@data, 'server_settings.txt')}: #{message} (Chatty::SettingsError)"
       end
     end
+  end
+
+  scenario 'The settings file gives the users of Basic authentication' do
+    c = nil
+    step('Given a data directory whose server_settings.txt has --basic-auth for "alice" and for "bob"') do
+      given_data_dir(["--basic-auth=alice:#{HASH_A}", "--basic-auth=bob:#{HASH_B}"])
+    end
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then Chatty.basic_users has "alice" and "bob" with their hashes') do
+      assert_equal({ 'alice' => HASH_A, 'bob' => HASH_B }, c['basic_users'])
+    end
+  end
+
+  scenario 'Without --basic-auth there is no user' do
+    c = nil
+    step('Given a data directory without server_settings.txt') { given_data_dir(nil) }
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then Chatty.basic_users is empty') { assert_equal({}, c['basic_users']) }
+  end
+
+  scenario 'A user given twice stops the server' do
+    c = nil
+    step('Given a data directory whose server_settings.txt has --basic-auth for "alice" twice') do
+      given_data_dir(["--basic-auth=alice:#{HASH_A}", "--basic-auth=alice:#{HASH_B}"])
+    end
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then loading fails with a SettingsError that starts with the path of the file and "--basic-auth: the user "alice" is given twice"') do
+      refute c[:status].success?
+      assert_includes c[:err], "#{File.join(@data, 'server_settings.txt')}: --basic-auth: the user \"alice\" is given " \
+                               'twice (Chatty::SettingsError)'
+    end
+  end
+
+  scenario 'LCTY_BASIC_AUTH gives one user, instead of those of the file' do
+    c = nil
+    step('Given a data directory whose server_settings.txt has --basic-auth for "alice"') do
+      given_data_dir(["--basic-auth=alice:#{HASH_A}"])
+    end
+    step('And LCTY_BASIC_AUTH is "bob" and a hash') { @env['LCTY_BASIC_AUTH'] = "bob:#{HASH_B}" }
+    step('When lib/config.rb is loaded') { c = load_config }
+    step('Then Chatty.basic_users has "bob" only') { assert_equal({ 'bob' => HASH_B }, c['basic_users']) }
   end
 
   scenario 'An option of the command line that is not one stops the server' do
