@@ -181,7 +181,9 @@ the user's data, and the pages of today show and write only the format of LCTYSP
 - **The ids** get the new prefixes and keep the UUID behind them, so the search index and the vectors still find
   them (an id that is not a UUIDv7 gets a new one). Links to the old ids (`#c-msg-…`) are not kept.
 - **The presentation:** `div.user-text` becomes `<article>`, and an `<article>` written by `lcty.v1` keeps its
-  contents. Where none was written, the `<article>` holds the text alone. `data-content-integrity` is computed.
+  contents. A user or system message holds its text alone. A reply with text but no `<article>` written by `lcty.v1`
+  (an older renderer) fails its file, which is left as it was: only the browser renders Markdown, so the converted
+  reply would show its Markdown as text. `data-content-integrity` is computed.
 - **What leaves the file:**
   - The tags on line 4 go to `lcty_t.sqlite`, unless the conversation's tags were changed since and a row is there
     already ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).

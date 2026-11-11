@@ -11,7 +11,8 @@ Feature: LCTYSP-3023 Converting the conversation files
   Chatty::ConvertC.run converts every file of c/ in the format of LCTYSP-0003, once, by hand, with the server stopped.
   The tags at creation go to lcty_t.sqlite, the stats of the replies to lcty_c.sqlite, the file as it was is copied to
   c-former/, and the file is replaced by its conversion with its modification time kept. Every element is checked and
-  written by the code of /v1/rpc. In the steps the files are in a directory of the test's own, and lcty_t.sqlite and
+  written by the code of /v1/rpc. A reply with text but without the article lcty.v1 rendered fails its file, which is
+  left as it was: only the browser renders Markdown. In the steps the files are in a directory of the test's own, and lcty_t.sqlite and
   lcty_c.sqlite are files of its own too.
 
   Background:
@@ -61,6 +62,13 @@ Feature: LCTYSP-3023 Converting the conversation files
     Given a file whose user message has the data-at "yesterday", and a file that can be converted
     When ConvertC.run runs
     Then the first is reported as failed and has not changed, and the second is converted
+
+  # Only the browser renders Markdown: a reply whose article lcty.v1 did not write would show its Markdown as text
+  Scenario: A reply without the HTML of lcty.v1 leaves its file as it was
+    Given a file whose reply has no HTML written by lcty.v1, and a file that can be converted
+    When ConvertC.run runs
+    Then the first is reported as failed, saying it would show its Markdown as text, and has not changed
+    And the second is converted
 
   # tools/convert.rb runs ConvertC.main: ConvertC.run on c/ of the data directory, with its lcty_t.sqlite and
   # lcty_c.sqlite, and the counts
