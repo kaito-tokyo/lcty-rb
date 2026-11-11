@@ -23,7 +23,7 @@ LctyT.addLang("ja", {
 	systemPrompt: "システムプロンプト",
 	memoryOf: "メモリ",
 	formerReadOnly:
-		"この会話は古い形式です。lcty.rb convert で変換すると、続きを書けます。",
+		"この会話は古い形式です。tools/convert.rb で変換すると、続きを書けます。",
 	none: "（なし）",
 	recompose: "タグから作り直す",
 	setupHint:

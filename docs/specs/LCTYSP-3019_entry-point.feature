@@ -9,10 +9,9 @@ Feature: LCTYSP-3019 The entry point
 
   lcty.rb wires the servlets of the site together. Lcty.base_url is the path the site is served under, from the base
   URL of the settings (--base-url or LCTY_BASE_URL, LCTYSP-3008): it always starts and ends with "/", and is "/" when
-  it is unset or empty. Lcty.main reads the options of its command line (those of server_settings.txt) before the
-  other arguments: none starts the server, "convert" converts the conversation files, "hash-password USER" prints
-  the option of a user of Basic authentication for a password (LCTYSP-3024), asked twice without echo on a terminal
-  and else the first line of the input. Lcty.mount_all
+  it is unset or empty. Lcty.main reads the options of its command line (those of server_settings.txt) and starts the
+  server; lcty.rb takes no other argument, since the tools are the scripts of tools/ (tools/convert.rb, LCTYSP-3023,
+  and tools/hash_password.rb, LCTYSP-3024). Lcty.mount_all
   mounts every servlet under it: the HTTP API at v1, C at c and T at t, each file of /lcty.v1/ under its own name and
   under the names of version 1 (nothing else there), the page entries as they are (they are not bundled) and the rest
   of public/. Lcty.publish_offline copies what a file opened directly reads, lcty.v1.js (the bytes of
@@ -43,25 +42,11 @@ Feature: LCTYSP-3019 The entry point
     When lcty.rb is run with "--prot"
     Then it exits with the status 1 and prints "lcty-rb: the command line: invalid option: --prot" and the usage
 
-  Scenario: lcty.rb hash-password prints the option of the user for the password piped in
-    When lcty.rb is run with "hash-password alice" and the input "correct horse battery"
-    Then it exits with the status 0 and prints one line "--basic-auth=alice:" and a hash
-    And the hash accepts "correct horse battery"
-
-  Scenario: lcty.rb hash-password refuses a password that cannot be used
-    When lcty.rb is run with "hash-password alice" and the input "too short"
-    Then it exits with the status 1, prints nothing and says "the password is shorter than 15 characters"
-
-  Scenario: On a terminal hash-password asks for the password twice, without echo
-    Given a terminal typed "correct horse battery" twice
-    When Lcty.hash_password runs for "alice" on it
-    Then it asks "Password: " and "Again: ", reading neither with echo
-    And it returns true and prints the option of "alice"
-
-  Scenario: On a terminal two passwords that differ print nothing
-    Given a terminal typed "correct horse battery" and "correct horse batterY"
-    When Lcty.hash_password runs for "alice" on it
-    Then it returns false, prints nothing and says "the two passwords differ"
+  # The subcommands of before are scripts of tools/
+  Scenario: An argument that is not an option stops lcty.rb, pointing at tools/
+    Given a data directory without server_settings.txt
+    When lcty.rb is run with "convert"
+    Then it exits with the status 1 and prints "lcty-rb: not an option: convert (the tools are in tools/)" and the usage
 
   Scenario: --help prints every option
     When lcty.rb is run with "--help"

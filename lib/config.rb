@@ -18,7 +18,7 @@ module Chatty
   class << self
     # Announces a change made outside /v1/rpc (the HTTP API): ->(method) { records }, set by lcty.rb to the hub of
     # lib/rpc/servlet.rb, which runs the block under its lock and sends its records as one method notification with
-    # the next version (LCTYSP-0014). Unset (the tests, `lcty.rb convert`), the block only runs.
+    # the next version (LCTYSP-0014). Unset (the tests, tools/convert.rb), the block only runs.
     attr_accessor :committer
 
     # Run the change in the block, which returns its records [{store, op, row}, ...], and announce it as method
@@ -48,7 +48,7 @@ module Chatty
   TAGS_DB_PATH = File.join(DATA_DIR, 'lcty_t.sqlite') # Source of truth (the current tags of conversations)
   FORMER_TAGS_DB_PATH = File.join(DATA_DIR, 'tags.sqlite') # Renamed to TAGS_DB_PATH at startup
   C_DB_PATH = File.join(DATA_DIR, 'lcty_c.sqlite') # Source of truth (what the conversation files of c/ do not hold)
-  # Where `lcty.rb convert` keeps every conversation file as it was before converting it to LCTYSP-0013; never deleted
+  # Where tools/convert.rb keeps every conversation file as it was before converting it to LCTYSP-0013; never deleted
   FORMER_CONV_DIR = File.join(DATA_DIR, 'c-former')
   # Files in data/ starting with _ are derived data that can be rebuilt after deletion (LCTYSP-0010); _index.sqlite is
   # discarded and made anew at every start
@@ -101,7 +101,7 @@ module Chatty
   # The options of lcty.rb, the same for the file and the command line; what they set goes into into
   def self.option_parser(into)
     OptionParser.new do |o|
-      o.banner = 'usage: lcty.rb [options] [convert | hash-password USER]'
+      o.banner = 'usage: lcty.rb [options]'
       o.on('--bind-ip=ADDRESS', 'an IP address to listen on, once per address (default 127.0.0.1)') do |v|
         raise SettingsError, "not an IP address to listen on: #{v.inspect}" unless ip_address?(v)
         (into[:bind_ips] ||= []) << v
@@ -109,8 +109,8 @@ module Chatty
       o.on('--base-url=PATH', 'the path the site is served under (default /)') { |v| into[:base_url] = v }
       o.on('--allowed-origin=ORIGIN', 'an origin whose pages may use /v1/rpc, once per origin (default: the ' \
                                       "server's own)") { |v| (into[:allowed_origins] ||= []) << v }
-      o.on('--basic-auth=USER:HASH', 'a user of Basic authentication, once per user, as `lcty.rb hash-password ' \
-                                     'USER` prints it; with one, every request needs one (default: none)') do |v|
+      o.on('--basic-auth=USER:HASH', 'a user of Basic authentication, once per user, as tools/hash_password.rb ' \
+                                     'prints it; with one, every request needs one (default: none)') do |v|
         users = (into[:basic_users] ||= [])
         user = basic_user(v)
         raise SettingsError, "--basic-auth: the user #{user[0].inspect} is given twice" if users.assoc(user[0])
@@ -139,7 +139,7 @@ module Chatty
   def self.basic_user(v)
     user, hash = v.split(':', 2)
     unless hash && Password::USER_RE.match?(user)
-      raise SettingsError, '--basic-auth: not USER:HASH, as `lcty.rb hash-password USER` prints it'
+      raise SettingsError, '--basic-auth: not USER:HASH, as tools/hash_password.rb prints it'
     end
     begin
       Password.parse(hash)

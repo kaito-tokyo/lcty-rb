@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# `lcty.rb convert`: convert the conversation files of c/ from LCTYSP-0003 to LCTYSP-0013 (lcty-msg), once, by hand,
+# tools/convert.rb: convert the conversation files of c/ from LCTYSP-0003 to LCTYSP-0013 (lcty-msg), once, by hand,
 # with the server stopped. Nothing converts them at startup: they are the user's data (LCTYSP-0013, Moving existing
 # files).
 #
@@ -29,6 +29,24 @@ module Chatty
     module_function
 
     ConvStore = Lcty::Rpc::ConvStore
+
+    # tools/convert.rb, with the server stopped: convert the conversation files of c/ of the data directory once, with
+    # its TagStore and CStore, and report the counts to out. Returns whether every file could be converted.
+    def main(out: $stderr)
+      require_relative 'tag_store'
+      require_relative 'c_store'
+      TagStore.rename_former(FORMER_TAGS_DB_PATH, TAGS_DB_PATH)
+      tags = TagStore.new(TAGS_DB_PATH)
+      c_store = CStore.new(C_DB_PATH)
+      begin
+        r = run(tags: tags, c_store: c_store, out: out)
+      ensure
+        c_store.close
+      end
+      out.puts "convert: #{r[:converted].size} converted, #{r[:current].size} already lcty-msg, " \
+               "#{r[:failed].size} failed (the files as they were are in #{FORMER_CONV_DIR})"
+      r[:failed].empty?
+    end
 
     # Convert every file of conv_dir; tags is a TagStore, c_store a CStore. Returns {converted:, current:, failed:},
     # the names of the files in each case, and reports each converted or failed file to out.

@@ -48,10 +48,10 @@ the layout before that (`_vectors.*`).
 | `c/*.html`                                    | Source (conversations; same layout as the URL `/c/<id>.html`)                                                                    | —                                                                                                                                                      |
 | `c/lcty.v1.js`, `c/lcty.v1.css`               | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                                                                                      |
 | `lcty_t.sqlite`                               | Source (the current tags of conversations, `t_has_many_c`; tag definitions and memory are `t/`, below)                           | —                                                                                                                                                      |
-| `lcty_c.sqlite`                               | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `lcty.rb convert`)                   | —                                                                                                                                                      |
+| `lcty_c.sqlite`                               | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `tools/convert.rb`)                  | —                                                                                                                                                      |
 | `server_settings.txt`                         | Source (the options of lcty.rb, one per line; [below](#settings))                                                                |
 | `.htdigest`                                   | Not read (the Digest users of an older version: the server does not start with it, [below](#authentication))                     | —                                                                                                                                                      |
-| `c-former/*.html`                             | Source (every conversation file as it was before `lcty.rb convert` converted it; never deleted)                                  | —                                                                                                                                                      |
+| `c-former/*.html`                             | Source (every conversation file as it was before `tools/convert.rb` converted it; never deleted)                                 | —                                                                                                                                                      |
 | `lcty_fuzzy_search.sqlite` (+ `-wal`, `-shm`) | The vectors of every embedding model: derived, but only the browser can make them again, so they are kept and backed up          | Re-embedded by the browser while a page is open, when lost ([LCTYSP-0008](LCTYSP-0008_vector-binary.md))                                               |
 | `_index.sqlite` (+ `-wal`, `-shm`)            | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
 
@@ -155,7 +155,7 @@ browser.
     once per origin. Default: `http://<address>:<port>` of every address listened on, and `http://localhost:<port>`
     when one of them is `127.0.0.1`.
   - `--basic-auth=USER:HASH`: a user of Basic authentication ([below](#authentication)), once per user, as
-    `lcty.rb hash-password USER` prints it. Default: none, and no request needs credentials.
+    `tools/hash_password.rb USER` prints it. Default: none, and no request needs credentials.
   - `--help` lists them; `--port` is refused with a pointer to `LCTY_PORT`.
   - Not `--host`: it named an address to listen on with a word that reads as a host to connect to, and took one
     address only. `--bind-ip` replaced it (and `LCTY_BIND_IP` replaced `LCTY_HOST`) without an alias.
@@ -203,11 +203,11 @@ browser.
 
 - **A user of `--basic-auth` turns on HTTP Basic authentication** for every request; without one no request needs
   credentials. Each user is one option, `--basic-auth=<user>:<hash>`, in `server_settings.txt` (or on the command
-  line, or one in `LCTY_BASIC_AUTH`), and `lcty.rb hash-password <user>` prints that line: it asks for the password
+  line, or one in `LCTY_BASIC_AUTH`), and `tools/hash_password.rb <user>` prints that line: it asks for the password
   twice without echo on a terminal, and else reads the first line of its input.
 
   ```bash
-  /usr/bin/ruby lcty.rb hash-password alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
+  /usr/bin/ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
   ```
 
   A user or password changed applies after a restart, as every setting does.

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of lib/convert_c.rb and lib/c_store.rb: `lcty.rb convert`, which converts the conversation files of c/
+# The behaviour of lib/convert_c.rb and lib/c_store.rb: tools/convert.rb, which converts the conversation files of c/
 # from LCTYSP-0003 to LCTYSP-0013 (Moving existing files). Each Scenario is a test of the same title in
 # tests/backend/convert_c_test.rb, whose steps are the lines below.
 
@@ -61,6 +61,18 @@ Feature: LCTYSP-3023 Converting the conversation files
     Given a file whose user message has the data-at "yesterday", and a file that can be converted
     When ConvertC.run runs
     Then the first is reported as failed and has not changed, and the second is converted
+
+  # tools/convert.rb runs ConvertC.main: ConvertC.run on c/ of the data directory, with its lcty_t.sqlite and
+  # lcty_c.sqlite, and the counts
+  Scenario: tools/convert.rb converts the files of the data directory of LCTY_DATA_DIR
+    Given a file of LCTYSP-0003 with a user message and a reply
+    When tools/convert.rb is run with LCTY_DATA_DIR the directory of the test
+    Then it exits with the status 0 and prints "convert: 1 converted, 0 already lcty-msg, 0 failed"
+    And c-former/ has the file as it was
+
+  Scenario: tools/convert.rb takes no arguments
+    When tools/convert.rb is run with "--all"
+    Then it exits with the status 1 and prints its usage
 
   Scenario: lcty_c.sqlite of a newer format is refused
     Given lcty_c.sqlite whose user_version is 2

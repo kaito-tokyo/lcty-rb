@@ -9,7 +9,7 @@
 #   $pbkdf2-sha256$i=600000$<salt>$<hash>
 #
 # (salt and hash in Base64 without padding), so that a hash made with other parameters is still checked with its own.
-# It needs only the OpenSSL of Ruby, which macOS's Ruby and the Linux images have alike. `lcty.rb hash-password` makes
+# It needs only the OpenSSL of Ruby, which macOS's Ruby and the Linux images have alike. tools/hash_password.rb makes
 # the line of a user for the settings, and lib/basic_auth.rb checks the requests with them.
 
 require 'openssl'
@@ -74,6 +74,35 @@ module Chatty
         USER_RE.match?(user)
 
       "--basic-auth=#{user}:#{create(password)}"
+    end
+
+    # tools/hash_password.rb: print the option of user for a password to out. The password is asked twice on a
+    # terminal, without echo; from anything else it is the first line of input, so a script can pipe it. Returns
+    # whether it printed one; what is wrong goes to err.
+    def ask_option(user, input: $stdin, out: $stdout, err: $stderr)
+      password = if input.tty?
+                   require 'io/console'
+                   ask = lambda do |prompt|
+                     err.print prompt
+                     line = input.noecho(&:gets)
+                     err.puts
+                     line.to_s.chomp
+                   end
+                   first = ask.call('Password: ')
+                   again = ask.call('Again: ')
+                   if first != again
+                     err.puts 'hash_password: the two passwords differ'
+                     return false
+                   end
+                   first
+                 else
+                   input.gets.to_s.chomp
+                 end
+      out.puts option(user, password)
+      true
+    rescue Error => e
+      err.puts "hash_password: #{e.message}"
+      false
     end
 
     def derive(password, salt, iterations)

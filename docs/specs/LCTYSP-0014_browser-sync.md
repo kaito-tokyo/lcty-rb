@@ -143,7 +143,7 @@ the version they were last brought to, so that an older answer never overwrites 
   behind `messages_hint`) went with `messages_hint`.
 - **The `tags_hint` and `messages_hint` of version 1** (from the search index) went with those rows. A file of
   LCTYSP-0003 not yet converted has no tags in the sidebar unless its tags were changed (`data-setup-tags` is not
-  read); `lcty.rb convert` writes them into `t_has_many_c`.
+  read); `tools/convert.rb` writes them into `t_has_many_c`.
 
 ## Upgrading the databases
 

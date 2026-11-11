@@ -105,7 +105,7 @@ module Chatty
       end
     end
 
-    # A file in the format of LCTYSP-0013 (converted by `lcty.rb convert`) is written only through /v1/rpc: the
+    # A file in the format of LCTYSP-0013 (converted by tools/convert.rb) is written only through /v1/rpc: the
     # messages of this API would add elements of LCTYSP-0003 to it, and a rewrite would lose the elements it cannot
     # write. 409, the file left as it is; the title slot is still overwritten in place.
     def lcty_msg_error

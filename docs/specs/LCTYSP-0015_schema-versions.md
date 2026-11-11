@@ -43,7 +43,7 @@ sides.
     ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)). It has no leading `_`, so backups keep it.
   - `lcty_c.sqlite`: `message_stats`, source data, version 1: what was measured of a reply (`data-timings`,
     `data-usage` and `data-client`), which the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)
-    moved out of the conversation file. `lcty.rb convert` and the server make it; the server writes and reads it through
+    moved out of the conversation file. `tools/convert.rb` and the server make it; the server writes and reads it through
     `c.stats.put` and `c.stats.list` of `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)). The conversation
     files are still the source of truth of everything else of `c/`, and what is derived from them is in
     `_index.sqlite`.
