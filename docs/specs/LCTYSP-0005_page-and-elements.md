@@ -480,13 +480,16 @@ Rendering must stay cheaper than generation:
 - **Scrolling is the user's.** The page never moves to the end by itself: where it opens is the browser's (the top, the
   `#c-msg-…` element, or on reload the previous position); the page does not touch `history.scrollRestoration`. Moving to the end
   on open fought the browser's restoration and the estimated heights of off-screen messages, and sometimes ended at
-  the top.
+  the top. The one exception is a reply streaming in that the reader is at the end of: the page follows it while the
+  reader stays there, as [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box) says, and stops when the reader
+  leaves.
 - **"To the bottom" floats above the composer** (`#to-end` in `<lcty-c>`), shown while the end is out of view (more
   than 48px below): an `IntersectionObserver` watches an empty element at the end of the frame (`lcty-c__end`). It moves to the end once.
 - **A running command floats next to it.** While an `lcty-cmd` runs (every generation does: sending, regenerating, a
   new conversation), it sets `slot="float"` on itself and floats next to "To the bottom" with its spinner and a stop
-  button; when it ends it removes the attribute and is hidden again. Nothing scrolls the page except the button: not
-  sending, not a reply streaming in.
+  button; when it ends it removes the attribute and is hidden again. Nothing else scrolls the page but the button and
+  the following of a reply ([LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box)): not sending, and not a
+  reply streaming in below a reader who is not at its end.
 - Not adopted: streaming insertion APIs such as `streamAppendHTML` (behind a flag as of 2026-11, not in Safari). The hard
   part, incremental Markdown parsing, has to be written anyway, and rendering is not a bottleneck.
 
