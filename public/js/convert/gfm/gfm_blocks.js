@@ -20,45 +20,6 @@ export function fitChildren(node) {
 	if (node.children.length !== 0) node.children = node.children.slice();
 }
 
-/** The last child of node, or null. */
-function lastChild(node) {
-	const c = node.children;
-	return c.length > 0 ? c[c.length - 1] : null;
-}
-
-/** Put node where old is, taking old out. */
-function replaceNode(old, node) {
-	const siblings = old.parent.children;
-	siblings[indexIn(siblings, old)] = node;
-	node.parent = old.parent;
-	old.parent = null;
-}
-
-/** Put node right after ref. */
-function insertAfter(ref, node) {
-	const siblings = ref.parent.children;
-	const i = indexIn(siblings, ref);
-	if (i === siblings.length - 1) siblings.push(node);
-	else siblings.splice(i + 1, 0, node);
-	node.parent = ref.parent;
-}
-
-/** Take node out of its parent. */
-function removeNode(node) {
-	const siblings = node.parent.children;
-	const i = indexIn(siblings, node);
-	if (i === siblings.length - 1) siblings.pop();
-	else siblings.splice(i, 1);
-	node.parent = null;
-}
-
-/** Where node is in siblings, searched from the end. */
-function indexIn(siblings, node) {
-	for (let i = siblings.length - 1; i >= 0; i--)
-		if (siblings[i] === node) return i;
-	return -1;
-}
-
 export const ESCAPABLE = "[!\"#$%&'()*+,./:;<=>?@[\\\\\\]^_`{|}~-]";
 const reBackslashOrAmp = /[\\&]/;
 const reEntityOrEscape = new RegExp(
@@ -254,31 +215,235 @@ const reNonSpace = /[^ \t\f\v\r\n]/;
 const reTableDelimiterCell = /^:?-+:?$/;
 const reBlankLine = /^[ \t]*$/;
 
-/** @import { Block, Node } from "./gfm_blocks.js" */
+// The types of the blocks, as the codes of the table's type column
+export const DOCUMENT = 0;
+export const BLOCK_QUOTE = 1;
+export const LIST = 2;
+export const ITEM = 3;
+export const PARAGRAPH = 4;
+export const HEADING = 5;
+export const CODE_BLOCK = 6;
+export const HTML_BLOCK = 7;
+export const THEMATIC_BREAK = 8;
+export const TABLE = 9;
+export const TABLE_HEAD = 10;
+export const TABLE_ROW = 11;
+export const TABLE_CELL = 12;
+/** The name of each type of block, by its code. */
+export const BLOCK_NAMES = Object.freeze([
+	"document",
+	"block_quote",
+	"list",
+	"item",
+	"paragraph",
+	"heading",
+	"code_block",
+	"html_block",
+	"thematic_break",
+	"table",
+	"table_head",
+	"table_row",
+	"table_cell",
+]);
 
-/** A new block, every field given so that every block has one shape. @returns {Block} */
-function block(type, offset, data, open, startLine) {
-	return {
-		type,
-		offset,
-		view: NONE,
-		parent: null,
-		children: NONE,
-		data,
-		open,
-		startLine,
-		endLine: 0,
-	};
+/** A table cell's alignment, by its code in column a: none, left, center, right. */
+export const ALIGNS = Object.freeze([null, "left", "center", "right"]);
+
+/** The blocks of a document as the rows of a table, one typed array for each column (gfm_blocks.d.ts). */
+export class BlockTable {
+	constructor() {
+		this.length = 0;
+		this.capacity = 0;
+		// the string a block has besides its ranges, by its row: a code block's info string
+		this.info = new Map();
+		this.grow(1024);
+	}
+
+	/** Make room for n rows (at least length), the rows there copied. */
+	grow(n) {
+		const copy = (Type, old) => {
+			const a = new Type(n);
+			if (old !== undefined) a.set(old.subarray(0, Math.min(old.length, n)));
+			return a;
+		};
+		this.type = copy(Uint8Array, this.type);
+		this.open = copy(Uint8Array, this.open);
+		this.offset = copy(Uint32Array, this.offset);
+		this.startLine = copy(Uint32Array, this.startLine);
+		this.endLine = copy(Uint32Array, this.endLine);
+		this.parent = copy(Int32Array, this.parent);
+		this.first = copy(Int32Array, this.first);
+		this.last = copy(Int32Array, this.last);
+		this.prev = copy(Int32Array, this.prev);
+		this.next = copy(Int32Array, this.next);
+		this.rangeAt = copy(Uint32Array, this.rangeAt);
+		this.rangeCount = copy(Uint32Array, this.rangeCount);
+		this.a = copy(Int32Array, this.a);
+		this.b = copy(Int32Array, this.b);
+		this.c = copy(Int32Array, this.c);
+		this.d = copy(Int32Array, this.d);
+		this.capacity = n;
+	}
+
+	/** Give up the room past the last row, once no more rows are added. */
+	compact() {
+		if (this.capacity > this.length) this.grow(this.length);
+	}
+
+	/** A new row, of no parent, children or ranges; its index. */
+	add(type, offset, open, startLine) {
+		const i = this.length;
+		if (i === this.capacity) this.grow(2 * i);
+		this.type[i] = type;
+		this.open[i] = open;
+		this.offset[i] = offset;
+		this.startLine[i] = startLine;
+		this.endLine[i] = 0;
+		this.parent[i] = -1;
+		this.first[i] = -1;
+		this.last[i] = -1;
+		this.prev[i] = -1;
+		this.next[i] = -1;
+		this.rangeAt[i] = 0;
+		this.rangeCount[i] = 0;
+		this.a[i] = 0;
+		this.b[i] = 0;
+		this.c[i] = 0;
+		this.d[i] = 0;
+		this.length = i + 1;
+		return i;
+	}
+
+	/** Make child the last child of parent. */
+	append(parent, child) {
+		const last = this.last[parent];
+		this.parent[child] = parent;
+		this.prev[child] = last;
+		this.next[child] = -1;
+		if (last === -1) this.first[parent] = child;
+		else this.next[last] = child;
+		this.last[parent] = child;
+	}
+
+	/** Take node out of its parent. */
+	unlink(node) {
+		const parent = this.parent[node];
+		const prev = this.prev[node];
+		const next = this.next[node];
+		if (prev === -1) this.first[parent] = next;
+		else this.next[prev] = next;
+		if (next === -1) this.last[parent] = prev;
+		else this.prev[next] = prev;
+		this.parent[node] = -1;
+		this.prev[node] = -1;
+		this.next[node] = -1;
+	}
+
+	/** Put node where old is, taking old out. */
+	replace(old, node) {
+		const parent = this.parent[old];
+		const prev = this.prev[old];
+		const next = this.next[old];
+		this.parent[node] = parent;
+		this.prev[node] = prev;
+		this.next[node] = next;
+		if (prev === -1) this.first[parent] = node;
+		else this.next[prev] = node;
+		if (next === -1) this.last[parent] = node;
+		else this.prev[next] = node;
+		this.parent[old] = -1;
+		this.prev[old] = -1;
+		this.next[old] = -1;
+	}
+
+	/** Put node right after ref. */
+	insertAfter(ref, node) {
+		const parent = this.parent[ref];
+		const next = this.next[ref];
+		this.parent[node] = parent;
+		this.prev[node] = ref;
+		this.next[node] = next;
+		this.next[ref] = node;
+		if (next === -1) this.last[parent] = node;
+		else this.prev[next] = node;
+	}
+}
+
+/** The ranges of a document's blocks in one linear store: [start, end) of each at 2i, 2i + 1, and its pad at i. */
+export class RangeStore {
+	constructor() {
+		this.u32 = new Uint32Array(2048);
+		this.pads = new Uint8Array(1024);
+		this.length = 0;
+	}
+
+	/** Add a range and its pad; its index. */
+	push(start, end, pad) {
+		const i = this.length;
+		if (2 * i + 2 > this.u32.length) {
+			const u32 = new Uint32Array(this.u32.length * 2);
+			u32.set(this.u32);
+			this.u32 = u32;
+			const pads = new Uint8Array(this.pads.length * 2);
+			pads.set(this.pads);
+			this.pads = pads;
+		}
+		this.u32[2 * i] = start;
+		this.u32[2 * i + 1] = end;
+		this.pads[i] = pad;
+		this.length = i + 1;
+		return i;
+	}
+
+	/** Give up the room past the last range, once no more ranges are added. */
+	compact() {
+		if (this.u32.length > 2 * this.length) {
+			this.u32 = this.u32.slice(0, 2 * this.length);
+			this.pads = this.pads.slice(0, this.length);
+		}
+	}
+}
+
+/** The text of the content of leaf, a paragraph, a heading or a table cell of blocks, read from source by its ranges. */
+export function leafText(source, blocks, store, leaf) {
+	const u32 = store.u32;
+	const at = blocks.rangeAt[leaf];
+	const end = at + blocks.rangeCount[leaf];
+	let s = "";
+	for (let i = at; i < end; i++) {
+		if (i > at) s += "\n";
+		s += source.slice(u32[2 * i], u32[2 * i + 1]);
+	}
+	if (s.includes("\0")) s = s.replace(/\0/g, "�");
+	// in a table cell, \| is a | of the content
+	if (blocks.type[leaf] === TABLE_CELL && s.includes("\\"))
+		s = s.replace(/\\([\s\S])/g, (m, c) => (c === "|" ? "|" : m));
+	return s;
+}
+
+/** The lines of block, a code block or an HTML block of blocks, read from source by its ranges and their pads. */
+export function blockLines(source, blocks, store, block) {
+	const lines = [];
+	const at = blocks.rangeAt[block];
+	for (let i = at; i < at + blocks.rangeCount[block]; i++) {
+		const line = source.slice(store.u32[2 * i], store.u32[2 * i + 1]);
+		const pad = store.pads[i];
+		const padded = pad === 0 ? line : " ".repeat(pad) + line;
+		lines.push(padded.includes("\0") ? padded.replace(/\0/g, "�") : padded);
+	}
+	return lines;
 }
 
 /** How deep block quotes and list items may nest (LCTYSP-0017). */
 export const MAX_NESTING = 32;
 
-/** The number of block quotes and list items that block is in, itself included. */
-function nesting(block) {
+/** The number of block quotes and list items that block of t is in, itself included. */
+function nesting(t, block) {
 	let n = 0;
-	for (let b = block; b !== null; b = b.parent)
-		if (b.type === "block_quote" || b.type === "item") n++;
+	for (let b = block; b !== -1; b = t.parent[b]) {
+		const type = t.type[b];
+		if (type === BLOCK_QUOTE || type === ITEM) n++;
+	}
 	return n;
 }
 
@@ -315,10 +480,10 @@ function runEnd(line, i, c) {
 	return i;
 }
 
-/** Whether a blank line separates children[i] from the child after it. */
-function blankAfter(children, i) {
-	const next = children[i + 1];
-	return next !== undefined && children[i].endLine !== next.startLine - 1;
+/** Whether a blank line separates child from its next sibling in t. */
+function blankAfter(t, child) {
+	const next = t.next[child];
+	return next !== -1 && t.endLine[child] !== t.startLine[next] - 1;
 }
 
 /** The cells of a table row. */
@@ -347,29 +512,76 @@ function tableCells(line) {
 	return cells;
 }
 
-/** The alignments of a delimiter row (null, "left", "center", "right"), or null when line is not one. */
+/** The alignment codes of a delimiter row (ALIGNS), or null when line is not one. */
 function delimiterRow(line) {
 	const s = line.trim();
 	if (!s.includes("-")) return null;
 	if (!s.includes("|") && !s.includes(":")) return null;
 	const cells = tableCells(s);
 	if (!cells.every((c) => reTableDelimiterCell.test(c))) return null;
-	return cells.map((c) => {
+	return Uint8Array.from(cells, (c) => {
 		const l = c.startsWith(":");
 		const r = c.endsWith(":");
-		return l && r ? "center" : l ? "left" : r ? "right" : null;
+		return l && r ? 2 : l ? 1 : r ? 3 : 0;
 	});
+}
+
+/** The ranges of the cells of a row, line from i, as tableCells cuts them; line starts at abs in the text. */
+function cellRanges(line, i, abs) {
+	let a = i;
+	let b = line.length;
+	while (a < b && /\s/.test(line[a])) a++;
+	while (b > a && /\s/.test(line[b - 1])) b--;
+	if (line[a] === "|") a++;
+	if (b > a && line[b - 1] === "|" && line[b - 2] !== "\\") b--;
+	const ranges = [];
+	let start = a;
+	const cut = (end) => {
+		let x = start;
+		let y = end;
+		while (x < y && /\s/.test(line[x])) x++;
+		while (y > x && /\s/.test(line[y - 1])) y--;
+		ranges.push(abs + x, abs + y);
+	};
+	for (let k = a; k < b; k++) {
+		const c = line[k];
+		if (c === "\\" && k + 1 < b) k++;
+		else if (c === "|") {
+			cut(k);
+			start = k + 1;
+		}
+	}
+	cut(b);
+	return ranges;
+}
+
+/** Drop the first n characters of node's text, its ranges joined by line endings, from its ranges. */
+function dropFront(parser, node, n) {
+	const t = parser.blocks;
+	const u32 = parser.store.u32;
+	while (t.rangeCount[node] > 0) {
+		const i = t.rangeAt[node];
+		const length = u32[2 * i + 1] - u32[2 * i];
+		if (n <= length) {
+			u32[2 * i] += n;
+			return;
+		}
+		n -= length + 1;
+		t.rangeAt[node] = i + 1;
+		t.rangeCount[node]--;
+	}
 }
 
 // What each type of block does, as switches on its type.
 
 /** Whether the current line continues block: 0 (it does), 1 (it does not) or 2 (the line is used up). */
 function continueBlock(parser, block) {
-	switch (block.type) {
-		case "document":
-		case "list":
+	const t = parser.blocks;
+	switch (t.type[block]) {
+		case DOCUMENT:
+		case LIST:
 			return 0;
-		case "block_quote": {
+		case BLOCK_QUOTE: {
 			const ln = parser.currentLine;
 			if (parser.indented || ln[parser.nextNonspace] !== ">") return 1;
 			parser.advanceNextNonspace();
@@ -377,10 +589,10 @@ function continueBlock(parser, block) {
 			if (isSpaceOrTab(ln[parser.offset])) parser.advanceOffset(1, true);
 			return 0;
 		}
-		case "item": {
-			const width = block.data.markerOffset + block.data.padding;
+		case ITEM: {
+			const width = t.a[block] + t.b[block];
 			if (parser.blank) {
-				if (block.children.length === 0) return 1;
+				if (t.first[block] === -1) return 1;
 				parser.advanceNextNonspace();
 			} else if (parser.indent >= width) {
 				parser.advanceOffset(width, true);
@@ -389,15 +601,12 @@ function continueBlock(parser, block) {
 			}
 			return 0;
 		}
-		case "code_block":
+		case CODE_BLOCK:
 			return continueCodeBlock(parser, block);
-		case "html_block":
-			return parser.blank &&
-				(block.data.htmlType === 6 || block.data.htmlType === 7)
-				? 1
-				: 0;
-		case "paragraph":
-		case "table":
+		case HTML_BLOCK:
+			return parser.blank && (t.a[block] === 6 || t.a[block] === 7) ? 1 : 0;
+		case PARAGRAPH:
+		case TABLE:
 			return parser.blank ? 1 : 0;
 		default:
 			// heading, thematic_break: one line each
@@ -406,22 +615,19 @@ function continueBlock(parser, block) {
 }
 
 function continueCodeBlock(parser, block) {
+	const t = parser.blocks;
 	const ln = parser.currentLine;
 	const indent = parser.indent;
-	const fence = block.data;
-	if (fence.fenced) {
+	if (t.a[block] === 1) {
 		// a closing fence, at least as long as the opening
 		const at = parser.nextNonspace;
-		const end = indent <= 3 ? runEnd(ln, at, fence.fenceChar) : at;
-		if (
-			end - at >= 3 &&
-			end - at >= fence.fenceLength &&
-			spacesToEnd(ln, end)
-		) {
+		const end =
+			indent <= 3 ? runEnd(ln, at, String.fromCharCode(t.b[block])) : at;
+		if (end - at >= 3 && end - at >= t.c[block] && spacesToEnd(ln, end)) {
 			parser.finalize(block, parser.lineNumber);
 			return 2;
 		}
-		let i = fence.fenceOffset;
+		let i = t.d[block];
 		while (i > 0 && isSpaceOrTab(ln[parser.offset])) {
 			parser.advanceOffset(1, true);
 			i--;
@@ -438,62 +644,87 @@ function continueCodeBlock(parser, block) {
 
 /** What is done to block when it is closed. */
 function finalizeBlock(parser, block) {
-	switch (block.type) {
-		case "list": {
-			block.endLine = lastChild(block)?.endLine ?? block.startLine;
-			const items = block.children;
+	const t = parser.blocks;
+	switch (t.type[block]) {
+		case LIST: {
+			const last = t.last[block];
+			t.endLine[block] = last === -1 ? t.startLine[block] : t.endLine[last];
 			let tight = true;
-			for (let i = 0; tight && i < items.length; i++) {
-				if (blankAfter(items, i)) tight = false;
-				const subs = items[i].children;
-				for (let j = 0; tight && j < subs.length; j++)
-					if (blankAfter(subs, j)) tight = false;
+			for (
+				let item = t.first[block];
+				tight && item !== -1;
+				item = t.next[item]
+			) {
+				if (blankAfter(t, item)) tight = false;
+				for (let sub = t.first[item]; tight && sub !== -1; sub = t.next[sub])
+					if (blankAfter(t, sub)) tight = false;
 			}
-			block.data.tight = tight;
+			t.d[block] = tight ? 1 : 0;
 			break;
 		}
-		case "item":
-			block.endLine = lastChild(block)?.endLine ?? block.startLine;
+		case ITEM: {
+			const last = t.last[block];
+			t.endLine[block] = last === -1 ? t.startLine[block] : t.endLine[last];
 			break;
-		case "code_block": {
-			const lines = block.view;
-			if (block.data.fenced) {
+		}
+		case CODE_BLOCK: {
+			if (t.a[block] === 1) {
 				// the first line is the info string
-				block.data.info = unescapeString(lines[0].trim(), parser.decodeName);
-				block.view = lines.slice(1);
+				t.info.set(
+					block,
+					unescapeString(
+						parser.textOf(t.rangeAt[block]).trim(),
+						parser.decodeName,
+					),
+				);
+				t.rangeAt[block]++;
+				t.rangeCount[block]--;
 			} else {
-				let n = lines.length;
-				while (n > 0 && reBlankLine.test(lines[n - 1])) n--;
-				block.endLine -= lines.length - n;
-				block.view = lines.slice(0, n);
+				const n = t.rangeCount[block];
+				while (
+					t.rangeCount[block] > 0 &&
+					reBlankLine.test(
+						parser.textOf(t.rangeAt[block] + t.rangeCount[block] - 1),
+					)
+				)
+					t.rangeCount[block]--;
+				t.endLine[block] -= n - t.rangeCount[block];
 			}
 			break;
 		}
-		case "html_block": {
-			const lines = block.view;
-			let n = lines.length;
-			while (n > 1 && /^ *$/.test(lines[n - 1])) n--;
-			if (n < lines.length) block.view = lines.slice(0, n);
+		case HTML_BLOCK:
+			while (
+				t.rangeCount[block] > 1 &&
+				/^ *$/.test(parser.textOf(t.rangeAt[block] + t.rangeCount[block] - 1))
+			)
+				t.rangeCount[block]--;
 			break;
-		}
-		case "paragraph":
+		case PARAGRAPH:
 			finalizeParagraph(parser, block);
 			break;
 	}
 }
 
 function finalizeParagraph(parser, block) {
-	let content = block.view.join("\n");
+	const t = parser.blocks;
+	// only one starting with [ may hold a definition or a task box; one a setext underline emptied stays empty
+	if (
+		t.rangeCount[block] === 0 ||
+		parser.charAt(parser.store.u32[2 * t.rangeAt[block]]) !== "["
+	)
+		return;
+	let content = parser.joined(block);
 	const refs = takeReferences(parser, content);
 	if (refs > 0) {
 		content = content.slice(refs);
 		if (isBlank(content)) {
-			removeNode(block);
+			t.unlink(block);
 			return;
 		}
+		dropFront(parser, block, refs);
 	}
-	const item = block.parent;
-	if (item.type === "item" && item.children[0] === block) {
+	const item = t.parent[block];
+	if (t.type[item] === ITEM && t.first[item] === block) {
 		// a task list item's box
 		const x = content[1];
 		if (
@@ -502,22 +733,21 @@ function finalizeParagraph(parser, block) {
 			isSpaceOrTab(content[3]) &&
 			(isSpaceOrTab(x) || x === "x" || x === "X")
 		) {
-			item.data.task = isSpaceOrTab(x) ? "unchecked" : "checked";
-			content = content.slice(3);
+			t.c[item] = isSpaceOrTab(x) ? 1 : 2;
+			dropFront(parser, block, 3);
 		}
 	}
-	block.view = [content];
 }
 
 /** Whether a block of type parent may hold a block of type child. */
 function canContain(parent, child) {
 	switch (parent) {
-		case "document":
-		case "block_quote":
-		case "item":
-			return child !== "item";
-		case "list":
-			return child === "item";
+		case DOCUMENT:
+		case BLOCK_QUOTE:
+		case ITEM:
+			return child !== ITEM;
+		case LIST:
+			return child === ITEM;
 		default:
 			return false;
 	}
@@ -526,10 +756,10 @@ function canContain(parent, child) {
 /** Whether the rest of a line is added to an open block of type. */
 function acceptsLines(type) {
 	return (
-		type === "code_block" ||
-		type === "html_block" ||
-		type === "paragraph" ||
-		type === "table"
+		type === CODE_BLOCK ||
+		type === HTML_BLOCK ||
+		type === PARAGRAPH ||
+		type === TABLE
 	);
 }
 
@@ -566,9 +796,6 @@ function takeReferences(parser, content) {
 	return taken;
 }
 
-/** The lines of a paragraph's text, as its view holds them. */
-const linesOf = (content) => content.replace(/\n$/, "").split("\n");
-
 // The block starts: a switch on the line's first character, then a character at a time.
 
 /** The block the current line starts where its indentation ends. */
@@ -576,6 +803,7 @@ function startBlock(parser, container) {
 	const ln = parser.currentLine;
 	const i = parser.nextNonspace;
 	const c = ln[i];
+	const inParagraph = parser.blocks.type[container] === PARAGRAPH;
 	switch (c) {
 		case ">":
 			return startBlockQuote(parser, container);
@@ -587,11 +815,11 @@ function startBlock(parser, container) {
 		case "<":
 			return startHtmlBlock(parser, container);
 		case "=":
-			return container.type === "paragraph" && spacesToEnd(ln, runEnd(ln, i, c))
+			return inParagraph && spacesToEnd(ln, runEnd(ln, i, c))
 				? startSetextHeading(parser, container, 1)
 				: 0;
 		case "-":
-			if (container.type === "paragraph") {
+			if (inParagraph) {
 				if (spacesToEnd(ln, runEnd(ln, i, c))) {
 					const r = startSetextHeading(parser, container, 2);
 					if (r !== 0) return r;
@@ -612,7 +840,7 @@ function startBlock(parser, container) {
 			return startBulletItem(parser, container, c);
 		case "|":
 		case ":":
-			return container.type === "paragraph" ? startTable(parser, container) : 0;
+			return inParagraph ? startTable(parser, container) : 0;
 		default:
 			return c >= "0" && c <= "9" ? startOrderedItem(parser, container) : 0;
 	}
@@ -630,13 +858,13 @@ export function isThematicBreak(line, i, c) {
 }
 
 function startBlockQuote(parser, container) {
-	if (nesting(container) >= MAX_NESTING) return 0;
+	if (nesting(parser.blocks, container) >= MAX_NESTING) return 0;
 	parser.advanceNextNonspace();
 	parser.advanceOffset(1, false);
 	if (isSpaceOrTab(parser.currentLine[parser.offset]))
 		parser.advanceOffset(1, true);
 	parser.closeUnmatchedBlocks();
-	parser.addChild("block_quote", parser.nextNonspace, null);
+	parser.addChild(BLOCK_QUOTE, parser.nextNonspace);
 	return 1;
 }
 
@@ -653,23 +881,30 @@ function startATXHeading(parser) {
 	parser.advanceNextNonspace();
 	parser.advanceOffset(j - i, false);
 	parser.closeUnmatchedBlocks();
-	const heading = parser.addChild("heading", parser.nextNonspace, { level });
-	heading.view = [withoutClosingSequence(ln.slice(parser.offset))];
+	const t = parser.blocks;
+	const heading = parser.addChild(HEADING, parser.nextNonspace);
+	t.a[heading] = level;
+	t.rangeAt[heading] = parser.store.push(
+		parser.lineStart + parser.offset,
+		parser.lineStart + closingSequenceAt(ln, parser.offset),
+		0,
+	);
+	t.rangeCount[heading] = 1;
 	parser.advanceOffset(ln.length - parser.offset);
 	return 2;
 }
 
-/** The text of an ATX heading without its closing sequence: # at the end, after a space or a tab, or alone. */
-function withoutClosingSequence(s) {
-	let end = s.length;
-	while (end > 0 && isSpaceOrTab(s[end - 1])) end--;
+/** Where the text of an ATX heading from i of line ends, before its closing sequence. */
+function closingSequenceAt(line, i) {
+	let end = line.length;
+	while (end > i && isSpaceOrTab(line[end - 1])) end--;
 	let hashes = end;
-	while (hashes > 0 && s[hashes - 1] === "#") hashes--;
-	if (hashes === end) return s;
-	if (hashes === 0) return "";
-	if (!isSpaceOrTab(s[hashes - 1])) return s;
-	while (hashes > 0 && isSpaceOrTab(s[hashes - 1])) hashes--;
-	return s.slice(0, hashes);
+	while (hashes > i && line[hashes - 1] === "#") hashes--;
+	if (hashes === end) return line.length;
+	if (hashes === i) return i;
+	if (!isSpaceOrTab(line[hashes - 1])) return line.length;
+	while (hashes > i && isSpaceOrTab(line[hashes - 1])) hashes--;
+	return hashes;
 }
 
 /** A fenced code block. */
@@ -680,13 +915,12 @@ function startFencedCode(parser, c) {
 	const length = end - i;
 	if (length < 3 || (c === "`" && ln.indexOf("`", end) !== -1)) return 0;
 	parser.closeUnmatchedBlocks();
-	parser.addChild("code_block", i, {
-		fenced: true,
-		fenceChar: c,
-		fenceLength: length,
-		fenceOffset: parser.indent,
-		info: "",
-	});
+	const t = parser.blocks;
+	const code = parser.addChild(CODE_BLOCK, i);
+	t.a[code] = 1;
+	t.b[code] = c.charCodeAt(0);
+	t.c[code] = length;
+	t.d[code] = parser.indent;
 	parser.advanceNextNonspace();
 	parser.advanceOffset(length, false);
 	return 2;
@@ -696,40 +930,45 @@ function startFencedCode(parser, c) {
 function startHtmlBlock(parser, container) {
 	const m = parser.at(parser.reHtmlBlockStart, parser.nextNonspace);
 	if (m === null) return 0;
-	let t = 1;
-	while (m[t] === undefined) t++;
+	let n = 1;
+	while (m[n] === undefined) n++;
 	// reHtmlBlockStart ignores case, which 1, 6 and 7 want; 4 wants an uppercase letter, 5 CDATA as it is
-	if (t === 4 && !(m[4][2] >= "A" && m[4][2] <= "Z")) return 0;
-	if (t === 5 && m[5] !== "<![CDATA[") return 0;
+	if (n === 4 && !(m[4][2] >= "A" && m[4][2] <= "Z")) return 0;
+	if (n === 5 && m[5] !== "<![CDATA[") return 0;
+	const t = parser.blocks;
 	if (
-		t === 7 &&
-		(container.type === "paragraph" ||
-			(!parser.allClosed && !parser.blank && parser.tip.type === "paragraph"))
+		n === 7 &&
+		(t.type[container] === PARAGRAPH ||
+			(!parser.allClosed && !parser.blank && t.type[parser.tip] === PARAGRAPH))
 	)
 		return 0;
 	parser.closeUnmatchedBlocks();
-	parser.addChild("html_block", parser.offset, { htmlType: t });
+	const html = parser.addChild(HTML_BLOCK, parser.offset);
+	t.a[html] = n;
 	return 2;
 }
 
 /** A setext heading: the line underlines the paragraph container. */
 function startSetextHeading(parser, container, level) {
 	parser.closeUnmatchedBlocks();
-	const content = container.view.join("\n");
-	const rest = content.slice(takeReferences(parser, content));
-	if (rest.length === 0) {
-		container.view = [];
+	const t = parser.blocks;
+	const content = parser.joined(container);
+	const taken = takeReferences(parser, content);
+	if (taken === content.length) {
+		t.rangeCount[container] = 0;
 		return 0;
 	}
-	const heading = block(
-		"heading",
-		container.offset,
-		{ level },
-		true,
-		container.startLine,
+	const heading = t.add(
+		HEADING,
+		t.offset[container],
+		1,
+		t.startLine[container],
 	);
-	heading.view = linesOf(rest);
-	replaceNode(container, heading);
+	t.a[heading] = level;
+	t.rangeAt[heading] = t.rangeAt[container];
+	t.rangeCount[heading] = t.rangeCount[container];
+	dropFront(parser, heading, taken);
+	t.replace(container, heading);
 	parser.tip = heading;
 	parser.advanceOffset(parser.currentLine.length - parser.offset, false);
 	return 2;
@@ -739,29 +978,29 @@ function startSetextHeading(parser, container, level) {
 function startTable(parser, container) {
 	const aligns = delimiterRow(parser.currentLine.slice(parser.nextNonspace));
 	if (!aligns) return 0;
-	const lines = container.view;
-	const header = tableCells(lines[lines.length - 1]);
-	if (header.length !== aligns.length) return 0;
+	const t = parser.blocks;
+	const last = t.rangeAt[container] + t.rangeCount[container] - 1;
+	const lastAt = parser.store.u32[2 * last];
+	const header = cellRanges(parser.textOf(last), 0, lastAt);
+	if (header.length !== 2 * aligns.length) return 0;
 	parser.closeUnmatchedBlocks();
+	const keeps = t.rangeCount[container] > 1;
 	// where the header row's text starts, when the paragraph keeps lines before it
-	const table = block(
-		"table",
-		lines.length > 1 ? parser.lastLineAt : container.offset,
-		{
-			aligns,
-			skipLine: true,
-		},
-		true,
+	const table = t.add(
+		TABLE,
+		keeps ? lastAt : t.offset[container],
+		1,
 		parser.lineNumber - 1,
 	);
-	if (lines.length > 1) {
-		container.view = lines.slice(0, -1);
-		insertAfter(container, table);
+	t.a[table] = 1;
+	if (keeps) {
+		t.rangeCount[container]--;
+		t.insertAfter(container, table);
 		parser.finalize(container, parser.lineNumber - 2);
 	} else {
-		replaceNode(container, table);
+		t.replace(container, table);
 	}
-	parser.addTableRow(table, header, "table_head");
+	parser.addTableRow(table, header, TABLE_HEAD, aligns);
 	parser.tip = table;
 	parser.advanceOffset(parser.currentLine.length - parser.offset, false);
 	return 2;
@@ -769,7 +1008,7 @@ function startTable(parser, container) {
 
 function startThematicBreak(parser) {
 	parser.closeUnmatchedBlocks();
-	parser.addChild("thematic_break", parser.nextNonspace, null);
+	parser.addChild(THEMATIC_BREAK, parser.nextNonspace);
 	parser.advanceOffset(parser.currentLine.length - parser.offset, false);
 	return 2;
 }
@@ -778,7 +1017,7 @@ function startThematicBreak(parser) {
 function startBulletItem(parser, container, c) {
 	const next = parser.currentLine[parser.nextNonspace + 1];
 	if (next !== undefined && !isSpaceOrTab(next)) return 0;
-	return startListItem(parser, container, 1, "bullet", c, 1, "");
+	return startListItem(parser, container, 1, 0, c.charCodeAt(0), 1);
 }
 
 /** An ordered list item. */
@@ -793,44 +1032,30 @@ function startOrderedItem(parser, container) {
 	if (next !== undefined && !isSpaceOrTab(next)) return 0;
 	const start = Number.parseInt(ln.slice(i, j), 10);
 	// in a paragraph, an ordered list starts only at 1
-	if (container.type === "paragraph" && start !== 1) return 0;
+	if (parser.blocks.type[container] === PARAGRAPH && start !== 1) return 0;
 	return startListItem(
 		parser,
 		container,
 		j + 1 - i,
-		"ordered",
-		"",
+		1,
+		delimiter.charCodeAt(0),
 		start,
-		delimiter,
 	);
 }
 
-/** A list item whose marker is length characters, the parser moved past it and the spaces after it. */
-function startListItem(
-	parser,
-	container,
-	length,
-	type,
-	bulletChar,
-	start,
-	delimiter,
-) {
-	if (nesting(container) >= MAX_NESTING) return 0;
+/** A list item whose marker is length characters (ordered, its character's code, start), the parser moved past it. */
+function startListItem(parser, container, length, ordered, char, start) {
+	const t = parser.blocks;
+	if (nesting(t, container) >= MAX_NESTING) return 0;
 	const ln = parser.currentLine;
 	// in a paragraph, a list item may not start empty
 	if (
-		container.type === "paragraph" &&
+		t.type[container] === PARAGRAPH &&
 		blankToEnd(ln, parser.nextNonspace + length)
 	)
 		return 0;
-	const marker = {
-		type,
-		bulletChar,
-		start,
-		delimiter,
-		markerOffset: parser.indent,
-		padding: 0,
-	};
+	const markerOffset = parser.indent;
+	let padding;
 	parser.advanceNextNonspace();
 	parser.advanceOffset(length, true);
 	const spacesStartCol = parser.column;
@@ -843,74 +1068,72 @@ function startListItem(
 	const blankItem = nextc === undefined;
 	const spacesAfterMarker = parser.column - spacesStartCol;
 	if (spacesAfterMarker >= 5 || spacesAfterMarker < 1 || blankItem) {
-		marker.padding = length + 1;
+		padding = length + 1;
 		parser.column = spacesStartCol;
 		parser.offset = spacesStartOffset;
 		if (isSpaceOrTab(ln[parser.offset])) parser.advanceOffset(1, true);
 	} else {
-		marker.padding = length + spacesAfterMarker;
+		padding = length + spacesAfterMarker;
 	}
 	parser.closeUnmatchedBlocks();
-	const list = parser.tip;
-	if (
-		list.type !== "list" ||
-		list.data.type !== marker.type ||
-		list.data.delimiter !== marker.delimiter ||
-		list.data.bulletChar !== marker.bulletChar
-	) {
-		parser.addChild("list", parser.nextNonspace, {
-			type: marker.type,
-			bulletChar: marker.bulletChar,
-			delimiter: marker.delimiter,
-			start: marker.start,
-			tight: true,
-		});
+	const tip = parser.tip;
+	if (t.type[tip] !== LIST || t.a[tip] !== ordered || t.b[tip] !== char) {
+		const list = parser.addChild(LIST, parser.nextNonspace);
+		t.a[list] = ordered;
+		t.b[list] = char;
+		t.c[list] = start;
+		t.d[list] = 1;
 	}
-	parser.addChild("item", parser.nextNonspace, {
-		markerOffset: marker.markerOffset,
-		padding: marker.padding,
-		task: null,
-	});
+	const item = parser.addChild(ITEM, parser.nextNonspace);
+	t.a[item] = markerOffset;
+	t.b[item] = padding;
 	return 1;
 }
 
 /** An indented code block. */
 function startIndentedCode(parser) {
-	if (parser.tip.type === "paragraph" || parser.blank) return 0;
+	if (parser.blocks.type[parser.tip] === PARAGRAPH || parser.blank) return 0;
 	parser.advanceOffset(CODE_INDENT, true);
 	parser.closeUnmatchedBlocks();
-	parser.addChild("code_block", parser.offset, {
-		fenced: false,
-		fenceChar: "",
-		fenceLength: 0,
-		fenceOffset: 0,
-		info: "",
-	});
+	parser.addChild(CODE_BLOCK, parser.offset);
 	return 2;
 }
+
+// the document's row and the row one advance reads its lines into, both fixed
+const DOC = 0;
+const ROOT = 1;
 
 export class BlockParser {
 	/** decodeName(name) is the text of the named character reference &name;, or null (LCTYSP-0017). */
 	constructor(decodeName) {
 		this.decodeName = decodeName;
-		// what lasts from one advance to the next: the definitions and the document
+		// what lasts from one advance to the next: the definitions, the blocks and their ranges
 		this.refmap = new Map();
-		this.doc = block("document", 0, null, true, 1);
+		this.blocks = new BlockTable();
+		this.store = new RangeStore();
+		this.blocks.add(DOCUMENT, 0, 1, 1);
+		this.blocks.add(DOCUMENT, 0, 1, 1);
+		// how much of the store and the table the blocks taken use; a fresh advance cuts them back to that
+		this.committed = 0;
+		this.committedRows = 2;
+		// for line k + 1 of the parser's lines: the lengths of the store and the table before it, and where it ends
+		this.marks = new Uint32Array(256);
+		this.rowMarks = new Uint32Array(256);
+		this.ends = new Uint32Array(256);
 		// the lines read past the last block taken (took)
 		this.carryRest = null;
 		this.carryBase = 0;
 		this.carryPos = 0;
 		this.carryStart = 0;
-		this.ends = [];
+		this.carryAt = 0;
 		this.base = 0;
-		// what one advance reads its lines into, emptied at each
-		this.root = block("document", 0, null, true, 1);
-		this.tip = this.doc;
-		this.oldtip = this.doc;
+		this.tip = ROOT;
+		this.oldtip = ROOT;
 		this.lineNumber = 0;
 		this.lineStart = 0;
-		// where the text addLine last added starts
-		this.lastLineAt = 0;
+		// the head being advanced, and where it starts in the text
+		this.head = "";
+		this.headAt = 0;
 		this.currentLine = "";
 		this.offset = 0;
 		this.column = 0;
@@ -921,7 +1144,7 @@ export class BlockParser {
 		this.blank = false;
 		this.partiallyConsumedTab = false;
 		this.allClosed = true;
-		this.lastMatchedContainer = this.doc;
+		this.lastMatchedContainer = ROOT;
 
 		// the parser's own patterns, their lastIndex set freely (at)
 		this.reLineEnding = /\r\n|\n|\r/g;
@@ -940,6 +1163,11 @@ export class BlockParser {
 		this.reHtmlBlockEnd1 = /<\/(?:script|pre|style)>/gi;
 	}
 
+	/** The document's row. */
+	get doc() {
+		return DOC;
+	}
+
 	/** The match of re (one of the parser's sticky or global patterns) in the current line from position i, or null. */
 	at(re, i) {
 		re.lastIndex = i;
@@ -948,28 +1176,30 @@ export class BlockParser {
 
 	/** Take the first top-level block of head once its lines end it (gfm_blocks.d.ts). */
 	advance(head, end = false, offset = 0) {
+		const t = this.blocks;
 		// the lines after the last block taken, read already, when head is the rest that advance gave
-		const carried = this.carryRest === head;
+		const carried = this.carryRest === head && this.carryAt === offset;
 		this.carryRest = null;
+		this.head = head;
+		this.headAt = offset;
 		let blockStart;
 		let first;
 		let pos;
 		if (carried) {
 			this.base = this.carryBase;
 			pos = this.carryPos;
-			first = this.root.children[0] ?? null;
-			blockStart = first === null ? -1 : this.carryStart;
-			if (first !== null) {
+			first = t.first[ROOT];
+			blockStart = first === -1 ? -1 : this.carryStart;
+			if (first !== -1) {
 				const taken = this.ended(head, blockStart, first, pos);
 				if (taken !== null) return taken;
 			}
 		} else {
 			this.restart();
 			blockStart = -1;
-			first = null;
+			first = -1;
 			pos = 0;
 		}
-		const ends = this.ends;
 		const base = this.base;
 		const re = this.reLineEnding;
 		re.lastIndex = pos;
@@ -998,29 +1228,45 @@ export class BlockParser {
 				blockStart = pos;
 			}
 			this.lineStart = offset + pos;
+			const k = this.lineNumber;
+			if (k === this.ends.length) this.growLines();
+			this.marks[k] = this.store.length;
+			this.rowMarks[k] = t.length;
 			this.incorporateLine(line);
-			ends.push(base + next);
+			this.ends[k] = base + next;
 			pos = next;
 			// the first block, again when a setext heading or a table has taken its place
-			if (first === null || (first.parent === null && first.open))
-				first = this.root.children[0] ?? null;
-			if (first === null) continue;
+			if (first === -1 || (t.parent[first] === -1 && t.open[first] === 1))
+				first = t.first[ROOT];
+			if (first === -1) continue;
 			const taken = this.ended(head, blockStart, first, pos);
 			if (taken !== null) return taken;
 		}
 		if (blockStart === -1)
 			return pos === head.length ? ["", undefined] : undefined;
 		if (!end) return undefined;
-		while (this.tip) this.finalize(this.tip, this.lineNumber);
-		if (first === null || (first.parent === null && first.open))
-			first = this.root.children[0] ?? null;
+		while (this.tip !== -1) this.finalize(this.tip, this.lineNumber);
+		if (first === -1 || (t.parent[first] === -1 && t.open[first] === 1))
+			first = t.first[ROOT];
 		return this.took(
 			head,
 			blockStart,
-			this.lineEndAt(first.endLine),
+			this.lineEndAt(t.endLine[first]),
 			first,
 			pos,
 		);
+	}
+
+	/** Make room for twice as many lines in marks, rowMarks and ends. */
+	growLines() {
+		const grow = (a) => {
+			const b = new Uint32Array(2 * a.length);
+			b.set(a);
+			return b;
+		};
+		this.marks = grow(this.marks);
+		this.rowMarks = grow(this.rowMarks);
+		this.ends = grow(this.ends);
 	}
 
 	/** Where line n of the parser's lines ends in the head, its line ending included. */
@@ -1030,86 +1276,103 @@ export class BlockParser {
 
 	/** What advance gives when the lines read end first, or null when they do not yet. */
 	ended(head, blockStart, first, pos) {
-		if (!first.open)
+		const t = this.blocks;
+		if (t.open[first] === 0)
 			return this.took(
 				head,
 				blockStart,
-				this.lineEndAt(first.endLine),
+				this.lineEndAt(t.endLine[first]),
 				first,
 				pos,
 			);
-		if (first.type === "heading" || first.type === "thematic_break") {
+		const type = t.type[first];
+		if (type === HEADING || type === THEMATIC_BREAK) {
 			this.finalize(first, this.lineNumber);
 			return this.took(head, blockStart, pos, first, pos);
 		}
 		return null;
 	}
 
-	/** An empty root and line state for the next advance (the root and the array of line ends used again). */
+	/** An empty root and line state for the next advance, the store and the table cut back to what is taken. */
 	restart() {
-		const root = this.root;
-		root.children = NONE;
-		root.open = true;
-		root.parent = null;
-		this.tip = root;
-		this.oldtip = root;
-		this.lastMatchedContainer = root;
+		const t = this.blocks;
+		t.first[ROOT] = -1;
+		t.last[ROOT] = -1;
+		t.open[ROOT] = 1;
+		t.parent[ROOT] = -1;
+		this.tip = ROOT;
+		this.oldtip = ROOT;
+		this.lastMatchedContainer = ROOT;
 		this.lineNumber = 0;
 		this.allClosed = true;
 		// ends[k] - base is where line k + 1 of the parser's lines, its line ending included, ends in the head
-		this.ends.length = 0;
+		this.store.length = this.committed;
+		t.length = this.committedRows;
 		this.base = 0;
 	}
 
 	/** What advance gives for first, what was read past it kept for the next advance. */
 	took(head, start, end, first, pos) {
+		const t = this.blocks;
+		// the store's ranges and the table's rows up to the line after first are the blocks taken, garbage included
+		const after = t.endLine[first];
+		this.committed =
+			after < this.lineNumber ? this.marks[after] : this.store.length;
+		this.committedRows =
+			after < this.lineNumber ? this.rowMarks[after] : t.length;
 		const text = head.slice(start, end);
 		const rest = head.slice(end);
-		const root = this.root;
-		if (root.children[0] === first) root.children.shift();
-		const next = root.children[0];
+		const removed = t.parent[first] === -1;
+		if (!removed) t.unlink(first);
+		const next = t.first[ROOT];
 		// where the next block starts in rest, carried only when blank lines alone come between
 		const nextStart =
-			next === undefined ? -1 : this.lineEndAt(next.startLine - 1) - end;
+			next === -1 ? -1 : this.lineEndAt(t.startLine[next] - 1) - end;
 		if (nextStart >= 0 && blankBetween(rest, 0, nextStart)) {
 			this.carryRest = rest;
 			this.carryBase = this.base + end;
 			this.carryPos = pos - end;
 			this.carryStart = nextStart;
+			this.carryAt = this.headAt + end;
 		}
 		// a paragraph of link reference definitions only is taken out of the tree
-		if (first.parent === null) return [rest, text, null, []];
-		appendChild(this.doc, first);
-		const type = first.type;
-		if (type === "paragraph" || type === "heading")
+		if (removed) return [rest, text, -1, []];
+		t.append(DOC, first);
+		const type = t.type[first];
+		if (type === PARAGRAPH || type === HEADING)
 			return [rest, text, first, [first]];
 		// its leaves in the order of the text (a loop over its blocks, any depth)
 		const leaves = [];
 		const stack = [first];
 		while (stack.length > 0) {
 			const node = stack.pop();
-			const t = node.type;
-			if (t === "paragraph" || t === "heading" || t === "table_cell")
+			const ty = t.type[node];
+			if (ty === PARAGRAPH || ty === HEADING || ty === TABLE_CELL)
 				leaves.push(node);
-			else
-				for (let i = node.children.length - 1; i >= 0; i--)
-					stack.push(node.children[i]);
+			else for (let c = t.last[node]; c !== -1; c = t.prev[c]) stack.push(c);
 		}
 		return [rest, text, first, leaves];
 	}
 
-	/** A row of a table: each cell is on the row's one line, its text kept as its content. */
-	addTableRow(table, cells, type) {
-		const row = appendChild(table, block(type, this.lineStart, null, false, 0));
-		const aligns = table.data.aligns;
-		for (let i = 0; i < aligns.length; i++) {
-			const cell = appendChild(
-				row,
-				block("table_cell", this.lineStart, { align: aligns[i] }, false, 0),
-			);
-			cell.view = [cells[i] ?? ""];
+	/** A row of a table: each cell is on the row's one line; its alignments those of the header row, or aligns. */
+	addTableRow(table, cells, type, aligns = null) {
+		const t = this.blocks;
+		const row = t.add(type, this.lineStart, 0, 0);
+		t.append(table, row);
+		// a body row's cells as many as the header row's, aligned alike
+		let head = aligns === null ? t.first[t.first[table]] : -1;
+		for (let i = 0; aligns === null ? head !== -1 : i < aligns.length; i++) {
+			const cell = t.add(TABLE_CELL, this.lineStart, 0, 0);
+			t.append(row, cell);
+			if (aligns === null) {
+				t.a[cell] = t.a[head];
+				head = t.next[head];
+			} else t.a[cell] = aligns[i];
+			const start = 2 * i < cells.length ? cells[2 * i] : this.lineStart;
+			const stop = 2 * i < cells.length ? cells[2 * i + 1] : this.lineStart;
+			t.rangeAt[cell] = this.store.push(start, stop, 0);
+			t.rangeCount[cell] = 1;
 		}
-		fitChildren(row);
 	}
 
 	findNextNonspace() {
@@ -1161,37 +1424,59 @@ export class BlockParser {
 		}
 	}
 
-	/** Add the rest of the line to the open leaf's view. */
+	/** Add the rest of the line to the open leaf's ranges in the store, the spaces of a tab begun as its pad. */
 	addLine() {
-		let rest = this.currentLine.slice(this.offset);
-		if (this.partiallyConsumedTab) {
-			const charsToTab = 4 - (this.column % 4);
-			rest = " ".repeat(charsToTab) + this.currentLine.slice(this.offset + 1);
-		}
-		if (this.tip.view === NONE) this.tip.view = [];
-		this.tip.view.push(rest);
-		this.lastLineAt = this.lineStart + this.offset;
+		const t = this.blocks;
+		const tip = this.tip;
+		const pad = this.partiallyConsumedTab ? 4 - (this.column % 4) : 0;
+		const i = this.store.push(
+			this.lineStart + this.offset + (pad > 0 ? 1 : 0),
+			this.lineStart + this.currentLine.length,
+			pad,
+		);
+		if (t.rangeCount[tip] === 0) t.rangeAt[tip] = i;
+		t.rangeCount[tip]++;
 	}
 
-	addChild(type, offset, data) {
-		while (!canContain(this.tip.type, type))
-			this.finalize(this.tip, this.lineNumber - 1);
-		const node = block(
-			type,
-			this.lineStart + offset,
-			data,
-			true,
-			this.lineNumber,
+	/** The text of range i of the store, read from the head being advanced. */
+	textOf(i) {
+		const u32 = this.store.u32;
+		return this.head.slice(
+			u32[2 * i] - this.headAt,
+			u32[2 * i + 1] - this.headAt,
 		);
-		appendChild(this.tip, node);
+	}
+
+	/** The character at p of the text, read from the head being advanced. */
+	charAt(p) {
+		return this.head[p - this.headAt];
+	}
+
+	/** The text of node's ranges joined by line endings, NUL read as U+FFFD as the lines were. */
+	joined(node) {
+		const t = this.blocks;
+		const at = t.rangeAt[node];
+		let s = this.textOf(at);
+		for (let i = 1; i < t.rangeCount[node]; i++)
+			s += `\n${this.textOf(at + i)}`;
+		return s.includes("\0") ? s.replace(/\0/g, "�") : s;
+	}
+
+	addChild(type, offset) {
+		const t = this.blocks;
+		while (!canContain(t.type[this.tip], type))
+			this.finalize(this.tip, this.lineNumber - 1);
+		const node = t.add(type, this.lineStart + offset, 1, this.lineNumber);
+		t.append(this.tip, node);
 		this.tip = node;
 		return node;
 	}
 
 	closeUnmatchedBlocks() {
 		if (this.allClosed) return;
+		const t = this.blocks;
 		while (this.oldtip !== this.lastMatchedContainer) {
-			const parent = this.oldtip.parent;
+			const parent = t.parent[this.oldtip];
 			this.finalize(this.oldtip, this.lineNumber - 1);
 			this.oldtip = parent;
 		}
@@ -1199,16 +1484,17 @@ export class BlockParser {
 	}
 
 	finalize(block, lineNumber) {
-		const above = block.parent;
-		block.open = false;
-		block.endLine = lineNumber;
+		const t = this.blocks;
+		const above = t.parent[block];
+		t.open[block] = 0;
+		t.endLine[block] = lineNumber;
 		finalizeBlock(this, block);
-		fitChildren(block);
 		this.tip = above;
 	}
 
 	incorporateLine(line) {
-		let container = this.root;
+		const t = this.blocks;
+		let container = ROOT;
 		this.oldtip = this.tip;
 		this.offset = 0;
 		this.column = 0;
@@ -1217,26 +1503,27 @@ export class BlockParser {
 		this.lineNumber += 1;
 		this.currentLine = line.includes("\0") ? line.replace(/\0/g, "�") : line;
 
-		let last = lastChild(container);
-		while (last?.open) {
+		let last = t.last[container];
+		while (last !== -1 && t.open[last] === 1) {
 			container = last;
 			this.findNextNonspace();
 			const r = continueBlock(this, container);
 			if (r === 2) return;
 			if (r === 1) {
-				container = container.parent;
+				container = t.parent[container];
 				break;
 			}
-			last = lastChild(container);
+			last = t.last[container];
 		}
 
 		this.allClosed = container === this.oldtip;
 		this.lastMatchedContainer = container;
 
+		const containerType = t.type[container];
 		let matchedLeaf =
-			container.type !== "paragraph" &&
-			container.type !== "table" &&
-			acceptsLines(container.type);
+			containerType !== PARAGRAPH &&
+			containerType !== TABLE &&
+			acceptsLines(containerType);
 
 		while (!matchedLeaf) {
 			this.findNextNonspace();
@@ -1251,31 +1538,31 @@ export class BlockParser {
 			if (r === 2) matchedLeaf = true;
 		}
 
-		if (!this.allClosed && !this.blank && this.tip.type === "paragraph") {
+		if (!this.allClosed && !this.blank && t.type[this.tip] === PARAGRAPH) {
 			// a lazy continuation line
 			this.addLine();
 			return;
 		}
 		this.closeUnmatchedBlocks();
-		const type = container.type;
-		if (type === "table") {
-			if (container.data.skipLine) container.data.skipLine = false;
+		const type = t.type[container];
+		if (type === TABLE) {
+			if (t.a[container] === 1) t.a[container] = 0;
 			else
 				this.addTableRow(
 					container,
-					tableCells(this.currentLine.slice(this.offset)),
-					"table_row",
+					cellRanges(this.currentLine, this.offset, this.lineStart),
+					TABLE_ROW,
 				);
 		} else if (acceptsLines(type)) {
 			this.addLine();
 			if (
-				type === "html_block" &&
-				container.data.htmlType <= 5 &&
-				htmlBlockEnds(this, container.data.htmlType)
+				type === HTML_BLOCK &&
+				t.a[container] <= 5 &&
+				htmlBlockEnds(this, t.a[container])
 			)
 				this.finalize(container, this.lineNumber);
 		} else if (this.offset < this.currentLine.length && !this.blank) {
-			this.addChild("paragraph", this.offset, null);
+			this.addChild(PARAGRAPH, this.offset);
 			this.advanceNextNonspace();
 			this.addLine();
 		}

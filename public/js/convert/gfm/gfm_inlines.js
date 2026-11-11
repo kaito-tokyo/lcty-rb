@@ -20,7 +20,7 @@ import {
 	skipSpnl,
 } from "./gfm_blocks.js";
 
-/** @import { Inline } from "./gfm_inlines.js" */
+/** @import { Inline, InlineRoot } from "./gfm_inlines.js" */
 
 /** A new inline node, of no view and no children. @returns {Inline} */
 function inline(type, offset, data = null) {
@@ -180,8 +180,16 @@ function textNode(s, offset) {
 /** A link of an autolink: destination, and its text as its only child. */
 function autolinkNode(destination, text, offset) {
 	const link = inline("link", offset, { destination, title: "" });
-	appendChild(link, textNode(text, offset));
+	// its one child in an array of one, not one grown by push
+	const child = textNode(text, offset);
+	child.parent = link;
+	link.children = [child];
 	return link;
+}
+
+/** The root that a leaf block's inlines hang from, an inline node of type "root". @returns {InlineRoot} */
+export function inlineRoot() {
+	return inline("root", 0, null);
 }
 
 export class InlineParser {

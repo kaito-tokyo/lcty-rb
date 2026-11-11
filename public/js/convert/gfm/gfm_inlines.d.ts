@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// gfm_inlines.js: the inline phase of GFM 0.29-gfm (LCTYSP-0017), the inlines of its document tree, and the whole tree
-// once they are parsed, the blocks of gfm_blocks.d.ts with the inlines as what a paragraph, a heading and a table cell
-// hold. The implementation carries one-line comments only; its documentation is this file.
+// gfm_inlines.js: the inline phase of GFM 0.29-gfm (LCTYSP-0017), and the inlines of its document tree. The inlines of
+// a paragraph, a heading or a table cell hang from a root of their own (inlineRoot), which the document keeps by the
+// leaf's row (converter.d.ts). The implementation carries one-line comments only; its documentation is this file.
 //
 // The text of a leaf block becomes text, code spans, emphasis, strikethrough, links, images, autolinks, raw HTML and
 // line breaks. It is done in three steps, so the tree is built once and never rearranged:
@@ -19,26 +19,34 @@
 // The extended autolinks are found as GFM's reference finds them: www. and scheme:// while the text is read, email
 // addresses in each text node, outside links, as it is built.
 
-import type * as Blocks from "./gfm_blocks.js";
 import type { DecodeName, LinkData, NodeOf } from "./gfm_blocks.js";
 
-export type Text = NodeOf<"text", null, never>;
-export type Code = NodeOf<"code", null, never>;
-export type HtmlInline = NodeOf<"html_inline", null, never>;
-export type Break = NodeOf<"softbreak" | "linebreak", null, never>;
+/** What every inline has besides the fields of every node. */
+export interface InlineOf<T extends string, D, C> extends NodeOf<T, D, C> {
+	/**
+	 * Its text as pieces in order, joined only when written: the pieces of a text, a code span or raw HTML (an escape
+	 * or a character reference resolved is a piece of its own). Empty for any other inline.
+	 */
+	view: readonly string[];
+}
+
+export type Text = InlineOf<"text", null, never>;
+export type Code = InlineOf<"code", null, never>;
+export type HtmlInline = InlineOf<"html_inline", null, never>;
+export type Break = InlineOf<"softbreak" | "linebreak", null, never>;
 /** Emphasis, strong emphasis and strikethrough. */
-export type Emphasis = NodeOf<"emph" | "strong" | "del", null, Inline>;
+export type Emphasis = InlineOf<"emph" | "strong" | "del", null, Inline>;
 /** A link or an image; an image's children are its description. */
-export type Link = NodeOf<"link" | "image", LinkData, Inline>;
+export type Link = InlineOf<"link" | "image", LinkData, Inline>;
 
 /** An inline: its offset is in the text of its leaf block's content. */
 export type Inline = Text | Code | HtmlInline | Break | Emphasis | Link;
 
-/** The document once its inlines are parsed. */
-export type Document = Blocks.Document<Inline>;
-export type Block = Blocks.Block<Inline>;
-/** Any node of a parsed document. */
-export type Node = Block | Inline;
+/** The root of a leaf block's inlines, its children. */
+export type InlineRoot = InlineOf<"root", null, Inline>;
+
+/** A new root, of no children, for parse to hang a leaf's inlines from. */
+export function inlineRoot(): InlineRoot;
 
 export interface InlineOptions {
 	/** Whether the extended autolinks are made (true by default). */
@@ -56,11 +64,8 @@ export class InlineParser {
 		refmap: ReadonlyMap<string, LinkData>,
 		options?: InlineOptions,
 	);
-	/** Parse content as the inlines of node, which becomes their parent. */
-	parse(
-		node: Blocks.Paragraph | Blocks.Heading | Blocks.TableCell,
-		content: string,
-	): void;
+	/** Parse content, a leaf block's (leafText), as the inlines of root, which becomes their parent. */
+	parse(root: InlineRoot, content: string): void;
 }
 
 // How it works (gfm_inlines.js)

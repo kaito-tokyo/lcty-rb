@@ -8,9 +8,9 @@ import {
 	BlockParser,
 	isSpaceOrTab,
 	isThematicBreak,
-	NONE,
+	leafText,
 } from "./gfm_blocks.js";
-import { InlineParser } from "./gfm_inlines.js";
+import { InlineParser, inlineRoot } from "./gfm_inlines.js";
 
 /** The first phase of text, each top-level block advanced in turn to the end. */
 export function parseBlocks(text, decodeName) {
@@ -23,19 +23,28 @@ export function parseBlocks(text, decodeName) {
 		head = step[0];
 		for (const leaf of step[3]) leaves.push(leaf);
 	}
-	return { doc: parser.doc, refmap: parser.refmap, leaves };
+	// the whole text read, the tables need no room for more
+	parser.blocks.compact();
+	parser.store.compact();
+	return {
+		blocks: parser.blocks,
+		ranges: parser.store,
+		refmap: parser.refmap,
+		leaves,
+	};
 }
 
 /** The document tree of text, in both phases. */
 export function parseGfm(text, decodeName, options = {}) {
-	const { doc, refmap, leaves } = parseBlocks(text, decodeName);
-	const inlines = new InlineParser(decodeName, refmap, options);
+	const { blocks, ranges, refmap, leaves } = parseBlocks(text, decodeName);
+	const parser = new InlineParser(decodeName, refmap, options);
+	const inlines = new Array(blocks.length).fill(null);
 	for (const leaf of leaves) {
-		const view = leaf.view;
-		leaf.view = NONE;
-		inlines.parse(leaf, view.length === 1 ? view[0] : view.join("\n"));
+		const root = inlineRoot();
+		parser.parse(root, leafText(text, blocks, ranges, leaf));
+		inlines[leaf] = root;
 	}
-	return doc;
+	return { blocks, ranges, inlines };
 }
 
 // What BlockWatch takes the first block of a head to be, from its first line

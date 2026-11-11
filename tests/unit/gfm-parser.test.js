@@ -19,8 +19,10 @@ import { expect, publicUrl, scenario } from "./node-unit.js";
 const { BlockWatch, parseBlocks, parseGfm } = await import(
 	publicUrl("js/convert/gfm/converter.js")
 );
-const { BlockParser } = await import(publicUrl("js/convert/gfm/gfm_blocks.js"));
-const { InlineParser } = await import(
+const { BLOCK_QUOTE, BlockParser, leafText, PARAGRAPH } = await import(
+	publicUrl("js/convert/gfm/gfm_blocks.js")
+);
+const { InlineParser, inlineRoot } = await import(
 	publicUrl("js/convert/gfm/gfm_inlines.js")
 );
 
@@ -48,9 +50,8 @@ async function background(step) {
 function render(e, autolink = e.extension === "autolink") {
 	return referenceHtml(
 		parseGfm(e.markdown, decodeNameFromTable, { autolink }),
-		{
-			tagfilter: e.extension === "tagfilter",
-		},
+		e.markdown,
+		{ tagfilter: e.extension === "tagfilter" },
 	);
 }
 
@@ -150,11 +151,12 @@ scenario(
 		await step(
 			"Then the document holds 32 block quotes, one in another",
 			() => {
+				const t = doc.blocks;
 				let depth = 0;
 				for (
-					let n = doc.children[0];
-					n?.type === "block_quote";
-					n = n.children[0]
+					let n = t.first[0];
+					n !== -1 && t.type[n] === BLOCK_QUOTE;
+					n = t.first[n]
 				) {
 					depth++;
 					inner = n;
@@ -165,11 +167,10 @@ scenario(
 		await step(
 			'And the innermost holds a paragraph of "> > > > > > > > a"',
 			() => {
-				const p = inner.children[0];
-				expect(p.type).toBe("paragraph");
-				expect(p.children.map((n) => n.view.join("")).join("")).toBe(
-					"> > > > > > > > a",
-				);
+				const p = doc.blocks.first[inner];
+				expect(doc.blocks.type[p]).toBe(PARAGRAPH);
+				const text = doc.inlines[p].children.map((n) => n.view.join(""));
+				expect(text.join("")).toBe("> > > > > > > > a");
 			},
 		);
 	},
@@ -194,16 +195,33 @@ function pushed(e, watch = null) {
 		autolink: e.extension === "autolink",
 	});
 	let got = "";
+	// the document so far: the parser's blocks and ranges, and the inlines of the leaves taken
+	const doc = { blocks: parser.blocks, ranges: parser.store, inlines: [] };
 	const take = (step) => {
-		for (const leaf of step[3]) inlines.parse(leaf, leaf.view.join("\n"));
-		if (step[2] !== null)
-			got += referenceHtml(step[2], { tagfilter: e.extension === "tagfilter" });
+		for (const leaf of step[3]) {
+			const root = inlineRoot();
+			inlines.parse(
+				root,
+				leafText(e.markdown, parser.blocks, parser.store, leaf),
+			);
+			doc.inlines[leaf] = root;
+		}
+		if (step[2] !== -1)
+			got += referenceHtml(
+				doc,
+				e.markdown,
+				{ tagfilter: e.extension === "tagfilter" },
+				step[2],
+			);
 	};
+	// head is the text pushed so far that no block has taken; the nodes' offsets count from the start of the text
 	let head = "";
+	let pushedLength = 0;
 	for (const c of e.markdown) {
 		head += c;
+		pushedLength += c.length;
 		while (watch === null || watch.mayEnd(head)) {
-			const step = parser.advance(head);
+			const step = parser.advance(head, false, pushedLength - head.length);
 			if (step === undefined) {
 				if (watch === null) break;
 				continue;
@@ -215,7 +233,7 @@ function pushed(e, watch = null) {
 		}
 	}
 	for (;;) {
-		const step = parser.advance(head, true);
+		const step = parser.advance(head, true, pushedLength - head.length);
 		if (step[1] === undefined) break;
 		head = step[0];
 		take(step);
