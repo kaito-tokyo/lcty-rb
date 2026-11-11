@@ -230,8 +230,39 @@ module Lcty
     r[:failed].empty?
   end
 
+  # `lcty.rb hash-password USER`: print the option of the settings for user, --basic-auth=USER:<PBKDF2 hash>
+  # (lib/password.rb). The password is asked twice on a terminal, without echo; from anything else it is the first line
+  # of input, so a script can pipe it. Returns whether it printed one; what is wrong goes to err.
+  def self.hash_password(user, input: $stdin, out: $stdout, err: $stderr)
+    require_relative 'lib/password'
+    password = if input.tty?
+                 require 'io/console'
+                 ask = lambda do |prompt|
+                   err.print prompt
+                   line = input.noecho(&:gets)
+                   err.puts
+                   line.to_s.chomp
+                 end
+                 first = ask.call('Password: ')
+                 again = ask.call('Again: ')
+                 if first != again
+                   err.puts 'lcty-rb hash-password: the two passwords differ'
+                   return false
+                 end
+                 first
+               else
+                 input.gets.to_s.chomp
+               end
+    out.puts Chatty::Password.option(user, password)
+    true
+  rescue Chatty::Password::Error => e
+    err.puts "lcty-rb hash-password: #{e.message}"
+    false
+  end
+
   # The command line: its options (those of server_settings.txt, LCTYSP-0010) override the file and the environment;
-  # no other argument starts the server, and `convert` converts the conversation files
+  # no other argument starts the server, `convert` converts the conversation files and `hash-password USER` prints the
+  # option of a user of Basic authentication
   def self.main(argv)
     args = begin
       Chatty.configure(argv.dup)
@@ -241,6 +272,7 @@ module Lcty
     case args
     when [] then run
     when ['convert'] then exit(convert ? 0 : 1)
+    when ->(a) { a.size == 2 && a[0] == 'hash-password' } then exit(hash_password(args[1]) ? 0 : 1)
     else abort Chatty.option_parser({}).help
     end
   end

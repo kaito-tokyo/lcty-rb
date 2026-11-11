@@ -221,6 +221,16 @@ browser.
   nothing, so from outside the machine TLS goes in front (a reverse proxy). `/v1/rpc` still checks `Origin`: the
   browser would send the credentials for a page of another site as well.
 - A conversation file opened directly (`file://`) does not go through the server and is not affected.
+- **Moving to Basic authentication:** the users will be options of the settings, one line each,
+  `--basic-auth=<user>:<hash>`, and HTTPS (a reverse proxy) is what protects the password on the way. The first step
+  is the hash: `lcty.rb hash-password <user>` asks for the password twice without echo (on a terminal; else it reads
+  the first line of its input) and prints the line. The server does not take `--basic-auth` yet.
+  - **The hash is PBKDF2-HMAC-SHA256** with OWASP's 600,000 iterations, a random salt of 16 bytes and 32 bytes of
+    output, written as a PHC string, `$pbkdf2-sha256$i=600000$<salt>$<hash>` (Base64 without padding), so a hash
+    made with other parameters is still checked with its own. It needs only the OpenSSL of Ruby: macOS's Ruby has no
+    bcrypt, and its `crypt()` knows only DES, so `htpasswd` files are not used.
+  - **A password has at least 15 characters** (NIST SP 800-63B-4, for a password used on its own) and at most 1024
+    bytes of UTF-8. A user name has no `:`, space or control character.
 
 - **The data directory is outside the repository** by default, in the per-user application data folder (named by the
   reverse-DNS id `tokyo.kaito.lcty-rb`), so a checkout can be moved, cleaned or replaced without touching the data. It
