@@ -297,10 +297,11 @@ export class BlockParser {
 	 * Take the first top-level block of head, once head's lines end it; offset is where head starts in the whole text,
 	 * which the nodes' offsets count from.
 	 * - [rest, text, node, leaves] when they do: text is the block's, its last line ending included; rest is what
-	 *   follows, where the next advance starts; node is the block's row, now the last child of doc (-1 for a paragraph
-	 *   of link reference definitions only, which leaves only its definitions); leaves are the rows of its paragraphs,
-	 *   headings and table cells in the order of the text, their ranges where the text of their content is (leafText
-	 *   reads it).
+	 *   follows, where the next advance starts (after a paragraph that a table split, where the table's header row's
+	 *   text starts, as an indented header row was the paragraph's); node is the block's row, now the last child of doc
+	 *   (-1 for a paragraph of link reference definitions only, which leaves only its definitions); leaves are the rows
+	 *   of its paragraphs, headings and table cells in the order of the text, their ranges where the text of their
+	 *   content is (leafText reads it).
 	 * - ["", undefined] when head holds no block: nothing, or only blank lines.
 	 * - undefined when the lines so far do not end it.
 	 *
@@ -384,4 +385,5 @@ export class BlockParser {
 // taken (took), what was read past it, the start of the next block, is kept for the next advance if that is given the
 // rest: the next block's lines keep their numbers and their ends their values, rest starts end further on, which base
 // takes. It is kept only when the next block follows the first with nothing between but blank lines: a paragraph of
-// definitions only between them has left the tree, and is read again as a block of its own.
+// definitions only between them has left the tree, and is read again as a block of its own. Nor is it kept for a table
+// that split a paragraph: its rest starts at the header row's text, past the line's indentation, and is read afresh.

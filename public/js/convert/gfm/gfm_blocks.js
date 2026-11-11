@@ -669,11 +669,12 @@ function finalizeBlock(parser, block) {
 		}
 		case CODE_BLOCK: {
 			if (t.a[block] === 1) {
-				// the first line is the info string
+				// the first line is the info string, NUL read as U+FFFD as the lines were
+				const line = parser.textOf(t.rangeAt[block]).trim();
 				t.info.set(
 					block,
 					unescapeString(
-						parser.textOf(t.rangeAt[block]).trim(),
+						line.includes("\0") ? line.replace(/\0/g, "�") : line,
 						parser.decodeName,
 					),
 				);
@@ -1321,14 +1322,18 @@ export class BlockParser {
 		this.committedRows =
 			after < this.lineNumber ? this.rowMarks[after] : t.length;
 		const text = head.slice(start, end);
-		const rest = head.slice(end);
+		let rest = head.slice(end);
 		const removed = t.parent[first] === -1;
 		if (!removed) t.unlink(first);
 		const next = t.first[ROOT];
+		// a table that split a paragraph starts where its header row's text does, the line's indentation no part of it
+		const tableAt =
+			next !== -1 && t.type[next] === TABLE ? t.offset[next] - this.headAt : -1;
+		if (tableAt > end) rest = head.slice(tableAt);
 		// where the next block starts in rest, carried only when blank lines alone come between
 		const nextStart =
 			next === -1 ? -1 : this.lineEndAt(t.startLine[next] - 1) - end;
-		if (nextStart >= 0 && blankBetween(rest, 0, nextStart)) {
+		if (tableAt <= end && nextStart >= 0 && blankBetween(rest, 0, nextStart)) {
 			this.carryRest = rest;
 			this.carryBase = this.base + end;
 			this.carryPos = pos - end;
