@@ -329,13 +329,15 @@ module Lcty
 
     module_function
 
-    # Append one element of tag after the element named, and announce it with a c_html record of the element as written
+    # Append one element of tag after the element named, and announce it with a c_html record of the element as written:
+    # its tag and attributes, not its presentation. No HTML goes to a browser over /v1/rpc: a page makes the
+    # presentation itself, from the text in the attributes (LCTYSP-0012)
     def append(p, peer, tag, inner)
       attrs = nil
       version = HUB.commit(peer) do
         attrs, count = ConvStore.append(p['cid'], p['after'], tag, p['attrs'], inner)
         [{ 'store' => 'c_html', 'op' => 'append',
-           'row' => { 'cid' => p['cid'], 'after' => p['after'], 'tag' => tag, 'attrs' => attrs, 'innerHTML' => inner.to_s } },
+           'row' => { 'cid' => p['cid'], 'after' => p['after'], 'tag' => tag, 'attrs' => attrs } },
          meta_record(p['cid']), count_record(p['cid'], count)]
       end
       { 'version' => version, 'attrs' => attrs }

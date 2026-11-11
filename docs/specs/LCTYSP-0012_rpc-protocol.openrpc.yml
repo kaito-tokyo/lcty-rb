@@ -750,17 +750,17 @@ components:
       additionalProperties:
         type: string
     Element:
+      description: >-
+        An element as written, without its presentation: no HTML goes to a browser over /v1/rpc, and a page makes the
+        presentation from the text in the attributes (LCTYSP-0012)
       type: object
-      required: [tag, attrs, innerHTML]
+      required: [tag, attrs]
       properties:
         tag:
           type: string
           enum: [lcty-msg, lcty-thinking, lcty-cmd]
         attrs:
           $ref: "#/components/schemas/Attrs"
-        innerHTML:
-          description: The presentation, one <article> (empty for lcty-cmd)
-          type: string
   errors:
     Conflict:
       code: 1

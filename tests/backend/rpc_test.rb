@@ -381,6 +381,27 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
+  scenario 'A c_html record has the tag and attributes of the element, and no HTML' do
+    pg = cid = a = nil
+    step('Given a page following a conversation') do
+      cid = create
+      pg = page
+      pg.initialize_session
+      pg.call('c.subscribe', 'cid' => cid, 'last' => nil)
+    end
+    step('When a model message whose presentation is "<article><p>Hi</p></article>" is appended') do
+      a = model_attrs('Hi')
+      assert_nil append(cid, nil, a, '<article><p>Hi</p></article>')['error']
+    end
+    step('Then its c_html record has a row of only cid, after, tag and attrs, the text in the attrs') do
+      wait_until { pg.records('c_html', 'append').any? }
+      row = pg.records('c_html', 'append').first['row']
+      assert_equal %w[cid after tag attrs], row.keys
+      assert_equal 'Hi', row['attrs']['data-content']
+      refute_includes JSON.generate(row), '<p>'
+    end
+  end
+
   scenario 'One change is one c.batch.updated, without the c_html records for a page that does not follow' do
     cid = follower = other = nil
     step('Given a page following a conversation and a page following nothing') do

@@ -190,6 +190,12 @@ Feature: LCTYSP-3020 The RPC protocol
     Then the page gets a c.batch.updated with only version, actorId and records
     And its c_meta record has a row of only cid, lang, title, titleTypeId, updatedAt and createdAt
 
+  # No HTML goes to a browser over /v1/rpc: a page makes the presentation from the text (LCTYSP-0012)
+  Scenario: A c_html record has the tag and attributes of the element, and no HTML
+    Given a page following a conversation
+    When a model message whose presentation is "<article><p>Hi</p></article>" is appended
+    Then its c_html record has a row of only cid, after, tag and attrs, the text in the attrs
+
   Scenario: One change is one c.batch.updated, without the c_html records for a page that does not follow
     Given a page following a conversation and a page following nothing
     When an element is appended to the conversation

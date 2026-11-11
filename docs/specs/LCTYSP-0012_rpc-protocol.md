@@ -149,9 +149,15 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
     id of `<title>`), `updatedAt` and `createdAt`. Creating, appending, unappending and changing the title send it.
   - `c_recordcount` / `put`: `{cid, count}`, the number of elements of the file but `lcty-c` (its lines less 4),
     counted while the file is still locked. Creating (`0`), appending and unappending send it.
-  - `c_html` / `append`: `{cid, after, tag, attrs, innerHTML}`, the element as written. `c_html` / `unappend`:
-    `{cid, id}`. A page applies one only when its `after` (or `id`) matches what it holds; otherwise the conversation
-    is out of sync.
+  - `c_html` / `append`: `{cid, after, tag, attrs}`, the element as written, without its presentation. `c_html` /
+    `unappend`: `{cid, id}`. A page applies one only when its `after` (or `id`) matches what it holds; otherwise the
+    conversation is out of sync.
+- **No HTML goes to a browser over `/v1/rpc`.** A page sends the presentation it made when it appends (`innerHTML`,
+  which the server checks against the allowlist and keeps in the file), but nothing the server sends a page holds
+  HTML: a page that shows an element another page wrote makes its presentation itself, from the text in the attributes
+  (`data-content`, Markdown for a model message), as it does for its own. The DOM of a page then holds no HTML that
+  another page made, whatever the allowlist lets through. A page that is opened still reads the file, presentation
+  and all.
   - `c_meta` / `delete` and `c_recordcount` / `delete`: `{cid}`, a conversation deleted (today only through the HTTP
     API, so the `actorId` is `null`).
 
