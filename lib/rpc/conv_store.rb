@@ -4,7 +4,7 @@
 
 # -*- encoding: utf-8 -*-
 # Conversation files in the format of LCTYSP-0013 (prototype), in c/ of the data directory with every other
-# conversation (or LCTY_RPC_DIR). A file of LCTYSP-0003 there, not converted yet (lcty.rb convert), is read but never
+# conversation (or LCTY_RPC_DIR). A file of LCTYSP-0003 there, not converted yet (tools/convert.rb), is read but never
 # written: appending to it and removing from it are refused (FORMER); its title slot is still overwritten.
 #
 # A file changes only at its end, one line at a time: append one element after a named id, or remove the last element.
@@ -150,7 +150,7 @@ module Lcty
         f.rewind
         lines = Array.new(HEAD_LINES + 1) { f.gets.to_s }
         return unless Chatty::ConvHtml.legacy?(lines[0]) || lines[HEAD_LINES].start_with?('<lcty-setup', '<lcty-message')
-        raise Error.new(FORMER, 'the conversation is in the format of LCTYSP-0003; convert it with lcty.rb convert',
+        raise Error.new(FORMER, 'the conversation is in the format of LCTYSP-0003; convert it with tools/convert.rb',
                         'cid' => cid)
       end
 

@@ -78,3 +78,29 @@ Feature: LCTYSP-3024 Password hashes
       | "al:ice"  |
       | "al ice"  |
       | "al\tice" |
+
+  # tools/hash_password.rb USER prints the option with Password.ask_option: the password is asked twice without echo on
+  # a terminal, and else is the first line of the input
+  Scenario: tools/hash_password.rb prints the option of the user for the password piped in
+    When tools/hash_password.rb is run with "alice" and the input "correct horse battery"
+    Then it exits with the status 0 and prints one line "--basic-auth=alice:" and a hash
+    And the hash accepts "correct horse battery"
+
+  Scenario: tools/hash_password.rb refuses a password that cannot be used
+    When tools/hash_password.rb is run with "alice" and the input "too short"
+    Then it exits with the status 1, prints nothing and says "hash_password: the password is shorter than 15 characters"
+
+  Scenario: tools/hash_password.rb without one user prints its usage
+    When tools/hash_password.rb is run with no argument
+    Then it exits with the status 1 and prints "usage: tools/hash_password.rb USER"
+
+  Scenario: On a terminal the password is asked twice, without echo
+    Given a terminal typed "correct horse battery" twice
+    When Password.ask_option runs for "alice" on it
+    Then it asks "Password: " and "Again: ", reading neither with echo
+    And it returns true and prints the option of "alice"
+
+  Scenario: On a terminal two passwords that differ print nothing
+    Given a terminal typed "correct horse battery" and "correct horse batterY"
+    When Password.ask_option runs for "alice" on it
+    Then it returns false, prints nothing and says "hash_password: the two passwords differ"

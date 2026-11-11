@@ -25,7 +25,7 @@ only transport: a page always has one, and so do tools and tests. Reading everyt
 
 The prototype writes conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) into
 `c/` of the data directory, with every other conversation. A file of
-[LCTYSP-0003](LCTYSP-0003_conversation-file.md) there, not converted yet (`lcty.rb convert`), is read but never
+[LCTYSP-0003](LCTYSP-0003_conversation-file.md) there, not converted yet (`tools/convert.rb`), is read but never
 written, except its title slot. Every write that appends or removes a `user` or `model` message also brings the
 search index up to date ([LCTYSP-0007](LCTYSP-0007_search.md)), as the HTTP API does for the files it writes; the
 other elements change no round of the index.
@@ -76,7 +76,7 @@ Every message follows [JSON-RPC 2.0](https://www.jsonrpc.org/specification):
   - `4` not found: there is no such conversation.
   - `5` exists: the conversation already exists.
   - `6` former: the conversation is in the format of LCTYSP-0003, which is never appended to or removed from here;
-    `data.cid` is its id. Converting it (`lcty.rb convert`) makes it writable.
+    `data.cid` is its id. Converting it (`tools/convert.rb`) makes it writable.
 
 ## The global version
 

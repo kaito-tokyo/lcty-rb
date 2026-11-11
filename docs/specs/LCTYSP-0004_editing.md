@@ -56,7 +56,7 @@ only). **If `n` is before the last user message, it is rejected with 409.**
 
 The pages write conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) through
 `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), one element at a time at the end of the file, each naming the
-last element it expects. A file of LCTYSP-0003 is read-only until `lcty.rb convert` converts it; the sequences after
+last element it expects. A file of LCTYSP-0003 is read-only until `tools/convert.rb` converts it; the sequences after
 this section are those of such files, kept for reference.
 
 ```

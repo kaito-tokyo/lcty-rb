@@ -8,6 +8,9 @@
 
 require_relative 'helper'
 require 'password'
+require 'open3'
+require 'rbconfig'
+require 'stringio'
 
 class PasswordTest < Lcty::Scenarios
   Password = Chatty::Password
@@ -123,6 +126,110 @@ class PasswordTest < Lcty::Scenarios
         e = assert_raises(Password::Error) { Password.option(user, PW) }
       end
       step('Then it raises Password::Error that names the user') { assert_includes e.message, user.inspect }
+    end
+  end
+
+  # ---- tools/hash_password.rb ----
+
+  TOOL = File.expand_path('../../tools/hash_password.rb', __dir__)
+
+  # tools/hash_password.rb run in a new process with args and input: [out, err, status]
+  def run_tool(*args, input: '')
+    Open3.capture3(RbConfig.ruby, TOOL, *args, stdin_data: input)
+  end
+
+  # A terminal that is typed lines; echoed is whether a line was read with echo
+  class Terminal
+    attr_reader :echoed
+
+    def initialize(*lines)
+      @lines = lines.map { |l| "#{l}\n" }
+      @echoed = false
+      @quiet = false
+    end
+
+    def tty?
+      true
+    end
+
+    def gets
+      @echoed ||= !@quiet
+      @lines.shift
+    end
+
+    def noecho
+      @quiet = true
+      yield self
+    ensure
+      @quiet = false
+    end
+  end
+
+  scenario 'tools/hash_password.rb prints the option of the user for the password piped in' do
+    out = status = nil
+    step(%(When tools/hash_password.rb is run with "alice" and the input "#{PW}")) do
+      out, _, status = run_tool('alice', input: "#{PW}\n")
+    end
+    step('Then it exits with the status 0 and prints one line "--basic-auth=alice:" and a hash') do
+      assert_equal 0, status.exitstatus
+      assert_match(/\A--basic-auth=alice:\$pbkdf2-sha256\$i=600000\$\S+\n\z/, out)
+    end
+    step(%(And the hash accepts "#{PW}")) { assert Password.verify(PW, out.chomp.delete_prefix('--basic-auth=alice:')) }
+  end
+
+  scenario 'tools/hash_password.rb refuses a password that cannot be used' do
+    out = err = status = nil
+    step('When tools/hash_password.rb is run with "alice" and the input "too short"') do
+      out, err, status = run_tool('alice', input: "too short\n")
+    end
+    step('Then it exits with the status 1, prints nothing and says "hash_password: the password is shorter than 15 characters"') do
+      assert_equal 1, status.exitstatus
+      assert_empty out
+      assert_equal "hash_password: the password is shorter than 15 characters\n", err
+    end
+  end
+
+  scenario 'tools/hash_password.rb without one user prints its usage' do
+    err = status = nil
+    step('When tools/hash_password.rb is run with no argument') { _, err, status = run_tool }
+    step('Then it exits with the status 1 and prints "usage: tools/hash_password.rb USER"') do
+      assert_equal 1, status.exitstatus
+      assert_equal "usage: tools/hash_password.rb USER\n", err
+    end
+  end
+
+  scenario 'On a terminal the password is asked twice, without echo' do
+    term = out = err = r = nil
+    step(%(Given a terminal typed "#{PW}" twice)) { term = Terminal.new(PW, PW) }
+    step('When Password.ask_option runs for "alice" on it') do
+      out = StringIO.new
+      err = StringIO.new
+      r = Password.ask_option('alice', input: term, out: out, err: err)
+    end
+    step('Then it asks "Password: " and "Again: ", reading neither with echo') do
+      assert_equal "Password: \nAgain: \n", err.string
+      refute term.echoed
+    end
+    step('And it returns true and prints the option of "alice"') do
+      assert r
+      assert out.string.start_with?('--basic-auth=alice:$pbkdf2-sha256$'), out.string
+    end
+  end
+
+  scenario 'On a terminal two passwords that differ print nothing' do
+    term = out = err = r = nil
+    step(%(Given a terminal typed "#{PW}" and "correct horse batterY")) do
+      term = Terminal.new(PW, 'correct horse batterY')
+    end
+    step('When Password.ask_option runs for "alice" on it') do
+      out = StringIO.new
+      err = StringIO.new
+      r = Password.ask_option('alice', input: term, out: out, err: err)
+    end
+    step('Then it returns false, prints nothing and says "hash_password: the two passwords differ"') do
+      refute r
+      assert_empty out.string
+      assert err.string.end_with?("hash_password: the two passwords differ\n"), err.string
     end
   end
 end

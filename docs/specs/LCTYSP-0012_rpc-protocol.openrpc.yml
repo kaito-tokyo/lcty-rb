@@ -790,7 +790,7 @@ components:
       message: the conversation exists
     Former:
       code: 6
-      message: the conversation is in the format of LCTYSP-0003; convert it with lcty.rb convert
+      message: the conversation is in the format of LCTYSP-0003; convert it with tools/convert.rb
       data:
         type: object
         properties:

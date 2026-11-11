@@ -16,6 +16,8 @@ require 'digest'
 require 'tag_store'
 require 'c_store'
 require 'convert_c'
+require 'open3'
+require 'rbconfig'
 
 class ConvertCTest < Lcty::Scenarios
   ConvHtml = Chatty::ConvHtml
@@ -222,6 +224,44 @@ class ConvertCTest < Lcty::Scenarios
       assert_equal text, read('conv-i')
       refute File.exist?(File.join(@former_dir, 'conv-i.html'))
       assert ConvHtml.lcty_msg?(read('conv-j'))
+    end
+  end
+
+  TOOL = File.expand_path('../../tools/convert.rb', __dir__)
+
+  # tools/convert.rb run in a new process with args, the data directory the test's own: [out, err, status]
+  def run_tool(*args)
+    env = { 'LCTY_DATA_DIR' => @dir, 'LCTY_BIND_IP' => nil, 'LCTY_BASE_URL' => nil, 'LCTY_ALLOWED_ORIGIN' => nil,
+            'LCTY_BASIC_AUTH' => nil }
+    Open3.capture3(env, RbConfig.ruby, TOOL, *args)
+  end
+
+  scenario 'tools/convert.rb converts the files of the data directory of LCTY_DATA_DIR' do
+    background
+    text = err = status = nil
+    step('Given a file of LCTYSP-0003 with a user message and a reply') do
+      text = old_file('conv-t', [user('q'), reply('a')])
+      @c_store.close # the tool opens lcty_c.sqlite itself
+      @c_store = nil
+    end
+    step('When tools/convert.rb is run with LCTY_DATA_DIR the directory of the test') { _, err, status = run_tool }
+    step('Then it exits with the status 0 and prints "convert: 1 converted, 0 already lcty-msg, 0 failed"') do
+      assert_equal 0, status.exitstatus, err
+      assert_includes err, 'convert: 1 converted, 0 already lcty-msg, 0 failed'
+      assert ConvHtml.lcty_msg?(read('conv-t'))
+    end
+    step('And c-former/ has the file as it was') do
+      assert_equal text, File.read(File.join(@former_dir, 'conv-t.html'), mode: 'r:UTF-8')
+    end
+  end
+
+  scenario 'tools/convert.rb takes no arguments' do
+    background
+    err = status = nil
+    step('When tools/convert.rb is run with "--all"') { _, err, status = run_tool('--all') }
+    step('Then it exits with the status 1 and prints its usage') do
+      assert_equal 1, status.exitstatus
+      assert err.start_with?('usage: tools/convert.rb'), err
     end
   end
 

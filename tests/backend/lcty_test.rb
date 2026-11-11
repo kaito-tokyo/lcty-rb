@@ -88,36 +88,9 @@ class LctyTest < Lcty::Scenarios
 
   # lcty.rb run as the program in a new process with LCTY_DATA_DIR dir (and no other setting) and args: [out, err,
   # status]
-  def run_lcty(dir, *args, stdin_data: '')
+  def run_lcty(dir, *args)
     env = { 'LCTY_DATA_DIR' => dir, 'LCTY_BIND_IP' => nil, 'LCTY_BASE_URL' => nil, 'LCTY_ALLOWED_ORIGIN' => nil }
-    Open3.capture3(env, RbConfig.ruby, LCTY_RB, *args, chdir: REPO_ROOT, stdin_data: stdin_data)
-  end
-
-  # A terminal that is typed lines, as $stdin of lcty.rb hash-password; echoed is whether a line was read with echo
-  class Terminal
-    attr_reader :echoed
-
-    def initialize(*lines)
-      @lines = lines.map { |l| "#{l}\n" }
-      @echoed = false
-      @quiet = false
-    end
-
-    def tty?
-      true
-    end
-
-    def gets
-      @echoed ||= !@quiet
-      @lines.shift
-    end
-
-    def noecho
-      @quiet = true
-      yield self
-    ensure
-      @quiet = false
-    end
+    Open3.capture3(env, RbConfig.ruby, LCTY_RB, *args, chdir: REPO_ROOT)
   end
 
   def usage
@@ -154,74 +127,17 @@ class LctyTest < Lcty::Scenarios
     FileUtils.rm_rf(dir)
   end
 
-  scenario 'lcty.rb hash-password prints the option of the user for the password piped in' do
+  scenario 'An argument that is not an option stops lcty.rb, pointing at tools/' do
     dir = Dir.mktmpdir('lcty-settings-')
-    out = status = nil
-    step('When lcty.rb is run with "hash-password alice" and the input "correct horse battery"') do
-      out, _, status = run_lcty(dir, 'hash-password', 'alice', stdin_data: "correct horse battery\n")
-    end
-    step('Then it exits with the status 0 and prints one line "--basic-auth=alice:" and a hash') do
-      assert_equal 0, status.exitstatus
-      assert_match(/\A--basic-auth=alice:\$pbkdf2-sha256\$i=600000\$\S+\n\z/, out)
-    end
-    step('And the hash accepts "correct horse battery"') do
-      require 'password'
-      assert Chatty::Password.verify('correct horse battery', out.chomp.delete_prefix('--basic-auth=alice:'))
-    end
-  ensure
-    FileUtils.rm_rf(dir)
-  end
-
-  scenario 'lcty.rb hash-password refuses a password that cannot be used' do
-    dir = Dir.mktmpdir('lcty-settings-')
-    out = err = status = nil
-    step('When lcty.rb is run with "hash-password alice" and the input "too short"') do
-      out, err, status = run_lcty(dir, 'hash-password', 'alice', stdin_data: "too short\n")
-    end
-    step('Then it exits with the status 1, prints nothing and says "the password is shorter than 15 characters"') do
+    err = status = nil
+    step('Given a data directory without server_settings.txt') {}
+    step('When lcty.rb is run with "convert"') { _, err, status = run_lcty(dir, 'convert') }
+    step('Then it exits with the status 1 and prints "lcty-rb: not an option: convert (the tools are in tools/)" and the usage') do
       assert_equal 1, status.exitstatus
-      assert_empty out
-      assert_equal "lcty-rb hash-password: the password is shorter than 15 characters\n", err
+      assert_equal "lcty-rb: not an option: convert (the tools are in tools/)\n#{usage}", err
     end
   ensure
     FileUtils.rm_rf(dir)
-  end
-
-  scenario 'On a terminal hash-password asks for the password twice, without echo' do
-    term = out = err = r = nil
-    step('Given a terminal typed "correct horse battery" twice') do
-      term = Terminal.new('correct horse battery', 'correct horse battery')
-    end
-    step('When Lcty.hash_password runs for "alice" on it') do
-      out = StringIO.new
-      err = StringIO.new
-      r = Lcty.hash_password('alice', input: term, out: out, err: err)
-    end
-    step('Then it asks "Password: " and "Again: ", reading neither with echo') do
-      assert_equal "Password: \nAgain: \n", err.string
-      refute term.echoed
-    end
-    step('And it returns true and prints the option of "alice"') do
-      assert r
-      assert out.string.start_with?('--basic-auth=alice:$pbkdf2-sha256$'), out.string
-    end
-  end
-
-  scenario 'On a terminal two passwords that differ print nothing' do
-    term = out = err = r = nil
-    step('Given a terminal typed "correct horse battery" and "correct horse batterY"') do
-      term = Terminal.new('correct horse battery', 'correct horse batterY')
-    end
-    step('When Lcty.hash_password runs for "alice" on it') do
-      out = StringIO.new
-      err = StringIO.new
-      r = Lcty.hash_password('alice', input: term, out: out, err: err)
-    end
-    step('Then it returns false, prints nothing and says "the two passwords differ"') do
-      refute r
-      assert_empty out.string
-      assert err.string.end_with?("lcty-rb hash-password: the two passwords differ\n"), err.string
-    end
   end
 
   scenario '--help prints every option' do

@@ -161,7 +161,7 @@ module Lcty
   def self.basic_auth(users = Chatty.basic_users, htdigest: Chatty::HTDIGEST_PATH, logger: Log.new, fail_delay: 1.0)
     if File.exist?(htdigest)
       raise Chatty::SettingsError, "#{htdigest}: Digest authentication is gone; give the users with --basic-auth " \
-                                   'in server_settings.txt (`lcty.rb hash-password USER` prints them), then remove it'
+                                   'in server_settings.txt (tools/hash_password.rb prints them), then remove it'
     end
     return nil if users.empty?
 
@@ -208,69 +208,19 @@ module Lcty
 end
 
 module Lcty
-  # `lcty.rb convert`, with the server stopped: convert the conversation files of c/ to LCTYSP-0013 once
-  # (lib/convert_c.rb). Returns whether every file could be converted.
-  def self.convert(out = $stderr)
-    require_relative 'lib/c_store'
-    require_relative 'lib/convert_c'
-    Chatty::TagStore.rename_former(Chatty::FORMER_TAGS_DB_PATH, Chatty::TAGS_DB_PATH)
-    tags = Chatty::TagStore.new(Chatty::TAGS_DB_PATH)
-    c_store = Chatty::CStore.new(Chatty::C_DB_PATH)
-    begin
-      r = Chatty::ConvertC.run(tags: tags, c_store: c_store, out: out)
-    ensure
-      c_store.close
-    end
-    out.puts "lcty-rb convert: #{r[:converted].size} converted, #{r[:current].size} already lcty-msg, " \
-             "#{r[:failed].size} failed (the files as they were are in #{Chatty::FORMER_CONV_DIR})"
-    r[:failed].empty?
-  end
-
-  # `lcty.rb hash-password USER`: print the option of the settings for user, --basic-auth=USER:<PBKDF2 hash>
-  # (lib/password.rb). The password is asked twice on a terminal, without echo; from anything else it is the first line
-  # of input, so a script can pipe it. Returns whether it printed one; what is wrong goes to err.
-  def self.hash_password(user, input: $stdin, out: $stdout, err: $stderr)
-    require_relative 'lib/password'
-    password = if input.tty?
-                 require 'io/console'
-                 ask = lambda do |prompt|
-                   err.print prompt
-                   line = input.noecho(&:gets)
-                   err.puts
-                   line.to_s.chomp
-                 end
-                 first = ask.call('Password: ')
-                 again = ask.call('Again: ')
-                 if first != again
-                   err.puts 'lcty-rb hash-password: the two passwords differ'
-                   return false
-                 end
-                 first
-               else
-                 input.gets.to_s.chomp
-               end
-    out.puts Chatty::Password.option(user, password)
-    true
-  rescue Chatty::Password::Error => e
-    err.puts "lcty-rb hash-password: #{e.message}"
-    false
-  end
-
-  # The command line: its options (those of server_settings.txt, LCTYSP-0010) override the file and the environment;
-  # no other argument starts the server, `convert` converts the conversation files and `hash-password USER` prints the
-  # option of a user of Basic authentication
+  # The command line: its options (those of server_settings.txt, LCTYSP-0010) override the file and the environment,
+  # and start the server. lcty.rb takes no other argument: the tools are the scripts of tools/ (converting the
+  # conversation files, hashing a password)
   def self.main(argv)
     args = begin
       Chatty.configure(argv.dup)
     rescue Chatty::SettingsError => e
       abort "lcty-rb: #{e.message}\n#{Chatty.option_parser({}).help}"
     end
-    case args
-    when [] then run
-    when ['convert'] then exit(convert ? 0 : 1)
-    when ->(a) { a.size == 2 && a[0] == 'hash-password' } then exit(hash_password(args[1]) ? 0 : 1)
-    else abort Chatty.option_parser({}).help
-    end
+    abort "lcty-rb: not an option: #{args.join(' ')} (the tools are in tools/)\n#{Chatty.option_parser({}).help}" unless
+      args.empty?
+
+    run
   end
 end
 

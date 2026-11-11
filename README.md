@@ -72,11 +72,11 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
       the file with one value each (several addresses or origins go in the file or on the command line), and the
       command line overrides both. `LCTY_DATA_DIR` is an environment variable only.
   - Authentication: give a user with `--basic-auth` and every request needs one of the users (HTTP Basic).
-    `lcty.rb hash-password` asks for the password (15 characters or more) and prints the line, to add to
+    `tools/hash_password.rb` asks for the password (15 characters or more) and prints the line, to add to
     `server_settings.txt`:
 
     ```bash
-    /usr/bin/ruby lcty.rb hash-password alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
+    /usr/bin/ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
     ```
 
     Basic sends the password itself; from outside the machine, put HTTPS in front of the server (a reverse proxy). A
@@ -95,8 +95,8 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
   renamed to it when the server starts). Tag definitions and memory kept there by an older version are dropped when it
   starts (they are not converted; define the tags again).
 - `lcty_c.sqlite`: the timings, usage and client of the replies of conversations in the new format (`lcty-msg`),
-  written by the server and by `lcty.rb convert` (below).
-- `c-former/`: every conversation file as it was before `lcty.rb convert` converted it.
+  written by the server and by `tools/convert.rb` (below).
+- `c-former/`: every conversation file as it was before `tools/convert.rb` converted it.
 - `lcty_fuzzy_search.sqlite`: the vectors of semantic search. They are derived, but only the browser can make them
   again (it does so while a page is open), so they are kept.
 - Files starting with `_` are derived (the search index) and are made anew at every start.
@@ -109,16 +109,17 @@ rsync -a --exclude='_*' "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/D
 
 ### Converting the conversation files
 
-The conversations are moving to the format of LCTYSP-0013 (`lcty-msg`), which `/v1/rpc` writes. `lcty.rb convert`
+The conversations are moving to the format of LCTYSP-0013 (`lcty-msg`), which `/v1/rpc` writes. `tools/convert.rb`
 converts the files of `c/` once, with the server stopped. It is never run at startup. The pages write only files in
 the new format and show the others read-only, so run it once after updating. Back up the data directory first
 (above), then:
 
 ```bash
-/usr/bin/ruby lcty.rb convert
+/usr/bin/ruby tools/convert.rb
 ```
 
-Each file is copied to `c-former/` before it is replaced. A file that is converted already is left as it is, so
+The tools are scripts of `tools/`, run on their own; `lcty.rb` only starts the server. Each file is copied to
+`c-former/` before it is replaced. A file that is converted already is left as it is, so
 running it again converts only the rest. Replies that were not completed are dropped.
 
 ## Tests

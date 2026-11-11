@@ -8,7 +8,7 @@
 #
 #   message_stats  what was measured of a reply, which LCTYSP-0013 moved out of the file: the id of its element
 #                  (msg-m-…), the conversation, and data-timings, data-usage and data-client as they were (JSON text,
-#                  NULL when absent). Written by `lcty.rb convert` and by c.stats.put of /v1/rpc.
+#                  NULL when absent). Written by tools/convert.rb and by c.stats.put of /v1/rpc.
 #
 # The version is PRAGMA user_version (LCTYSP-0015): a newer one is refused, an older one migrated step by step.
 

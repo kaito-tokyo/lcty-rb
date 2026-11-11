@@ -235,7 +235,7 @@ class ConfigTest < Lcty::Scenarios
     ['--bind-ip=', 'not an IP address to listen on: ""'],
     ['--bind-ip=localhost', 'not an IP address to listen on: "localhost"'],
     ['--bind-ip=10.0.0.0/8', 'not an IP address to listen on: "10.0.0.0/8"'],
-    ['--basic-auth=alice', '--basic-auth: not USER:HASH, as `lcty.rb hash-password USER` prints it'],
+    ['--basic-auth=alice', '--basic-auth: not USER:HASH, as tools/hash_password.rb prints it'],
     ['--basic-auth=alice:secret', '--basic-auth: the user "alice": not a password hash ' \
                                   '($pbkdf2-sha256$i=<iterations>$<salt>$<hash>)']
   ].each do |line, message|

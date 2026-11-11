@@ -166,7 +166,7 @@ still read as well as it can be.
 
 ## Moving existing files
 
-Existing files are converted once to this format, by hand: `lcty.rb convert`, with the server stopped
+Existing files are converted once to this format, by hand: `tools/convert.rb`, with the server stopped
 (`lib/convert_c.rb`, tested by [LCTYSP-3023](LCTYSP-3023_convert.feature)). Nothing converts them at startup: they are
 the user's data, and the pages of today show and write only the format of LCTYSP-0003.
 

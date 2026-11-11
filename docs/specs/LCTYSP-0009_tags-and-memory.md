@@ -66,7 +66,7 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
   renaming a tag definition does not rename it in conversations.
   - Format 4 of `lcty_t.sqlite` replaced `conversation_tags` (the tags as a JSON array per conversation) with
     `t_has_many_c`, converting its rows. A row of `conversation_tags` with no tags becomes no row, so an unconverted
-    file of LCTYSP-0003 whose tags had been removed shows `data-setup-tags` again (and `lcty.rb convert` gives it
+    file of LCTYSP-0003 whose tags had been removed shows `data-setup-tags` again (and `tools/convert.rb` gives it
     those).
   - Every change of the rows is announced to the pages as one `t.batch.updated`, and `t.c.list` of `/v1/rpc` reads
     them all ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).

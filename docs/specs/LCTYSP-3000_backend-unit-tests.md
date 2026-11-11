@@ -51,7 +51,7 @@ changed.
 | [LCTYSP-3020](LCTYSP-3020_rpc.feature)               | `lib/rpc/`: the RPC protocol at `/v1/rpc`            |
 | [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)         | `lib/rpc/`: several pages over `/v1/rpc` at once     |
 | [LCTYSP-3021](LCTYSP-3021_openapi.feature)           | `openapi.yaml`: every path the site answers          |
-| [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `lcty.rb convert`                |
+| [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `tools/convert.rb`               |
 | [LCTYSP-3024](LCTYSP-3024_password.feature)          | `lib/password.rb`: the password hashes               |
 | [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)        | `lib/basic_auth.rb`: Basic authentication            |
 

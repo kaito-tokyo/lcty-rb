@@ -248,7 +248,7 @@ export async function createConversation(
 }
 
 /**
- * Create a conversation in the format of LCTYSP-0003 through the HTTP API (as before lcty.rb convert), which the pages
+ * Create a conversation in the format of LCTYSP-0003 through the HTTP API (as before tools/convert.rb), which the pages
  * show read-only. Arguments and result as createConversation.
  */
 export async function createFormerConversation(

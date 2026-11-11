@@ -60,7 +60,7 @@ import {
 //
 // The conversation file itself (data/c/<id>.html), of LCTYSP-0013 (lcty-msg): the page writes it through /v1/rpc, one
 // element at a time at its end, and puts into its document the same element it sent (LCTYSP-0012, LCTYSP-0014). A
-// file of LCTYSP-0003 is shown read-only until lcty.rb convert converts it. New conversations are made on the new
+// file of LCTYSP-0003 is shown read-only until tools/convert.rb converts it. New conversations are made on the new
 // conversation page, /c/ next to it ("./", js/pages/new.js).
 import { initSidebar } from "../js/ui/sidebar.js";
 import { textAttr } from "../js/ui/text-attr.js";
@@ -718,7 +718,7 @@ window.addEventListener("beforeunload", (e) => {
 		disableComposer(
 			tr(
 				"formerReadOnly",
-				"This conversation is in the former format. Convert it with lcty.rb convert to continue it.",
+				"This conversation is in the former format. Convert it with tools/convert.rb to continue it.",
 			),
 		);
 	markLast();

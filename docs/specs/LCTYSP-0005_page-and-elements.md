@@ -362,7 +362,7 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
     a reload.
   - The header's chips are the current tags, since the file has no `data-setup-tags`; the ⓘ of a reply shows what
     `c.stats.list` gives; a search result scrolls to `#msg-u-<id>`.
-- **A file of LCTYSP-0003 is read-only.** Until `lcty.rb convert` converts it, the composer is disabled with a notice,
+- **A file of LCTYSP-0003 is read-only.** Until `tools/convert.rb` converts it, the composer is disabled with a notice,
   the messages' actions are hidden and no command runs. The title, the tags and deleting still work.
 - `<lcty-conv-list>` (the sidebar's conversation list) is defined in `lcty.v1.cjs` like the other elements: it builds
   the items (title, tag chips, date and, when known, the message count) as parts of `<lcty-sidebar>`'s Shadow DOM
