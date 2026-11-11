@@ -8,7 +8,7 @@
 // Lines are read one at a time, as the spec's "A parsing strategy" describes. Each line first continues the open blocks
 // it can, then may start new ones, and what is left of it is added to the deepest open block that takes lines. This is
 // the spec's first phase: the link reference definitions are read into refmap, and a paragraph, a heading and a table
-// cell keep the ranges of where the text of their content is. The parser's one operation is advance: it takes the first
+// cell keep the spans of where the text of their content is. The parser's one operation is advance: it takes the first
 // top-level block of a text once the text's lines end it, so a whole text and a streamed one are read alike, one block
 // after another (converter.js).
 //
@@ -16,18 +16,20 @@
 // and character references, link labels, destinations and titles (a link reference definition is a leaf block), and
 // HTML tags (an HTML block of condition 7 begins with one).
 //
-// A block is a row of a table (BlockTable), not an object: each field of a block is a column, a typed array indexed by
-// the row, so the tree is integers only and costs no object of its own for each block. The rows are linked as a tree,
-// a parent with its first and last child and each child with the ones before and after it (-1 when there is none).
-// The columns a to d hold the values of each type, as integers (BlockTable says which).
+// The document is kept as C keeps struct arrays, in linear memory the parsers share: the block phase, the inline phase
+// (gfm_inlines.d.ts) and what runs them (converter.d.ts). A node, a block or an inline, is a row of NodeTable, in two
+// Int32Arrays of their own: what every node has (8 slots, 32 bytes: F_TYPE, F_PARENT, …) in i32, and what only a block
+// has (8 more: B_PREV, B_START_LINE, the values of its type, …) in b32, both by the row. The tree is integers only, a
+// node costs no object of its own, and a node's fields are next to each other in memory. The two arrays never alias, so
+// a write to one leaves what was read of the other as it is. The rows are linked as a tree, a parent with its first and
+// last child and each child with the next (-1 when there is none), and a block with the one before it too: the
+// document's children are its blocks, and a paragraph's, a heading's or a table cell's are its inlines.
 //
-// A block holds no text of its own. Its ranges say where its text is in the text it was parsed from, which whoever
-// reads the tree keeps (leafText, blockLines), and they are kept apart from the rows, in one linear store for the whole
-// document (RangeStore): a block holds only where its ranges start in the store and how many they are. So parsing
-// makes no string but a line at a time and what a definition or a table row is read from.
-//
-// The inlines are rows of a table of their own, made by the inline phase (gfm_inlines.d.ts), and the document holds
-// the root of each leaf's inlines by the leaf's row (converter.d.ts).
+// A node holds no text of its own. Its spans say where its text is in the text it was parsed from, which whoever reads
+// the tree keeps (leafText, blockLines, inlineText), and they are kept apart from the rows, in one linear store for the
+// whole document (SpanStore): a node holds only where its spans start in the store and how many they are. So parsing
+// makes no string but a line at a time and what a definition or a table row is read from. The few strings a node has
+// (a code block's info string, a link's destination and title) are in one array, strings.
 
 /** The text of the named character reference &name; ("amp" → "&"), or null when HTML has no such name. */
 export type DecodeName = (name: string) => string | null;
@@ -39,7 +41,7 @@ export interface LinkData {
 	title: string;
 }
 
-// The types of the blocks, as the codes of BlockTable's type column
+// The types of the blocks, as the codes in slot F_TYPE; the inlines' follow them, from 16 (gfm_inlines.d.ts)
 export const DOCUMENT: 0;
 export const BLOCK_QUOTE: 1;
 export const LIST: 2;
@@ -64,92 +66,131 @@ export const BLOCK_NAMES: readonly string[];
 
 export type Align = "left" | "center" | "right" | null;
 
-/** A table cell's alignment, by its code in column a: 0 none, 1 left, 2 center, 3 right. */
+/** A table cell's alignment, by its code in slot B_A: 0 none, 1 left, 2 center, 3 right. */
 export const ALIGNS: readonly Align[];
 
-/** A block: its row in its document's BlockTable. */
+/** A node: its row in its document's NodeTable. */
 export type Row = number;
 
+// The slots of a row in i32, every node's: row i's field f is i32[(i << 3) + f]
+/** How many slots a row has in i32, and a block's in b32: 8, 32 bytes. */
+export const ROW: 8;
+/** The type's code in bits 0 to 7 (i32[i << 3] & 0xff), and OPEN. */
+export const F_TYPE: 0;
 /**
- * The blocks of a document, as the rows of a table: one typed array for each column, row i of each the field of block
- * i. Row 0 is the document. The arrays grow by doubling, so a reader takes them from the table each time, not once, and
- * a row past length holds nothing.
- *
- * The columns a to d are the values of each type (0 where a type has none):
- * - list: a 1 when ordered; b the character code of its bullet (* + -) or delimiter (. or )); c its start; d 1 when
- *   tight.
- * - item: a the marker's offset; b its padding; c its task box, 0 for no task, 1 unchecked, 2 checked.
- * - heading: a its level, 1 to 6.
- * - code_block: a 1 when fenced; b the fence's character code (` or ~, 0 when indented); c its length; d its offset.
- *   Its info string is in info.
- * - html_block: a which of the seven start conditions of the spec opened it.
- * - table: a 1 while the next line is the delimiter row, which adds no row.
- * - table_cell: a its alignment's code (ALIGNS).
+ * Where the node starts: a block in the whole text; an inline in the content of its leaf block, its leading spaces,
+ * tabs and line endings left out.
  */
-export class BlockTable {
+export const F_OFFSET: 1;
+export const F_PARENT: 2;
+export const F_FIRST: 3;
+export const F_LAST: 4;
+export const F_NEXT: 5;
+/**
+ * Where its spans start in the document's SpanStore, and how many they are (F_COUNT): of a block, one span for each
+ * line of a code block or an HTML block; of a paragraph or a heading, its content's lines, a container's markers and
+ * the line's leading spaces left out (and the definitions, the task list item's box or the closing sequence it gave
+ * up); of a table cell, its content, trimmed, between the row's pipes (one span; a \| in it is a | of the content).
+ * The line endings between them are not in them: a paragraph's content is its spans' text joined by "\n". Of an
+ * inline, the pieces of the text of a text, a code span or raw HTML (gfm_inlines.d.ts). None for any other node, but
+ * a link or an image, whose F_AT is the index of its destination in strings (gfm_inlines.d.ts).
+ */
+export const F_AT: 6;
+export const F_COUNT: 7;
+/** The bit of slot F_TYPE set while lines may still be added to a block. */
+export const OPEN: 0x100;
+
+// The slots of a block's row in b32: block i's field f is b32[(i << 3) + f]
+/** The block before it, -1 when it is the first. */
+export const B_PREV: 0;
+/** The lines a block begins and ends on, 1-based (a list's tightness is read from them). */
+export const B_START_LINE: 1;
+export const B_END_LINE: 2;
+/**
+ * The values of each type of block (0 where a type has none):
+ * - list: B_A 1 when ordered; B_B the character code of its bullet (* + -) or delimiter (. or )); B_C its start; B_D 1
+ *   when tight.
+ * - item: B_A the marker's offset; B_B its padding; B_C its task box, 0 for no task, 1 unchecked, 2 checked.
+ * - heading: B_A its level, 1 to 6.
+ * - code_block: B_A 1 when fenced; B_B the fence's character code (` or ~, 0 when indented); B_C its length; B_D its
+ *   offset.
+ * - html_block: B_A which of the seven start conditions of the spec opened it.
+ * - table: B_A 1 while the next line is the delimiter row, which adds no row.
+ * - table_cell: B_A its alignment's code (ALIGNS).
+ */
+export const B_A: 3;
+export const B_B: 4;
+export const B_C: 5;
+export const B_D: 6;
+/** A code block's info string, its escapes and character references resolved: its index in strings, -1 when none. */
+export const B_STR: 7;
+
+/**
+ * The nodes of a document, blocks and inlines, row 0 the document: every node's fields in i32, a block's own in b32,
+ * both ROW slots a row and by the same row. b32 has room up to the last block's row only; an inline's row there holds
+ * nothing. The arrays grow by doubling, so a reader takes them from the table each time, not once, and a row past
+ * length holds nothing.
+ */
+export class NodeTable {
 	/** How many rows it holds. */
 	length: number;
-	/** How many rows its arrays have room for. */
+	/** How many rows i32 has room for. */
 	capacity: number;
-	type: Uint8Array;
-	/** 1 while lines may still be added to it. */
-	open: Uint8Array;
-	/** Where it starts, in the whole text. */
-	offset: Uint32Array;
-	/** The lines it begins and ends on, 1-based (a list's tightness is read from them). */
-	startLine: Uint32Array;
-	endLine: Uint32Array;
-	parent: Int32Array;
-	first: Int32Array;
-	last: Int32Array;
-	prev: Int32Array;
-	next: Int32Array;
-	/**
-	 * Where its ranges start in the document's store, and how many they are: one range for each line of a code block or
-	 * an HTML block; of a paragraph or a heading, its content's lines, a container's markers and the line's leading
-	 * spaces left out (and the definitions, the task list item's box or the closing sequence it gave up); of a table
-	 * cell, its content, trimmed, between the row's pipes (one range; a \| in it is a | of the content). None for any
-	 * other block. The line endings between them are not in them: a paragraph's content is its ranges' text joined by
-	 * "\n".
-	 */
-	rangeAt: Uint32Array;
-	rangeCount: Uint32Array;
-	a: Int32Array;
-	b: Int32Array;
-	c: Int32Array;
-	d: Int32Array;
-	/** A code block's info string, its escapes and character references resolved, by its row (none when ""). */
-	info: Map<Row, string>;
-	/** Make room for n rows (at least length), the rows there copied. */
+	/** How many rows b32 has room for, and one past the last block's row. */
+	blockCapacity: number;
+	blockEnd: number;
+	i32: Int32Array;
+	b32: Int32Array;
+	/** The strings of the rows: a code block's info string by B_STR, a link's destination and title by F_AT. */
+	strings: string[];
+	/** Make room for n rows (at least length) in i32, the rows there copied. */
 	grow(n: number): void;
-	/** Give up the room past the last row, once no more rows are added. */
+	/** Make room for n rows (at least blockEnd) in b32, the rows there copied. */
+	growBlocks(n: number): void;
+	/** Give up the room past the last row and the last block's, once no more rows are added. */
 	compact(): void;
-	/** A new row, of no parent, children or ranges, its values 0; its index. */
-	add(type: BlockType, offset: number, open: 0 | 1, startLine: number): Row;
-	/** Make child the last child of parent. */
+	/** A new inline's row, of no parent, children or spans; its index. */
+	add(type: number, offset: number): Row;
+	/** A new block's row, its fields in b32 too, its values 0 and no string; its index. */
+	addBlock(
+		type: BlockType,
+		offset: number,
+		open: 0 | 1,
+		startLine: number,
+	): Row;
+	/** Add s to strings; its index. */
+	addString(s: string): number;
+	/** Make child, a block, the last child of parent. */
 	append(parent: Row, child: Row): void;
-	/** Take node out of its parent. */
+	/** Make child, an inline, the last child of parent; an inline has no B_PREV. */
+	appendInline(parent: Row, child: Row): void;
+	/** Take node, a block, out of its parent. */
 	unlink(node: Row): void;
-	/** Put node where old is, taking old out. */
+	/** Put node, a block, where old is, taking old out. */
 	replace(old: Row, node: Row): void;
-	/** Put node right after ref. */
+	/** Put node, a block, right after ref. */
 	insertAfter(ref: Row, node: Row): void;
 }
 
+/** How many slots a span has: 3. */
+export const SPAN: 3;
+
 /**
- * The ranges of a document's blocks, in one linear store: range i is [u32[2i], u32[2i + 1]), offsets of UTF-16 code
- * units in the whole text, and pads[i] the spaces before it that a tab only partly taken by the indentation leaves (one
- * to three, for a line of a code block or an HTML block; ranges cannot hold them, as they are not in the text). The
- * arrays grow by doubling, so a reader takes them from the store each time, not once.
+ * The spans of a document, as SPAN slots of one Int32Array: span i is [i32[3i], i32[3i + 1]), offsets of UTF-16 code
+ * units, and i32[3i + 2] its flag. A block's line is a span of the whole text, and its flag the spaces before it that a
+ * tab only partly taken by the indentation leaves (one to three, for a line of a code block or an HTML block; a span
+ * cannot hold them, as they are not in the text). An inline's piece is a span of the whole text when its flag is 0,
+ * of extra when it is 1. The array grows by doubling, so a reader takes i32 from the store each time, not once.
  */
-export class RangeStore {
-	u32: Uint32Array;
-	pads: Uint8Array;
-	/** How many ranges it holds. */
+export class SpanStore {
+	i32: Int32Array;
+	/** How many spans it holds. */
 	length: number;
-	/** Add a range and its pad; its index. */
-	push(start: number, end: number, pad: number): number;
-	/** Give up the room past the last range, once no more ranges are added. */
+	/** The text of the pieces that are not in the parsed text, one after another (gfm_inlines.d.ts). */
+	extra: string;
+	/** Add a span and its flag; its index. */
+	push(start: number, end: number, flag: number): number;
+	/** Give up the room past the last span, once no more spans are added. */
 	compact(): void;
 }
 
@@ -221,25 +262,25 @@ export function scanLinkDestination(
 // The block parser
 
 /**
- * The text of the content of leaf, a paragraph, a heading or a table cell of blocks, read from source, the text it was
- * parsed from, by its ranges in store, its document's: joined by "\n", NUL read as U+FFFD, and in a table cell \| read
+ * The text of the content of leaf, a paragraph, a heading or a table cell of nodes, read from source, the text it was
+ * parsed from, by its spans in spans, its document's: joined by "\n", NUL read as U+FFFD, and in a table cell \| read
  * as |.
  */
 export function leafText(
 	source: string,
-	blocks: BlockTable,
-	store: RangeStore,
+	nodes: NodeTable,
+	spans: SpanStore,
 	leaf: Row,
 ): string;
 
 /**
- * The lines of block, a code block or an HTML block of blocks, read from source by its ranges in store, padded, NUL
- * read as U+FFFD.
+ * The lines of block, a code block or an HTML block of nodes, read from source by its spans, padded, NUL read as
+ * U+FFFD.
  */
 export function blockLines(
 	source: string,
-	blocks: BlockTable,
-	store: RangeStore,
+	nodes: NodeTable,
+	spans: SpanStore,
 	block: Row,
 ): string[];
 
@@ -257,12 +298,15 @@ export type Advanced = [
  */
 export class BlockParser {
 	constructor(decodeName: DecodeName);
-	/** The document's row in blocks (0), the blocks advanced so far its children, one each. */
+	/** The document's row in nodes (0), the blocks advanced so far its children, one each. */
 	readonly doc: Row;
-	/** The blocks of the document; rows past those of the blocks taken are an advance's own, cut back by the next. */
-	readonly blocks: BlockTable;
-	/** The ranges of every block advanced. */
-	readonly store: RangeStore;
+	/**
+	 * The nodes of the document. Rows past those of the blocks taken are an advance's own, cut back by the next; what
+	 * the client adds between two advances (the inlines of the leaves taken) is kept.
+	 */
+	readonly nodes: NodeTable;
+	/** The spans of every block advanced, and of what the client adds. */
+	readonly spans: SpanStore;
 	/** The link reference definitions read so far, by normalized label. */
 	readonly refmap: ReadonlyMap<string, LinkData>;
 	/**
@@ -272,7 +316,7 @@ export class BlockParser {
 	 *   follows, where the next advance starts (after a paragraph that a table split, where the table's header row's
 	 *   text starts, as an indented header row was the paragraph's); node is the block's row, now the last child of doc
 	 *   (-1 for a paragraph of link reference definitions only, which leaves only its definitions); leaves are the rows
-	 *   of its paragraphs, headings and table cells in the order of the text, their ranges where the text of their
+	 *   of its paragraphs, headings and table cells in the order of the text, their spans where the text of their
 	 *   content is (leafText reads it).
 	 * - ["", undefined] when head holds no block: nothing, or only blank lines.
 	 * - undefined when the lines so far do not end it.
@@ -282,11 +326,11 @@ export class BlockParser {
 	 * part of it. A block ends when a later line closes it, or, a heading and a thematic break being one line each, with
 	 * its line.
 	 *
-	 * The nodes' ranges and offsets count from the start of the whole text, so offset must be where head starts in it
+	 * The nodes' spans and offsets count from the start of the whole text, so offset must be where head starts in it
 	 * for them to be right: the client passes how much of its text the blocks taken so far, and the blank lines before
 	 * them, have used up. When head is the rest the last advance gave and offset where that rest starts, the parser goes
-	 * on from the lines it read past that block (it carries them), so the line that ended a block is not read again;
-	 * see "How it works" below.
+	 * on from the lines it read past that block (it carries them), so the line that ended a block is not read again,
+	 * unless the client has added to nodes or spans since; see "How it works" below.
 	 */
 	advance(
 		head: string,
@@ -297,11 +341,13 @@ export class BlockParser {
 
 // How it works (gfm_blocks.js)
 //
-// Rows. A block is a row made with every column given (BlockTable's add), its type, offset, open and startLine by the
+// Rows. A block is a row made with every slot given (NodeTable's addBlock), its type, offset, open and startLine by the
 // caller; endLine is known only when the block closes. The tree is changed only by linking rows (append, unlink,
-// replace, insertAfter), each a few writes to the link columns, so no child is looked for among its siblings. The
-// table's arrays start at 1024 rows and double; parseBlocks gives up the room left once the whole text is read
-// (compact). Row 0 is the document, which the blocks taken are linked to, and row 1 the root of one advance's lines.
+// replace, insertAfter), each a few writes to the link slots, so no child is looked for among its siblings. A slot is
+// read as i32[(i << 3) + F_X] or b32[(i << 3) + B_X], the row's start shifted once and kept where it is used again.
+// The arrays start at 1024 rows and double; parseGfm gives up the room left once the whole text is read (compact).
+// Row 0 is the document, which the blocks taken are linked to, and row 1 the root of one advance's lines. In a whole
+// text the blocks' rows come first and the inlines' after them, so b32 holds the blocks' rows and no more.
 //
 // What each type of block does is a switch on its type: continueBlock gives 0 (the current line continues the block),
 // 1 (it does not) or 2 (the line is used up); finalizeBlock runs when the block is closed; canContain says whether a
@@ -311,19 +357,27 @@ export class BlockParser {
 // gives up the link reference definitions at its start (takeReferences); a paragraph of nothing else leaves the tree.
 // A task list item's box is [ ], [x] or [X] at the start of its first paragraph, and then a space or a tab.
 //
-// Ranges. A leaf's line is pushed to the store as the range of the rest of the line (addLine), the spaces a tab only
-// partly taken leaves as its pad. Only the open leaf takes lines, so a leaf's ranges are next to each other in the
+// Spans. A leaf's line is pushed to the store as the span of the rest of the line (addLine), the spaces a tab only
+// partly taken leaves as its pad. Only the open leaf takes lines, so a leaf's spans are next to each other in the
 // store, and a table row's cells are pushed together. What the parser must read of a leaf's text, it reads from the
 // head being advanced (textOf, joined): a paragraph's, only when it starts with [, which a definition and a task list
 // item's box do; the header row of a table; a code block's info string and blank last lines; an HTML block's blank
 // last lines. A block gives up what it reads (definitions, a box, an info string, blank lines) by moving where its
-// ranges start in the store, or the start of its first one, and by counting fewer (dropFront). A table row is cut into
-// the ranges of its cells as tableCells cuts it (cellRanges). An advance that starts afresh reads lines again that one
-// before it read; so that their ranges do not pile up in the store, the store is cut back at each fresh advance to the
+// spans start in the store, or the start of its first one, and by counting fewer (dropFront). A table row is cut into
+// the spans of its cells as tableCells cuts it (cellRanges). An advance that starts afresh reads lines again that one
+// before it read; so that their spans do not pile up in the store, the store is cut back at each fresh advance to the
 // length the blocks taken use (committed: the store's length before the line after the last block taken, kept for each
-// line in marks), and the table to the rows they use alike (committedRows, from rowMarks). The marks and the line ends
-// are typed arrays indexed by the line's number, written once a line and never emptied, so a fresh advance costs
-// nothing for the lines it does not read again.
+// line in marks), and the table to the rows they use alike (committedRows, from rowMarks). A block's string is made
+// when the block closes, which may be on a line after its last, so strings keeps every string made up to the last
+// block taken (committedStrings). The marks and the line ends are typed arrays indexed by the line's number, written
+// once a line and never emptied, so a fresh advance costs nothing for the lines it does not read again.
+//
+// What the client adds. The inline phase writes into the same tables, between two advances, past what the last advance
+// left: advance sees that the lengths have changed since it returned (afterRows, afterSpans, afterStrings), and from
+// then on never cuts the tables below them (floorRows, floor, floorStrings). The rows and spans an advance had read
+// past the block it took are left below them, unused. The lines it carried are read again, as a block's spans must be
+// next to each other and the next block's would come after the client's. In a whole text the inlines are parsed after
+// every block, so nothing of this happens there.
 //
 // Block starts. A line that is not indented is read as a tree of few levels: a switch on the first character after the
 // indentation (startBlock), then what follows it, read a character at a time. Where one line may start several blocks

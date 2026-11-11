@@ -18,12 +18,9 @@ export function parseBlocks(text, decodeName) {
 		head = step[0];
 		for (const leaf of step[3]) leaves.push(leaf);
 	}
-	// the whole text read, the tables need no room for more
-	parser.blocks.compact();
-	parser.store.compact();
 	return {
-		blocks: parser.blocks,
-		ranges: parser.store,
+		nodes: parser.nodes,
+		spans: parser.spans,
 		refmap: parser.refmap,
 		leaves,
 	};
@@ -31,14 +28,13 @@ export function parseBlocks(text, decodeName) {
 
 /** The document tree of text, in both phases. */
 export function parseGfm(text, decodeName, options = {}) {
-	const { blocks, ranges, refmap, leaves } = parseBlocks(text, decodeName);
+	const { nodes, spans, refmap, leaves } = parseBlocks(text, decodeName);
 	const parser = new InlineParser(decodeName, refmap, options);
-	// the root row of each leaf's inlines, by the leaf's row (-1: no leaf)
-	const roots = new Int32Array(blocks.length).fill(-1);
-	for (const leaf of leaves)
-		roots[leaf] = parser.parseLeaf(text, blocks, ranges, leaf);
-	parser.table.compact();
-	return { blocks, ranges, inlines: parser.table, roots };
+	for (const leaf of leaves) parser.parseLeaf(text, nodes, spans, leaf);
+	// the whole text read, the tables need no room for more
+	nodes.compact();
+	spans.compact();
+	return { nodes, spans };
 }
 
 // What BlockWatch takes the first block of a head to be, from its first line

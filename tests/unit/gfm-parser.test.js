@@ -19,7 +19,7 @@ import { expect, publicUrl, scenario } from "./node-unit.js";
 const { BlockWatch, parseBlocks, parseGfm } = await import(
 	publicUrl("js/convert/gfm/converter.js")
 );
-const { BLOCK_QUOTE, BlockParser, PARAGRAPH } = await import(
+const { BLOCK_QUOTE, BlockParser, F_FIRST, F_NEXT, PARAGRAPH } = await import(
 	publicUrl("js/convert/gfm/gfm_blocks.js")
 );
 const { InlineParser, inlineText } = await import(
@@ -152,15 +152,15 @@ scenario(
 		await step(
 			"Then the document holds 32 block quotes, one in another",
 			() => {
-				const t = doc.blocks;
+				const n = doc.nodes.i32;
 				let depth = 0;
 				for (
-					let n = t.first[0];
-					n !== -1 && t.type[n] === BLOCK_QUOTE;
-					n = t.first[n]
+					let b = n[F_FIRST];
+					b !== -1 && (n[b << 3] & 0xff) === BLOCK_QUOTE;
+					b = n[(b << 3) + F_FIRST]
 				) {
 					depth++;
-					inner = n;
+					inner = b;
 				}
 				expect(depth).toBe(32);
 			},
@@ -168,12 +168,12 @@ scenario(
 		await step(
 			'And the innermost holds a paragraph of "> > > > > > > > a"',
 			() => {
-				const p = doc.blocks.first[inner];
-				expect(doc.blocks.type[p]).toBe(PARAGRAPH);
-				const n = doc.inlines;
+				const n = doc.nodes.i32;
+				const p = n[(inner << 3) + F_FIRST];
+				expect(n[p << 3] & 0xff).toBe(PARAGRAPH);
 				let text = "";
-				for (let c = n.first[doc.roots[p]]; c !== -1; c = n.next[c])
-					text += inlineText(source, n, c);
+				for (let c = n[(p << 3) + F_FIRST]; c !== -1; c = n[(c << 3) + F_NEXT])
+					text += inlineText(source, doc.nodes, doc.spans, c);
 				expect(text).toBe("> > > > > > > > a");
 			},
 		);
@@ -199,21 +199,11 @@ function pushed(e, watch = null) {
 		autolink: e.extension === "autolink",
 	});
 	let got = "";
-	// the document so far: the parser's blocks and ranges, and the inlines of the leaves taken
-	const doc = {
-		blocks: parser.blocks,
-		ranges: parser.store,
-		inlines: inlines.table,
-		roots: [],
-	};
+	// the document so far: the parser's tables, the inlines of the leaves taken written into them
+	const doc = { nodes: parser.nodes, spans: parser.spans };
 	const take = (step) => {
 		for (const leaf of step[3])
-			doc.roots[leaf] = inlines.parseLeaf(
-				e.markdown,
-				parser.blocks,
-				parser.store,
-				leaf,
-			);
+			inlines.parseLeaf(e.markdown, parser.nodes, parser.spans, leaf);
 		if (step[2] !== -1)
 			got += referenceHtml(
 				doc,

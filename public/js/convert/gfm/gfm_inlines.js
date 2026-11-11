@@ -8,31 +8,37 @@ import {
 	CLOSETAG,
 	decodeEntity,
 	ESCAPABLE,
+	F_AT,
+	F_COUNT,
+	F_FIRST,
+	F_LAST,
+	F_NEXT,
+	F_OFFSET,
+	F_PARENT,
 	leafText,
 	normalizeLabel,
 	normalizeURI,
 	OPENTAG,
+	SPAN,
 	scanLinkDestination,
 	scanLinkLabel,
 	scanLinkTitle,
 	skipSpnl,
 } from "./gfm_blocks.js";
 
-// The types of the inlines, as the codes of the table's type column
-export const INLINE_ROOT = 0;
-export const TEXT = 1;
-export const CODE = 2;
-export const HTML_INLINE = 3;
-export const SOFTBREAK = 4;
-export const LINEBREAK = 5;
-export const EMPH = 6;
-export const STRONG = 7;
-export const DEL = 8;
-export const LINK = 9;
-export const IMAGE = 10;
-/** The name of each type of inline, by its code. */
+// The types of the inlines, as the codes of a row's type, after the blocks'
+export const TEXT = 16;
+export const CODE = 17;
+export const HTML_INLINE = 18;
+export const SOFTBREAK = 19;
+export const LINEBREAK = 20;
+export const EMPH = 21;
+export const STRONG = 22;
+export const DEL = 23;
+export const LINK = 24;
+export const IMAGE = 25;
+/** The name of each type of inline, by its code less TEXT. */
 export const INLINE_NAMES = Object.freeze([
-	"root",
 	"text",
 	"code",
 	"html_inline",
@@ -45,147 +51,51 @@ export const INLINE_NAMES = Object.freeze([
 	"image",
 ]);
 
-/** The inlines of a document as the rows of a table, and their text as pieces (gfm_inlines.d.ts). */
-export class InlineTable {
-	constructor() {
-		this.length = 0;
-		this.capacity = 0;
-		this.pieces = 0;
-		this.pieceCapacity = 0;
-		// the text of the pieces that are not in the parsed text, one after another
-		this.extra = "";
-		// a link's or an image's destination and title, by its index in column link
-		this.destinations = [];
-		this.titles = [];
-		this.grow(1024);
-		this.growPieces(1024);
+/** Add [start, end) of the parsed text (src 0) or of spans.extra (src 1) to the text of row, the last row with spans. */
+function addPiece(nodes, spans, row, src, start, end) {
+	const n = nodes.i32;
+	const R = row << 3;
+	const s = spans.i32;
+	const k = spans.length;
+	// a piece right after the row's last, in the same text, lengthens it
+	if (
+		n[R + F_COUNT] > 0 &&
+		s[(k - 1) * SPAN + 2] === src &&
+		s[(k - 1) * SPAN + 1] === start
+	) {
+		s[(k - 1) * SPAN + 1] = end;
+		return;
 	}
-
-	/** Make room for n rows (at least length), the rows there copied. */
-	grow(n) {
-		const copy = (Type, old) => {
-			const a = new Type(n);
-			if (old !== undefined) a.set(old.subarray(0, Math.min(old.length, n)));
-			return a;
-		};
-		this.type = copy(Uint8Array, this.type);
-		this.offset = copy(Uint32Array, this.offset);
-		this.parent = copy(Int32Array, this.parent);
-		this.first = copy(Int32Array, this.first);
-		this.last = copy(Int32Array, this.last);
-		this.prev = copy(Int32Array, this.prev);
-		this.next = copy(Int32Array, this.next);
-		this.pieceAt = copy(Uint32Array, this.pieceAt);
-		this.pieceCount = copy(Uint32Array, this.pieceCount);
-		this.link = copy(Int32Array, this.link);
-		this.capacity = n;
-	}
-
-	/** Make room for n pieces (at least pieces), the pieces there copied. */
-	growPieces(n) {
-		const span = new Uint32Array(2 * n);
-		const src = new Uint8Array(n);
-		if (this.span !== undefined) {
-			span.set(this.span.subarray(0, 2 * Math.min(this.pieces, n)));
-			src.set(this.src.subarray(0, Math.min(this.pieces, n)));
-		}
-		this.span = span;
-		this.src = src;
-		this.pieceCapacity = n;
-	}
-
-	/** Give up the room past the last row and piece, once no more are added. */
-	compact() {
-		if (this.capacity > this.length) this.grow(this.length);
-		if (this.pieceCapacity > this.pieces) this.growPieces(this.pieces);
-	}
-
-	/** A new row, of no parent, children or pieces; its index. */
-	add(type, offset) {
-		const i = this.length;
-		if (i === this.capacity) this.grow(2 * i);
-		this.type[i] = type;
-		this.offset[i] = offset;
-		this.parent[i] = -1;
-		this.first[i] = -1;
-		this.last[i] = -1;
-		this.prev[i] = -1;
-		this.next[i] = -1;
-		this.pieceAt[i] = 0;
-		this.pieceCount[i] = 0;
-		this.link[i] = -1;
-		this.length = i + 1;
-		return i;
-	}
-
-	/** Make child the last child of parent. */
-	append(parent, child) {
-		const last = this.last[parent];
-		this.parent[child] = parent;
-		this.prev[child] = last;
-		if (last === -1) this.first[parent] = child;
-		else this.next[last] = child;
-		this.last[parent] = child;
-	}
-
-	/** Take the last child out of parent. */
-	unlinkLast(parent) {
-		const node = this.last[parent];
-		const prev = this.prev[node];
-		this.last[parent] = prev;
-		if (prev === -1) this.first[parent] = -1;
-		else this.next[prev] = -1;
-		this.parent[node] = -1;
-		this.prev[node] = -1;
-	}
-
-	/** Give row a destination and a title. */
-	setLink(row, destination, title) {
-		this.link[row] = this.destinations.length;
-		this.destinations.push(destination);
-		this.titles.push(title);
-	}
-
-	/** Add [start, end) of the parsed text (src 0) or of extra (src 1) to the text of row, the last row with pieces. */
-	piece(row, src, start, end) {
-		const n = this.pieces;
-		// a piece right after the row's last, in the same text, lengthens it
-		if (
-			this.pieceCount[row] > 0 &&
-			this.src[n - 1] === src &&
-			this.span[2 * n - 1] === start
-		) {
-			this.span[2 * n - 1] = end;
-			return;
-		}
-		if (n === this.pieceCapacity) this.growPieces(2 * n);
-		this.span[2 * n] = start;
-		this.span[2 * n + 1] = end;
-		this.src[n] = src;
-		if (this.pieceCount[row] === 0) this.pieceAt[row] = n;
-		this.pieceCount[row]++;
-		this.pieces = n + 1;
-	}
-
-	/** Add s, a string not in the parsed text, to the text of row. */
-	literal(row, s) {
-		const start = this.extra.length;
-		this.extra += s;
-		this.piece(row, 1, start, this.extra.length);
-	}
+	const i = spans.push(start, end, src);
+	if (n[R + F_COUNT] === 0) n[R + F_AT] = i;
+	n[R + F_COUNT]++;
 }
 
-/** The text of row of t, its pieces joined, read from source, the text the inlines were parsed from. */
-export function inlineText(source, t, row) {
-	const at = t.pieceAt[row];
-	const end = at + t.pieceCount[row];
-	let s = "";
+/** Add s, a string not in the parsed text, to the text of row. */
+function addLiteral(nodes, spans, row, s) {
+	const start = spans.extra.length;
+	spans.extra += s;
+	addPiece(nodes, spans, row, 1, start, spans.extra.length);
+}
+
+/** Give row, a link or an image, its destination and title: strings[F_AT] and the one after (a link has no pieces). */
+function setLink(nodes, row, destination, title) {
+	nodes.i32[(row << 3) + F_AT] = nodes.addString(destination);
+	nodes.strings.push(title);
+}
+
+/** The text of row of nodes, its pieces joined, read from source, the text the inlines were parsed from. */
+export function inlineText(source, nodes, spans, row) {
+	const at = nodes.i32[(row << 3) + F_AT];
+	const end = at + nodes.i32[(row << 3) + F_COUNT];
+	const s = spans.i32;
+	let text = "";
 	for (let i = at; i < end; i++)
-		s += (t.src[i] === 0 ? source : t.extra).slice(
-			t.span[2 * i],
-			t.span[2 * i + 1],
+		text += (s[i * SPAN + 2] === 0 ? source : spans.extra).slice(
+			s[i * SPAN],
+			s[i * SPAN + 1],
 		);
-	return s;
+	return text;
 }
 
 /** A character reference, matched where the parser is (sticky). */
@@ -339,7 +249,9 @@ export class InlineParser {
 		this.decodeName = decodeName;
 		this.autolink = autolink;
 		this.refmap = refmap;
-		this.table = new InlineTable();
+		// the tables the leaf being parsed writes its inlines into, the document's
+		this.nodes = null;
+		this.spans = null;
 		this.source = "";
 		// the leaf's lines: where each starts in its content (lineAt) and in the text of its pieces (lineSrc)
 		this.lineAt = new Uint32Array(64);
@@ -407,40 +319,40 @@ export class InlineParser {
 		return this.nextNewline < end;
 	}
 
-	/** Parse the content of leaf, a paragraph, a heading or a table cell of blocks, read from source; its root row. */
-	parseLeaf(source, blocks, ranges, leaf) {
-		const content = leafText(source, blocks, ranges, leaf);
-		const n = blocks.rangeCount[leaf];
+	/** Parse the content of leaf, a paragraph, a heading or a table cell of nodes, read from source, as its children. */
+	parseLeaf(source, nodes, spans, leaf) {
+		const content = leafText(source, nodes, spans, leaf);
+		const n = nodes.i32[(leaf << 3) + F_COUNT];
 		if (n > this.lineAt.length) {
 			this.lineAt = new Uint32Array(2 * n);
 			this.lineSrc = new Uint32Array(2 * n);
 		}
-		const at = blocks.rangeAt[leaf];
-		const u32 = ranges.u32;
+		const at = nodes.i32[(leaf << 3) + F_AT];
+		const s32 = spans.i32;
 		let pos = 0;
 		let nul = false;
 		for (let k = 0; k < n; k++) {
-			const a = u32[2 * (at + k)];
-			const b = u32[2 * (at + k) + 1];
+			const a = s32[(at + k) * SPAN];
+			const b = s32[(at + k) * SPAN + 1];
 			this.lineAt[k] = pos;
 			this.lineSrc[k] = a;
 			pos += b - a + 1;
 			if (!nul && this.nulAt(source, a) < b) nul = true;
 		}
 		this.source = source;
+		this.nodes = nodes;
+		this.spans = spans;
 		this.lines = n;
 		this.src = 0;
 		// a content not just its ranges joined (a NUL, a \| of a cell) is put in extra whole
 		if (nul || (n > 0 && pos - 1 !== content.length)) {
 			this.lines = 1;
 			this.lineAt[0] = 0;
-			this.lineSrc[0] = this.table.extra.length;
-			this.table.extra += content;
+			this.lineSrc[0] = spans.extra.length;
+			spans.extra += content;
 			this.src = 1;
 		}
-		const root = this.table.add(INLINE_ROOT, 0);
-		this.parse(root, content);
-		return root;
+		this.parse(leaf, content);
 	}
 
 	/** The first NUL of source at or after i (its length: none), looked for once ahead. */
@@ -462,7 +374,7 @@ export class InlineParser {
 		while (k > 0 && this.lineAt[k] > c) k--;
 		this.line = k;
 		const from = this.lineSrc[k] + (c - this.lineAt[k]);
-		this.table.piece(row, this.src, from, from + (end - start));
+		addPiece(this.nodes, this.spans, row, this.src, from, from + (end - start));
 	}
 
 	/** Parse content as the inlines of root. */
@@ -973,7 +885,8 @@ export class InlineParser {
 
 	/** Step 3: the items, read once in order, as the children of root. */
 	build(root) {
-		const t = this.table;
+		const t = this.nodes;
+		const sp = this.spans;
 		const stack = [root];
 		let top = root;
 		let text = -1;
@@ -982,7 +895,7 @@ export class InlineParser {
 		const textRow = (offset) => {
 			if (text === -1) {
 				text = t.add(TEXT, offset);
-				t.append(top, text);
+				t.appendInline(top, text);
 			}
 			return text;
 		};
@@ -1000,7 +913,7 @@ export class InlineParser {
 		};
 		const addLit = (s, offset) => {
 			if (s === "") return;
-			t.literal(textRow(offset), s);
+			addLiteral(t, sp, textRow(offset), s);
 			if (!hasAt && s.includes("@")) hasAt = true;
 		};
 		const addItem = (item, offset) => {
@@ -1016,7 +929,7 @@ export class InlineParser {
 		const open = (type, offset) => {
 			endText();
 			const n = t.add(type, offset);
-			t.append(top, n);
+			t.appendInline(top, n);
 			stack.push(n);
 			top = n;
 			return n;
@@ -1029,10 +942,10 @@ export class InlineParser {
 		// a node of one piece of text, the item's
 		const leafOf = (type, item, parent) => {
 			const n = t.add(type, item.offset);
-			t.append(parent, n);
+			t.appendInline(parent, n);
 			if (item.lit === null) {
 				if (item.end > item.start) this.piece(n, item.start, item.end);
-			} else if (item.lit !== "") t.literal(n, item.lit);
+			} else if (item.lit !== "") addLiteral(t, sp, n, item.lit);
 			return n;
 		};
 		for (const item of this.items) {
@@ -1053,7 +966,7 @@ export class InlineParser {
 					break;
 				case K_LINK_OPEN: {
 					const n = open(item.data.image ? IMAGE : LINK, item.offset);
-					t.setLink(n, item.data.destination, item.data.title);
+					setLink(t, n, item.data.destination, item.data.title);
 					inLink++;
 					break;
 				}
@@ -1069,7 +982,7 @@ export class InlineParser {
 				case K_SOFTBREAK:
 				case K_LINEBREAK:
 					endText();
-					t.append(
+					t.appendInline(
 						top,
 						t.add(
 							item.kind === K_SOFTBREAK ? SOFTBREAK : LINEBREAK,
@@ -1080,8 +993,8 @@ export class InlineParser {
 				case K_AUTOLINK: {
 					endText();
 					const link = t.add(LINK, item.offset);
-					t.append(top, link);
-					t.setLink(link, item.data, "");
+					t.appendInline(top, link);
+					setLink(t, link, item.data, "");
 					leafOf(TEXT, item, link);
 					break;
 				}
@@ -1092,23 +1005,36 @@ export class InlineParser {
 
 	/** Turn the email addresses of text, the last row, into links, the row replaced by its pieces (GFM's postprocess). */
 	autolinkEmails(text) {
-		const t = this.table;
-		const s = inlineText(this.source, t, text);
+		const t = this.nodes;
+		const sp = this.spans;
+		const s = inlineText(this.source, t, sp, text);
 		const parts = splitEmails(s);
 		if (parts.length === 3 && parts[0] === 0) return;
-		const parent = t.parent[text];
-		const offset = t.offset[text];
-		const at = t.pieceAt[text];
+		const T = text << 3;
+		const parent = t.i32[T + F_PARENT];
+		const offset = t.i32[T + F_OFFSET];
+		const at = t.i32[T + F_AT];
 		// of one piece, the parts are pieces of it; else literals
-		const single = t.pieceCount[text] === 1;
-		const src = t.src[at];
-		const base = t.span[2 * at];
-		t.unlinkLast(parent);
+		const single = t.i32[T + F_COUNT] === 1;
+		const src = sp.i32[at * SPAN + 2];
+		const base = sp.i32[at * SPAN];
+		// text is the last row and parent's last child; the one before it, found from the first, is the last now
+		const n = t.i32;
+		let prev = -1;
+		for (
+			let c = n[(parent << 3) + F_FIRST];
+			c !== text;
+			c = n[(c << 3) + F_NEXT]
+		)
+			prev = c;
+		n[(parent << 3) + F_LAST] = prev;
+		if (prev === -1) n[(parent << 3) + F_FIRST] = -1;
+		else n[(prev << 3) + F_NEXT] = -1;
 		t.length = text;
-		t.pieces = at;
+		sp.length = at;
 		const textOf = (row, from, to) => {
-			if (single) t.piece(row, src, base + from, base + to);
-			else t.literal(row, s.slice(from, to));
+			if (single) addPiece(t, sp, row, src, base + from, base + to);
+			else addLiteral(t, sp, row, s.slice(from, to));
 		};
 		for (let i = 0; i < parts.length; i += 3) {
 			const from = parts[i + 1];
@@ -1116,10 +1042,10 @@ export class InlineParser {
 			const row = t.add(TEXT, offset + from);
 			if (parts[i] === 1) {
 				const link = t.add(LINK, offset + from);
-				t.append(parent, link);
-				t.setLink(link, normalizeURI(`mailto:${s.slice(from, to)}`), "");
-				t.append(link, row);
-			} else t.append(parent, row);
+				t.appendInline(parent, link);
+				setLink(t, link, normalizeURI(`mailto:${s.slice(from, to)}`), "");
+				t.appendInline(link, row);
+			} else t.appendInline(parent, row);
 			textOf(row, from, to);
 		}
 	}

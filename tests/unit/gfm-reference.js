@@ -16,7 +16,15 @@ const {
 	BLOCK_QUOTE,
 	blockLines,
 	CODE_BLOCK,
+	B_A,
+	B_C,
+	B_D,
+	B_STR,
 	DOCUMENT,
+	F_AT,
+	F_FIRST,
+	F_NEXT,
+	F_PARENT,
 	HEADING,
 	HTML_BLOCK,
 	ITEM,
@@ -103,9 +111,9 @@ const TAGFILTER =
 const tagfilter = (s) => s.replace(TAGFILTER, "&lt;");
 
 /**
- * The document doc ({ blocks, ranges, inlines, roots }, as parseGfm gives it), parsed from source, as GFM's reference HTML, or
- * its block at row when row is given. options.tagfilter (true by default) writes raw HTML through the tagfilter
- * extension. As cmark-gfm does, a strong right inside a strong writes no tags of its own.
+ * The document doc ({ nodes, spans }, as parseGfm gives it), parsed from source, as GFM's reference HTML, or its block
+ * at row when row is given. options.tagfilter (true by default) writes raw HTML through the tagfilter extension. As
+ * cmark-gfm does, a strong right inside a strong writes no tags of its own.
  */
 export function referenceHtml(
 	doc,
@@ -114,17 +122,22 @@ export function referenceHtml(
 	row = 0,
 ) {
 	const raw = filter ? tagfilter : (s) => s;
-	const t = doc.blocks;
-	const n = doc.inlines;
-	const textOf = (i) => inlineText(source, n, i);
+	const t = doc.nodes;
+	const n = t.i32;
+	const type = (i) => n[i << 3] & 0xff;
+	const slot = (i, f) => n[(i << 3) + f];
+	// a block's own field
+	const field = (i, f) => t.b32[(i << 3) + f];
+	const textOf = (i) => inlineText(source, t, doc.spans, i);
+	const lines = (i) => blockLines(source, t, doc.spans, i);
 	let out = "";
 	const cr = () => {
 		if (out !== "" && !out.endsWith("\n")) out += "\n";
 	};
 	const plain = (i) => {
 		let s = "";
-		for (let c = n.first[i]; c !== -1; c = n.next[c]) {
-			const ty = n.type[c];
+		for (let c = slot(i, F_FIRST); c !== -1; c = slot(c, F_NEXT)) {
+			const ty = type(c);
 			if (ty === TEXT || ty === CODE || ty === HTML_INLINE) s += textOf(c);
 			else if (ty === SOFTBREAK || ty === LINEBREAK) s += "\n";
 			else s += plain(c);
@@ -133,55 +146,54 @@ export function referenceHtml(
 	};
 	// a paragraph in an item of a tight list writes no <p>
 	const tight = (i) => {
-		const item = t.parent[i];
-		const list = item === -1 ? -1 : t.parent[item];
-		return list !== -1 && t.type[list] === LIST && t.d[list] === 1;
+		const item = slot(i, F_PARENT);
+		const list = item === -1 ? -1 : slot(item, F_PARENT);
+		return list !== -1 && type(list) === LIST && field(list, B_D) === 1;
 	};
-	const inlines = (i) => {
-		const root = doc.roots[i];
-		for (let c = n.first[root]; c !== -1; c = n.next[c]) render(c);
+	// a leaf's children are its inlines, a container's its blocks
+	const children = (i) => {
+		for (let c = slot(i, F_FIRST); c !== -1; c = slot(c, F_NEXT)) node(c);
 	};
-	const blocks = (i) => {
-		for (let c = t.first[i]; c !== -1; c = t.next[c]) block(c);
-	};
-	const block = (i) => {
-		switch (t.type[i]) {
+	const node = (i) => {
+		const ty = type(i);
+		switch (ty) {
 			case DOCUMENT:
-				blocks(i);
+				children(i);
 				break;
 			case PARAGRAPH:
-				if (tight(i)) inlines(i);
+				if (tight(i)) children(i);
 				else {
 					cr();
 					out += "<p>";
-					inlines(i);
+					children(i);
 					out += "</p>";
 					cr();
 				}
 				break;
 			case HEADING:
 				cr();
-				out += `<h${t.a[i]}>`;
-				inlines(i);
-				out += `</h${t.a[i]}>`;
+				out += `<h${field(i, B_A)}>`;
+				children(i);
+				out += `</h${field(i, B_A)}>`;
 				cr();
 				break;
 			case BLOCK_QUOTE:
 				cr();
 				out += "<blockquote>";
 				cr();
-				blocks(i);
+				children(i);
 				cr();
 				out += "</blockquote>";
 				cr();
 				break;
 			case LIST: {
-				const tag = t.a[i] === 1 ? "ol" : "ul";
+				const tag = field(i, B_A) === 1 ? "ol" : "ul";
+				const start = field(i, B_C);
 				cr();
 				out +=
-					tag === "ol" && t.c[i] !== 1 ? `<ol start="${t.c[i]}">` : `<${tag}>`;
+					tag === "ol" && start !== 1 ? `<ol start="${start}">` : `<${tag}>`;
 				cr();
-				blocks(i);
+				children(i);
 				cr();
 				out += `</${tag}>`;
 				cr();
@@ -189,21 +201,22 @@ export function referenceHtml(
 			}
 			case ITEM:
 				out += "<li>";
-				if (t.c[i] === 2)
+				if (field(i, B_C) === 2)
 					out += '<input checked="" disabled="" type="checkbox"> ';
-				if (t.c[i] === 1) out += '<input disabled="" type="checkbox"> ';
-				blocks(i);
+				if (field(i, B_C) === 1) out += '<input disabled="" type="checkbox"> ';
+				children(i);
 				out += "</li>";
 				cr();
 				break;
 			case CODE_BLOCK: {
 				cr();
-				const lang = (t.info.get(i) ?? "").split(/[ \t\n]+/)[0];
+				const info = field(i, B_STR) === -1 ? "" : t.strings[field(i, B_STR)];
+				const lang = info.split(/[ \t\n]+/)[0];
 				out += lang
 					? `<pre><code class="language-${escapeXml(lang)}">`
 					: "<pre><code>";
 				out += `${escapeXml(
-					blockLines(source, t, doc.ranges, i)
+					lines(i)
 						.map((l) => `${l}\n`)
 						.join(""),
 				)}</code></pre>`;
@@ -212,7 +225,7 @@ export function referenceHtml(
 			}
 			case HTML_BLOCK:
 				cr();
-				out += raw(blockLines(source, t, doc.ranges, i).join("\n"));
+				out += raw(lines(i).join("\n"));
 				cr();
 				break;
 			case THEMATIC_BREAK:
@@ -223,38 +236,32 @@ export function referenceHtml(
 			case TABLE: {
 				cr();
 				out += "<table>\n<thead>\n";
-				const row = (r, tag) => {
+				const tr = (r, tag) => {
 					out += "<tr>\n";
-					for (let cell = t.first[r]; cell !== -1; cell = t.next[cell]) {
-						const align = ALIGNS[t.a[cell]];
+					for (
+						let cell = slot(r, F_FIRST);
+						cell !== -1;
+						cell = slot(cell, F_NEXT)
+					) {
+						const align = ALIGNS[field(cell, B_A)];
 						out += align ? `<${tag} align="${align}">` : `<${tag}>`;
-						inlines(cell);
+						children(cell);
 						out += `</${tag}>\n`;
 					}
 					out += "</tr>\n";
 				};
-				const head = t.first[i];
-				row(head, "th");
+				const head = slot(i, F_FIRST);
+				tr(head, "th");
 				out += "</thead>\n";
-				if (t.next[head] !== -1) {
+				if (slot(head, F_NEXT) !== -1) {
 					out += "<tbody>\n";
-					for (let r = t.next[head]; r !== -1; r = t.next[r]) row(r, "td");
+					for (let r = slot(head, F_NEXT); r !== -1; r = slot(r, F_NEXT))
+						tr(r, "td");
 					out += "</tbody>\n";
 				}
 				out += "</table>\n";
 				break;
 			}
-			default:
-				throw new Error(`no reference HTML for ${BLOCK_NAMES[t.type[i]]}`);
-		}
-	};
-	const render = (i) => {
-		const kids = () => {
-			for (let c = n.first[i]; c !== -1; c = n.next[c]) render(c);
-		};
-		const link = n.link[i];
-		const ty = n.type[i];
-		switch (ty) {
 			case TEXT:
 				out += escapeXml(textOf(i));
 				break;
@@ -273,32 +280,39 @@ export function referenceHtml(
 			case EMPH:
 			case STRONG:
 			case DEL: {
-				if (ty === STRONG && n.type[n.parent[i]] === STRONG) {
-					kids();
+				if (ty === STRONG && type(slot(i, F_PARENT)) === STRONG) {
+					children(i);
 					break;
 				}
 				const tag = ty === EMPH ? "em" : ty === STRONG ? "strong" : "del";
 				out += `<${tag}>`;
-				kids();
+				children(i);
 				out += `</${tag}>`;
 				break;
 			}
 			case LINK:
-				out += `<a href="${escapeXml(n.destinations[link])}"`;
-				if (n.titles[link]) out += ` title="${escapeXml(n.titles[link])}"`;
-				out += ">";
-				kids();
-				out += "</a>";
+			case IMAGE: {
+				const k = slot(i, F_AT);
+				const title = t.strings[k + 1];
+				if (ty === LINK) {
+					out += `<a href="${escapeXml(t.strings[k])}"`;
+					if (title) out += ` title="${escapeXml(title)}"`;
+					out += ">";
+					children(i);
+					out += "</a>";
+				} else {
+					out += `<img src="${escapeXml(t.strings[k])}" alt="${escapeXml(plain(i))}"`;
+					if (title) out += ` title="${escapeXml(title)}"`;
+					out += " />";
+				}
 				break;
-			case IMAGE:
-				out += `<img src="${escapeXml(n.destinations[link])}" alt="${escapeXml(plain(i))}"`;
-				if (n.titles[link]) out += ` title="${escapeXml(n.titles[link])}"`;
-				out += " />";
-				break;
+			}
 			default:
-				throw new Error(`no reference HTML for ${INLINE_NAMES[ty]}`);
+				throw new Error(
+					`no reference HTML for ${ty >= TEXT ? INLINE_NAMES[ty - TEXT] : BLOCK_NAMES[ty]}`,
+				);
 		}
 	};
-	block(row);
+	node(row);
 	return out;
 }
