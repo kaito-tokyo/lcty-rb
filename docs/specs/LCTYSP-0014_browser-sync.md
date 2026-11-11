@@ -174,9 +174,18 @@ When the connection is open and `initialize` has answered:
 
 - **The `c_meta` and `c_recordcount` records** of a `c.batch.updated` are written by the worker of `lcty_c` in one
   transaction under the version rule, and the sidebar is redrawn from them.
-- **The `c_html` records** of the conversation shown that another page made (another `actorId`) put the conversation
-  [out of sync](#out-of-sync): they are not applied to the document, whether or not they follow its last element.
-  Those of the page's own `actorId` are already in its document. Applying the records that follow is left for later.
+- **The `c_html` records** of the conversation shown that another page made (another `actorId`) are applied to the
+  document, in order, each when it follows the document's last element: an `append` whose `after` is the id of the
+  last element adds the element after it, and an `unappend` of the last element removes it. One that does not follow
+  puts the conversation [out of sync](#out-of-sync). Those of the page's own `actorId` are already in its document.
+  - **The element is built here,** from the tag and attributes of the record: no HTML comes over `/v1/rpc`
+    ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)). Its `<article>` is made from its text as the page makes its own: a
+    user message's is the text alone, a model or system message's and a thinking's the Markdown rendered by
+    `markdown.js`. The page's DOM never holds HTML another page made.
+  - **An `lcty-cmd` is another page's lock:** it is added marked held ("A reply is being made in another tab") and
+    never runs here; the page sends nothing while it is the last element, and the record that removes it removes it
+    here too. One with `data-error` shows itself as failed.
+  - **The title** follows the `c_meta` records of the conversation that another page made.
 - **`c.cmd.holds`** is answered `{holds: true}` while the page runs that `lcty-cmd`, `{holds: false}` otherwise, at
   once: the page that asked waits only a short time.
 

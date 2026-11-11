@@ -166,8 +166,25 @@ Feature: LCTYSP-2002 The conversation page
     Then the lock reads "返信が途中のまま残っています" with Retry and Remove
     And llama-server is sent nothing
 
-  Scenario: A change by another tab makes the page ask for a reload
+  # Another tab's changes are applied, each element built from its text: no HTML comes over /v1/rpc (LCTYSP-0014)
+  Scenario: A message another tab appends is shown, its presentation made from its text
     Given a conversation of two finished turns is open
+    When another connection appends a user message "別のタブから" and a reply "**太字**" whose presentation in the file is "<p>ファイルの表示</p>"
+    Then the page shows six messages, the last user message "別のタブから"
+    And the reply shows "太字" in bold, made from its Markdown, not "ファイルの表示"
+    And the composer can still be used
+
+  Scenario: A lock another tab takes is shown as held and does not run here
+    Given a conversation of two finished turns is open
+    When another connection appends a user message and an lcty-cmd send
+    Then the lock reads "別のタブで返信を作っています"
+    And llama-server is sent nothing
+    When the other connection removes the lock
+    Then the page has no lock
+
+  Scenario: A change by another tab that does not follow the page makes it ask for a reload
+    Given a conversation of two finished turns is open
+    And the page's document ends with a message the file does not have
     When another connection appends a user message to it through /v1/rpc
     Then the composer is disabled and asks for a reload
     And the page sends nothing more when "送らない質問" is typed and Enter is pressed

@@ -38,6 +38,14 @@ Feature: LCTYSP-1023 The elements of lcty-msg built by the page
     When elementOf builds an lcty-msg from the attributes of a user message and its article
     Then the element has the attributes in their order and the <article> as its only child
 
+  # Another page's element comes as its tag and attributes only: no HTML comes over /v1/rpc (LCTYSP-0012)
+  Scenario: elementFromAttrs builds another page's element, its article made here from the text
+    When elementFromAttrs builds a model message "**bold**", a user message "<b>", a model message in data-content-base64 and an lcty-cmd
+    Then the model message's article holds <p><strong>bold</strong></p>
+    And the user message's is <article>&lt;b&gt;</article>
+    And the base64 one's holds its decoded text
+    And the lcty-cmd has no children
+
   Scenario: lastElement is the last element of the file, skipping what is not written
     Given a container holding a system message, a user message and a draft <lcty-message data-draft>
     Then lastElement is the user message

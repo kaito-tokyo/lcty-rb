@@ -153,6 +153,58 @@ test("elementOf builds the element from its attributes and presentation", async 
 	});
 });
 
+test("elementFromAttrs builds another page's element, its article made here from the text", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	let r;
+	await test.step('When elementFromAttrs builds a model message "**bold**", a user message "<b>", a model message in data-content-base64 and an lcty-cmd', async () => {
+		r = await page.evaluate(() => {
+			const M = window.M;
+			const html = (el) => [...el.children].map((c) => c.outerHTML);
+			const model = M.elementFromAttrs(
+				"lcty-msg",
+				M.msgAttrs("model", "**bold**", { at: "2026-11-10T09:00:00+09:00" }),
+			);
+			const user = M.elementFromAttrs(
+				"lcty-msg",
+				M.msgAttrs("user", "<b>", { at: "2026-11-10T09:00:00+09:00" }),
+			);
+			const b64 = M.elementFromAttrs(
+				"lcty-msg",
+				M.msgAttrs("model", "a\u0001b", { at: "2026-11-10T09:00:00+09:00" }),
+			);
+			const cmd = M.elementFromAttrs(
+				"lcty-cmd",
+				M.cmdAttrs("send", "2026-11-10T09:00:00+09:00"),
+			);
+			return {
+				model: html(model),
+				user: html(user),
+				b64: b64.querySelector(":scope > article").textContent,
+				b64Attr: b64.hasAttribute("data-content-base64"),
+				cmd: cmd.children.length,
+			};
+		});
+	});
+	await test.step("Then the model message's article holds <p><strong>bold</strong></p>", () => {
+		expect(r.model).toEqual([
+			"<article><p><strong>bold</strong></p></article>",
+		]);
+	});
+	await test.step("And the user message's is <article>&lt;b&gt;</article>", () => {
+		expect(r.user).toEqual(["<article>&lt;b&gt;</article>"]);
+	});
+	await test.step("And the base64 one's holds its decoded text", () => {
+		expect(r.b64Attr).toBe(true);
+		expect(r.b64).toContain("a\u0001b");
+	});
+	await test.step("And the lcty-cmd has no children", () => {
+		expect(r.cmd).toBe(0);
+	});
+});
+
 test("lastElement is the last element of the file, skipping what is not written", async ({
 	page,
 	context,
