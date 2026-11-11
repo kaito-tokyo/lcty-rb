@@ -187,6 +187,14 @@ Feature: LCTYSP-2002 The conversation page
     When the other connection removes the lock
     Then the page has no lock
 
+  # A tab closed in the middle of a reply never removes its lock: the page asks again while it shows the lock as held
+  Scenario: A lock left by a tab that went away is shown as unfinished
+    Given a conversation of two finished turns is open
+    When another connection appends a user message and an lcty-cmd send, and closes without removing it
+    Then the lock reads "別のタブで返信を作っています" at first
+    And within 10 seconds it reads "返信が途中のまま残っています" with Retry and Remove
+    And llama-server is sent nothing
+
   Scenario: A change by another tab that does not follow the page makes it ask for a reload
     Given a conversation of two finished turns is open
     And the page's document ends with a message the file does not have

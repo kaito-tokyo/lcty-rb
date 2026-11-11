@@ -169,7 +169,8 @@ When the connection is open and `initialize` has answered:
    nothing was missed since the file was loaded, and the notifications of the conversation follow from the version
    answered.
 3. **A lock found at the end:** when the last element is an `lcty-cmd` the page did not start, it calls `c.cmd.held`.
-   When a page holds it, it shows that a reply is being made in another tab; when none does, it asks the user whether
+   When a page holds it, it shows that a reply is being made in another tab, and asks again while it shows so
+   ([below](#applying-notifications)); when none does, it asks the user whether
    to run it again or remove it ([LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md#lcty-cmd)).
 
 ## Applying notifications
@@ -187,6 +188,9 @@ When the connection is open and `initialize` has answered:
   - **An `lcty-cmd` is another page's lock:** it is added marked held ("A reply is being made in another tab") and
     never runs here; the page sends nothing while it is the last element, and the record that removes it removes it
     here too. One with `data-error` shows itself as failed.
+  - **A held lock is asked about again** every 5 seconds while it is shown so, with `c.cmd.held`: a page closed in
+    the middle of a reply never removes its lock. Once no page holds it, it shows as left unfinished, with "Retry"
+    and "Remove", as when the page found it at the start.
   - **The title** follows the `c_meta` records of the conversation that another page made, and the ⓘ of a reply its
     `c_stats` records.
 - **`c.cmd.holds`** is answered `{holds: true}` while the page runs that `lcty-cmd`, `{holds: false}` otherwise, at

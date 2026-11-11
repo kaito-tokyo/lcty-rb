@@ -356,7 +356,8 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
     **Regenerate** removes what follows the last user message and takes the lock again. **Fork** goes to the new
     conversation page.
   - **A lock the page did not start** is not run: the page asks `c.cmd.held`, and shows "A reply is being made in
-    another tab" when a tab holds it, or "A reply was left unfinished" with "Retry" and "Remove" when none does. The new
+    another tab" when a tab holds it, asking again every 5 seconds while it shows so, or "A reply was left unfinished"
+    with "Retry" and "Remove" when none does. The new
     conversation page marks the lock it appended (`sessionStorage` `lcty.run.<id>`), so that tab runs it.
   - **A change made by another tab** to the conversation shows here as it is made: its messages are added or removed,
     their presentation made by this page from their text, its lock shows as held, and its title and the ⓘ of its

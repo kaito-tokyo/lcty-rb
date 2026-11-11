@@ -739,6 +739,51 @@ test("A lock another tab takes is shown as held and does not run here", async ({
 	});
 });
 
+test("A lock left by a tab that went away is shown as unfinished", async ({
+	page,
+	request,
+	llm,
+}) => {
+	const conv = await test.step(TWO_TURNS, () => openTwoTurns(page, request));
+	await test.step("When another connection appends a user message and an lcty-cmd send, and closes without removing it", () =>
+		withRpc(async (call) => {
+			const user = otherAttrs("user", "途中で閉じたタブ");
+			await call("c.append.msg", {
+				cid: conv.id,
+				after: `msg-m-${conv.messages[3].id}`,
+				attrs: user,
+				innerHTML: "<article>途中で閉じたタブ</article>",
+			});
+			await call("c.append.cmd", {
+				cid: conv.id,
+				after: user.id,
+				attrs: {
+					id: `cmd-${uuidv7()}`,
+					"data-op": "send",
+					"data-at": new Date().toISOString(),
+				},
+			});
+		}));
+	await test.step('Then the lock reads "別のタブで返信を作っています" at first', async () => {
+		await expect(lock(page)).toHaveAttribute("state", "held");
+	});
+	await test.step('And within 10 seconds it reads "返信が途中のまま残っています" with Retry and Remove', async () => {
+		await expect(lock(page)).toHaveAttribute("state", "stale", {
+			timeout: 10_000,
+		});
+		await expect(lock(page).locator('[part~="lcty-cmd__label"]')).toHaveText(
+			"返信が途中のまま残っています",
+		);
+		await expect(lock(page).locator('[part~="lcty-cmd__retry"]')).toBeVisible();
+		await expect(
+			lock(page).locator('[part~="lcty-cmd__remove"]'),
+		).toBeVisible();
+	});
+	await test.step("And llama-server is sent nothing", () => {
+		expect(llm.requests).toHaveLength(0);
+	});
+});
+
 test("A change by another tab that does not follow the page makes it ask for a reload", async ({
 	page,
 	request,

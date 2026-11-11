@@ -202,6 +202,7 @@ function applyRecord(op, row) {
 				);
 		}
 		log.append(el);
+		if (el.getAttribute("state") === "held") watchHeld(el);
 	} else return false;
 	markLast();
 	return true;
@@ -621,7 +622,37 @@ async function checkLock(cmd) {
 			"cmdHeld",
 			"A reply is being made in another tab",
 		);
+		watchHeld(cmd);
 	} else cmd.label.textContent = tr("cmdStale", "A reply was left unfinished");
+}
+
+// How often a lock another tab holds is asked about again while it is shown
+const HELD_RECHECK_MS = 5000;
+
+/**
+ * While cmd shows as held by another tab, ask again every few seconds whether a tab still holds it (c.cmd.held): a tab
+ * closed in the middle of a reply never removes its lock, and this page would show it as held for good. Once none
+ * does, it shows as left unfinished, with Retry and Remove. Stops when cmd is no longer the held lock at the end.
+ */
+function watchHeld(cmd) {
+	const stillHeld = () =>
+		!state.outOfSync &&
+		cmd.isConnected &&
+		lastElement(log) === cmd &&
+		cmd.getAttribute("state") === "held";
+	const recheck = async () => {
+		if (!stillHeld()) return;
+		let held = true;
+		try {
+			({ held } = await rpc.call("c.cmd.held", { cid, id: cmd.id }));
+		} catch {} // asked again next time
+		if (!stillHeld()) return;
+		if (held) return void setTimeout(recheck, HELD_RECHECK_MS);
+		cmd.setAttribute("state", "stale");
+		if (cmd.label)
+			cmd.label.textContent = tr("cmdStale", "A reply was left unfinished");
+	};
+	setTimeout(recheck, HELD_RECHECK_MS);
 }
 
 // ---- Undo, regenerate, fork (LCTYSP-0004) ----
