@@ -64,6 +64,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1023](LCTYSP-1023_lcty-msg-elements.feature)          | `js/ui/lcty-msg.js`: the elements the page builds           |       0 |       7 |
 | [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | `js/api/tab-rpc.js`: the tab's connection                   |       5 |       0 |
 | [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)                 | `js/convert/gfm/converter.js`: parsing GFM                  |      17 |       0 |
+| [LCTYSP-1026](LCTYSP-1026_committed-converter.feature)        | `js/convert/gfm/committed.js`: GFM as lcty-rb's HTML        |      28 |       0 |
 
 ## How a feature is written
 

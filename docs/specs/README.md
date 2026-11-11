@@ -64,6 +64,7 @@ for the backend ones).
 | [LCTYSP-1023](LCTYSP-1023_lcty-msg-elements.feature)          | The elements of lcty-msg built by the page    | `tests/unit/lcty-msg.spec.js`                                |
 | [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | The tab's connection to /v1/rpc               | `tests/unit/tab-rpc.test.js`                                 |
 | [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)                 | Parsing GitHub Flavored Markdown              | `tests/unit/gfm-parser.test.js`                              |
+| [LCTYSP-1026](LCTYSP-1026_committed-converter.feature)        | Writing GFM as the HTML of lcty-rb            | `tests/unit/gfm-committed.test.js`                           |
 | [LCTYSP-2001](LCTYSP-2001_new-conversation-page.feature)      | The new conversation page /c/                 | `tests/ui/new-conversation.spec.js`                          |
 | [LCTYSP-2002](LCTYSP-2002_conversation-page.feature)          | The conversation page                         | `tests/ui/conversation.spec.js`                              |
 | [LCTYSP-2003](LCTYSP-2003_sidebar.feature)                    | The sidebar                                   | `tests/ui/sidebar.spec.js`                                   |
