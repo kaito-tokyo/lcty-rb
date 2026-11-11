@@ -123,7 +123,9 @@ module Chatty
     # - data-thinking becomes an lcty-thinking before its reply, with a new id;
     # - an lcty-cmd gets an id;
     # - div.user-text becomes <article>, an article written by lcty.v1 keeps its presentation, and
-    #   data-content-integrity is computed.
+    #   data-content-integrity is computed;
+    # - a reply with text but no article written by lcty.v1 (an older renderer) raises ConvHtml::FormatError: only the
+    #   browser renders Markdown, and the file is left as it was.
     def elements(meta, entries, fallback_at)
       lines = []
       stats = {}
@@ -152,6 +154,12 @@ module Chatty
                    article(thinking))
             end
             html = o['content_html']
+            # Only the browser renders Markdown: without the HTML lcty.v1 wrote, the reply would show its Markdown as
+            # text, so the file is left as it was (it stays read-only)
+            if html.nil? && !content.empty?
+              raise ConvHtml::FormatError, "the reply #{o['id'].inspect} has no HTML written by lcty.v1; converted, it " \
+                                           'would show its Markdown as text'
+            end
             add.('lcty-msg', { 'data-role' => 'model', 'id' => "msg-m-#{id}", 'data-at' => at }.merge(text_attrs(content)),
                  html ? "<article>#{html}</article>" : article(content))
             s = CStore::STATS.map { |k| [k, o[k]] }.to_h

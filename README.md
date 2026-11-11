@@ -120,7 +120,9 @@ the new format and show the others read-only, so run it once after updating. Bac
 
 The tools are scripts of `tools/`, run on their own; `lcty.rb` only starts the server. Each file is copied to
 `c-former/` before it is replaced. A file that is converted already is left as it is, so
-running it again converts only the rest. Replies that were not completed are dropped.
+running it again converts only the rest. Replies that were not completed are dropped. A file with a reply that has no
+HTML rendered by the page (an older version) is not converted and stays read-only, since only the browser renders
+Markdown.
 
 ## Tests
 

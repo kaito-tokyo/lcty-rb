@@ -59,9 +59,10 @@ class ConvertCTest < Lcty::Scenarios
     { 'type' => 'message', 'id' => id, 'role' => 'user', 'at' => AT, 'content' => content }
   end
 
+  # A completed reply with the HTML lcty.v1 rendered (content_html), unless extra says otherwise
   def reply(content, extra = {})
     { 'type' => 'message', 'id' => Chatty::Uuid.v7, 'role' => 'assistant', 'at' => AT, 'status' => 'completed',
-      'content' => content }.merge(extra)
+      'content' => content, 'content_html' => "<p>#{content}</p>" }.merge(extra)
   end
 
   def run_convert
@@ -225,6 +226,23 @@ class ConvertCTest < Lcty::Scenarios
       refute File.exist?(File.join(@former_dir, 'conv-i.html'))
       assert ConvHtml.lcty_msg?(read('conv-j'))
     end
+  end
+
+  scenario 'A reply without the HTML of lcty.v1 leaves its file as it was' do
+    background
+    text = result = out = nil
+    step('Given a file whose reply has no HTML written by lcty.v1, and a file that can be converted') do
+      text = old_file('conv-k', [user('q'), reply('**bold**', 'content_html' => nil)])
+      old_file('conv-l', [user('q'), reply('a')])
+    end
+    step('When ConvertC.run runs') { result, out = run_convert }
+    step('Then the first is reported as failed, saying it would show its Markdown as text, and has not changed') do
+      assert_equal({ converted: ['conv-l.html'], current: [], failed: ['conv-k.html'] }, result)
+      assert_match(/could not convert conv-k\.html: .*has no HTML written by lcty\.v1; converted, it would show its Markdown as text/, out)
+      assert_equal text, read('conv-k')
+      refute File.exist?(File.join(@former_dir, 'conv-k.html'))
+    end
+    step('And the second is converted') { assert ConvHtml.lcty_msg?(read('conv-l')) }
   end
 
   TOOL = File.expand_path('../../tools/convert.rb', __dir__)
