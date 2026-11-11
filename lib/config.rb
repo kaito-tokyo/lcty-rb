@@ -98,7 +98,7 @@ module Chatty
   # The options of lcty.rb, the same for the file and the command line; what they set goes into into
   def self.option_parser(into)
     OptionParser.new do |o|
-      o.banner = 'usage: lcty.rb [options] [convert]'
+      o.banner = 'usage: lcty.rb [options] [convert | hash-password USER]'
       o.on('--bind-ip=ADDRESS', 'an IP address to listen on, once per address (default 127.0.0.1)') do |v|
         raise SettingsError, "not an IP address to listen on: #{v.inspect}" unless ip_address?(v)
         (into[:bind_ips] ||= []) << v

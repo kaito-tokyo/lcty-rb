@@ -52,6 +52,7 @@ changed.
 | [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)         | `lib/rpc/`: several pages over `/v1/rpc` at once     |
 | [LCTYSP-3021](LCTYSP-3021_openapi.feature)           | `openapi.yaml`: every path the site answers          |
 | [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `lcty.rb convert`                |
+| [LCTYSP-3024](LCTYSP-3024_password.feature)          | `lib/password.rb`: the password hashes               |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.
