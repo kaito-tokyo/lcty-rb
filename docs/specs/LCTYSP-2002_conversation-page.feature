@@ -174,6 +174,11 @@ Feature: LCTYSP-2002 The conversation page
     And the reply shows "太字" in bold, made from its Markdown, not "ファイルの表示"
     And the composer can still be used
 
+  Scenario: What another tab measured of a reply is shown in its ⓘ
+    Given a conversation of two finished turns is open
+    When another connection appends a user message and a reply, and records 7 output tokens of the reply
+    Then the reply's ⓘ is shown and says "7 tok"
+
   Scenario: A lock another tab takes is shown as held and does not run here
     Given a conversation of two finished turns is open
     When another connection appends a user message and an lcty-cmd send

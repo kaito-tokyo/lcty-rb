@@ -172,9 +172,12 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   ([LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md#moving-existing-files)), in `message_stats` of
   `lcty_c.sqlite`. `c.stats.put {cid, id, timings, usage, client}` records it for the reply whose `model` element has
   the id `id` (`msg-m-…`), replacing what was there, before or after the reply is appended. `c.stats.list {cid}`
-  returns it for every reply of a conversation. It is not a copy of the pages, so it gets no version and no
-  notification: another tab sees it when it reads it again.
-- **A page follows one conversation.** `c_html` records go only to the connections that follow their conversation,
+  returns it for every reply of a conversation. Recording it is a change with a version and a `c_stats` record
+  (`op` `put`, `row` `{cid, id, timings, usage, client}`) that goes only to the pages following the conversation,
+  which show it; no database of the browser keeps it, so a page reads the others with `c.stats.list`. Unappending a
+  reply forgets what was measured of it, and deleting a conversation everything measured of its replies, so no row is
+  left without its reply.
+- **A page follows one conversation.** `c_html` and `c_stats` records go only to the connections that follow their conversation,
   set by `c.subscribe {cid, last}`; a page shows one conversation, so a connection follows at most one, and a new
   `c.subscribe` replaces the old one (`cid: null` follows none). The other records go to every connection that
   receives `c.batch.updated`, whatever it follows. The server leaves out the records a connection does not get, and

@@ -465,6 +465,10 @@ class V1ServletTest < Lcty::Scenarios
       assert_ok http('POST', "/v1/conversations/#{id}/lines", [{ 'type' => 'tags', 'tags' => [tag] }])
       assert_includes search('q' => word).map { |r| r['id'] }, round['id']
     end
+    step('And what was measured of a reply of it is recorded in lcty_c.sqlite') do
+      Chatty::C_STORE.put_message_stats("msg-m-#{Chatty::Uuid.v7}", id, 'timings' => { 'prompt_n' => 1 })
+      refute_empty Chatty::C_STORE.stats_of(id)
+    end
     step('When DELETE /v1/conversations/<id> is requested') { res = http('DELETE', "/v1/conversations/#{id}") }
     step('Then the status is 200 and the body is {"ok": true}') { assert_ok res }
     step('And GET /v1/conversations/<id> answers 404') do
@@ -478,6 +482,7 @@ class V1ServletTest < Lcty::Scenarios
     end
     step('And its current tags are forgotten') { assert_nil Chatty::TAGS.conversation_tags(id) }
     step('And the search index keeps no tag for it') { refute_includes Chatty::INDEX.convs_with_tags([tag]), id }
+    step('And lcty_c.sqlite keeps nothing measured of its replies') { assert_empty Chatty::C_STORE.stats_of(id) }
     step('And deleting it again still answers 200') { assert_ok http('DELETE', "/v1/conversations/#{id}") }
   end
 
