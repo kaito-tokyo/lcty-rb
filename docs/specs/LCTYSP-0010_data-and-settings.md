@@ -66,7 +66,7 @@ the following. The rule on `_` is unchanged.
 | `t/NNNNN-<file-name part>.html`           | Source (one file per tag: display name, operation policies, prompt and memory; rewritten whole, via a temporary file whose name starts with `.` and a rename) |
 | `lcty.v1.*`, `c/lcty.v1.*`, `t/lcty.v1.*` | Source (a copy of the assets in every directory that holds HTML, so each file loads them by name alone; published at startup, rewritten only when changed)    |
 | `t.lock`                                  | Holds no data: the file `flock` is taken on (shared for get-all, exclusive for replace-all and add-memory). Created when missing; backups may leave it out    |
-| `lcty_t.sqlite`                           | Source, but only `t_has_many_c` (the current tags of conversations). The `tags` and `memory` tables are dropped by a migration, without conversion            |
+| `lcty_t.sqlite`                           | Source, only `t_has_many_c` (the current tags of conversations). The `tags` and `memory` tables are dropped by a migration (`tools/migrate_tags.rb` first)    |
 
 In the browser, IndexedDB is split by resource: `lcty_c` (stores `c_meta`, `c_recordcount` and `sync`, owned by
 `lcty.v1.c.worker.cjs`, below) and `lcty_t` (stores `t_full` and `t_set`, a full copy of the tags, one row per tag

@@ -76,6 +76,13 @@ module Chatty
       name[6...-5]
     end
 
+    # The part composed to NFC, as the browser compares file names (tagRef of js/tag-names.js); HFS+ lists names
+    # decomposed. A name that is not valid UTF-8 is returned as it is.
+    def self.nfc_part(name)
+      p = part(name)
+      p.valid_encoding? ? p.unicode_normalize(:nfc) : p
+    end
+
     # The ASCII symbols the browser escapes in a file-name part as ~ and two lowercase hex digits (tagPart of
     # js/tag-names.js)
     ESCAPED_HEX_RE = /~(2[13-689a]|3[cef]|5[bde]|7[bd])/.freeze
@@ -131,6 +138,29 @@ module Chatty
           next if (written + kept).any? { |w| File.identical?(w, path) }
           File.unlink(path) if File.exist?(path)
         end
+        etag_of(listed)
+      end
+    end
+
+    # ---- Add tags ----
+
+    # Write the tags of obj ({"tags" => [...]}, checked as replace-all checks them) as new tag files, under the
+    # exclusive lock, leaving every other file of t/ as it is (tools/migrate_tags.rb). 409 when one of them has the
+    # file-name part of a listed file (any number) or a memory id that a listed file has; nothing is written then.
+    def add_all(obj)
+      tags = validate_set!(obj)
+      raise HttpError.new(400, 'a tag to add cannot be invalid') if tags.any? { |t| t['invalid'] }
+      with_lock(File::LOCK_EX) do
+        before = listed
+        # HFS+ lists names decomposed, so compare the parts composed
+        parts = before.keys.map { |n| TagFiles.nfc_part(n) }
+        ids = before.flat_map { |n, body| parse(n, body)['memory'].map { |m| m['id'] } }
+        tags.each do |t|
+          raise HttpError.new(409, "a tag file for #{t['file'].inspect} exists") if parts.include?(TagFiles.nfc_part(t['file']))
+          clash = t['memory'].map { |m| m['id'] } & ids
+          raise HttpError.new(409, "memory id #{clash.first.inspect} exists") unless clash.empty?
+        end
+        tags.each { |t| write_atomic(File.join(@dir, t['file']), build(t)) }
         etag_of(listed)
       end
     end

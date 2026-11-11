@@ -482,8 +482,8 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 ### tags.sqlite: only conversation_tags remains; no conversion
 
 - **The `tags` and `memory` tables of `tags.sqlite` are abolished at once, without conversion.** The server no longer
-  reads or writes them; a migration (`PRAGMA user_version`) drops them. Existing tag definitions and memory are not
-  carried over to `t/`: tags start empty and are defined again in the tag editor.
+  reads or writes them; a migration (`PRAGMA user_version`) drops them. The server does not carry existing tag
+  definitions and memory over to `t/`: tags start empty, unless `tools/migrate_tags.rb` (below) is run first.
 - **`conversation_tags` stays in `tags.sqlite`,** which then holds only that table: the current tags of each
   conversation after a change, as before. The file is now `lcty_t.sqlite`: the server renames `tags.sqlite` to it at
   startup, its format kept ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)). Format 4 later replaced the table with
@@ -492,7 +492,16 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   of `conversation_tags` keep the display names they were written with. Where such a name equals the part of a new
   tag (lowercase names without the escaped symbols, such as `ruby`), it refers to that tag; otherwise it shows as an
   undefined tag, until the conversation's tags are changed.
-- Not adopted: converting the old tags in the browser or with a one-off script.
+- **`tools/migrate_tags.rb` moves the old tags by hand** (added on 2026-11-11), with the server stopped and before it
+  drops the tables, or from a backup of `tags.sqlite` given as its argument. It reads the file read-only and writes
+  each old tag, with its prompt and memory (ids, times and sources kept), as a new tag file numbered after the largest
+  number in `t/`. The part is derived in Ruby as `tagPart` derives it (an exception to "the browser converts"; only
+  characters newer than Ruby's Unicode tables could differ). A tag whose part has a tag file already is left as it is,
+  so it can be run again; a name the tag editor would refuse is reported and not migrated. When every tag was
+  migrated, the rows of `t_has_many_c` that are an old display name are changed to its part. `data-setup-tags` of
+  files not yet converted are not changed, so it is run after `tools/convert.rb`
+  ([LCTYSP-3026](LCTYSP-3026_migrate-tags.feature)).
+- Not adopted: converting the old tags in the browser or at startup.
 
 Tag files are served at `/t/NNNNN-<part>.html`, beside the reorder page, as the page of the tag
 ([Tag file pages](#tag-file-pages)). Not yet discussed: how the proposal flow uses the `add-memory` policy (adjusted

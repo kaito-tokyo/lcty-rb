@@ -93,7 +93,7 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 - `t/NNNNN-<name>.html`: one file per tag (its name, prompt and memory); `NNNNN` is the order, changed on `/t/`.
 - `lcty_t.sqlite`: the current tags of conversations, one row per tag and conversation (an older version's `tags.sqlite` is
   renamed to it when the server starts). Tag definitions and memory kept there by an older version are dropped when it
-  starts (they are not converted; define the tags again).
+  starts: move them to `t/` first with `tools/migrate_tags.rb` (below).
 - `lcty_c.sqlite`: the timings, usage and client of the replies of conversations in the new format (`lcty-msg`),
   written by the server and by `tools/convert.rb` (below).
 - `c-former/`: every conversation file as it was before `tools/convert.rb` converted it.
@@ -123,6 +123,27 @@ The tools are scripts of `tools/`, run on their own; `lcty.rb` only starts the s
 running it again converts only the rest. Replies that were not completed are dropped. A file with a reply that has no
 HTML rendered by the page (an older version) is not converted and stays read-only, since only the browser renders
 Markdown.
+
+### Migrating the old tags
+
+An older version kept the tag definitions and memory in `tags.sqlite`; the server drops them when it starts.
+`tools/migrate_tags.rb` writes each of them, with its prompt and memory, as a tag file in `t/`, numbered after the tags
+there are, and changes the tags of conversations from the old names (`Ruby`) to the new references (`ruby`). Run it
+once, with the server stopped, before starting this version, and after `tools/convert.rb`:
+
+```bash
+/usr/bin/ruby tools/migrate_tags.rb
+```
+
+If the server has started already, give it a backup of `tags.sqlite` from before:
+
+```bash
+/usr/bin/ruby tools/migrate_tags.rb backup/tags.sqlite
+```
+
+A tag that has a tag file already is left as it is, so running it again adds only the rest. A name the tag editor
+would refuse (one with `/` or a space, say) is reported and not migrated; the tags of conversations are then not
+changed, so fix it in the old file and run it again.
 
 ## Tests
 

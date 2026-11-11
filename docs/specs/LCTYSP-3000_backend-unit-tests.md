@@ -54,6 +54,7 @@ changed.
 | [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `tools/convert.rb`               |
 | [LCTYSP-3024](LCTYSP-3024_password.feature)          | `lib/password.rb`: the password hashes               |
 | [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)        | `lib/basic_auth.rb`: Basic authentication            |
+| [LCTYSP-3026](LCTYSP-3026_migrate-tags.feature)      | `lib/migrate_tags.rb`: `tools/migrate_tags.rb`       |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.
