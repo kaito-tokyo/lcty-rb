@@ -445,6 +445,19 @@ module Lcty
     end
 
     class Servlet < WEBrick::HTTPServlet::AbstractServlet
+      # A body read before the answer 405, at most; a larger one is left unread
+      BODY_READ = 65_536
+
+      # Another method is not a transport: 405. The body is read first, when it is small: WEBrick closes the connection
+      # after the answer, and a socket closed with data still unread is reset, which the client can get before it reads
+      # the 405
+      def method_not_allowed(req, res)
+        req.body if req.content_length.to_i <= BODY_READ
+        res['Allow'] = 'GET'
+        raise WEBrick::HTTPStatus::MethodNotAllowed, "#{req.request_method} is not a transport of /v1/rpc"
+      end
+      %w[do_POST do_PUT do_DELETE do_PATCH].each { |m| alias_method m, :method_not_allowed }
+
       def do_GET(req, res)
         unless Rpc.origin_ok?(req)
           warn Rpc.refusal(req['origin'])
