@@ -4,22 +4,6 @@
 
 // The block phase of GFM 0.29-gfm: BlockParser and the grammar it needs (gfm_blocks.d.ts).
 
-/** The shared, frozen empty view and child list. */
-export const NONE = Object.freeze([]);
-
-/** Add child as the last child of parent. */
-export function appendChild(parent, child) {
-	if (parent.children === NONE) parent.children = [];
-	child.parent = parent;
-	parent.children.push(child);
-	return child;
-}
-
-/** Give node's children an array of exactly their number. */
-export function fitChildren(node) {
-	if (node.children.length !== 0) node.children = node.children.slice();
-}
-
 export const ESCAPABLE = "[!\"#$%&'()*+,./:;<=>?@[\\\\\\]^_`{|}~-]";
 const reBackslashOrAmp = /[\\&]/;
 const reEntityOrEscape = new RegExp(

@@ -19,10 +19,10 @@ import { expect, publicUrl, scenario } from "./node-unit.js";
 const { BlockWatch, parseBlocks, parseGfm } = await import(
 	publicUrl("js/convert/gfm/converter.js")
 );
-const { BLOCK_QUOTE, BlockParser, leafText, PARAGRAPH } = await import(
+const { BLOCK_QUOTE, BlockParser, PARAGRAPH } = await import(
 	publicUrl("js/convert/gfm/gfm_blocks.js")
 );
-const { InlineParser, inlineRoot } = await import(
+const { InlineParser, inlineText } = await import(
 	publicUrl("js/convert/gfm/gfm_inlines.js")
 );
 
@@ -144,8 +144,9 @@ scenario(
 	async ({ step }) => {
 		await background(step);
 		let doc;
+		const source = `${"> ".repeat(40)}a`;
 		await step('When a line of 40 "> " and then "a" is parsed', () => {
-			doc = parseGfm(`${"> ".repeat(40)}a`, decodeNameFromTable);
+			doc = parseGfm(source, decodeNameFromTable);
 		});
 		let inner = null;
 		await step(
@@ -169,8 +170,11 @@ scenario(
 			() => {
 				const p = doc.blocks.first[inner];
 				expect(doc.blocks.type[p]).toBe(PARAGRAPH);
-				const text = doc.inlines[p].children.map((n) => n.view.join(""));
-				expect(text.join("")).toBe("> > > > > > > > a");
+				const n = doc.inlines;
+				let text = "";
+				for (let c = n.first[doc.roots[p]]; c !== -1; c = n.next[c])
+					text += inlineText(source, n, c);
+				expect(text).toBe("> > > > > > > > a");
 			},
 		);
 	},
@@ -196,16 +200,20 @@ function pushed(e, watch = null) {
 	});
 	let got = "";
 	// the document so far: the parser's blocks and ranges, and the inlines of the leaves taken
-	const doc = { blocks: parser.blocks, ranges: parser.store, inlines: [] };
+	const doc = {
+		blocks: parser.blocks,
+		ranges: parser.store,
+		inlines: inlines.table,
+		roots: [],
+	};
 	const take = (step) => {
-		for (const leaf of step[3]) {
-			const root = inlineRoot();
-			inlines.parse(
-				root,
-				leafText(e.markdown, parser.blocks, parser.store, leaf),
+		for (const leaf of step[3])
+			doc.roots[leaf] = inlines.parseLeaf(
+				e.markdown,
+				parser.blocks,
+				parser.store,
+				leaf,
 			);
-			doc.inlines[leaf] = root;
-		}
 		if (step[2] !== -1)
 			got += referenceHtml(
 				doc,

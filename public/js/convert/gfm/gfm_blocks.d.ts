@@ -12,9 +12,9 @@
 // top-level block of a text once the text's lines end it, so a whole text and a streamed one are read alike, one block
 // after another (converter.js).
 //
-// The module stands on GFM's block grammar alone. What it holds besides is what that grammar needs: the tree's nodes
-// and their operations, backslash escapes and character references, link labels, destinations and titles (a link
-// reference definition is a leaf block), and HTML tags (an HTML block of condition 7 begins with one).
+// The module stands on GFM's block grammar alone. What it holds besides is what that grammar needs: backslash escapes
+// and character references, link labels, destinations and titles (a link reference definition is a leaf block), and
+// HTML tags (an HTML block of condition 7 begins with one).
 //
 // A block is a row of a table (BlockTable), not an object: each field of a block is a column, a typed array indexed by
 // the row, so the tree is integers only and costs no object of its own for each block. The rows are linked as a tree,
@@ -26,25 +26,11 @@
 // document (RangeStore): a block holds only where its ranges start in the store and how many they are. So parsing
 // makes no string but a line at a time and what a definition or a table row is read from.
 //
-// The inlines are still nodes, plain objects of the shape NodeOf, made by the inline phase (gfm_inlines.d.ts), which
-// hangs them from the leaves by their rows.
+// The inlines are rows of a table of their own, made by the inline phase (gfm_inlines.d.ts), and the document holds
+// the root of each leaf's inlines by the leaf's row (converter.d.ts).
 
 /** The text of the named character reference &name; ("amp" → "&"), or null when HTML has no such name. */
 export type DecodeName = (name: string) => string | null;
-
-/** Any node: what every node has, whatever its type, values and children. */
-export type AnyNode = NodeOf<string, unknown, unknown>;
-
-/** What every node of the inline phase has (gfm_inlines.d.ts). */
-export interface NodeOf<T extends string, D, C> {
-	readonly type: T;
-	/** Where it starts, in the text its parser read. */
-	offset: number;
-	parent: AnyNode | null;
-	children: readonly C[];
-	/** The values of its type, or null when it has none. */
-	data: D;
-}
 
 /** A link reference definition's destination and title, and a link's. */
 export interface LinkData {
@@ -175,20 +161,6 @@ export function isSpaceOrTab(c: string | undefined): boolean;
 
 /** Whether line from i is a thematic break of c: three or more of it, and spaces and tabs only between. */
 export function isThematicBreak(line: string, i: number, c: string): boolean;
-
-// The tree's nodes
-
-/** The shared empty view and child list of the nodes that have none. Frozen, so nothing is added to it by mistake. */
-export const NONE: readonly never[];
-
-/** Add child as the last child of parent, and give it back. */
-export function appendChild<C extends AnyNode>(parent: AnyNode, child: C): C;
-
-/**
- * Give node's children an array of exactly their number, once no more are added: an array grown by push holds room for
- * 17 children however few it has (a node has one to three, mostly).
- */
-export function fitChildren(node: AnyNode): void;
 
 // Escapes, character references, labels and destinations
 

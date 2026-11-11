@@ -25,6 +25,20 @@ const {
 	TABLE,
 	THEMATIC_BREAK,
 } = await import(publicUrl("js/convert/gfm/gfm_blocks.js"));
+const {
+	CODE,
+	DEL,
+	EMPH,
+	HTML_INLINE,
+	IMAGE,
+	INLINE_NAMES,
+	inlineText,
+	LINEBREAK,
+	LINK,
+	SOFTBREAK,
+	STRONG,
+	TEXT,
+} = await import(publicUrl("js/convert/gfm/gfm_inlines.js"));
 
 const GFM = new URL("../gfm/", import.meta.url);
 
@@ -89,7 +103,7 @@ const TAGFILTER =
 const tagfilter = (s) => s.replace(TAGFILTER, "&lt;");
 
 /**
- * The document doc ({ blocks, ranges, inlines }, as parseGfm gives it), parsed from source, as GFM's reference HTML, or
+ * The document doc ({ blocks, ranges, inlines, roots }, as parseGfm gives it), parsed from source, as GFM's reference HTML, or
  * its block at row when row is given. options.tagfilter (true by default) writes raw HTML through the tagfilter
  * extension. As cmark-gfm does, a strong right inside a strong writes no tags of its own.
  */
@@ -101,20 +115,22 @@ export function referenceHtml(
 ) {
 	const raw = filter ? tagfilter : (s) => s;
 	const t = doc.blocks;
+	const n = doc.inlines;
+	const textOf = (i) => inlineText(source, n, i);
 	let out = "";
 	const cr = () => {
 		if (out !== "" && !out.endsWith("\n")) out += "\n";
 	};
-	const plain = (node) =>
-		node.children
-			.map((n) =>
-				n.type === "text" || n.type === "code" || n.type === "html_inline"
-					? n.view.join("")
-					: n.type === "softbreak" || n.type === "linebreak"
-						? "\n"
-						: plain(n),
-			)
-			.join("");
+	const plain = (i) => {
+		let s = "";
+		for (let c = n.first[i]; c !== -1; c = n.next[c]) {
+			const ty = n.type[c];
+			if (ty === TEXT || ty === CODE || ty === HTML_INLINE) s += textOf(c);
+			else if (ty === SOFTBREAK || ty === LINEBREAK) s += "\n";
+			else s += plain(c);
+		}
+		return s;
+	};
 	// a paragraph in an item of a tight list writes no <p>
 	const tight = (i) => {
 		const item = t.parent[i];
@@ -122,7 +138,8 @@ export function referenceHtml(
 		return list !== -1 && t.type[list] === LIST && t.d[list] === 1;
 	};
 	const inlines = (i) => {
-		for (const c of doc.inlines[i].children) render(c);
+		const root = doc.roots[i];
+		for (let c = n.first[root]; c !== -1; c = n.next[c]) render(c);
 	};
 	const blocks = (i) => {
 		for (let c = t.first[i]; c !== -1; c = t.next[c]) block(c);
@@ -231,58 +248,55 @@ export function referenceHtml(
 				throw new Error(`no reference HTML for ${BLOCK_NAMES[t.type[i]]}`);
 		}
 	};
-	const render = (node) => {
+	const render = (i) => {
 		const kids = () => {
-			for (const c of node.children) render(c);
+			for (let c = n.first[i]; c !== -1; c = n.next[c]) render(c);
 		};
-		switch (node.type) {
-			case "text":
-				out += escapeXml(node.view.join(""));
+		const link = n.link[i];
+		const ty = n.type[i];
+		switch (ty) {
+			case TEXT:
+				out += escapeXml(textOf(i));
 				break;
-			case "softbreak":
+			case SOFTBREAK:
 				out += "\n";
 				break;
-			case "linebreak":
+			case LINEBREAK:
 				out += "<br />\n";
 				break;
-			case "code":
-				out += `<code>${escapeXml(node.view.join(""))}</code>`;
+			case CODE:
+				out += `<code>${escapeXml(textOf(i))}</code>`;
 				break;
-			case "html_inline":
-				out += raw(node.view.join("\n"));
+			case HTML_INLINE:
+				out += raw(textOf(i));
 				break;
-			case "emph":
-			case "strong":
-			case "del": {
-				if (node.type === "strong" && node.parent?.type === "strong") {
+			case EMPH:
+			case STRONG:
+			case DEL: {
+				if (ty === STRONG && n.type[n.parent[i]] === STRONG) {
 					kids();
 					break;
 				}
-				const tag =
-					node.type === "emph"
-						? "em"
-						: node.type === "strong"
-							? "strong"
-							: "del";
+				const tag = ty === EMPH ? "em" : ty === STRONG ? "strong" : "del";
 				out += `<${tag}>`;
 				kids();
 				out += `</${tag}>`;
 				break;
 			}
-			case "link":
-				out += `<a href="${escapeXml(node.data.destination)}"`;
-				if (node.data.title) out += ` title="${escapeXml(node.data.title)}"`;
+			case LINK:
+				out += `<a href="${escapeXml(n.destinations[link])}"`;
+				if (n.titles[link]) out += ` title="${escapeXml(n.titles[link])}"`;
 				out += ">";
 				kids();
 				out += "</a>";
 				break;
-			case "image":
-				out += `<img src="${escapeXml(node.data.destination)}" alt="${escapeXml(plain(node))}"`;
-				if (node.data.title) out += ` title="${escapeXml(node.data.title)}"`;
+			case IMAGE:
+				out += `<img src="${escapeXml(n.destinations[link])}" alt="${escapeXml(plain(i))}"`;
+				if (n.titles[link]) out += ` title="${escapeXml(n.titles[link])}"`;
 				out += " />";
 				break;
 			default:
-				throw new Error(`no reference HTML for ${node.type}`);
+				throw new Error(`no reference HTML for ${INLINE_NAMES[ty]}`);
 		}
 	};
 	block(row);

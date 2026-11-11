@@ -17,7 +17,7 @@ import type {
 	RangeStore,
 	Row,
 } from "./gfm_blocks.js";
-import type { InlineOptions, InlineRoot } from "./gfm_inlines.js";
+import type { InlineOptions, InlineTable } from "./gfm_inlines.js";
 
 export type ParseOptions = InlineOptions;
 
@@ -27,9 +27,11 @@ export interface BlockDocument {
 	ranges: RangeStore;
 }
 
-/** A parsed document: its blocks, and the inlines of each leaf by its row (null for a row of no leaf). */
+/** A parsed document: its blocks, and its inlines. */
 export interface Document extends BlockDocument {
-	inlines: (InlineRoot | null)[];
+	inlines: InlineTable;
+	/** The row in inlines of the root of each leaf's inlines, by the leaf's row in blocks (-1 for any other block). */
+	roots: Int32Array;
 }
 
 /**
@@ -46,7 +48,8 @@ export function parseBlocks(
 
 /**
  * The document tree of text, in both phases: its blocks, and the inlines of each paragraph, heading and table cell. Its
- * ranges are offsets in text, which a reader keeps to read the blocks' text (leafText, blockLines).
+ * ranges and its inlines' pieces are offsets in text, which a reader keeps to read their text (leafText, blockLines,
+ * inlineText). The tables keep no room for more.
  */
 export function parseGfm(
 	text: string,
