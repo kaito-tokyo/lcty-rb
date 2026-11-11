@@ -190,7 +190,7 @@ const del = (store, cid) => ({ store, op: "delete", row: { cid } });
 const HTML = {
 	store: "c_html",
 	op: "append",
-	row: { cid: "a", after: null, tag: "lcty-msg", attrs: {}, innerHTML: "" },
+	row: { cid: "a", after: null, tag: "lcty-msg", attrs: {} },
 };
 
 // ---- Steps shared by the scenarios ----

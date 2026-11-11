@@ -61,8 +61,9 @@ the version they were last brought to, so that an older answer never overwrites 
   - `c_meta`, `op` `put`: `row` is the meta of the conversation (creating it, appending, unappending, changing the
     title).
   - `c_recordcount`, `op` `put`: `row` is `{cid, count}` (creating it, appending, unappending).
-  - `c_html`, the document of the conversation: `op` `append` with `row` `{cid, after, tag, attrs, innerHTML}`, the
-    element as written; `op` `unappend` with `row` `{cid, id}`.
+  - `c_html`, the document of the conversation: `op` `append` with `row` `{cid, after, tag, attrs}`, the element as
+    written without its presentation (no HTML goes to a browser over `/v1/rpc`, LCTYSP-0012); `op` `unappend` with
+    `row` `{cid, id}`.
   - `c_meta` and `c_recordcount`, `op` `delete`: `row` is `{cid}` (deleting a conversation, today through the HTTP
     API, with the `actorId` `null`).
 - **`t.batch.updated` does the same for `t/`:** its records are those of `t_has_many_c` of `lcty_t`, `op` `delete`
