@@ -65,8 +65,9 @@ What the pages need, which the policy below must allow:
 
 - No inline `<script>`, no event attribute (`onclick=`), no `eval` or `new Function`, no `blob:` or `data:` script.
   Scripts and workers are files of the same origin (`lcty.v1.*`, `fuzzy_search.worker.js`).
-- The only inline style in HTML is `style="text-align:…"` on `th` and `td` of a table in a presentation
-  (`ConvHtml::ATTR_OK`). Styles set from scripts (`element.style`) are not affected by a policy.
+- No inline style in HTML. The one there was, `style="text-align:…"` on `th` and `td` of a table in a presentation,
+  becomes a class ([LCTYSP-0017](LCTYSP-0017_markdown.md#decisions), decision 4). Styles set from scripts
+  (`element.style`) are not affected by a policy.
 - `/v1/rpc` is a WebSocket of the same origin.
 - llama-server is another origin, set in the browser's settings, so the server cannot know it.
 
@@ -123,7 +124,8 @@ On every response:
   Security Policy Cheat Sheet tightens its basic policy ([below](#owasp-content-security-policy-cheat-sheet)):
   - `default-src 'none'`: no fonts, media, frames, manifests or objects, which no page uses
   - `script-src 'self'`; `worker-src 'self'`: the scripts and workers are files of the site
-  - `style-src 'self'`, and the inline style of tables (decision 1)
+  - `style-src 'self'`: the style sheets are files of the site, and no presentation has a `style` attribute
+    ([LCTYSP-0017](LCTYSP-0017_markdown.md))
   - `img-src 'self'`: no page shows an image; the browser may ask for `/favicon.ico`
   - `connect-src 'self' http: https:`: the pages connect to llama-server, wherever the user set it (`'self'` covers
     the WebSocket of `/v1/rpc`; to be checked in Safari)
@@ -223,14 +225,12 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
   Sheets when this spec is revised: what they add is either done here or listed as not taken, with the reason.
 - LCTYSP-0001 points here, and the README says what lcty-rb guards against and what is left to the proxy.
 
-## Decisions to make
+## Decisions made
 
-With the one this plan proposes first.
-
-1. **The inline style of tables:** allowed with `style-src-attr 'unsafe-inline'`, since a style attribute can only be
-   `text-align:left|center|right` in a file (the allowlist) and a page makes the presentation itself. The other way:
-   classes (`lcty-align-center` and the like) instead of `style`, which changes the presentation of LCTYSP-0013 and
-   the files written so far.
+1. **The inline style of tables:** settled by [LCTYSP-0017](LCTYSP-0017_markdown.md#decisions), which defines the
+   output of Markdown: the alignment of a column is a class (`align-left`, `align-center`, `align-right`), so no
+   `style-src-attr 'unsafe-inline'` is needed. Tables of the files written so far lose their alignment until their
+   presentation is made again.
 
 ## OWASP Secure Headers Project
 
@@ -356,7 +356,7 @@ step 2 follows it:
 
   To be looked at again if a page ever needs an inline script or a script from another host.
 - **The `object-src 'none'` and `base-uri 'none'` of its strict samples:** taken.
-- **`style-src-attr`:** the directive decision 1 is about.
+- **`style-src-attr`:** not needed; decision 1 made the alignment of tables a class.
 - **`Content-Security-Policy-Report-Only` first, and `report-to`:** not taken. There is no endpoint to collect
   reports, and one would be another way to write to the server; instead the UI tests fail on any violation in
   Chromium and WebKit (step 4), before a policy ships.

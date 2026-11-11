@@ -7,6 +7,20 @@ path = [
 	"Gemfile.lock",
 	"package-lock.json",
 	"package.json",
+	"tests/gfm/entities.json.upstream",
+	"tests/gfm/spec.txt.upstream",
 ]
 SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
 SPDX-License-Identifier = "Apache-2.0"
+
+# The GitHub Flavored Markdown Spec 0.29-gfm, unchanged from where spec.txt.upstream says
+[[annotations]]
+path = "tests/gfm/spec.txt"
+SPDX-FileCopyrightText = "2014-15 John MacFarlane"
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# The named character references of the HTML Standard, unchanged from where entities.json.upstream says
+[[annotations]]
+path = "tests/gfm/entities.json"
+SPDX-FileCopyrightText = "WHATWG (Apple, Google, Mozilla, Microsoft)"
+SPDX-License-Identifier = "CC-BY-4.0"
