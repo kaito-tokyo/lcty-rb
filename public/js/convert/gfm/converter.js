@@ -2,10 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// What runs the parts of GFM 0.29-gfm (LCTYSP-0017). A whole text is read as a streamed one is, a top-level block at a
-// time (BlockParser's advance), and then the inlines of each paragraph, heading and table cell, with every link
-// reference definition known: the two phases of the spec's "A parsing strategy". BlockWatch is this module's own guess,
-// no part of GFM, of when a streamed head may have ended its block: it decides only how often advance is tried.
+// Runs the GFM parts: a text, whole or streamed, block by block, then the inlines (converter.d.ts).
 
 import {
 	BlockParser,
@@ -15,10 +12,7 @@ import {
 } from "./gfm_blocks.js";
 import { InlineParser } from "./gfm_inlines.js";
 
-/**
- * The first phase of text: each of its top-level blocks advanced in turn, to the end. The document, the definitions
- * read, and the paragraphs, headings and table cells, their view the text of their content.
- */
+/** The first phase of text, each top-level block advanced in turn to the end. */
 export function parseBlocks(text, decodeName) {
 	const parser = new BlockParser(decodeName);
 	const leaves = [];
@@ -32,10 +26,7 @@ export function parseBlocks(text, decodeName) {
 	return { doc: parser.doc, refmap: parser.refmap, leaves };
 }
 
-/**
- * The document tree of text. decodeName(name) is the text of the named character reference &name; ("amp" → "&"), or
- * null when HTML has no such name. options.autolink (true by default) makes the extended autolinks.
- */
+/** The document tree of text, in both phases. */
 export function parseGfm(text, decodeName, options = {}) {
 	const { doc, refmap, leaves } = parseBlocks(text, decodeName);
 	const inlines = new InlineParser(decodeName, refmap, options);
@@ -58,13 +49,7 @@ const W_INDENTED = 5;
 /** The characters a block other than a paragraph may start with. */
 const START_CHARS = "#`~>*+-=_<|0123456789";
 
-/**
- * The weak half of reading a stream: whether the head may have ended its first block, so that BlockParser's advance,
- * the strong half, is worth a try. It reads each complete line of the head once, a few characters of it, and says yes
- * too often rather than too seldom: a yes advance refuses costs one try, and a no where the block had ended only waits
- * for the next yes or for the end of the stream, when the client advances with end. After advance gives a block, the
- * client calls reset, as the rest is a new head.
- */
+/** The weak half of reading a stream: whether advance is worth a try (converter.d.ts). */
 export class BlockWatch {
 	constructor() {
 		this.reset();
@@ -76,16 +61,13 @@ export class BlockWatch {
 		this.pos = 0;
 		this.seen = false;
 		this.kind = W_PARAGRAPH;
-		// a fence's character and length; a list's marker character, and the column its items' content starts at
+		// a fence's character and length; a list's marker and the column of its content
 		this.char = "";
 		this.length = 0;
 		this.content = 0;
 	}
 
-	/**
-	 * Whether a line of head not read yet may end its first block: true at the first such line, read up to it, so the
-	 * client tries advance and then asks again; false once every complete line is read.
-	 */
+	/** Whether a line of head not read yet may end its first block. */
 	mayEnd(head) {
 		for (;;) {
 			let end = head.indexOf("\n", this.pos);
@@ -175,7 +157,7 @@ export class BlockWatch {
 		}
 	}
 
-	/** Whether the line at j is an item of the first block's list: its marker, and no thematic break. */
+	/** Whether the line at j is an item of the first block's list. */
 	isItem(head, j, end, c) {
 		const marker = markerLength(head, j, end, c);
 		if (marker === 0) return false;
@@ -194,7 +176,7 @@ function hasCharIn(head, c, i, end) {
 	return false;
 }
 
-/** The length of the list marker at j of head (* + - alone, or 1 to 9 digits and . or ), then a space, a tab or the end), or 0. */
+/** The length of the list marker at j of head, or 0. */
 function markerLength(head, j, end, c) {
 	let k = j;
 	if (c === "*" || c === "+" || c === "-") k++;

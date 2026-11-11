@@ -2,20 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The inlines of GFM 0.29-gfm (LCTYSP-0017): the text of a leaf block becomes text, code spans, emphasis,
-// strikethrough, links, images, autolinks, raw HTML and line breaks. It is done in three steps, so the tree is built
-// once and never rearranged:
-//
-// 1. The text is read into a flat array of items: runs of text, delimiter runs (* _ ~), brackets, code spans, raw
-//    HTML, autolinks and line breaks.
-// 2. Emphasis and links are found with the delimiter and bracket stacks of the spec's "An algorithm for parsing nested
-//    emphasis and links". A match does not move nodes: it marks the items, an opening run with the elements it opens
-//    and a closing run with how many it closes, and a bracket as the start of a link.
-// 3. The items are read once, in order, into the children of the leaf. Adjacent pieces of text are one text node whose
-//    view is the pieces.
-//
-// The extended autolinks are found as GFM's reference finds them: www. and scheme:// while the text is read, email
-// addresses in each text node, outside links, as it is built.
+// The inline phase of GFM 0.29-gfm: items, marks, then the tree at once (gfm_inlines.d.ts).
 
 import {
 	appendChild,
@@ -35,17 +22,13 @@ import {
 
 /** @import { Inline } from "./gfm_inlines.js" */
 
-/**
- * A new inline node, of no view and no children (gfm_blocks.d.ts gives the shapes); a block has the same fields
- * first.
- * @returns {Inline}
- */
-export function inline(type, offset, data = null) {
+/** A new inline node, of no view and no children. @returns {Inline} */
+function inline(type, offset, data = null) {
 	return { type, offset, view: NONE, parent: null, children: NONE, data };
 }
 
 /** A character reference, matched where the parser is (sticky). */
-export const reEntityHere =
+const reEntityHere =
 	/&(?:#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{1,31});/y;
 
 const HTMLCOMMENT = "<!-->|<!--->|<!--[\\s\\S]*?-->";
@@ -53,15 +36,15 @@ const PROCESSINGINSTRUCTION = "[<][?][\\s\\S]*?[?][>]";
 const DECLARATION = "<![A-Z]+\\s+[^>]*>";
 const CDATA = "<!\\[CDATA\\[[\\s\\S]*?\\]\\]>";
 /** An HTML tag of the spec (raw HTML), matched where the parser is (sticky). */
-export const reHtmlTag = new RegExp(
+const reHtmlTag = new RegExp(
 	`(?:${OPENTAG}|${CLOSETAG}|${HTMLCOMMENT}|${PROCESSINGINSTRUCTION}|${DECLARATION}|${CDATA})`,
 	"y",
 );
 
 /** Unicode whitespace of the spec: Zs, tab, LF, FF, CR. */
-export const reUnicodeWhitespaceChar = /^[\t\n\f\r\p{Zs}]/u;
+const reUnicodeWhitespaceChar = /^[\t\n\f\r\p{Zs}]/u;
 /** ASCII or Unicode punctuation of the spec (0.29: P* categories, plus the ASCII symbols). */
-export const rePunctuation = /^[\p{P}!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/u;
+const rePunctuation = /^[\p{P}!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/u;
 
 const reEscapable = new RegExp(`^${ESCAPABLE}`);
 const reTicksHere = /`+/y;
@@ -161,10 +144,7 @@ function autolinkDelim(data, end) {
 
 const reRunEnd = /[ \t\n\r\f\v<]/g;
 
-/**
- * Where an extended autolink starting at i of s must have ended: just past the first whitespace or < after it. The
- * autolink is looked for in s up to there only, so each look costs its own length, not the rest of the text.
- */
+/** Where an extended autolink starting at i of s must have ended. */
 function runEnd(s, i) {
 	reRunEnd.lastIndex = i;
 	const m = reRunEnd.exec(s);
@@ -205,10 +185,7 @@ function autolinkNode(destination, text, offset) {
 }
 
 export class InlineParser {
-	/**
-	 * refmap holds the link reference definitions of the whole text, read by the block phase. autolink: whether the
-	 * extended autolinks of GFM are made (the spec's examples without the extension turn it off).
-	 */
+	/** refmap: the definitions of the whole text; autolink: whether extended autolinks are made. */
 	constructor(decodeName, refmap, { autolink = true } = {}) {
 		this.decodeName = decodeName;
 		this.autolink = autolink;
@@ -218,8 +195,7 @@ export class InlineParser {
 		this.items = [];
 		this.delimiters = null;
 		this.brackets = null;
-		// the next character that may start something other than text, and the next "www." and "://" (-1: none), where
-		// a run of text ends
+		// the next places a run of text may end: a special character, "www.", "://" (-1: none)
 		this.nextSpecial = -1;
 		this.nextWww = -1;
 		this.nextScheme = -1;
@@ -655,11 +631,7 @@ export class InlineParser {
 		return true;
 	}
 
-	/**
-	 * A run of plain text, up to the next character that may start something else, cut before the next place an
-	 * extended autolink may start. Each of those places is looked for once, ahead of the position, so the runs cost
-	 * their own length.
-	 */
+	/** A run of plain text, up to the next place something else may start. */
 	parseString() {
 		const start = this.pos;
 		const s = this.subject;

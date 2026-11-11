@@ -2,18 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The block structure of GFM 0.29-gfm (LCTYSP-0017): lines are read one at a time, as the spec's "A parsing strategy"
-// describes. Each line first continues the open blocks it can, then may start new ones, and what is left of it is added
-// to the deepest open block that takes lines. This is the spec's first phase: the link reference definitions are read
-// into refmap, and a paragraph, a heading and a table cell keep in their view the text of their content. The parser's
-// one operation is advance: it takes the first top-level block of a text once the text's lines end it, so a whole text
-// and a streamed one are read alike, one block after another (converter.js).
-//
-// The module stands on GFM's block grammar alone. What it holds besides is what that grammar needs: the tree's nodes
-// and their operations, backslash escapes and character references, link labels, destinations and titles (a link
-// reference definition is a leaf block), and HTML tags (an HTML block of condition 7 begins with one).
+// The block phase of GFM 0.29-gfm: BlockParser and the grammar it needs (gfm_blocks.d.ts).
 
-/** The shared empty view and child list of the nodes that have none. Frozen, so nothing is added to it by mistake. */
+/** The shared, frozen empty view and child list. */
 export const NONE = Object.freeze([]);
 
 /** Add child as the last child of parent. */
@@ -24,22 +15,19 @@ export function appendChild(parent, child) {
 	return child;
 }
 
-/**
- * Give node's children an array of exactly their number, once no more are added: an array grown by push holds room for
- * 17 children however few it has (a node has one to three, mostly).
- */
+/** Give node's children an array of exactly their number. */
 export function fitChildren(node) {
 	if (node.children.length !== 0) node.children = node.children.slice();
 }
 
 /** The last child of node, or null. */
-export function lastChild(node) {
+function lastChild(node) {
 	const c = node.children;
 	return c.length > 0 ? c[c.length - 1] : null;
 }
 
 /** Put node where old is, taking old out. */
-export function replaceNode(old, node) {
+function replaceNode(old, node) {
 	const siblings = old.parent.children;
 	siblings[indexIn(siblings, old)] = node;
 	node.parent = old.parent;
@@ -47,7 +35,7 @@ export function replaceNode(old, node) {
 }
 
 /** Put node right after ref. */
-export function insertAfter(ref, node) {
+function insertAfter(ref, node) {
 	const siblings = ref.parent.children;
 	const i = indexIn(siblings, ref);
 	if (i === siblings.length - 1) siblings.push(node);
@@ -56,7 +44,7 @@ export function insertAfter(ref, node) {
 }
 
 /** Take node out of its parent. */
-export function removeNode(node) {
+function removeNode(node) {
 	const siblings = node.parent.children;
 	const i = indexIn(siblings, node);
 	if (i === siblings.length - 1) siblings.pop();
@@ -64,29 +52,11 @@ export function removeNode(node) {
 	node.parent = null;
 }
 
-/**
- * Where node is in siblings. The parser changes only the last or nearly the last child (the block it is in), so the
- * search starts from the end and costs nothing for a long document.
- */
+/** Where node is in siblings, searched from the end. */
 function indexIn(siblings, node) {
 	for (let i = siblings.length - 1; i >= 0; i--)
 		if (siblings[i] === node) return i;
 	return -1;
-}
-
-/**
- * Call f on each node of root's subtree, parents before their children (a loop, so any depth).
- * @param {Node} root
- * @param {(node: Node) => void} f
- */
-export function eachNode(root, f) {
-	const stack = [root];
-	while (stack.length > 0) {
-		const node = stack.pop();
-		f(node);
-		const c = node.children;
-		for (let i = c.length - 1; i >= 0; i--) stack.push(c[i]);
-	}
 }
 
 export const ESCAPABLE = "[!\"#$%&'()*+,./:;<=>?@[\\\\\\]^_`{|}~-]";
@@ -95,17 +65,14 @@ const reEntityOrEscape = new RegExp(
 	`\\\\${ESCAPABLE}|&(?:#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z][A-Za-z0-9]{1,31});`,
 	"g",
 );
-/** The text of a numeric character reference: U+FFFD for 0, a surrogate or a code point past U+10FFFF. */
+/** The text of a numeric character reference, U+FFFD when it names none. */
 function numeric(code) {
 	if (code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff))
 		return "�";
 	return String.fromCodePoint(code);
 }
 
-/**
- * The text of the character reference ref ("&amp;", "&#35;", "&#x22;"), or null when it is none.
- * decodeName(name) gives the text of a named one ("amp" → "&"), or null when HTML has no such name.
- */
+/** The text of the character reference ref, or null when it is none. */
 export function decodeEntity(ref, decodeName) {
 	if (ref[1] === "#") {
 		const hex = ref[2] === "x" || ref[2] === "X";
@@ -115,7 +82,7 @@ export function decodeEntity(ref, decodeName) {
 }
 
 /** s with its backslash escapes and character references resolved. */
-export function unescapeString(s, decodeName) {
+function unescapeString(s, decodeName) {
 	if (!reBackslashOrAmp.test(s)) return s;
 	return s.replace(reEntityOrEscape, (m) =>
 		m[0] === "\\" ? m[1] : (decodeEntity(m, decodeName) ?? m),
@@ -135,10 +102,7 @@ export function normalizeLabel(s) {
 const reURIKept = /^[A-Za-z0-9;/?:@&=+$,\-_.!~*'()#]*$/;
 const URL_SAFE = /[A-Za-z0-9;/?:@&=+$,\-_.!~*'()#]/;
 
-/**
- * A link destination percent-encoded as GFM's reference writes it: %XX already there is kept. One of only the characters
- * kept as they are is itself; any other is written in pieces and joined, so the result is one flat string.
- */
+/** A link destination percent-encoded as GFM's reference writes it. */
 export function normalizeURI(uri) {
 	if (reURIKept.test(uri)) return uri;
 	const out = [];
@@ -174,9 +138,7 @@ const ATTRIBUTE = `(?:\\s+${ATTRIBUTENAME}${ATTRIBUTEVALUESPEC}?)`;
 export const OPENTAG = `<${TAGNAME}${ATTRIBUTE}*\\s*/?>`;
 export const CLOSETAG = `</${TAGNAME}\\s*[>]`;
 
-// The grammar of a link reference definition's label, destination and title, read from p.subject at p.pos, which they
-// move past what they read: p is any object with the two, the cursor of parseReference here. The patterns are sticky,
-// their lastIndex set at each use.
+// The grammar of link labels, destinations and titles, read at p.pos of p.subject.
 const reEscapableHere = new RegExp(`^${ESCAPABLE}`);
 const reLinkLabel = /\[(?:[^\\[\]]|\\.){0,1000}\]/sy;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: GFM's grammar excludes NUL here
@@ -250,10 +212,7 @@ export function scanLinkDestination(p, decodeName) {
 	return normalizeURI(unescapeString(s.slice(savepos, p.pos), decodeName));
 }
 
-/**
- * Read a link reference definition at the start of s into refmap; the number of characters it takes, or 0 when s does
- * not start with one.
- */
+/** Read a link reference definition at the start of s into refmap; the length taken, or 0. */
 function parseReference(s, refmap, decodeName) {
 	const p = { subject: s, pos: 0 };
 	const n = scanLinkLabel(p);
@@ -290,18 +249,14 @@ function parseReference(s, refmap, decodeName) {
 
 const CODE_INDENT = 4;
 
-// The patterns that need no position. Those matched where the parser is in the line are the parser's own (BlockParser).
+// The patterns that need no position.
 const reNonSpace = /[^ \t\f\v\r\n]/;
 const reTableDelimiterCell = /^:?-+:?$/;
 const reBlankLine = /^[ \t]*$/;
 
 /** @import { Block, Node } from "./gfm_blocks.js" */
 
-/**
- * A new block, of no view and no children: the fields of every node and then the block parser's (gfm_blocks.d.ts). Every field is
- * given here, so every block has one shape; open and startLine are the caller's, endLine is known only when it closes.
- * @returns {Block}
- */
+/** A new block, every field given so that every block has one shape. @returns {Block} */
 function block(type, offset, data, open, startLine) {
 	return {
 		type,
@@ -316,7 +271,7 @@ function block(type, offset, data, open, startLine) {
 	};
 }
 
-/** How deep block quotes and list items may nest (LCTYSP-0017, limits): one more is not opened. */
+/** How deep block quotes and list items may nest (LCTYSP-0017). */
 export const MAX_NESTING = 32;
 
 /** The number of block quotes and list items that block is in, itself included. */
@@ -330,8 +285,8 @@ function nesting(block) {
 export const isSpaceOrTab = (c) => c === " " || c === "\t";
 const isBlank = (s) => !reNonSpace.test(s);
 
-/** Whether line holds only spaces and tabs from i to its end: from 0, a blank line of GFM. */
-export function spacesToEnd(line, i) {
+/** Whether line holds only spaces and tabs from i to its end. */
+function spacesToEnd(line, i) {
 	for (; i < line.length; i++) if (!isSpaceOrTab(line[i])) return false;
 	return true;
 }
@@ -345,7 +300,7 @@ function blankToEnd(line, i) {
 	return true;
 }
 
-/** Whether s from i to end holds only spaces, tabs and line endings: blank lines. */
+/** Whether s from i to end holds only blank lines. */
 function blankBetween(s, i, end) {
 	for (; i < end; i++) {
 		const c = s[i];
@@ -366,8 +321,8 @@ function blankAfter(children, i) {
 	return next !== undefined && children[i].endLine !== next.startLine - 1;
 }
 
-/** The cells of a table row: between its unescaped pipes, trimmed, \| read as |. */
-export function tableCells(line) {
+/** The cells of a table row. */
+function tableCells(line) {
 	let s = line.trim();
 	if (s.startsWith("|")) s = s.slice(1);
 	if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
@@ -406,7 +361,7 @@ function delimiterRow(line) {
 	});
 }
 
-// What each type of block does, as a switch on its type: continueBlock, finalizeBlock, canContain and acceptsLines.
+// What each type of block does, as switches on its type.
 
 /** Whether the current line continues block: 0 (it does), 1 (it does not) or 2 (the line is used up). */
 function continueBlock(parser, block) {
@@ -455,7 +410,7 @@ function continueCodeBlock(parser, block) {
 	const indent = parser.indent;
 	const fence = block.data;
 	if (fence.fenced) {
-		// a closing fence: a run of the opening's character, as long at least, and then only spaces and tabs
+		// a closing fence, at least as long as the opening
 		const at = parser.nextNonspace;
 		const end = indent <= 3 ? runEnd(ln, at, fence.fenceChar) : at;
 		if (
@@ -503,7 +458,7 @@ function finalizeBlock(parser, block) {
 		case "code_block": {
 			const lines = block.view;
 			if (block.data.fenced) {
-				// the first line is the info string; the code is the lines after it
+				// the first line is the info string
 				block.data.info = unescapeString(lines[0].trim(), parser.decodeName);
 				block.view = lines.slice(1);
 			} else {
@@ -539,7 +494,7 @@ function finalizeParagraph(parser, block) {
 	}
 	const item = block.parent;
 	if (item.type === "item" && item.children[0] === block) {
-		// a task list item's box: [ ], [x] or [X], and then a space or a tab
+		// a task list item's box
 		const x = content[1];
 		if (
 			content[0] === "[" &&
@@ -568,7 +523,7 @@ function canContain(parent, child) {
 	}
 }
 
-/** Whether the rest of a line is added to an open block of type: the leaves of lines. */
+/** Whether the rest of a line is added to an open block of type. */
 function acceptsLines(type) {
 	return (
 		type === "code_block" ||
@@ -596,7 +551,7 @@ function htmlBlockEnds(parser, type) {
 	}
 }
 
-/** Read the link reference definitions at the start of a paragraph's text into the parser's map; the characters taken. */
+/** Read the definitions at the start of a paragraph's text; the characters taken. */
 function takeReferences(parser, content) {
 	let taken = 0;
 	while (content[taken] === "[") {
@@ -614,11 +569,7 @@ function takeReferences(parser, content) {
 /** The lines of a paragraph's text, as its view holds them. */
 const linesOf = (content) => content.replace(/\n$/, "").split("\n");
 
-// The block starts of a line that is not indented, as a tree of few levels: a switch on the first character after the
-// indentation, then what follows it, read a character at a time. Where one line may start several blocks (a "-" line
-// may be a setext underline, a table's delimiter row, a thematic break or a list item), they are tried in the spec's
-// order, and one the context refuses gives way to the next. Each gives 0 (no start), 1 (a container started) or 2 (a
-// leaf started).
+// The block starts: a switch on the line's first character, then a character at a time.
 
 /** The block the current line starts where its indentation ends. */
 function startBlock(parser, container) {
@@ -667,7 +618,7 @@ function startBlock(parser, container) {
 	}
 }
 
-/** Whether line from i is a thematic break of c: three or more of it, and spaces and tabs only between. */
+/** Whether line from i is a thematic break of c. */
 export function isThematicBreak(line, i, c) {
 	let n = 0;
 	for (; i < line.length; i++) {
@@ -689,7 +640,7 @@ function startBlockQuote(parser, container) {
 	return 1;
 }
 
-/** An ATX heading: one to six #, then a space, a tab or the end of the line. */
+/** An ATX heading. */
 function startATXHeading(parser) {
 	const ln = parser.currentLine;
 	const i = parser.nextNonspace;
@@ -721,7 +672,7 @@ function withoutClosingSequence(s) {
 	return s.slice(0, hashes);
 }
 
-/** A fenced code block: three or more ` or ~, and for ` no ` after them. */
+/** A fenced code block. */
 function startFencedCode(parser, c) {
 	const ln = parser.currentLine;
 	const i = parser.nextNonspace;
@@ -761,7 +712,7 @@ function startHtmlBlock(parser, container) {
 	return 2;
 }
 
-/** A setext heading of level: the line is the underline of the paragraph container. */
+/** A setext heading: the line underlines the paragraph container. */
 function startSetextHeading(parser, container, level) {
 	parser.closeUnmatchedBlocks();
 	const content = container.view.join("\n");
@@ -792,7 +743,7 @@ function startTable(parser, container) {
 	const header = tableCells(lines[lines.length - 1]);
 	if (header.length !== aligns.length) return 0;
 	parser.closeUnmatchedBlocks();
-	// the header row is the paragraph's last line: where its text starts, when the paragraph keeps lines before it
+	// where the header row's text starts, when the paragraph keeps lines before it
 	const table = block(
 		"table",
 		lines.length > 1 ? parser.lastLineAt : container.offset,
@@ -830,7 +781,7 @@ function startBulletItem(parser, container, c) {
 	return startListItem(parser, container, 1, "bullet", c, 1, "");
 }
 
-/** An ordered list item: one to nine digits, . or ), then a space, a tab or the end of the line. */
+/** An ordered list item. */
 function startOrderedItem(parser, container) {
 	const ln = parser.currentLine;
 	const i = parser.nextNonspace;
@@ -942,19 +893,17 @@ export class BlockParser {
 	/** decodeName(name) is the text of the named character reference &name;, or null (LCTYSP-0017). */
 	constructor(decodeName) {
 		this.decodeName = decodeName;
-		// What lasts from one advance to the next: the link reference definitions, by normalized label ({ destination,
-		// title }), and the document of the blocks advanced, one child each.
+		// what lasts from one advance to the next: the definitions and the document
 		this.refmap = new Map();
 		this.doc = block("document", 0, null, true, 1);
-		// the lines read past the last block taken, for an advance given carryRest: their base, where reading goes on,
-		// and where the next block starts
+		// the lines read past the last block taken (took)
 		this.carryRest = null;
 		this.carryBase = 0;
 		this.carryPos = 0;
 		this.carryStart = 0;
 		this.ends = [];
 		this.base = 0;
-		// What one advance reads its lines into, emptied at each: a root of its own and the state of its lines.
+		// what one advance reads its lines into, emptied at each
 		this.root = block("document", 0, null, true, 1);
 		this.tip = this.doc;
 		this.oldtip = this.doc;
@@ -974,9 +923,7 @@ export class BlockParser {
 		this.allClosed = true;
 		this.lastMatchedContainer = this.doc;
 
-		// The three patterns matched where the parser is, the parser's own, so their lastIndex is set and changed freely
-		// (at): an HTML block's start conditions, one group each, tried in order, the end of condition 1, and the line
-		// endings advance cuts the lines at. Every other start and end of a block is read a character at a time.
+		// the parser's own patterns, their lastIndex set freely (at)
 		this.reLineEnding = /\r\n|\n|\r/g;
 		this.reHtmlBlockStart = new RegExp(
 			[
@@ -999,20 +946,7 @@ export class BlockParser {
 		return re.exec(this.currentLine);
 	}
 
-	/**
-	 * Take the first top-level block of head, once head's lines end it; offset is where head starts in the whole text,
-	 * which the nodes' offsets count from.
-	 * - [rest, text, node, leaves] when they do: text is the block's, its last line ending included; rest is what
-	 *   follows, where the next advance starts; node is the block, now the last child of doc (null for a paragraph of
-	 *   link reference definitions only, which leaves only its definitions); leaves are its paragraphs, headings and
-	 *   table cells, their view the text of their content.
-	 * - ["", undefined] when head holds no block: nothing, or only blank lines.
-	 * - undefined when the lines so far do not end it.
-	 * A line counts once its line ending is there (a last \r may be half of \r\n), or, when end is true, head being the
-	 * rest of the whole text, at the end of head too, where every block closes. The blank lines before a block are no
-	 * part of it. A block ends when a later line closes it, or, a heading and a thematic break being one line each, with
-	 * its line.
-	 */
+	/** Take the first top-level block of head once its lines end it (gfm_blocks.d.ts). */
 	advance(head, end = false, offset = 0) {
 		// the lines after the last block taken, read already, when head is the rest that advance gave
 		const carried = this.carryRest === head;
@@ -1127,19 +1061,14 @@ export class BlockParser {
 		this.base = 0;
 	}
 
-	/**
-	 * The result of advance for first, the block head held from start to end, the parser's lines read to pos. What it
-	 * read past the block, the start of the next one, is kept for the next advance, if that is given the rest.
-	 */
+	/** What advance gives for first, what was read past it kept for the next advance. */
 	took(head, start, end, first, pos) {
 		const text = head.slice(start, end);
 		const rest = head.slice(end);
 		const root = this.root;
 		if (root.children[0] === first) root.children.shift();
 		const next = root.children[0];
-		// where the next block starts in rest; it is kept only when it follows first with nothing between but blank
-		// lines (a paragraph of definitions only between them has left the tree, and is read again as a block of its
-		// own). Its lines keep their numbers, the ends their values: rest starts end further on, which base takes.
+		// where the next block starts in rest, carried only when blank lines alone come between
 		const nextStart =
 			next === undefined ? -1 : this.lineEndAt(next.startLine - 1) - end;
 		if (nextStart >= 0 && blankBetween(rest, 0, nextStart)) {
