@@ -15,7 +15,7 @@ Feature: LCTYSP-1009 The client of the HTTP API
   cut to 200 characters, with the status as its status. The tags are not here: js/api/lcty-t.js and its worker
   (LCTYSP-1021) send their requests. The requests that change conversations (create, append, pop, delete) send nothing
   else: the browser's copies of the list hear of the change from the server, over /v1/rpc (LCTYSP-0014). toLine turns
-  a message into a line to append: a reply also carries its content rendered by js/ui/markdown.js, as the screen shows
+  a message into a line to append: a reply also carries its content rendered by js/convert/markdown.js, as the screen shows
   it.
 
   In the steps a GET /v1/meta-all.json, which nothing should send any more, is counted apart from the other requests.

@@ -20,6 +20,7 @@ import {
 	nowIso,
 	showToast,
 } from "../common.js";
+import { replyArticle, userArticle } from "../convert/article.js";
 import { localize, tr } from "../i18n.js";
 import { sortTags, tagRef } from "../tag-names.js";
 import { composeDraft } from "../tags.js";
@@ -29,12 +30,7 @@ import {
 	setComposerBusy,
 	setComposerValue,
 } from "../ui/lcty-elements.js";
-import {
-	cmdAttrs,
-	msgAttrs,
-	replyArticle,
-	userArticle,
-} from "../ui/lcty-msg.js";
+import { cmdAttrs, msgAttrs } from "../ui/lcty-msg.js";
 import { initSidebar } from "../ui/sidebar.js";
 
 const TITLE_MAX_SIZE = 512; // bytes of the title slot, as the files of LCTYSP-0003 have (LCTYSP-0013)

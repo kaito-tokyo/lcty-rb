@@ -5,8 +5,8 @@
 // Client for the lcty.rb storage API (LCTYSP-0006). Conversations are only created, appended to and popped (Ruby decides the format. LCTYSP-0003).
 // The paths are relative to the root of the site (v1/…), which siteUrl() turns into URLs (LCTYSP-0005).
 
+import { renderMarkdown } from "../convert/markdown.js";
 import { siteUrl } from "../site.js";
-import { renderMarkdown } from "../ui/markdown.js";
 
 /** The error of a failed request: the message is "<status> <body>", and status is the HTTP status. */
 function httpError(status, body) {

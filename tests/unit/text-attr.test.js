@@ -5,14 +5,16 @@
 // LCTYSP-1005: the scenarios of docs/specs/LCTYSP-1005_text-attributes.feature, written by hand. Each test has the title
 // of its Scenario (an Examples row is added in parentheses) and one step per line of it, so the two read side by side.
 //
-// js/ui/text-attr.js runs in Node.js (node-unit.js): textAttr(el, name) only calls el.getAttribute(), so the element is
+// js/convert/text-attr.js runs in Node.js (node-unit.js): textAttr(el, name) only calls el.getAttribute(), so the element is
 // a stand-in, an object whose getAttribute() returns the attribute's value or null as an Element's does; no DOM is
 // made. The element is described by its attributes: a string is written as it is, and { utf8: text } as base64 of the
 // UTF-8 bytes of text, as Ruby writes name-base64 (LCTYSP-0003).
 
 import { expect, publicUrl, scenario } from "./node-unit.js";
 
-const { textAttr } = await import(publicUrl("js/ui/text-attr.js"));
+const { textAttr, textAttrOf } = await import(
+	publicUrl("js/convert/text-attr.js")
+);
 
 /** A stand-in for an element with attrs: only getAttribute(), which is all textAttr() reads. */
 function element(attrs) {
@@ -175,3 +177,30 @@ for (const { label, value } of [
 		},
 	);
 }
+
+scenario(
+	"textAttrOf writes a text as it is, or as base64 when XML cannot hold it, and textAttr reads it back",
+	async ({ step }) => {
+		let plain;
+		let forbidden;
+		await step(
+			'When textAttrOf writes "a\\u0009b" and "a\\u0001b" under "data-content"',
+			() => {
+				plain = textAttrOf("data-content", "a\tb");
+				forbidden = textAttrOf("data-content", "a\u0001b");
+			},
+		);
+		await step(
+			'Then the first is {"data-content": "a\\u0009b"} and the second has only data-content-base64',
+			() => {
+				expect(plain).toEqual({ "data-content": "a\tb" });
+				expect(Object.keys(forbidden)).toEqual(["data-content-base64"]);
+			},
+		);
+		await step("And textAttr reads each back as it was", () => {
+			const read = (attrs) =>
+				textAttr({ getAttribute: (n) => attrs[n] ?? null }, "data-content");
+			expect([read(plain), read(forbidden)]).toEqual(["a\tb", "a\u0001b"]);
+		});
+	},
+);

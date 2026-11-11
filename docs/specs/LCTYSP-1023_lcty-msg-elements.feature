@@ -2,18 +2,20 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/js/ui/lcty-msg.js: the elements of LCTYSP-0013 as the page builds them. Each Scenario is a
-# test of the same title in tests/unit/lcty-msg.spec.js, whose steps are the lines below.
+# The behaviour of public/js/ui/lcty-msg.js and public/js/convert/article.js: the elements of LCTYSP-0013 as the page
+# builds them. Each Scenario is a test of the same title in tests/unit/lcty-msg.spec.js, whose steps are the lines
+# below.
 
 Feature: LCTYSP-1023 The elements of lcty-msg built by the page
 
   The page builds every element it appends (fat client, thin server): its attributes in their one order and its
   <article>. The same element goes to /v1/rpc and into the document. js/ui/lcty-msg.js runs in a real browser on the
-  empty unit page, which loads /c/lcty.v1.js for the custom elements.
+  empty unit page, which loads /c/lcty.v1.js for the custom elements; the <article> of a text is made by
+  js/convert/article.js, which turns the text into the second form a message is kept in.
 
   Background:
     Given a page on the server's origin
-    And js/ui/lcty-msg.js is imported as window.M
+    And js/ui/lcty-msg.js and js/convert/article.js are imported as window.M
 
   Scenario: msgAttrs writes the attributes in their one order with the integrity placeholder
     When msgAttrs builds a user message "hi" at a time, and a system message "be brief" of the tag "ruby"

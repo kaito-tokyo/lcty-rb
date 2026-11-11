@@ -7,14 +7,14 @@
 // two read side by side. The scenarios that check how a page's HTML parser reads the output ("the HTML put into a
 // page") run in the browser (markdown.spec.js).
 //
-// public/js/ui/markdown.js is pure and runs in Node.js (node-unit.js). codeBlockHTML() calls tr(), which needs the
+// public/js/convert/markdown.js is pure and runs in Node.js (node-unit.js). codeBlockHTML() calls tr(), which needs the
 // global LctyT and <html lang>: useLctyT() makes them, in English. Texts in the steps are written as in the feature,
 // where \n is a newline, \| is | and \\ is \; unquote() turns them into the text the module is given.
 
 import { expect, publicUrl, scenario, useLctyT } from "./node-unit.js";
 
 await useLctyT({ lang: "en" });
-const md = await import(publicUrl("js/ui/markdown.js"));
+const md = await import(publicUrl("js/convert/markdown.js"));
 
 /** The text a quoted string or a table cell of the feature stands for. */
 const unquote = (raw) =>
