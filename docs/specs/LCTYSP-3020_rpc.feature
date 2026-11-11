@@ -295,6 +295,14 @@ Feature: LCTYSP-3020 The RPC protocol
 
   # ---- The server stopping (Ctrl-C, or launchd's TERM; LCTYSP-3019) ----
 
+  # A connection is taken by the hub only after its handshake is answered: one answered as the server stops would be
+  # missed by close_all and keep the server running
+  Scenario: A page whose handshake is answered as the server stops is closed at once
+    Given the hub has closed every connection, as the server stopping does
+    When a page opens /v1/rpc
+    Then it gets a close frame with the code 1001
+    And it is no connection of the hub
+
   Scenario: When the server stops every page gets a close frame of 1001 and is let go
     Given two pages that close their end when the server closes, and a grace of 2 seconds
     When the hub closes every connection
