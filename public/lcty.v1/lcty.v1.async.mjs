@@ -173,6 +173,7 @@ function onBatch({ actorId, records }) {
 	for (const { store, op, row } of records) {
 		if (row.cid !== cid) continue;
 		if (store === "c_meta" && op === "put") followTitle(row.title);
+		if (store === "c_stats" && op === "put") followStats(row);
 		if (store !== "c_html") continue;
 		if (!applyRecord(op, row)) return outOfSync();
 	}
@@ -204,6 +205,12 @@ function applyRecord(op, row) {
 	} else return false;
 	markLast();
 	return true;
+}
+
+/** What another page measured of a reply (c_stats), shown in its ⓘ. */
+function followStats(row) {
+	const el = document.getElementById(row.id);
+	if (el?.localName === "lcty-msg") showStats(el, row);
 }
 
 /** The title another page set (c_meta), shown in the header. */

@@ -375,8 +375,9 @@ methods:
     description: >-
       timings, usage and client of a reply, which LCTYSP-0013 keeps out of the conversation file, go to lcty_c.sqlite,
       keyed by the id of the reply's model lcty-msg; what was recorded for it is replaced. It may be sent before or
-      after the reply is appended. It is not a change of a copy of the pages, so it has no version and no notification:
-      the pages read the stats with c.stats.list.
+      after the reply is appended. It is a change with a version, announced by c.batch.updated with a c_stats record
+      that goes only to the connections following the conversation; no database of the browser keeps it, so the pages
+      read the others with c.stats.list. Unappending the reply forgets it.
     paramStructure: by-name
     params:
       - name: cid
@@ -401,6 +402,10 @@ methods:
       name: recorded
       schema:
         type: object
+        required: [version]
+        properties:
+          version:
+            $ref: "#/components/schemas/Version"
     errors:
       - $ref: "#/components/errors/Invalid"
       - $ref: "#/components/errors/NotFound"
@@ -689,6 +694,28 @@ components:
                   $ref: "#/components/schemas/Cid"
                 id:
                   $ref: "#/components/schemas/ElementId"
+        - type: object
+          description: What c.stats.put recorded of a reply, only to the connections following its conversation
+          required: [store, op, row]
+          properties:
+            store:
+              const: c_stats
+            op:
+              const: put
+            row:
+              type: object
+              required: [cid, id, timings, usage, client]
+              properties:
+                cid:
+                  $ref: "#/components/schemas/Cid"
+                id:
+                  $ref: "#/components/schemas/ElementId"
+                timings:
+                  type: [object, "null"]
+                usage:
+                  type: [object, "null"]
+                client:
+                  type: [object, "null"]
     TagHasC:
       description: That a tag has a conversation, a row of t_has_many_c (LCTYSP-0014)
       type: object

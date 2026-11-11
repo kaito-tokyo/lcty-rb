@@ -172,6 +172,18 @@ Feature: LCTYSP-3020 The RPC protocol
       | timings that are not object | timings that are a string                | 3    |
       | an unknown conversation     | a cid with no file                       | 4    |
 
+  # A page shows what another page measured as it is recorded, and a removed reply leaves nothing in lcty_c.sqlite
+  Scenario: c.stats.put is announced with a c_stats record to the pages following the conversation only
+    Given a conversation with a model message, a page following it and a page following nothing
+    When c.stats.put records timings for the model message
+    Then the following page gets a c_stats put of cid, id, timings, usage and client, with that version
+    And the other page gets nothing of it
+
+  Scenario: Unappending a reply forgets what was measured of it
+    Given a conversation whose model message has its timings recorded
+    When the model message is unappended
+    Then c.stats.list returns nothing
+
   # ---- Following a conversation ----
 
   Scenario: Element notifications go only to the page following the conversation

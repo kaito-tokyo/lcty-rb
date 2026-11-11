@@ -196,7 +196,7 @@ module Lcty
     # The one notification of every change of c/
     BATCH = 'c.batch.updated'
     # The stores whose records go only to the connections following their conversation (c.subscribe)
-    SUBSCRIBED = %w[c_html].freeze
+    SUBSCRIBED = %w[c_html c_stats].freeze
 
     HUB = Hub.new
     class << self
@@ -236,10 +236,11 @@ module Lcty
       'c.append.thinking' => ->(p, peer) { Rpc.append(p, peer, 'lcty-thinking', p['innerHTML']) },
       'c.append.cmd' => ->(p, peer) { Rpc.append(p, peer, 'lcty-cmd', '') },
 
-      # Remove the last element: {cid, id}
+      # Remove the last element: {cid, id}. What was measured of a reply goes with it (lcty_c.sqlite)
       'c.unappend' => lambda do |p, peer|
         version = HUB.commit(peer) do
           count = ConvStore.remove(p['cid'], p['id'])
+          Rpc.c_store&.delete_message_stats(p['id']) if p['id'].to_s.start_with?('msg-m-')
           [{ 'store' => 'c_html', 'op' => 'unappend', 'row' => { 'cid' => p['cid'], 'id' => p['id'] } },
            Rpc.meta_record(p['cid']), Rpc.count_record(p['cid'], count)]
         end
@@ -306,11 +307,16 @@ module Lcty
         { 'version' => version, 'items' => items }
       end,
 
-      # Record what was measured of a reply: {cid, id, timings, usage, client}. Not a change of a copy of the pages
-      # (they read it with c.stats.list), so it has no version and no notification.
-      'c.stats.put' => lambda do |p, _peer|
-        ConvStore.put_stats(p)
-        {}
+      # Record what was measured of a reply: {cid, id, timings, usage, client}. Announced with a c_stats record to the
+      # pages following the conversation, which show it (they read the others with c.stats.list); no copy in a
+      # database of the browser holds it
+      'c.stats.put' => lambda do |p, peer|
+        version = HUB.commit(peer) do
+          ConvStore.put_stats(p)
+          row = { 'cid' => p['cid'], 'id' => p['id'] }.merge(Chatty::CStore::STATS.map { |k| [k, p[k]] }.to_h)
+          [{ 'store' => 'c_stats', 'op' => 'put', 'row' => row }]
+        end
+        { 'version' => version }
       end,
 
       # What was measured of every reply of a conversation: {cid}

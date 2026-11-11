@@ -655,6 +655,47 @@ test("A message another tab appends is shown, its presentation made from its tex
 	});
 });
 
+test("What another tab measured of a reply is shown in its ⓘ", async ({
+	page,
+	request,
+}) => {
+	const conv = await test.step(TWO_TURNS, () => openTwoTurns(page, request));
+	let replyId;
+	await test.step("When another connection appends a user message and a reply, and records 7 output tokens of the reply", () =>
+		withRpc(async (call) => {
+			const user = otherAttrs("user", "別のタブの質問");
+			await call("c.append.msg", {
+				cid: conv.id,
+				after: `msg-m-${conv.messages[3].id}`,
+				attrs: user,
+				innerHTML: "<article>別のタブの質問</article>",
+			});
+			const reply = otherAttrs("model", "別のタブの答え");
+			replyId = reply.id;
+			await call("c.append.msg", {
+				cid: conv.id,
+				after: user.id,
+				attrs: reply,
+				innerHTML: "<article><p>別のタブの答え</p></article>",
+			});
+			await call("c.stats.put", {
+				cid: conv.id,
+				id: reply.id,
+				timings: { prompt_n: 10, predicted_n: 7, predicted_per_second: 35 },
+			});
+		}));
+	await test.step('Then the reply\'s ⓘ is shown and says "7 tok"', async () => {
+		await expect
+			.poll(() =>
+				page.evaluate((id) => {
+					const el = document.getElementById(id);
+					return el && !el.foot.hidden ? el.timings.textContent : null;
+				}, replyId),
+			)
+			.toMatch(/7 tok/);
+	});
+});
+
 test("A lock another tab takes is shown as held and does not run here", async ({
 	page,
 	request,

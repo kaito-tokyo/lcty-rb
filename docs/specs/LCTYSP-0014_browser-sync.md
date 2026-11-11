@@ -64,13 +64,15 @@ the version they were last brought to, so that an older answer never overwrites 
   - `c_html`, the document of the conversation: `op` `append` with `row` `{cid, after, tag, attrs}`, the element as
     written without its presentation (no HTML goes to a browser over `/v1/rpc`, LCTYSP-0012); `op` `unappend` with
     `row` `{cid, id}`.
+  - `c_stats`, what was measured of a reply (`c.stats.put`): `op` `put` with `row` `{cid, id, timings, usage,
+    client}`. No database of the browser keeps it; the page shows it.
   - `c_meta` and `c_recordcount`, `op` `delete`: `row` is `{cid}` (deleting a conversation, today through the HTTP
     API, with the `actorId` `null`).
 - **`t.batch.updated` does the same for `t/`:** its records are those of `t_has_many_c` of `lcty_t`, `op` `delete`
   and then `put` with `row` `{tag, cid}`, the rows of a conversation's tags that went and those that came. Tags are
   still written through the HTTP API, so its `actorId` is `null`. A page that shows the sidebar declares it beside
   `c.batch.updated`.
-- **Each connection gets the records it follows:** `c_html` records go only to the connections that follow their
+- **Each connection gets the records it follows:** `c_html` and `c_stats` records go only to the connections that follow their
   conversation (`c.subscribe`), the others to every connection that receives `c.batch.updated`. The server leaves out
   the records a connection does not get, and sends it nothing when none is left. A page declares in `receives` the
   notifications themselves, not the stores.
@@ -185,7 +187,8 @@ When the connection is open and `initialize` has answered:
   - **An `lcty-cmd` is another page's lock:** it is added marked held ("A reply is being made in another tab") and
     never runs here; the page sends nothing while it is the last element, and the record that removes it removes it
     here too. One with `data-error` shows itself as failed.
-  - **The title** follows the `c_meta` records of the conversation that another page made.
+  - **The title** follows the `c_meta` records of the conversation that another page made, and the ⓘ of a reply its
+    `c_stats` records.
 - **`c.cmd.holds`** is answered `{holds: true}` while the page runs that `lcty-cmd`, `{holds: false}` otherwise, at
   once: the page that asked waits only a short time.
 

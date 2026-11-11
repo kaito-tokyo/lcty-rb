@@ -8,7 +8,8 @@
 #
 #   message_stats  what was measured of a reply, which LCTYSP-0013 moved out of the file: the id of its element
 #                  (msg-m-…), the conversation, and data-timings, data-usage and data-client as they were (JSON text,
-#                  NULL when absent). Written by tools/convert.rb and by c.stats.put of /v1/rpc.
+#                  NULL when absent). Written by tools/convert.rb and by c.stats.put of /v1/rpc; a row goes when its
+#                  reply is unappended or its conversation deleted.
 #
 # The version is PRAGMA user_version (LCTYSP-0015): a newer one is refused, an older one migrated step by step.
 
@@ -55,6 +56,16 @@ module Chatty
         @db.execute('SELECT id, timings, usage, client FROM message_stats WHERE cid = ? ORDER BY id', [cid])
       end
       rows.map { |id, *values| { 'id' => id }.merge(STATS.zip(values).map { |k, v| [k, v && JSON.parse(v)] }.to_h) }
+    end
+
+    # Forget what was measured of the reply whose element is id (it was removed from its file)
+    def delete_message_stats(id)
+      @mutex.synchronize { @db.execute('DELETE FROM message_stats WHERE id = ?', [id]) }
+    end
+
+    # Forget what was measured of every reply of conversation cid (it was deleted)
+    def delete_stats_of(cid)
+      @mutex.synchronize { @db.execute('DELETE FROM message_stats WHERE cid = ?', [cid]) }
     end
 
     def close

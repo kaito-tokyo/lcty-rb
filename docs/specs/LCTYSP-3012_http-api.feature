@@ -130,6 +130,7 @@ Feature: LCTYSP-3012 HTTP API
 
   Scenario: Deleting a conversation removes it with its tags and its index entries
     Given a conversation with a round with a unique word whose tags were changed to ["gone"]
+    And what was measured of a reply of it is recorded in lcty_c.sqlite
     When DELETE /v1/conversations/<id> is requested
     Then the status is 200 and the body is {"ok": true}
     And GET /v1/conversations/<id> answers 404
@@ -137,6 +138,7 @@ Feature: LCTYSP-3012 HTTP API
     And a search for its word no longer finds its round
     And its current tags are forgotten
     And the search index keeps no tag for it
+    And lcty_c.sqlite keeps nothing measured of its replies
     And deleting it again still answers 200
 
   Scenario: Deleting a conversation is announced to the pages

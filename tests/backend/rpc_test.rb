@@ -298,7 +298,7 @@ class RpcTest < Lcty::Scenarios
     step('When c.stats.put records timings and usage for a model message') do
       id = "msg-m-#{Chatty::Uuid.v7}"
       r = rpc('c.stats.put', 'cid' => cid, 'id' => id, 'timings' => { 'prompt_n' => 3 }, 'usage' => { 'output_tokens' => 2 })
-      assert_equal({}, r['result'])
+      assert_equal %w[version], r['result'].keys
     end
     step('Then c.stats.list returns them for its id, with client null') do
       assert_equal [{ 'id' => id, 'timings' => { 'prompt_n' => 3 }, 'usage' => { 'output_tokens' => 2 }, 'client' => nil }],
@@ -324,6 +324,50 @@ class RpcTest < Lcty::Scenarios
       end
       step("Then the error is #{code}") { assert_equal code, r['error']['code'] }
     end
+  end
+
+  scenario 'c.stats.put is announced with a c_stats record to the pages following the conversation only' do
+    cid = id = follower = other = version = nil
+    step('Given a conversation with a model message, a page following it and a page following nothing') do
+      cid = create
+      a = model_attrs
+      id = a['id']
+      append(cid, nil, a)
+      follower = page
+      other = page
+      follower.initialize_session
+      other.initialize_session
+      follower.call('c.subscribe', 'cid' => cid, 'last' => id)
+    end
+    step('When c.stats.put records timings for the model message') do
+      version = rpc('c.stats.put', 'cid' => cid, 'id' => id, 'timings' => { 'prompt_n' => 3 })['result']['version']
+    end
+    step('Then the following page gets a c_stats put of cid, id, timings, usage and client, with that version') do
+      wait_until { follower.records('c_stats').any? }
+      r = follower.records('c_stats').first
+      assert_equal 'put', r['op']
+      assert_equal({ 'cid' => cid, 'id' => id, 'timings' => { 'prompt_n' => 3 }, 'usage' => nil, 'client' => nil },
+                   r['row'])
+      assert_equal version, r['version']
+    end
+    step('And the other page gets nothing of it') do
+      settle
+      assert_empty other.records('c_stats')
+      refute(other.notes('c.batch.updated').any? { |n| n['params']['version'] == version })
+    end
+  end
+
+  scenario 'Unappending a reply forgets what was measured of it' do
+    cid = id = nil
+    step('Given a conversation whose model message has its timings recorded') do
+      cid = create
+      a = model_attrs
+      id = a['id']
+      append(cid, nil, a)
+      rpc('c.stats.put', 'cid' => cid, 'id' => id, 'timings' => { 'prompt_n' => 3 })
+    end
+    step('When the model message is unappended') { assert_nil rpc('c.unappend', 'cid' => cid, 'id' => id)['error'] }
+    step('Then c.stats.list returns nothing') { assert_empty rpc('c.stats.list', 'cid' => cid)['result']['items'] }
   end
 
   # ---- Following a conversation ----

@@ -149,6 +149,7 @@ module Chatty
           end
           INDEX.remove(id)
           TAGS.delete_conversation_tags(id)
+          C_STORE.delete_stats_of(id) # what was measured of its replies (lcty_c.sqlite)
           json(res, 200, 'ok' => true)
         else
           raise HttpError.new(404, 'no such endpoint')
