@@ -8,32 +8,14 @@
 import type * as Blocks from "./gfm_blocks.js";
 import type { DecodeName, LinkData, NodeOf } from "./gfm_blocks.js";
 
-// The types of the inlines, numbered on from the blocks'
-export const TEXT: 13;
-export const SOFTBREAK: 14;
-export const LINEBREAK: 15;
-export const CODE: 16;
-export const HTML_INLINE: 17;
-export const EMPH: 18;
-export const STRONG: 19;
-export const DEL: 20;
-export const LINK: 21;
-export const IMAGE: 22;
-/** The name of each type of node, blocks and inlines, by its number ("document", …, "text", …). */
-export const TYPE_NAMES: readonly string[];
-
-export type Text = NodeOf<typeof TEXT, null, never>;
-export type Code = NodeOf<typeof CODE, null, never>;
-export type HtmlInline = NodeOf<typeof HTML_INLINE, null, never>;
-export type Break = NodeOf<typeof SOFTBREAK | typeof LINEBREAK, null, never>;
+export type Text = NodeOf<"text", null, never>;
+export type Code = NodeOf<"code", null, never>;
+export type HtmlInline = NodeOf<"html_inline", null, never>;
+export type Break = NodeOf<"softbreak" | "linebreak", null, never>;
 /** Emphasis, strong emphasis and strikethrough. */
-export type Emphasis = NodeOf<
-	typeof EMPH | typeof STRONG | typeof DEL,
-	null,
-	Inline
->;
+export type Emphasis = NodeOf<"emph" | "strong" | "del", null, Inline>;
 /** A link or an image; an image's children are its description. */
-export type Link = NodeOf<typeof LINK | typeof IMAGE, LinkData, Inline>;
+export type Link = NodeOf<"link" | "image", LinkData, Inline>;
 
 /** An inline: its offset is in the text of its leaf block's content. */
 export type Inline = Text | Code | HtmlInline | Break | Emphasis | Link;

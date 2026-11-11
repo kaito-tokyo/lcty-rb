@@ -19,7 +19,6 @@
 
 import {
 	appendChild,
-	BLOCK_NAMES,
 	CLOSETAG,
 	decodeEntity,
 	ESCAPABLE,
@@ -32,34 +31,7 @@ import {
 	scanLinkLabel,
 	scanLinkTitle,
 	skipSpnl,
-	TABLE_CELL,
 } from "./gfm_blocks.js";
-
-// The types of the inlines, numbered on from the blocks' (gfm_blocks.js), so that one switch reads the whole tree
-export const TEXT = TABLE_CELL + 1;
-export const SOFTBREAK = TABLE_CELL + 2;
-export const LINEBREAK = TABLE_CELL + 3;
-export const CODE = TABLE_CELL + 4;
-export const HTML_INLINE = TABLE_CELL + 5;
-export const EMPH = TABLE_CELL + 6;
-export const STRONG = TABLE_CELL + 7;
-export const DEL = TABLE_CELL + 8;
-export const LINK = TABLE_CELL + 9;
-export const IMAGE = TABLE_CELL + 10;
-/** The name of each type of node, blocks and inlines, by its number. */
-export const TYPE_NAMES = Object.freeze([
-	...BLOCK_NAMES,
-	"text",
-	"softbreak",
-	"linebreak",
-	"code",
-	"html_inline",
-	"emph",
-	"strong",
-	"del",
-	"link",
-	"image",
-]);
 
 /** @import { Inline } from "./gfm_inlines.js" */
 
@@ -220,14 +192,14 @@ function charAt(s, i) {
 
 /** A text node of one piece. */
 function textNode(s, offset) {
-	const n = inline(TEXT, offset, null);
+	const n = inline("text", offset, null);
 	n.view = [s];
 	return n;
 }
 
 /** A link of an autolink: destination, and its text as its only child. */
 function autolinkNode(destination, text, offset) {
-	const link = inline(LINK, offset, { destination, title: "" });
+	const link = inline("link", offset, { destination, title: "" });
 	appendChild(link, textNode(text, offset));
 	return link;
 }
@@ -523,7 +495,7 @@ export class InlineParser {
 			closer.numdelims -= use;
 			opener.item.right += use;
 			closer.item.left += use;
-			const type = cc === "~" ? DEL : use === 1 ? EMPH : STRONG;
+			const type = cc === "~" ? "del" : use === 1 ? "emph" : "strong";
 			if (opener.item.opens === null) opener.item.opens = [type];
 			else opener.item.opens.unshift(type);
 			closer.item.closes += 1;
@@ -800,7 +772,7 @@ export class InlineParser {
 					break;
 				case K_LINK_OPEN:
 					open(
-						inline(item.data.image ? IMAGE : LINK, item.offset, {
+						inline(item.data.image ? "image" : "link", item.offset, {
 							destination: item.data.destination,
 							title: item.data.title,
 						}),
@@ -816,7 +788,7 @@ export class InlineParser {
 					endText();
 					const n = appendChild(
 						top(),
-						inline(item.kind === K_CODE ? CODE : HTML_INLINE, item.offset),
+						inline(item.kind === K_CODE ? "code" : "html_inline", item.offset),
 					);
 					n.view = [item.text];
 					break;
@@ -827,7 +799,7 @@ export class InlineParser {
 					appendChild(
 						top(),
 						inline(
-							item.kind === K_SOFTBREAK ? SOFTBREAK : LINEBREAK,
+							item.kind === K_SOFTBREAK ? "softbreak" : "linebreak",
 							item.offset,
 						),
 					);
@@ -851,7 +823,7 @@ function autolinkEmails(node) {
 		view.length === 1 ? view[0] : view.join(""),
 		node.offset,
 	);
-	if (parts.length === 1 && parts[0].type === TEXT) return;
+	if (parts.length === 1 && parts[0].type === "text") return;
 	const siblings = node.parent.children;
 	siblings.pop();
 	for (const p of parts) appendChild(node.parent, p);

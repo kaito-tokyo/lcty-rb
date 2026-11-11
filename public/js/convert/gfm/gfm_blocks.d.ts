@@ -5,9 +5,9 @@
 // The types of gfm_blocks.js: the blocks of the document tree of GFM 0.29-gfm (LCTYSP-0017).
 //
 // A node is a plain object of the shape below, not an instance of a class: a type is a structural one, matched by its
-// fields, and the parsers make every node of a kind with the same fields in the same order. A node's type is one of the
-// small integers below (DOCUMENT, PARAGRAPH, …), not a name; BLOCK_NAMES gives the names. A block has the fields of
-// every node and then the block parser's (open, startLine, endLine).
+// fields, and the parsers make every node of a kind with the same fields in the same order. A node's type is its name
+// ("document", "paragraph", …), a string written as it is. A block has the fields of every node and then the
+// block parser's (open, startLine, endLine).
 //
 // The blocks say nothing of what a paragraph, a heading or a table cell holds: each type takes it as L, the type of
 // their children, none (never) as the block parser leaves them. Another phase gives the tree with its own L.
@@ -15,28 +15,11 @@
 /** The text of the named character reference &name; ("amp" → "&"), or null when HTML has no such name. */
 export type DecodeName = (name: string) => string | null;
 
-// The types of the blocks, in this order
-export const DOCUMENT: 0;
-export const BLOCK_QUOTE: 1;
-export const LIST: 2;
-export const ITEM: 3;
-export const PARAGRAPH: 4;
-export const HEADING: 5;
-export const CODE_BLOCK: 6;
-export const HTML_BLOCK: 7;
-export const THEMATIC_BREAK: 8;
-export const TABLE: 9;
-export const TABLE_HEAD: 10;
-export const TABLE_ROW: 11;
-export const TABLE_CELL: 12;
-/** The name of each type of block, by its number ("document", "block_quote", …). */
-export const BLOCK_NAMES: readonly string[];
-
 /** Any node: what every node has, whatever its type, values and children. */
-export type AnyNode = NodeOf<number, unknown, unknown>;
+export type AnyNode = NodeOf<string, unknown, unknown>;
 
 /** What every node has. */
-export interface NodeOf<T extends number, D, C> {
+export interface NodeOf<T extends string, D, C> {
 	readonly type: T;
 	/** Where it starts, in the text its parser read. */
 	offset: number;
@@ -52,7 +35,7 @@ export interface NodeOf<T extends number, D, C> {
 }
 
 /** What every block has besides: the block parser's state. */
-export interface BlockOf<T extends number, D, C> extends NodeOf<T, D, C> {
+export interface BlockOf<T extends string, D, C> extends NodeOf<T, D, C> {
 	/** Whether lines may still be added to it. */
 	open: boolean;
 	/** The lines it begins and ends on, 1-based (a list's tightness is read from them). */
@@ -114,23 +97,23 @@ export interface LinkData {
 	title: string;
 }
 
-export type Document<L = never> = BlockOf<typeof DOCUMENT, null, Block<L>>;
-export type BlockQuote<L = never> = BlockOf<typeof BLOCK_QUOTE, null, Block<L>>;
-export type List<L = never> = BlockOf<typeof LIST, ListData, Item<L>>;
-export type Item<L = never> = BlockOf<typeof ITEM, ItemData, Block<L>>;
-export type Paragraph<L = never> = BlockOf<typeof PARAGRAPH, null, L>;
-export type Heading<L = never> = BlockOf<typeof HEADING, HeadingData, L>;
-export type CodeBlock = BlockOf<typeof CODE_BLOCK, CodeBlockData, never>;
-export type HtmlBlock = BlockOf<typeof HTML_BLOCK, HtmlBlockData, never>;
-export type ThematicBreak = BlockOf<typeof THEMATIC_BREAK, null, never>;
-export type Table<L = never> = BlockOf<typeof TABLE, TableData, TableRow<L>>;
-/** The header row (TABLE_HEAD) or a body row (TABLE_ROW). */
+export type Document<L = never> = BlockOf<"document", null, Block<L>>;
+export type BlockQuote<L = never> = BlockOf<"block_quote", null, Block<L>>;
+export type List<L = never> = BlockOf<"list", ListData, Item<L>>;
+export type Item<L = never> = BlockOf<"item", ItemData, Block<L>>;
+export type Paragraph<L = never> = BlockOf<"paragraph", null, L>;
+export type Heading<L = never> = BlockOf<"heading", HeadingData, L>;
+export type CodeBlock = BlockOf<"code_block", CodeBlockData, never>;
+export type HtmlBlock = BlockOf<"html_block", HtmlBlockData, never>;
+export type ThematicBreak = BlockOf<"thematic_break", null, never>;
+export type Table<L = never> = BlockOf<"table", TableData, TableRow<L>>;
+/** The header row ("table_head") or a body row ("table_row"). */
 export type TableRow<L = never> = BlockOf<
-	typeof TABLE_HEAD | typeof TABLE_ROW,
+	"table_head" | "table_row",
 	null,
 	TableCell<L>
 >;
-export type TableCell<L = never> = BlockOf<typeof TABLE_CELL, TableCellData, L>;
+export type TableCell<L = never> = BlockOf<"table_cell", TableCellData, L>;
 
 export type Block<L = never> =
 	| Document<L>

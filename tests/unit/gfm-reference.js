@@ -8,33 +8,6 @@
 // LCTYSP-0017 instead.
 
 import { readFileSync } from "node:fs";
-import { publicUrl } from "./node-unit.js";
-
-const {
-	DOCUMENT,
-	BLOCK_QUOTE,
-	LIST,
-	ITEM,
-	PARAGRAPH,
-	HEADING,
-	CODE_BLOCK,
-	HTML_BLOCK,
-	THEMATIC_BREAK,
-	TABLE,
-} = await import(publicUrl("js/convert/gfm/gfm_blocks.js"));
-const {
-	TEXT,
-	SOFTBREAK,
-	LINEBREAK,
-	CODE,
-	HTML_INLINE,
-	EMPH,
-	STRONG,
-	DEL,
-	LINK,
-	IMAGE,
-	TYPE_NAMES,
-} = await import(publicUrl("js/convert/gfm/gfm_inlines.js"));
 
 const GFM = new URL("../gfm/", import.meta.url);
 
@@ -111,24 +84,24 @@ export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
 	const plain = (node) =>
 		node.children
 			.map((n) =>
-				n.type === TEXT || n.type === CODE || n.type === HTML_INLINE
+				n.type === "text" || n.type === "code" || n.type === "html_inline"
 					? n.view.join("")
-					: n.type === SOFTBREAK || n.type === LINEBREAK
+					: n.type === "softbreak" || n.type === "linebreak"
 						? "\n"
 						: plain(n),
 			)
 			.join("");
 	const tight = (node) =>
-		node.parent?.parent?.type === LIST && node.parent.parent.data.tight;
+		node.parent?.parent?.type === "list" && node.parent.parent.data.tight;
 	const render = (node) => {
 		const kids = () => {
 			for (const c of node.children) render(c);
 		};
 		switch (node.type) {
-			case DOCUMENT:
+			case "document":
 				kids();
 				break;
-			case PARAGRAPH:
+			case "paragraph":
 				if (tight(node)) kids();
 				else {
 					cr();
@@ -138,14 +111,14 @@ export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
 					cr();
 				}
 				break;
-			case HEADING:
+			case "heading":
 				cr();
 				out += `<h${node.data.level}>`;
 				kids();
 				out += `</h${node.data.level}>`;
 				cr();
 				break;
-			case BLOCK_QUOTE:
+			case "block_quote":
 				cr();
 				out += "<blockquote>";
 				cr();
@@ -154,7 +127,7 @@ export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
 				out += "</blockquote>";
 				cr();
 				break;
-			case LIST: {
+			case "list": {
 				const d = node.data;
 				const tag = d.type === "bullet" ? "ul" : "ol";
 				cr();
@@ -169,7 +142,7 @@ export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
 				cr();
 				break;
 			}
-			case ITEM:
+			case "item":
 				out += "<li>";
 				if (node.data.task === "checked")
 					out += '<input checked="" disabled="" type="checkbox"> ';
@@ -179,7 +152,7 @@ export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
 				out += "</li>";
 				cr();
 				break;
-			case CODE_BLOCK: {
+			case "code_block": {
 				cr();
 				const lang = node.data.info.split(/[ \t\n]+/)[0];
 				out += lang
@@ -189,17 +162,17 @@ export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
 				cr();
 				break;
 			}
-			case HTML_BLOCK:
+			case "html_block":
 				cr();
 				out += raw(node.view.join("\n"));
 				cr();
 				break;
-			case THEMATIC_BREAK:
+			case "thematic_break":
 				cr();
 				out += "<hr />";
 				cr();
 				break;
-			case TABLE: {
+			case "table": {
 				cr();
 				out += "<table>\n<thead>\n";
 				const [head, ...rows] = node.children;
@@ -224,49 +197,53 @@ export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
 				out += "</table>\n";
 				break;
 			}
-			case TEXT:
+			case "text":
 				out += escapeXml(node.view.join(""));
 				break;
-			case SOFTBREAK:
+			case "softbreak":
 				out += "\n";
 				break;
-			case LINEBREAK:
+			case "linebreak":
 				out += "<br />\n";
 				break;
-			case CODE:
+			case "code":
 				out += `<code>${escapeXml(node.view.join(""))}</code>`;
 				break;
-			case HTML_INLINE:
+			case "html_inline":
 				out += raw(node.view.join("\n"));
 				break;
-			case EMPH:
-			case STRONG:
-			case DEL: {
-				if (node.type === STRONG && node.parent?.type === STRONG) {
+			case "emph":
+			case "strong":
+			case "del": {
+				if (node.type === "strong" && node.parent?.type === "strong") {
 					kids();
 					break;
 				}
 				const tag =
-					node.type === EMPH ? "em" : node.type === STRONG ? "strong" : "del";
+					node.type === "emph"
+						? "em"
+						: node.type === "strong"
+							? "strong"
+							: "del";
 				out += `<${tag}>`;
 				kids();
 				out += `</${tag}>`;
 				break;
 			}
-			case LINK:
+			case "link":
 				out += `<a href="${escapeXml(node.data.destination)}"`;
 				if (node.data.title) out += ` title="${escapeXml(node.data.title)}"`;
 				out += ">";
 				kids();
 				out += "</a>";
 				break;
-			case IMAGE:
+			case "image":
 				out += `<img src="${escapeXml(node.data.destination)}" alt="${escapeXml(plain(node))}"`;
 				if (node.data.title) out += ` title="${escapeXml(node.data.title)}"`;
 				out += " />";
 				break;
 			default:
-				throw new Error(`no reference HTML for ${TYPE_NAMES[node.type]}`);
+				throw new Error(`no reference HTML for ${node.type}`);
 		}
 	};
 	render(doc);

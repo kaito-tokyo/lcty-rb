@@ -19,9 +19,7 @@ import { expect, publicUrl, scenario } from "./node-unit.js";
 const { BlockWatch, parseBlocks, parseGfm } = await import(
 	publicUrl("js/convert/gfm/converter.js")
 );
-const { BLOCK_QUOTE, BlockParser, PARAGRAPH } = await import(
-	publicUrl("js/convert/gfm/gfm_blocks.js")
-);
+const { BlockParser } = await import(publicUrl("js/convert/gfm/gfm_blocks.js"));
 const { InlineParser } = await import(
 	publicUrl("js/convert/gfm/gfm_inlines.js")
 );
@@ -155,7 +153,7 @@ scenario(
 				let depth = 0;
 				for (
 					let n = doc.children[0];
-					n?.type === BLOCK_QUOTE;
+					n?.type === "block_quote";
 					n = n.children[0]
 				) {
 					depth++;
@@ -168,7 +166,7 @@ scenario(
 			'And the innermost holds a paragraph of "> > > > > > > > a"',
 			() => {
 				const p = inner.children[0];
-				expect(p.type).toBe(PARAGRAPH);
+				expect(p.type).toBe("paragraph");
 				expect(p.children.map((n) => n.view.join("")).join("")).toBe(
 					"> > > > > > > > a",
 				);

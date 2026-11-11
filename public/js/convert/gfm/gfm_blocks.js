@@ -13,38 +13,6 @@
 // and their operations, backslash escapes and character references, link labels, destinations and titles (a link
 // reference definition is a leaf block), and HTML tags (an HTML block of condition 7 begins with one).
 
-// The types of the blocks (gfm_blocks.d.ts): small integers, so that a switch on a type is a jump table and a table of
-// the types is an array. BLOCK_NAMES gives each its name, for messages and debugging. The numbers after TABLE_CELL are
-// free for the nodes of other phases.
-export const DOCUMENT = 0;
-export const BLOCK_QUOTE = 1;
-export const LIST = 2;
-export const ITEM = 3;
-export const PARAGRAPH = 4;
-export const HEADING = 5;
-export const CODE_BLOCK = 6;
-export const HTML_BLOCK = 7;
-export const THEMATIC_BREAK = 8;
-export const TABLE = 9;
-export const TABLE_HEAD = 10;
-export const TABLE_ROW = 11;
-export const TABLE_CELL = 12;
-export const BLOCK_NAMES = Object.freeze([
-	"document",
-	"block_quote",
-	"list",
-	"item",
-	"paragraph",
-	"heading",
-	"code_block",
-	"html_block",
-	"thematic_break",
-	"table",
-	"table_head",
-	"table_row",
-	"table_cell",
-]);
-
 /** The shared empty view and child list of the nodes that have none. Frozen, so nothing is added to it by mistake. */
 export const NONE = Object.freeze([]);
 
@@ -355,7 +323,7 @@ export const MAX_NESTING = 32;
 function nesting(block) {
 	let n = 0;
 	for (let b = block; b !== null; b = b.parent)
-		if (b.type === BLOCK_QUOTE || b.type === ITEM) n++;
+		if (b.type === "block_quote" || b.type === "item") n++;
 	return n;
 }
 
@@ -443,10 +411,10 @@ function delimiterRow(line) {
 /** Whether the current line continues block: 0 (it does), 1 (it does not) or 2 (the line is used up). */
 function continueBlock(parser, block) {
 	switch (block.type) {
-		case DOCUMENT:
-		case LIST:
+		case "document":
+		case "list":
 			return 0;
-		case BLOCK_QUOTE: {
+		case "block_quote": {
 			const ln = parser.currentLine;
 			if (parser.indented || ln[parser.nextNonspace] !== ">") return 1;
 			parser.advanceNextNonspace();
@@ -454,7 +422,7 @@ function continueBlock(parser, block) {
 			if (isSpaceOrTab(ln[parser.offset])) parser.advanceOffset(1, true);
 			return 0;
 		}
-		case ITEM: {
+		case "item": {
 			const width = block.data.markerOffset + block.data.padding;
 			if (parser.blank) {
 				if (block.children.length === 0) return 1;
@@ -466,15 +434,15 @@ function continueBlock(parser, block) {
 			}
 			return 0;
 		}
-		case CODE_BLOCK:
+		case "code_block":
 			return continueCodeBlock(parser, block);
-		case HTML_BLOCK:
+		case "html_block":
 			return parser.blank &&
 				(block.data.htmlType === 6 || block.data.htmlType === 7)
 				? 1
 				: 0;
-		case PARAGRAPH:
-		case TABLE:
+		case "paragraph":
+		case "table":
 			return parser.blank ? 1 : 0;
 		default:
 			// heading, thematic_break: one line each
@@ -516,7 +484,7 @@ function continueCodeBlock(parser, block) {
 /** What is done to block when it is closed. */
 function finalizeBlock(parser, block) {
 	switch (block.type) {
-		case LIST: {
+		case "list": {
 			block.endLine = lastChild(block)?.endLine ?? block.startLine;
 			const items = block.children;
 			let tight = true;
@@ -529,10 +497,10 @@ function finalizeBlock(parser, block) {
 			block.data.tight = tight;
 			break;
 		}
-		case ITEM:
+		case "item":
 			block.endLine = lastChild(block)?.endLine ?? block.startLine;
 			break;
-		case CODE_BLOCK: {
+		case "code_block": {
 			const lines = block.view;
 			if (block.data.fenced) {
 				// the first line is the info string; the code is the lines after it
@@ -546,14 +514,14 @@ function finalizeBlock(parser, block) {
 			}
 			break;
 		}
-		case HTML_BLOCK: {
+		case "html_block": {
 			const lines = block.view;
 			let n = lines.length;
 			while (n > 1 && /^ *$/.test(lines[n - 1])) n--;
 			if (n < lines.length) block.view = lines.slice(0, n);
 			break;
 		}
-		case PARAGRAPH:
+		case "paragraph":
 			finalizeParagraph(parser, block);
 			break;
 	}
@@ -570,7 +538,7 @@ function finalizeParagraph(parser, block) {
 		}
 	}
 	const item = block.parent;
-	if (item.type === ITEM && item.children[0] === block) {
+	if (item.type === "item" && item.children[0] === block) {
 		// a task list item's box: [ ], [x] or [X], and then a space or a tab
 		const x = content[1];
 		if (
@@ -589,12 +557,12 @@ function finalizeParagraph(parser, block) {
 /** Whether a block of type parent may hold a block of type child. */
 function canContain(parent, child) {
 	switch (parent) {
-		case DOCUMENT:
-		case BLOCK_QUOTE:
-		case ITEM:
-			return child !== ITEM;
-		case LIST:
-			return child === ITEM;
+		case "document":
+		case "block_quote":
+		case "item":
+			return child !== "item";
+		case "list":
+			return child === "item";
 		default:
 			return false;
 	}
@@ -603,10 +571,10 @@ function canContain(parent, child) {
 /** Whether the rest of a line is added to an open block of type: the leaves of lines. */
 function acceptsLines(type) {
 	return (
-		type === CODE_BLOCK ||
-		type === HTML_BLOCK ||
-		type === PARAGRAPH ||
-		type === TABLE
+		type === "code_block" ||
+		type === "html_block" ||
+		type === "paragraph" ||
+		type === "table"
 	);
 }
 
@@ -668,11 +636,11 @@ function startBlock(parser, container) {
 		case "<":
 			return startHtmlBlock(parser, container);
 		case "=":
-			return container.type === PARAGRAPH && spacesToEnd(ln, runEnd(ln, i, c))
+			return container.type === "paragraph" && spacesToEnd(ln, runEnd(ln, i, c))
 				? startSetextHeading(parser, container, 1)
 				: 0;
 		case "-":
-			if (container.type === PARAGRAPH) {
+			if (container.type === "paragraph") {
 				if (spacesToEnd(ln, runEnd(ln, i, c))) {
 					const r = startSetextHeading(parser, container, 2);
 					if (r !== 0) return r;
@@ -693,7 +661,7 @@ function startBlock(parser, container) {
 			return startBulletItem(parser, container, c);
 		case "|":
 		case ":":
-			return container.type === PARAGRAPH ? startTable(parser, container) : 0;
+			return container.type === "paragraph" ? startTable(parser, container) : 0;
 		default:
 			return c >= "0" && c <= "9" ? startOrderedItem(parser, container) : 0;
 	}
@@ -717,7 +685,7 @@ function startBlockQuote(parser, container) {
 	if (isSpaceOrTab(parser.currentLine[parser.offset]))
 		parser.advanceOffset(1, true);
 	parser.closeUnmatchedBlocks();
-	parser.addChild(BLOCK_QUOTE, parser.nextNonspace, null);
+	parser.addChild("block_quote", parser.nextNonspace, null);
 	return 1;
 }
 
@@ -734,7 +702,7 @@ function startATXHeading(parser) {
 	parser.advanceNextNonspace();
 	parser.advanceOffset(j - i, false);
 	parser.closeUnmatchedBlocks();
-	const heading = parser.addChild(HEADING, parser.nextNonspace, { level });
+	const heading = parser.addChild("heading", parser.nextNonspace, { level });
 	heading.view = [withoutClosingSequence(ln.slice(parser.offset))];
 	parser.advanceOffset(ln.length - parser.offset);
 	return 2;
@@ -761,7 +729,7 @@ function startFencedCode(parser, c) {
 	const length = end - i;
 	if (length < 3 || (c === "`" && ln.indexOf("`", end) !== -1)) return 0;
 	parser.closeUnmatchedBlocks();
-	parser.addChild(CODE_BLOCK, i, {
+	parser.addChild("code_block", i, {
 		fenced: true,
 		fenceChar: c,
 		fenceLength: length,
@@ -784,12 +752,12 @@ function startHtmlBlock(parser, container) {
 	if (t === 5 && m[5] !== "<![CDATA[") return 0;
 	if (
 		t === 7 &&
-		(container.type === PARAGRAPH ||
-			(!parser.allClosed && !parser.blank && parser.tip.type === PARAGRAPH))
+		(container.type === "paragraph" ||
+			(!parser.allClosed && !parser.blank && parser.tip.type === "paragraph"))
 	)
 		return 0;
 	parser.closeUnmatchedBlocks();
-	parser.addChild(HTML_BLOCK, parser.offset, { htmlType: t });
+	parser.addChild("html_block", parser.offset, { htmlType: t });
 	return 2;
 }
 
@@ -803,7 +771,7 @@ function startSetextHeading(parser, container, level) {
 		return 0;
 	}
 	const heading = block(
-		HEADING,
+		"heading",
 		container.offset,
 		{ level },
 		true,
@@ -826,7 +794,7 @@ function startTable(parser, container) {
 	parser.closeUnmatchedBlocks();
 	// the header row is the paragraph's last line: where its text starts, when the paragraph keeps lines before it
 	const table = block(
-		TABLE,
+		"table",
 		lines.length > 1 ? parser.lastLineAt : container.offset,
 		{
 			aligns,
@@ -842,7 +810,7 @@ function startTable(parser, container) {
 	} else {
 		replaceNode(container, table);
 	}
-	parser.addTableRow(table, header, TABLE_HEAD);
+	parser.addTableRow(table, header, "table_head");
 	parser.tip = table;
 	parser.advanceOffset(parser.currentLine.length - parser.offset, false);
 	return 2;
@@ -850,7 +818,7 @@ function startTable(parser, container) {
 
 function startThematicBreak(parser) {
 	parser.closeUnmatchedBlocks();
-	parser.addChild(THEMATIC_BREAK, parser.nextNonspace, null);
+	parser.addChild("thematic_break", parser.nextNonspace, null);
 	parser.advanceOffset(parser.currentLine.length - parser.offset, false);
 	return 2;
 }
@@ -874,7 +842,7 @@ function startOrderedItem(parser, container) {
 	if (next !== undefined && !isSpaceOrTab(next)) return 0;
 	const start = Number.parseInt(ln.slice(i, j), 10);
 	// in a paragraph, an ordered list starts only at 1
-	if (container.type === PARAGRAPH && start !== 1) return 0;
+	if (container.type === "paragraph" && start !== 1) return 0;
 	return startListItem(
 		parser,
 		container,
@@ -900,7 +868,7 @@ function startListItem(
 	const ln = parser.currentLine;
 	// in a paragraph, a list item may not start empty
 	if (
-		container.type === PARAGRAPH &&
+		container.type === "paragraph" &&
 		blankToEnd(ln, parser.nextNonspace + length)
 	)
 		return 0;
@@ -934,12 +902,12 @@ function startListItem(
 	parser.closeUnmatchedBlocks();
 	const list = parser.tip;
 	if (
-		list.type !== LIST ||
+		list.type !== "list" ||
 		list.data.type !== marker.type ||
 		list.data.delimiter !== marker.delimiter ||
 		list.data.bulletChar !== marker.bulletChar
 	) {
-		parser.addChild(LIST, parser.nextNonspace, {
+		parser.addChild("list", parser.nextNonspace, {
 			type: marker.type,
 			bulletChar: marker.bulletChar,
 			delimiter: marker.delimiter,
@@ -947,7 +915,7 @@ function startListItem(
 			tight: true,
 		});
 	}
-	parser.addChild(ITEM, parser.nextNonspace, {
+	parser.addChild("item", parser.nextNonspace, {
 		markerOffset: marker.markerOffset,
 		padding: marker.padding,
 		task: null,
@@ -957,10 +925,10 @@ function startListItem(
 
 /** An indented code block. */
 function startIndentedCode(parser) {
-	if (parser.tip.type === PARAGRAPH || parser.blank) return 0;
+	if (parser.tip.type === "paragraph" || parser.blank) return 0;
 	parser.advanceOffset(CODE_INDENT, true);
 	parser.closeUnmatchedBlocks();
-	parser.addChild(CODE_BLOCK, parser.offset, {
+	parser.addChild("code_block", parser.offset, {
 		fenced: false,
 		fenceChar: "",
 		fenceLength: 0,
@@ -977,7 +945,7 @@ export class BlockParser {
 		// What lasts from one advance to the next: the link reference definitions, by normalized label ({ destination,
 		// title }), and the document of the blocks advanced, one child each.
 		this.refmap = new Map();
-		this.doc = block(DOCUMENT, 0, null, true, 1);
+		this.doc = block("document", 0, null, true, 1);
 		// the lines read past the last block taken, for an advance given carryRest: their base, where reading goes on,
 		// and where the next block starts
 		this.carryRest = null;
@@ -987,7 +955,7 @@ export class BlockParser {
 		this.ends = [];
 		this.base = 0;
 		// What one advance reads its lines into, emptied at each: a root of its own and the state of its lines.
-		this.root = block(DOCUMENT, 0, null, true, 1);
+		this.root = block("document", 0, null, true, 1);
 		this.tip = this.doc;
 		this.oldtip = this.doc;
 		this.lineNumber = 0;
@@ -1136,7 +1104,7 @@ export class BlockParser {
 				first,
 				pos,
 			);
-		if (first.type === HEADING || first.type === THEMATIC_BREAK) {
+		if (first.type === "heading" || first.type === "thematic_break") {
 			this.finalize(first, this.lineNumber);
 			return this.took(head, blockStart, pos, first, pos);
 		}
@@ -1184,7 +1152,7 @@ export class BlockParser {
 		if (first.parent === null) return [rest, text, null, []];
 		appendChild(this.doc, first);
 		const type = first.type;
-		if (type === PARAGRAPH || type === HEADING)
+		if (type === "paragraph" || type === "heading")
 			return [rest, text, first, [first]];
 		// its leaves in the order of the text (a loop over its blocks, any depth)
 		const leaves = [];
@@ -1192,7 +1160,7 @@ export class BlockParser {
 		while (stack.length > 0) {
 			const node = stack.pop();
 			const t = node.type;
-			if (t === PARAGRAPH || t === HEADING || t === TABLE_CELL)
+			if (t === "paragraph" || t === "heading" || t === "table_cell")
 				leaves.push(node);
 			else
 				for (let i = node.children.length - 1; i >= 0; i--)
@@ -1208,7 +1176,7 @@ export class BlockParser {
 		for (let i = 0; i < aligns.length; i++) {
 			const cell = appendChild(
 				row,
-				block(TABLE_CELL, this.lineStart, { align: aligns[i] }, false, 0),
+				block("table_cell", this.lineStart, { align: aligns[i] }, false, 0),
 			);
 			cell.view = [cells[i] ?? ""];
 		}
@@ -1337,8 +1305,8 @@ export class BlockParser {
 		this.lastMatchedContainer = container;
 
 		let matchedLeaf =
-			container.type !== PARAGRAPH &&
-			container.type !== TABLE &&
+			container.type !== "paragraph" &&
+			container.type !== "table" &&
 			acceptsLines(container.type);
 
 		while (!matchedLeaf) {
@@ -1354,31 +1322,31 @@ export class BlockParser {
 			if (r === 2) matchedLeaf = true;
 		}
 
-		if (!this.allClosed && !this.blank && this.tip.type === PARAGRAPH) {
+		if (!this.allClosed && !this.blank && this.tip.type === "paragraph") {
 			// a lazy continuation line
 			this.addLine();
 			return;
 		}
 		this.closeUnmatchedBlocks();
 		const type = container.type;
-		if (type === TABLE) {
+		if (type === "table") {
 			if (container.data.skipLine) container.data.skipLine = false;
 			else
 				this.addTableRow(
 					container,
 					tableCells(this.currentLine.slice(this.offset)),
-					TABLE_ROW,
+					"table_row",
 				);
 		} else if (acceptsLines(type)) {
 			this.addLine();
 			if (
-				type === HTML_BLOCK &&
+				type === "html_block" &&
 				container.data.htmlType <= 5 &&
 				htmlBlockEnds(this, container.data.htmlType)
 			)
 				this.finalize(container, this.lineNumber);
 		} else if (this.offset < this.currentLine.length && !this.blank) {
-			this.addChild(PARAGRAPH, this.offset, null);
+			this.addChild("paragraph", this.offset, null);
 			this.advanceNextNonspace();
 			this.addLine();
 		}
