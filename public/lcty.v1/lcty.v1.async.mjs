@@ -44,6 +44,7 @@ import {
 } from "../js/ui/lcty-elements.js";
 import {
 	cmdAttrs,
+	elementFromAttrs,
 	elementOf,
 	historyOf,
 	lastElement,
@@ -164,12 +165,52 @@ async function subscribe() {
 	}
 }
 
-// A change of this conversation made by another page: the document no longer follows the file (LCTYSP-0014). The
-// page's own changes are already in its document; the sidebar follows the other records itself.
+// A change of this conversation made by another page (LCTYSP-0014). The page's own changes are already in its
+// document; the sidebar follows the other records itself. Each c_html record is applied in order when it follows the
+// document's last element, and puts the conversation out of sync when it does not. The title follows c_meta.
 function onBatch({ actorId, records }) {
-	if (actorId === rpc.actorId) return;
-	if (records.some((r) => r.store === "c_html" && r.row.cid === cid))
-		outOfSync();
+	if (actorId === rpc.actorId || state.outOfSync) return;
+	for (const { store, op, row } of records) {
+		if (row.cid !== cid) continue;
+		if (store === "c_meta" && op === "put") followTitle(row.title);
+		if (store !== "c_html") continue;
+		if (!applyRecord(op, row)) return outOfSync();
+	}
+}
+
+/**
+ * Apply one c_html record of another page: append the element after the last one, or remove the last one. Returns
+ * false when it does not follow the document. The element is built from its tag and attributes (no HTML comes over
+ * /v1/rpc, LCTYSP-0012); an lcty-cmd is another page's lock, so it is marked held and never runs here.
+ */
+function applyRecord(op, row) {
+	const last = lastElement(log);
+	if (op === "unappend") {
+		if (last?.id !== row.id) return false;
+		last.remove();
+	} else if (op === "append") {
+		if ((last?.id ?? null) !== row.after) return false;
+		const el = elementFromAttrs(row.tag, row.attrs);
+		if (!el) return false;
+		if (row.tag === "lcty-cmd" && !el.hasAttribute("data-error")) {
+			el.setAttribute("state", "held");
+			if (el.label)
+				el.label.textContent = tr(
+					"cmdHeld",
+					"A reply is being made in another tab",
+				);
+		}
+		log.append(el);
+	} else return false;
+	markLast();
+	return true;
+}
+
+/** The title another page set (c_meta), shown in the header. */
+function followTitle(title) {
+	if (!state.conv || title == null || title === state.conv.title) return;
+	state.conv.title = title;
+	renderHeader();
 }
 
 /** The document no longer follows the file: nothing more is written, and the user is asked to reload (LCTYSP-0014). */

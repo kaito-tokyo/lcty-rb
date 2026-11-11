@@ -22,6 +22,7 @@ import {
 	savedMessages,
 	test,
 	uniqueWord,
+	userText,
 	uuidv7,
 	waitForReply,
 	waitForSaved,
@@ -607,23 +608,116 @@ test("A lock that no tab holds is shown with Retry and Remove", async ({
 	});
 });
 
-test("A change by another tab makes the page ask for a reload", async ({
+/** The attributes of a message another tab writes. */
+function otherAttrs(role, text) {
+	return {
+		"data-role": role,
+		id: `${role === "user" ? "msg-u" : "msg-m"}-${uuidv7()}`,
+		"data-at": new Date().toISOString(),
+		"data-content": text,
+	};
+}
+
+test("A message another tab appends is shown, its presentation made from its text", async ({
+	page,
+	request,
+}) => {
+	const conv = await test.step(TWO_TURNS, () => openTwoTurns(page, request));
+	await test.step('When another connection appends a user message "別のタブから" and a reply "**太字**" whose presentation in the file is "<p>ファイルの表示</p>"', () =>
+		withRpc(async (call) => {
+			const user = otherAttrs("user", "別のタブから");
+			await call("c.append.msg", {
+				cid: conv.id,
+				after: `msg-m-${conv.messages[3].id}`,
+				attrs: user,
+				innerHTML: "<article>別のタブから</article>",
+			});
+			await call("c.append.msg", {
+				cid: conv.id,
+				after: user.id,
+				attrs: otherAttrs("model", "**太字**"),
+				innerHTML: "<article><p>ファイルの表示</p></article>",
+			});
+		}));
+	await test.step('Then the page shows six messages, the last user message "別のタブから"', async () => {
+		await expect(messages(page)).toHaveCount(6);
+		await expect(userText(messages(page, "user").last())).toHaveText(
+			"別のタブから",
+		);
+	});
+	await test.step('And the reply shows "太字" in bold, made from its Markdown, not "ファイルの表示"', async () => {
+		const article = messages(page, "assistant").last().locator("article");
+		await expect(article.locator("strong")).toHaveText("太字");
+		await expect(article).not.toContainText("ファイルの表示");
+	});
+	await test.step("And the composer can still be used", async () => {
+		await expect(composerInput(page)).toBeEnabled();
+	});
+});
+
+test("A lock another tab takes is shown as held and does not run here", async ({
 	page,
 	request,
 	llm,
 }) => {
 	const conv = await test.step(TWO_TURNS, () => openTwoTurns(page, request));
+	const cmdId = `cmd-${uuidv7()}`;
+	await test.step("When another connection appends a user message and an lcty-cmd send", () =>
+		withRpc(async (call) => {
+			const user = otherAttrs("user", "別のタブの質問");
+			await call("c.append.msg", {
+				cid: conv.id,
+				after: `msg-m-${conv.messages[3].id}`,
+				attrs: user,
+				innerHTML: "<article>別のタブの質問</article>",
+			});
+			await call("c.append.cmd", {
+				cid: conv.id,
+				after: user.id,
+				attrs: {
+					id: cmdId,
+					"data-op": "send",
+					"data-at": new Date().toISOString(),
+				},
+			});
+		}));
+	await test.step('Then the lock reads "別のタブで返信を作っています"', async () => {
+		await expect(lock(page)).toHaveAttribute("state", "held");
+		await expect(lock(page).locator('[part~="lcty-cmd__label"]')).toHaveText(
+			"別のタブで返信を作っています",
+		);
+	});
+	await test.step("And llama-server is sent nothing", async () => {
+		await page.waitForTimeout(300);
+		expect(llm.requests).toHaveLength(0);
+	});
+	await test.step("When the other connection removes the lock", () =>
+		withRpc((call) => call("c.unappend", { cid: conv.id, id: cmdId })));
+	await test.step("Then the page has no lock", async () => {
+		await expect(lock(page)).toHaveCount(0);
+	});
+});
+
+test("A change by another tab that does not follow the page makes it ask for a reload", async ({
+	page,
+	request,
+	llm,
+}) => {
+	const conv = await test.step(TWO_TURNS, () => openTwoTurns(page, request));
+	await test.step("And the page's document ends with a message the file does not have", () =>
+		page.evaluate(() => {
+			const el = document.createElement("lcty-msg");
+			el.setAttribute("data-role", "user");
+			el.id = "msg-u-00000000-0000-7000-8000-000000000000";
+			el.setAttribute("data-content", "ページだけ");
+			document.querySelector("lcty-c").append(el);
+		}));
 	await test.step("When another connection appends a user message to it through /v1/rpc", () =>
 		withRpc((call) =>
 			call("c.append.msg", {
 				cid: conv.id,
 				after: `msg-m-${conv.messages[3].id}`,
-				attrs: {
-					"data-role": "user",
-					id: `msg-u-${uuidv7()}`,
-					"data-at": new Date().toISOString(),
-					"data-content": "別のタブから",
-				},
+				attrs: otherAttrs("user", "別のタブから"),
 				innerHTML: "<article>別のタブから</article>",
 			}),
 		));

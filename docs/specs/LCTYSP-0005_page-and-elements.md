@@ -358,8 +358,10 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   - **A lock the page did not start** is not run: the page asks `c.cmd.held`, and shows "A reply is being made in
     another tab" when a tab holds it, or "A reply was left unfinished" with "Retry" and "Remove" when none does. The new
     conversation page marks the lock it appended (`sessionStorage` `lcty.run.<id>`), so that tab runs it.
-  - **A change made by another tab** to the conversation puts the page out of sync: the composer is disabled, asking for
-    a reload.
+  - **A change made by another tab** to the conversation shows here as it is made: its messages are added or removed,
+    their presentation made by this page from their text, its lock shows as held, and its title follows
+    ([LCTYSP-0014](LCTYSP-0014_browser-sync.md#applying-notifications)). A change that does not follow the page's
+    document puts the page out of sync: the composer is disabled, asking for a reload.
   - The header's chips are the current tags, since the file has no `data-setup-tags`; the ⓘ of a reply shows what
     `c.stats.list` gives; a search result scrolls to `#msg-u-<id>`.
 - **A file of LCTYSP-0003 is read-only.** Until `tools/convert.rb` converts it, the composer is disabled with a notice,

@@ -9,6 +9,7 @@
 //   msgAttrs / thinkingAttrs / cmdAttrs   the attributes of an element, ready for c.append.*
 //   userArticle / replyArticle            the <article> of a user message and of the others (Markdown)
 //   elementOf(tag, attrs, innerHTML)       the element itself, for the document
+//   elementFromAttrs(tag, attrs)           an element another page wrote, its presentation made here from its text
 //   lastElement(container)                 the last element of the file in the document (null before the first)
 //   historyOf(container)                   {instructions, messages}: what the model is sent (LCTYSP-0013)
 
@@ -90,6 +91,22 @@ export function elementOf(tag, attrs, innerHTML = "") {
 	t.innerHTML = innerHTML;
 	el.append(t.content);
 	return el;
+}
+
+/**
+ * An element another page wrote, from the tag and attributes of its c_html record: no HTML comes over /v1/rpc
+ * (LCTYSP-0012), so the presentation is made here from the text, as for the page's own: a user message's article is
+ * its text alone, the others' its Markdown. An lcty-cmd has none. Null when the text cannot be read.
+ */
+export function elementFromAttrs(tag, attrs) {
+	if (tag === "lcty-cmd") return elementOf(tag, attrs);
+	const probe = document.createElement("div"); // only to read the text as textAttr does
+	for (const k of ["data-content", "data-content-base64"])
+		if (attrs[k] != null) probe.setAttribute(k, attrs[k]);
+	const text = textAttr(probe, "data-content");
+	if (text == null) return null;
+	const user = tag === "lcty-msg" && attrs["data-role"] === "user";
+	return elementOf(tag, attrs, user ? userArticle(text) : replyArticle(text));
 }
 
 const FILE_ELEMENTS = ":scope > :is(lcty-msg, lcty-thinking, lcty-cmd)";
