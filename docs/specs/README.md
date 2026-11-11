@@ -83,6 +83,7 @@ for the backend ones).
 | [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)                  | Several pages over /v1/rpc                    | `tests/backend/rpc_pages_test.rb`                            |
 | [LCTYSP-3023](LCTYSP-3023_convert.feature)                    | Converting the conversation files             | `tests/backend/convert_c_test.rb`                            |
 | [LCTYSP-3024](LCTYSP-3024_password.feature)                   | Password hashes                               | `tests/backend/password_test.rb`                             |
+| [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)                 | Basic authentication                          | `tests/backend/basic_auth_test.rb`                           |
 ### Withdrawn features
 
 These numbers were used by features that were removed with what they tested. They are not reused; the features are in

@@ -12,6 +12,7 @@
 
 require 'ipaddr'
 require 'optparse'
+require_relative 'password' # the hashes of --basic-auth
 
 module Chatty
   class << self
@@ -83,17 +84,19 @@ module Chatty
   # value separated by spaces), as they would be written on the command line; blank lines and lines starting with # are
   # left out. A missing file means every default; nothing is created.
   SETTINGS_PATH = File.join(DATA_DIR, 'server_settings.txt')
-  # Source of truth: the users of Digest authentication, as Apache's htdigest writes them (user:realm:MD5 of
-  # user:realm:password). When the file is there every request needs one of them; when it is not, none does
-  # (LCTYSP-0010). Named as Apache names it, a hidden file
+  # The file of the users of Digest authentication of an older version. It is not read any more; the server does not
+  # start while it is there, so that it never runs without the protection it was given (LCTYSP-0010)
   HTDIGEST_PATH = File.join(DATA_DIR, '.htdigest')
   # Each setting and the environment variable that overrides the file
-  SETTING_ENV = { bind_ips: 'LCTY_BIND_IP', base_url: 'LCTY_BASE_URL', allowed_origins: 'LCTY_ALLOWED_ORIGIN' }.freeze
+  SETTING_ENV = {
+    bind_ips: 'LCTY_BIND_IP', base_url: 'LCTY_BASE_URL', allowed_origins: 'LCTY_ALLOWED_ORIGIN',
+    basic_users: 'LCTY_BASIC_AUTH'
+  }.freeze
   # The settings that take several values (once per option); their environment variable takes one only, since the
   # environment is for starting the server quickly, and more are given as options (LCTYSP-0010)
-  SETTING_LISTS = %i[bind_ips allowed_origins].freeze
-  SETTING_DEFAULTS = { bind_ips: ['127.0.0.1'].freeze, base_url: '/', allowed_origins: nil }.freeze
-  OPTION_OF = { bind_ips: '--bind-ip', allowed_origins: '--allowed-origin' }.freeze
+  SETTING_LISTS = %i[bind_ips allowed_origins basic_users].freeze
+  SETTING_DEFAULTS = { bind_ips: ['127.0.0.1'].freeze, base_url: '/', allowed_origins: nil, basic_users: [].freeze }.freeze
+  OPTION_OF = { bind_ips: '--bind-ip', allowed_origins: '--allowed-origin', basic_users: '--basic-auth' }.freeze
 
   # The options of lcty.rb, the same for the file and the command line; what they set goes into into
   def self.option_parser(into)
@@ -106,6 +109,13 @@ module Chatty
       o.on('--base-url=PATH', 'the path the site is served under (default /)') { |v| into[:base_url] = v }
       o.on('--allowed-origin=ORIGIN', 'an origin whose pages may use /v1/rpc, once per origin (default: the ' \
                                       "server's own)") { |v| (into[:allowed_origins] ||= []) << v }
+      o.on('--basic-auth=USER:HASH', 'a user of Basic authentication, once per user, as `lcty.rb hash-password ' \
+                                     'USER` prints it; with one, every request needs one (default: none)') do |v|
+        users = (into[:basic_users] ||= [])
+        user = basic_user(v)
+        raise SettingsError, "--basic-auth: the user #{user[0].inspect} is given twice" if users.assoc(user[0])
+        users << user
+      end
       # Each server of a machine needs a port of its own, so it is not kept with the data (LCTYSP-0010)
       o.on('--port=PORT', 'not an option: set LCTY_PORT or PORT') do
         raise SettingsError, 'the port is not an option; set LCTY_PORT or PORT'
@@ -122,6 +132,21 @@ module Chatty
     !s.include?('/') && IPAddr.new(s) && true
   rescue IPAddr::Error
     false
+  end
+
+  # [user, hash] of the value of --basic-auth, USER:HASH with HASH a PHC string of lib/password.rb; raises SettingsError
+  # when it is not one. The hash is not shown in the message, only what is wrong with it
+  def self.basic_user(v)
+    user, hash = v.split(':', 2)
+    unless hash && Password::USER_RE.match?(user)
+      raise SettingsError, '--basic-auth: not USER:HASH, as `lcty.rb hash-password USER` prints it'
+    end
+    begin
+      Password.parse(hash)
+    rescue Password::Error => e
+      raise SettingsError, "--basic-auth: the user #{user.inspect}: #{e.message}"
+    end
+    [user, hash].freeze
   end
 
   # What the options args set, {setting => value}; args loses the options it had and keeps the other arguments. An
@@ -156,6 +181,8 @@ module Chatty
         raise SettingsError, "#{var}: one value only; give more with #{OPTION_OF[key]} in server_settings.txt"
       end
       raise SettingsError, "#{var}: not an IP address to listen on: #{v.inspect}" if key == :bind_ips && !ip_address?(v)
+      next set[key] = [basic_user(v)] if key == :basic_users
+
       set[key] = [v]
     end
   end
@@ -191,6 +218,11 @@ module Chatty
     # The origins whose pages may use /v1/rpc as written, or nil for the server's own (lib/rpc/servlet.rb)
     def allowed_origins
       @settings[:allowed_origins]
+    end
+
+    # The users of Basic authentication, {user => PHC string}; empty when no request needs credentials
+    def basic_users
+      @settings[:basic_users].to_h.freeze
     end
   end
 

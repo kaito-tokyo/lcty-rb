@@ -103,25 +103,25 @@ module Lcty
   # No port to listen on: the one asked for is taken, or every one tried is
   class PortError < StandardError; end
 
-  # WEBrick's log at WARN without the lines of a Digest challenge: a browser's first request carries no credentials and
-  # is answered with the challenge, so these two lines would come with every page opened. A wrong password or an
-  # unknown user is still logged.
+  # WEBrick's log at WARN, without the line WEBrick writes for every 401: a browser's first request carries no
+  # credentials and is answered with the challenge, so it would come with every page opened. A refused user is logged
+  # by lib/basic_auth.rb.
   class Log < WEBrick::Log
-    QUIET = ['WEBrick::HTTPStatus::Unauthorized', 'no credentials in the request.'].freeze
+    QUIET = 'WEBrick::HTTPStatus::Unauthorized'
 
-    def initialize
-      super($stderr, WEBrick::Log::WARN)
+    def initialize(io = $stderr)
+      super(io, WEBrick::Log::WARN)
     end
 
     def error(msg)
-      super unless QUIET.any? { |q| msg.to_s.end_with?(q) }
+      super unless msg.to_s == QUIET
     end
   end
 
   # A WEBrick server listening on every address of ips (Chatty.bind_ips) at one port: the port asked for (LCTY_PORT or
   # PORT), or else the first one of ports, in order, that is free on every address (LCTYSP-0010); Chatty.port is set
   # to it. A port asked for that is taken is not replaced by another: the pages, bookmarks and allowed origins name it.
-  # Raises PortError when there is none, and at once for an address that is not one of this machine. auth (digest_auth)
+  # Raises PortError when there is none, and at once for an address that is not one of this machine. auth (basic_auth)
   # checks every request before any servlet sees it, the WebSocket of /v1/rpc included.
   def self.listen(asked = Chatty::PORT, ports = Chatty::PORTS_TRIED, ips = Chatty.bind_ips, auth: nil)
     (asked ? [asked] : ports).each do |port|
@@ -133,7 +133,7 @@ module Lcty
         AccessLog: [],
         DoNotReverseLookup: true
       }
-      # A request without valid credentials is answered 401 with a Digest challenge (WEBrick raises it as a status)
+      # A request without valid credentials is answered 401 with a Basic challenge (raised as a status)
       config[:RequestCallback] = ->(req, res) { auth.authenticate(req, res) } if auth
       server = WEBrick::HTTPServer.new(config)
       begin
@@ -154,23 +154,19 @@ module Lcty
     raise PortError, "no free port from #{ports.first} to #{ports.last} (set one with LCTY_PORT or PORT)"
   end
 
-  # Digest authentication with the users of path (Chatty::HTDIGEST_PATH, the .htdigest of the data directory), or nil when
-  # there is no such file: then no request needs credentials. The file is as Apache's htdigest writes it, one
-  # user:realm:hash per line, every line of one realm, which is the realm the browser is asked for (LCTYSP-0010). A file
-  # that is not one, holds no user or names two realms raises Chatty::SettingsError: the server does not start
-  # without the protection it was given. WEBrick reads the file again when it changes, so users are added without a
-  # restart (a new realm needs one).
-  def self.digest_auth(path = Chatty::HTDIGEST_PATH)
-    return nil unless File.exist?(path)
-    entries = File.readlines(path, mode: 'r:UTF-8').map(&:chomp).reject(&:empty?).map { |l| l.split(':', 3) }
-    bad = entries.find { |e| e.size != 3 || e[0].empty? || !/\A\h{32}\z/.match?(e[2]) }
-    raise Chatty::SettingsError, "#{path}: not a line of htdigest (user:realm:md5): #{bad.join(':').inspect}" if bad
-    raise Chatty::SettingsError, "#{path}: no user (add one with htdigest)" if entries.empty?
-    realms = entries.map { |e| e[1] }.uniq
-    raise Chatty::SettingsError, "#{path}: one realm only, not #{realms.map(&:inspect).join(', ')}" if realms.size > 1
-    WEBrick::HTTPAuth::DigestAuth.new(
-      UserDB: WEBrick::HTTPAuth::Htdigest.new(path), Realm: realms.first, Logger: Log.new
-    )
+  # Basic authentication with the users of --basic-auth (Chatty.basic_users, lib/basic_auth.rb), or nil when there is
+  # none: then no request needs credentials (LCTYSP-0010). The .htdigest of an older version raises
+  # Chatty::SettingsError: its users are not read any more, and the server must not start without the protection that
+  # file gave it. fail_delay is the seconds a refusal waits (lib/basic_auth.rb).
+  def self.basic_auth(users = Chatty.basic_users, htdigest: Chatty::HTDIGEST_PATH, logger: Log.new, fail_delay: 1.0)
+    if File.exist?(htdigest)
+      raise Chatty::SettingsError, "#{htdigest}: Digest authentication is gone; give the users with --basic-auth " \
+                                   'in server_settings.txt (`lcty.rb hash-password USER` prints them), then remove it'
+    end
+    return nil if users.empty?
+
+    require_relative 'lib/basic_auth'
+    Chatty::BasicAuth.new(users, logger: logger, fail_delay: fail_delay)
   end
 
   # Stop server: it accepts nothing more, then every /v1/rpc connection is closed (Rpc::HUB.close_all), since WEBrick
@@ -190,7 +186,7 @@ module Lcty
     Rpc::ConvStore.fill_record_counts
     publish_offline
     s = begin
-      auth = digest_auth
+      auth = basic_auth
       listen(auth: auth)
     rescue PortError, Chatty::SettingsError => e
       abort "lcty-rb: #{e.message}"
@@ -205,8 +201,8 @@ module Lcty
     $stderr.puts "lcty-rb: pages may be opened from #{Rpc.allowed_origins.join(' ')}  (--allowed-origin)"
     settings = File.exist?(Chatty::SETTINGS_PATH) ? Chatty::SETTINGS_PATH : "none (#{Chatty::SETTINGS_PATH} does not exist)"
     $stderr.puts "lcty-rb: settings: #{settings}"
-    digest = auth ? "#{Chatty::HTDIGEST_PATH} (realm #{auth.realm.inspect})" : "none (#{Chatty::HTDIGEST_PATH} does not exist)"
-    $stderr.puts "lcty-rb: digest authentication: #{digest}"
+    users = auth ? "#{Chatty.basic_users.keys.join(', ')} (realm #{auth.realm.inspect})" : 'none (no --basic-auth)'
+    $stderr.puts "lcty-rb: basic authentication: #{users}"
     s.start
   end
 end

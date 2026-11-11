@@ -14,7 +14,6 @@
 # settings file and the command line are checked in a new Ruby process given only the environment of the Scenario.
 
 require_relative 'helper'
-require 'digest'
 require 'net/http'
 require 'open3'
 require 'rbconfig'
@@ -238,17 +237,24 @@ class LctyTest < Lcty::Scenarios
     FileUtils.rm_rf(dir)
   end
 
-  # ---- Digest authentication ----
+  # ---- Basic authentication ----
 
-  # A data directory of its own, with a .htdigest of lines (none when nil)
-  def htdigest_dir(lines)
+  # A data directory of its own, with a .htdigest of an older version when htdigest; the path of .htdigest
+  def auth_dir(htdigest: false)
     @auth_dir = Dir.mktmpdir('lcty-auth-')
-    File.write(File.join(@auth_dir, '.htdigest'), lines.map { |l| "#{l}\n" }.join) if lines
+    File.write(File.join(@auth_dir, '.htdigest'), "alice:lcty-rb:0123456789abcdef0123456789abcdef\n") if htdigest
     File.join(@auth_dir, '.htdigest')
   end
 
-  def htdigest_line(user, realm, password)
-    "#{user}:#{realm}:#{Digest::MD5.hexdigest("#{user}:#{realm}:#{password}")}"
+  # Lcty.basic_auth for "alice" with the password "correct horse battery" (a hash of few iterations), refusing at once
+  def alice_auth
+    require 'password'
+    Lcty.basic_auth({ 'alice' => Chatty::Password.create('correct horse battery', iterations: 1000) },
+                    htdigest: auth_dir, logger: WEBrick::Log.new(File::NULL), fail_delay: 0)
+  end
+
+  def basic(user, password)
+    "Basic #{["#{user}:#{password}"].pack('m0')}"
   end
 
   # A server on a free port with the site mounted and every request checked by auth; stopped by teardown
@@ -260,19 +266,6 @@ class LctyTest < Lcty::Scenarios
     Thread.new { @listener.start }
     sleep 0.05 until @listener.status == :Running
     @listener.config[:Port]
-  end
-
-  # The Authorization of a Digest response to challenge (a WWW-Authenticate) for method and uri, as a browser computes
-  # it with the algorithm MD5-sess and the qop auth
-  def digest_authorization(challenge, user, password, method, uri)
-    p = challenge.scan(/(\w+)="?([^",]*)"?/).to_h
-    cnonce = SecureRandom.hex(8)
-    nc = '00000001'
-    md5 = ->(s) { Digest::MD5.hexdigest(s) }
-    ha1 = md5.call("#{md5.call("#{user}:#{p['realm']}:#{password}")}:#{p['nonce']}:#{cnonce}")
-    response = md5.call("#{ha1}:#{p['nonce']}:#{nc}:#{cnonce}:auth:#{md5.call("#{method}:#{uri}")}")
-    %(Digest username="#{user}", realm="#{p['realm']}", nonce="#{p['nonce']}", uri="#{uri}", algorithm=MD5-sess, ) +
-      %(qop=auth, nc=#{nc}, cnonce="#{cnonce}", response="#{response}", opaque="#{p['opaque']}")
   end
 
   # GET path with the header authorization (nil: none): [status, WWW-Authenticate]
@@ -295,36 +288,32 @@ class LctyTest < Lcty::Scenarios
     s&.close
   end
 
-  ALICE = 'Given a data directory whose .htdigest has the user "alice" with the password "secret-pass" in the realm "lcty-rb"'
+  ALICE = 'Given Lcty.basic_auth with the user "alice" and the password "correct horse battery"'
 
-  scenario 'Without a .htdigest file no request needs credentials' do
+  scenario 'Without --basic-auth no request needs credentials' do
     path = r = nil
-    step('Given a data directory without .htdigest') { path = htdigest_dir(nil) }
-    step('When Lcty.digest_auth is called') { r = Lcty.digest_auth(path) }
+    step('Given no user of --basic-auth and a data directory without .htdigest') { path = auth_dir }
+    step('When Lcty.basic_auth is called') { r = Lcty.basic_auth({}, htdigest: path) }
     step('Then it returns nil') { assert_nil r }
+  ensure
+    FileUtils.rm_rf(@auth_dir) if @auth_dir
   end
 
-  scenario 'With a .htdigest file every request needs one of its users' do
-    port = status = challenge = nil
-    path = nil
-    step(ALICE) { path = htdigest_dir([htdigest_line('alice', 'lcty-rb', 'secret-pass')]) }
-    step('And a server listening with Lcty.digest_auth, the site mounted') { port = auth_server(Lcty.digest_auth(path)) }
+  scenario 'With --basic-auth every request needs one of its users' do
+    port = status = challenge = auth = nil
+    step(ALICE) { auth = alice_auth }
+    step('And a server listening with it, the site mounted') { port = auth_server(auth) }
     step('When /c/ is requested without credentials') { status, challenge = get_with(port, '/c/') }
-    step('Then it is answered 401 with a Digest challenge of the realm "lcty-rb"') do
+    step(%(Then it is answered 401 with the challenge 'Basic realm="lcty-rb", charset="UTF-8"')) do
       assert_equal '401', status
-      assert_match(/\ADigest realm="lcty-rb", nonce="/, challenge)
+      assert_equal 'Basic realm="lcty-rb", charset="UTF-8"', challenge
     end
-    step('When /c/ is requested with the Digest response of "alice" and "secret-pass"') do
-      status, = get_with(port, '/c/', digest_authorization(challenge, 'alice', 'secret-pass', 'GET', '/c/'))
+    step('When /c/ is requested with the Basic credentials of "alice" and "correct horse battery"') do
+      status, = get_with(port, '/c/', basic('alice', 'correct horse battery'))
     end
     step('Then it is answered 200') { assert_equal '200', status }
-    step('When /c/ is requested with the Digest response of "alice" and "wrong"') do
-      _, fresh = get_with(port, '/c/')
-      status, = get_with(port, '/c/', digest_authorization(fresh, 'alice', 'wrong', 'GET', '/c/'))
-    end
-    step('Then it is answered 401') { assert_equal '401', status }
-    step('When /c/ is requested with Basic credentials of "alice" and "secret-pass"') do
-      status, = get_with(port, '/c/', "Basic #{['alice:secret-pass'].pack('m0')}")
+    step('When /c/ is requested with the Basic credentials of "alice" and "wrong horse battery"') do
+      status, = get_with(port, '/c/', basic('alice', 'wrong horse battery'))
     end
     step('Then it is answered 401') { assert_equal '401', status }
   ensure
@@ -332,41 +321,51 @@ class LctyTest < Lcty::Scenarios
   end
 
   scenario 'The WebSocket of /v1/rpc needs the credentials too' do
-    port = status = path = nil
-    step(ALICE) { path = htdigest_dir([htdigest_line('alice', 'lcty-rb', 'secret-pass')]) }
-    step('And a server listening with Lcty.digest_auth, the site mounted') { port = auth_server(Lcty.digest_auth(path)) }
+    port = status = auth = nil
+    step(ALICE) { auth = alice_auth }
+    step('And a server listening with it, the site mounted') { port = auth_server(auth) }
     step('When the WebSocket of /v1/rpc is opened without credentials') { status = handshake_status(port, nil) }
     step('Then the handshake is answered 401') { assert_equal '401', status }
-    step('When it is opened with the Digest response of "alice" and "secret-pass"') do
-      _, challenge = get_with(port, '/v1/rpc')
-      status = handshake_status(port, digest_authorization(challenge, 'alice', 'secret-pass', 'GET', '/v1/rpc'))
+    step('When it is opened with the Basic credentials of "alice" and "correct horse battery"') do
+      status = handshake_status(port, basic('alice', 'correct horse battery'))
     end
     step('Then the handshake is answered 101') { assert_equal '101', status }
   ensure
     FileUtils.rm_rf(@auth_dir) if @auth_dir
   end
 
-  [
-    ['the line "alice:secret"', ['alice:secret'], 'not a line of htdigest (user:realm:md5): "alice:secret"'],
-    ['empty', [], 'no user (add one with htdigest)'],
-    ['the users "alice" of the realm "a" and "bob" of the realm "b"',
-     ['alice:a:0123456789abcdef0123456789abcdef', 'bob:b:0123456789abcdef0123456789abcdef'], 'one realm only, not "a", "b"']
-  ].each do |content, lines, message|
-    scenario "A .htdigest file that cannot be used stops the server (#{content})" do
-      path = r = nil
-      step("Given a data directory whose .htdigest is #{content}") { path = htdigest_dir(lines) }
-      step('When Lcty.digest_auth is called') do
-        r = Lcty.digest_auth(path)
-      rescue Chatty::SettingsError => e
-        r = e
-      end
-      step("Then it raises a SettingsError that starts with the path of the file and \"#{message}\"") do
-        assert_kind_of Chatty::SettingsError, r
-        assert_equal "#{path}: #{message}", r.message
-      end
-    ensure
-      FileUtils.rm_rf(@auth_dir) if @auth_dir
+  scenario 'The log leaves out the line of every 401 and keeps the other errors' do
+    io = StringIO.new
+    step('When Lcty::Log is given the error WEBrick::HTTPStatus::Unauthorized and the error "boom"') do
+      log = Lcty::Log.new(io)
+      log.error(WEBrick::HTTPStatus::Unauthorized.new)
+      log.error('boom')
     end
+    step('Then it logs "boom" only') do
+      assert_includes io.string, 'boom'
+      refute_includes io.string, 'Unauthorized'
+    end
+  end
+
+  scenario 'A .htdigest of an older version stops the server' do
+    path = r = nil
+    step('Given a data directory with a .htdigest') { path = auth_dir(htdigest: true) }
+    step('When Lcty.basic_auth is called, with or without users') do
+      r = [{}, { 'alice' => 'x' }].map do |users|
+        Lcty.basic_auth(users, htdigest: path)
+      rescue Chatty::SettingsError => e
+        e
+      end
+    end
+    step('Then it raises a SettingsError that starts with the path of the file and "Digest authentication is gone"') do
+      r.each do |e|
+        assert_kind_of Chatty::SettingsError, e
+        assert e.message.start_with?("#{path}: Digest authentication is gone; give the users with --basic-auth"),
+               e.message
+      end
+    end
+  ensure
+    FileUtils.rm_rf(@auth_dir) if @auth_dir
   end
 
   # ---- Stopping ----

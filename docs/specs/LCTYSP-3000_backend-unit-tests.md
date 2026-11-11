@@ -53,6 +53,7 @@ changed.
 | [LCTYSP-3021](LCTYSP-3021_openapi.feature)           | `openapi.yaml`: every path the site answers          |
 | [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `lcty.rb convert`                |
 | [LCTYSP-3024](LCTYSP-3024_password.feature)          | `lib/password.rb`: the password hashes               |
+| [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)        | `lib/basic_auth.rb`: Basic authentication            |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.
