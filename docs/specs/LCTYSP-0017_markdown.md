@@ -12,7 +12,8 @@ SPDX-License-Identifier: Apache-2.0
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md) (rendering streams, suggested next messages),
   [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the `<article>` of a message),
   [LCTYSP-0016](LCTYSP-0016_hardening.md) (the Content Security Policy),
-  [LCTYSP-1014](LCTYSP-1014_markdown.feature) (the tests of `markdown.js`)
+  [LCTYSP-1014](LCTYSP-1014_markdown.feature) (the tests of `markdown.js`),
+  [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md) (the DOM while a text streams in)
 
 ## Summary
 
@@ -140,8 +141,9 @@ The elements and attributes the tables above name are the whole output:
 ## A complete text
 
 This spec says what DOM a complete text gives: the whole text is given, then its end. A reply that streams in is
-given in pieces, and the DOM while it is still coming in is the subject of a later spec. That spec keeps one rule of
-this one: **once the end is given, the DOM is the one this spec gives for the whole text**, however the text was cut.
+given in pieces, and the DOM while it is still coming in is the subject of
+[LCTYSP-0018](LCTYSP-0018_markdown-streaming.md). That spec keeps one rule of this one: **once the end is given, the
+DOM is the one this spec gives for the whole text**, however the text was cut.
 
 ## Limits
 
