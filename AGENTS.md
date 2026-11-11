@@ -9,6 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 - [RULE: Commit Messages](#rule-commit-messages)
 - [RULE: GitHub Pull Request Body](#rule-github-pull-request-body)
 - [RULE: GitHub Issue Creation](#rule-github-issue-creation)
+- [RULE: Code Comments](#rule-code-comments)
 
 # AGENTS.md
 
@@ -66,3 +67,13 @@ When an agent creates an issue:
 - It MUST be written in English.
 - Its title MUST begin with exactly one of these prefixes: `[BUG]`, `[FEATURE]`, `[TASK]`, or `[CRASH REPORT]`.
 - The agent MUST NOT add labels.
+
+## RULE: Code Comments
+
+The modules under `public/js/` are served to the browser as they are, so their implementations MUST stay small. Their documentation lives in a `.d.ts` file beside each module (`foo.js` → `foo.d.ts`), which the browser never loads.
+
+- An implementation (`.js`) MUST carry only short comments: a one-line head comment for the module, and a one-line comment for a function, class, constant or section. Keep SPDX headers, `biome-ignore` comments and the JSDoc `@import` and type tags the code needs.
+- A comment longer than one line or one sentence MUST go into the module's `.d.ts`, leaving a one-line summary in the `.js`.
+- The `.d.ts` declares the module's exports with their types and doc comments, and may hold as much documentation as is useful. Notes about how the internals work, which have no export to hang on, go in it as plain comments.
+- Every `.d.ts` MUST carry an SPDX header, as every other file does, so that `reuse lint` passes.
+- When the code changes, update its `.d.ts` in the same commit.
