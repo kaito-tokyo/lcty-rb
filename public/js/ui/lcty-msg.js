@@ -2,17 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The elements of a conversation file of LCTYSP-0013 as the page builds them (fat client, thin server): the attributes
-// of each, in their one order, and its presentation, the <article>. The server checks them and writes them as sent
-// (/v1/rpc, LCTYSP-0012); the page puts the same element into its document, so the two never differ.
-//
-//   msgAttrs / thinkingAttrs / cmdAttrs   the attributes of an element, ready for c.append.*
-//   elementOf(tag, attrs, innerHTML)       the element itself, for the document
-//   elementFromAttrs(tag, attrs)           an element another page wrote, its presentation made here from its text
-//   lastElement(container)                 the last element of the file in the document (null before the first)
-//   historyOf(container)                   {instructions, messages}: what the model is sent (LCTYSP-0013)
-//
-// Turning a text into the forms it is kept in, its attribute and its <article>, is in js/convert/.
+// The elements of a conversation file of LCTYSP-0013 as the page builds them (fat client, thin server; LCTYSP-0012).
 
 import { newMsgId } from "../common.js";
 import { replyArticle, userArticle } from "../convert/article.js";
@@ -32,10 +22,7 @@ function textAttrs(text) {
 	};
 }
 
-/**
- * The attributes of an lcty-msg: data-role, id (the role's prefix and id, a new UUIDv7 by default), data-at (user and
- * model), data-template and data-tag when given, and the text.
- */
+/** The attributes of an lcty-msg, in their one order. */
 export function msgAttrs(
 	role,
 	text,
@@ -70,11 +57,7 @@ export function elementOf(tag, attrs, innerHTML = "") {
 	return el;
 }
 
-/**
- * An element another page wrote, from the tag and attributes of its c_html record: no HTML comes over /v1/rpc
- * (LCTYSP-0012), so the presentation is made here from the text, as for the page's own: a user message's article is
- * its text alone, the others' its Markdown. An lcty-cmd has none. Null when the text cannot be read.
- */
+/** An element another page wrote, its presentation made here from its text (LCTYSP-0012). */
 export function elementFromAttrs(tag, attrs) {
 	if (tag === "lcty-cmd") return elementOf(tag, attrs);
 	const probe = document.createElement("div"); // only to read the text as textAttr does
@@ -88,16 +71,13 @@ export function elementFromAttrs(tag, attrs) {
 
 const FILE_ELEMENTS = ":scope > :is(lcty-msg, lcty-thinking, lcty-cmd)";
 
-/** The last element of the file in the document, or null before the first; what is not written (data-draft) is skipped. */
+/** The last element of the file in the document, or null before the first. */
 export function lastElement(container) {
 	const els = container.querySelectorAll(`${FILE_ELEMENTS}:not([data-draft])`);
 	return els[els.length - 1] ?? null;
 }
 
-/**
- * What the model is sent (LCTYSP-0013): the system and memory messages, joined by blank lines, as the instructions, and
- * the user and model messages as user and assistant. Thinking and commands are never sent.
- */
+/** What the model is sent (LCTYSP-0013): {instructions, messages}. */
 export function historyOf(container) {
 	const instructions = [];
 	const messages = [];

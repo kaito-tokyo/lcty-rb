@@ -2,20 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Features of the conversation elements (LCTYSP-0005). The custom elements in /lcty.v1/lcty.v1.cjs build the DOM
-// structure and expose their inner elements as fields (container.composer, composer.input, message.undoButton, …).
-// Nothing is added to the elements here; handlers are attached directly to the exposed elements, and features are plain
-// functions that operate on the DOM.
-//
-//   initConversationElements(container, handlers)   initializes elements from the conversation file and attaches handlers (once at startup)
-//     handlers: { onSend(text), onStop(), onUndo(el), onFork(el), onRegenerate(el) }
-//   messageOf(el)                         the message of a <lcty-message> (read from attributes, or the one given when created on screen)
-//   readMessages(container) / appendMessage / removeFrom
-//   appendText / appendThinking / finishMessage   incremental rendering while generating
-//   initComposer / setComposerValue / setComposerBusy / focusComposer
-//
-// Elements from the conversation file (dual recording. LCTYSP-0003) read the message from attributes and keep the saved presentation children as they are.
-// Per-element state lives in WeakMaps made on first use (state).
+// Features of the conversation elements: plain functions on the elements lcty.v1.cjs builds (LCTYSP-0005, LCTYSP-0003).
 
 import {
 	codeBlockHTML,
@@ -29,8 +16,6 @@ import { tr } from "../i18n.js";
 const GENERATOR = "lcty.v1"; // The renderer that produced the saved presentation HTML (data-generator)
 
 // ---- Incremental Markdown rendering (the reply body <article>. LCTYSP-0005) ----
-// Finished blocks are fixed in the DOM; only the unfinished block is redrawn inside .md-tail.
-// An unfinished code block is appended to a text node instead of being redrawn.
 
 // Module state. The maps are made on first use, so the module only declares
 const state = {
@@ -145,9 +130,6 @@ function viewFinish(view) {
 }
 
 // ---- Thinking (while a reply is generated) ----
-// A reply's thinking view is part of <lcty-message> (its Shadow DOM, lcty.v1.cjs), built from data-thinking. While the
-// reply streams in, the text is kept here and written to the view's summary and body (the body only while it is open);
-// at the end it becomes data-thinking and the element shows it itself.
 
 /** <lcty-message> => { text, rendered, raf, node } while it streams */
 function thoughts() {
@@ -292,9 +274,7 @@ export function messageOf(el) {
 	return m;
 }
 
-// The foot is the element's own (lcty.v1.cjs): it shows the end of an incomplete reply from data-status / data-error
-// and the ⓘ from data-timings / data-client. A message made on screen gets those attributes here; the timings text goes
-// into the popover the ⓘ opens, so filling it in after the first paint changes nothing on screen.
+// Give the element's own foot its attributes and the ⓘ popover its timings text.
 function renderFoot(el) {
 	const m = messageOf(el);
 	const set = (name, v) =>
@@ -357,7 +337,6 @@ export function finishMessage(el) {
 }
 
 // ---- Message list (<lcty-c>) ----
-// The whole page (window) scrolls. Scrolling is the user's: nothing here scrolls the page.
 
 function messageEls(container) {
 	return [...container.querySelectorAll(":scope > lcty-message")];
@@ -368,19 +347,12 @@ export function readMessages(container) {
 	return messageEls(container).map(messageOf);
 }
 
-/**
- * Whether the conversation file is in the format of LCTYSP-0013 (lcty-msg): one of LCTYSP-0003 always has an
- * <lcty-setup>, its first element, so a file without one is of LCTYSP-0013.
- */
+/** Whether the conversation file is in the format of LCTYSP-0013 (lcty-msg) rather than LCTYSP-0003. */
 export function isLctyMsgFile(container) {
 	return !container.querySelector(":scope > lcty-setup, :scope > lcty-message");
 }
 
-/**
- * The messages of a file of LCTYSP-0013, as readMessages gives those of LCTYSP-0003: the user and model <lcty-msg>
- * as {id, role, at, content}, with the bare id and model as assistant. system, memory and the other elements are not
- * messages.
- */
+/** The messages of a file of LCTYSP-0013, as readMessages gives those of LCTYSP-0003. */
 export function readLctyMsgs(container) {
 	return [
 		...container.querySelectorAll(
@@ -447,18 +419,15 @@ export function initConversationElements(container, h = {}) {
 	for (const el of messageEls(container)) {
 		wireMessage(el);
 		renderFoot(el);
-		// The thinking view is the element's own, from data-thinking (lcty.v1.cjs). Files written before that may still
-		// have a <lcty-thinking> child of their own (hidden by lcty.v1.css); it is dropped
+		// Drop the <lcty-thinking> child that older files may still have
 		el.querySelector(":scope > lcty-thinking")?.remove();
-		// Replies without saved presentation HTML (e.g. created through the API directly) are rendered from the attribute
+		// Replies without saved presentation HTML are rendered from the attribute
 		const view = el.querySelector(":scope > article");
 		if (view && view.getAttribute("data-generator") !== GENERATOR)
 			viewSetText(view, messageOf(el).content);
 	}
 	markLastUser(container);
-	// "Select all" on code blocks: selects the code, to copy it with the browser's own copy (no clipboard API, which
-	// needs a secure context). Replies saved before have a "Copy" button (button.copy) in their presentation HTML; it
-	// is relabelled and works the same way
+	// "Select all" on code blocks; older replies' "Copy" buttons (button.copy) are relabelled and work the same way
 	for (const btn of container.querySelectorAll(
 		":scope > lcty-message > article .codebar button.copy",
 	))
@@ -486,11 +455,7 @@ export function initConversationElements(container, h = {}) {
 	});
 }
 
-/**
- * Attach the composer's behavior (used by the conversation page and the new conversation page): Enter sends,
- * Shift+Enter inserts a newline, Enter during IME composition is ignored, nothing is sent while busy, and the input grows
- * with its text.
- */
+/** Attach the composer's behavior (used by the conversation page and the new conversation page). */
 export function initComposer(composer, { onSend, onStop } = {}) {
 	const send = () => {
 		const text = composer.input.value;

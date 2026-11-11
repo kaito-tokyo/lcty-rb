@@ -2,22 +2,16 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// UI texts (LCTYSP-0005). Every text a user sees goes through tr(): it looks the key up in LctyT (lcty.v1.cjs; the
-// languages are lcty.v1.lang-<lang>.cjs, chosen by <html lang>) and falls back to the English x-default given with
-// the key. Code outside this mechanism writes no Japanese.
+// UI texts: every text a user sees goes through tr(), with an English x-default (LCTYSP-0005).
 
-/** The text for key in the page's language, or text (English). {name} placeholders are filled from vars. */
+/** The text for key in the page's language, or text (English), with {name} placeholders filled from vars. */
 export function tr(key, text, vars = {}) {
 	return LctyT._(key, text).replace(/\{(\w+)\}/g, (m, k) =>
 		Object.hasOwn(vars, k) ? String(vars[k]) : m,
 	);
 }
 
-/**
- * Localize static HTML under root: data-lcty-t="key" replaces an element's text, and data-lcty-t-placeholder /
- * data-lcty-t-title / data-lcty-t-aria-label="key" replace that attribute. The English written in the HTML is the
- * x-default.
- */
+/** Localize static HTML under root from its data-lcty-t and data-lcty-t-<attribute> keys. */
 export function localize(root = document) {
 	for (const el of root.querySelectorAll("[data-lcty-t]"))
 		el.textContent = tr(el.dataset.lctyT, el.textContent);

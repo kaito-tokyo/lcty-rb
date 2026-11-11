@@ -2,16 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The tab's one connection to /v1/rpc (LCTYSP-0014), shared by the parts of the page: the sidebar follows the lists
-// over it, and the conversation page writes its conversation over it.
-//
-//   onTabNotify(method, fn)    fn(params) for every notification method (any number of them per method)
-//   onTabRequest(method, fn)   fn(params) answers the server's request method (one per method)
-//   onTabOpen(fn)              fn(rpc) whenever the connection has opened (again): read what is needed anew
-//   tabRpc()                   the connection, opened by the first call
-//
-// The methods the page receives are declared in initialize, so every part registers before the page calls tabRpc();
-// registering later is refused.
+// The tab's one connection to /v1/rpc, shared by the parts of the page (LCTYSP-0014).
 
 import { connectRpc } from "./rpc.js";
 
@@ -51,10 +42,7 @@ function each(fns, ...args) {
 	}
 }
 
-/**
- * The tab's connection, opened by the first call with what was registered (connectRpc in api/rpc.js). options go to
- * connectRpc (url, WebSocketImpl and setTimeoutImpl, for the tests).
- */
+/** The tab's connection, opened by the first call with what was registered. */
 export function tabRpc(options = {}) {
 	state.client ??= connectRpc({
 		...options,
@@ -70,12 +58,7 @@ export function tabRpc(options = {}) {
 	return state.client;
 }
 
-/**
- * Follow copies kept in a worker (LCTYSP-0014): full reads replace them, notifications apply to them. run(op, payload)
- * posts one operation to the worker, in the tab's order; lists are [method, store] pairs read on every (re)connection.
- * Notifications that arrive while the lists are being read are held and applied after them, so a change is never
- * written before the full read it follows. onChange is called once the worker has stored something.
- */
+/** Follow copies kept in a worker: full reads replace them, notifications apply to them (LCTYSP-0014). */
 export function followCopies({ lists, run, onChange }) {
 	let reading = 0;
 	let held = [];
@@ -92,8 +75,7 @@ export function followCopies({ lists, run, onChange }) {
 		async readAll(rpc) {
 			reading += 1;
 			const writes = [];
-			// A write that fails while the next list is read (a worker cut off by leaving the page) is reported by
-			// Promise.all below, or not at all when a read failed: never as an unhandled rejection
+			// A failed write is reported by Promise.all below, never as an unhandled rejection
 			const write = (w) => {
 				w.catch(() => {});
 				writes.push(w);

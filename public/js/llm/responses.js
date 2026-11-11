@@ -2,8 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Adapter for the Responses API (POST /v1/responses, stream: true).
-// Converts llama-server events into common events { type: 'text' | 'thinking' | 'done' | 'error' } (LCTYSP-0002).
+// Adapter for the Responses API: llama-server events to the common events (LCTYSP-0002).
 
 import { parseSSE } from "./sse.js";
 
@@ -18,7 +17,7 @@ function buildBody({ backend, instructions, input, extraBody }) {
 		input,
 	};
 	if (instructions) body.instructions = instructions;
-	// Whether the model thinks is left to llama-server (its defaults / chat template): no enable_thinking is sent (LCTYSP-0002)
+	// Whether the model thinks is left to llama-server: no enable_thinking is sent (LCTYSP-0002)
 	return body;
 }
 

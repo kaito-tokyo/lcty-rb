@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Embeddings (LCTYSP-0007, LCTYSP-0008). The browser talks to the embedding model directly, to register the index and to vectorize queries.
+// Embeddings computed in the browser, to register the index and vectorize queries (LCTYSP-0007, LCTYSP-0008).
 
 import { putVectors, vectorsPending } from "../api/storage.js";
 import { encodeRecords, FULL_DIM } from "./vectors.js";
@@ -47,11 +47,7 @@ export async function embedQuery(cfg, q, signal) {
 	return (await embed(cfg, [QUERY_PREFIX + q], signal))[0];
 }
 
-/**
- * Embed and register the unindexed rounds one batch after another until none are left (LCTYSP-0008).
- * Every part of a round is embedded and PUT as a registration vector binary (768 dims). The server drops it if the revision (rev) changed.
- * Only one runs at a time. A kick() while running causes one more pass after it finishes.
- */
+/** Embed and register the unindexed rounds batch by batch until none are left (LCTYSP-0008). */
 export function createIndexer({ getConfig, onError }) {
 	let running = false;
 	let again = false;
@@ -73,7 +69,7 @@ export function createIndexer({ getConfig, onError }) {
 	async function drain() {
 		const cfg = getConfig();
 		if (!cfg) return;
-		const sent = new Set(); // Never send the same round twice in one pass (stops even if the server keeps returning already registered rounds)
+		const sent = new Set(); // Never send the same round twice in one pass
 		for (;;) {
 			const pending = (await vectorsPending(cfg.model)).filter(
 				(p) => !failed.has(p.id + p.rev) && !sent.has(p.id + p.rev),

@@ -2,22 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// <lcty-cmd>: a command tag as a command object (LCTYSP-0003, LCTYSP-0004, LCTYSP-0005). Unlike the elements in
-// lcty.v1.cjs (structure only), a command is behavior itself, so it is defined here.
-//
-//   <lcty-cmd data-op="send" data-at="…"></lcty-cmd>
-//
-// When a command becomes the last element of <lcty-c>, it runs its operation (data-op) and is responsible for it: while
-// running it floats above the composer (slot="float" of <lcty-c>) with a spinner and a stop button, and can be aborted.
-// It never scrolls the page. A command is added either
-//   - to the file as well (when a conversation is created): opening the conversation again runs it while it is still
-//     the last element, so an interrupted creation resumes; or
-//   - only in memory (sending, regenerating): it runs now, and nothing is left to resume after the page closes.
-// A command followed by other elements (its result) has already run and stays hidden. Unknown operations do nothing.
-// The state is an attribute in the DOM only (never saved): running / done / aborted / failed / unknown. A command that
-// has a state already, or a data-error (a failed one of LCTYSP-0013, written so), never runs: the page decides what it
-// shows (stale: a lock nobody holds; held: one another tab holds; failed), with the label, and "Retry" and "Remove"
-// (retryButton, removeButton), which the page wires, shown for failed and stale.
+// <lcty-cmd>: a command tag as a command object that runs its operation (LCTYSP-0003, LCTYSP-0004, LCTYSP-0005).
 import { tr } from "../i18n.js";
 
 const ops = { __proto__: null }; // op name → async (cmd, controller) => void
@@ -121,11 +106,7 @@ function cmdElementClass() {
 	};
 }
 
-/**
- * Register the operations and define <lcty-cmd>. Call it once the page is ready to run them: commands already in the
- * document are upgraded at this moment, and the last one runs.
- * @param {Record<string, (cmd: HTMLElement, controller: AbortController) => Promise<void>>} table
- */
+/** Register the operations and define <lcty-cmd>. */
 export function defineCommands(table) {
 	for (const [name, op] of Object.entries(table)) ops[name] = op;
 	if (!customElements.get("lcty-cmd"))

@@ -2,15 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Markdown → HTML (pure functions, no DOM).
-//
-// For streaming rendering it is split into scanBlocks(), which cuts text into blocks,
-// and renderBlock(), which turns one block into HTML (LCTYSP-0005).
-// Supported: paragraphs / headings / rules / code blocks / quotes / lists (nested) / tables /
-//            bold, italic, strikethrough, inline code, links, bare-URL autolinks and suggested next messages
-//            (<suggestion-for-user-turn>text</suggestion-for-user-turn>, rendered as a button).
-//
-// Safety: text is always escaped and only http / https / mailto links are allowed.
+// Markdown → HTML (pure functions, no DOM), split into blocks for streaming rendering (LCTYSP-0005).
 import { tr } from "../i18n.js";
 
 const RE_BLANK = /^[ \t]*$/;
@@ -31,12 +23,7 @@ function isFenceClose(line, fence) {
 	return !!m && m[1][0] === fence.ch && m[1].length >= fence.len;
 }
 
-/**
- * Split src into blocks.
- * With final=false, a last line that does not end with a newline never finalizes a block
- * (a line still being written may change the decision). Finalized blocks have complete=true.
- * complete is contiguous from the start (once false, everything after is false).
- */
+/** Split src into blocks. */
 export function scanBlocks(src, final = true) {
 	const blocks = [];
 	const safe = final ? src.length : src.lastIndexOf("\n") + 1;
@@ -386,9 +373,7 @@ function inlineText(raw) {
 	let s = esc(raw);
 	const slots = [];
 	const hold = (html) => `\u0000${slots.push(html) - 1}\u0000`;
-	// <suggestion-for-user-turn>text</suggestion-for-user-turn>: a suggested next user message, shown where it is
-	// written as a button. The text runs to the closing tag or, when it is missing (still streaming, or forgotten),
-	// to the end of the line. An empty one shows nothing
+	// <suggestion-for-user-turn>text</suggestion-for-user-turn>: a suggested next user message, shown as a button
 	s = s.replace(
 		/&lt;suggestion-for-user-turn&gt;([^\n]*?)(?:&lt;\/suggestion-for-user-turn&gt;|(?=\n)|$)/g,
 		(_, text) =>
@@ -403,8 +388,7 @@ function inlineText(raw) {
 		const href = safeUrl(unesc(u));
 		return href ? hold(anchor(href, emphasis(text))) : all;
 	});
-	// Bare URL (NUL marks a held piece of HTML, so a URL stops there). The text is already escaped, so the URL also
-	// stops before an escaped ", < or > (&quot; &lt; &gt;)
+	// Bare URL: it stops at a held piece of HTML (NUL) and before an escaped ", < or >
 	const RE_BARE_URL =
 		// biome-ignore lint/suspicious/noControlCharactersInRegex: NUL is the placeholder marker
 		/https?:\/\/(?:(?!&(?:quot|lt|gt);)[^\s<>"\u0000　、。「」『』（）])+/g;

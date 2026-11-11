@@ -2,14 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Tags and memory (LCTYSP-0009). A tag is a file t/NNNNN-<part>.html on the server: {file, name, ops, prompt,
-// memory}. NNNNN is the draft order, <part> is derived from the display name here (all Unicode handling is the
-// browser's; the server only checks file names mechanically), and conversations refer to a tag by its part.
-//  - (the name rules, file names and references are in tag-names.js)
-//  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
-//  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the sidebar
-//    (and, for one tag, on the page of its tag file)
-//  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
+// Tags and memory: the system prompt draft, the tag editor and memory proposals (LCTYSP-0009).
 
 import { addMemory, getTags, putTags } from "./api/lcty-t.js";
 import { tr } from "./i18n.js";
@@ -50,15 +43,7 @@ export function composeDraft(defs, selected) {
 
 // ---- Tag editor ----
 
-/**
- * Draws the editor for tag definitions (name, prompt, memory) into container: defs and etag are what GET /v1/tags
- * returned. The order is changed on the reorder page (/t/), not here. Calls onSaved(new definitions, {file}) after
- * saving. Returns { isDirty }: whether there are unsaved edits.
- *
- * With file (the page of a tag file, LCTYSP-0009), only the tag in that file is shown and there is no "+ New tag"; the
- * rest of the set is sent back as it is. Deleting it saves at once. onSaved's file is the tag's file after the save
- * (a new name gives a new file), or null when it was deleted.
- */
+/** Draws the editor for tag definitions (all, or only the tag in file) into container. */
 export function renderTagsEditor(
 	container,
 	{ defs, etag, onSaved, toast, file },
@@ -115,7 +100,7 @@ export function renderTagsEditor(
 			...work
 				.flatMap((t, i) => (single && t !== current ? [] : [[t, i]]))
 				.map(([t, i]) => {
-					// A file without <lcty-t>: shown with its name, not editable; saving sends it back and the server keeps it
+					// A file without <lcty-t>: shown with its name, not editable
 					if (t.invalid)
 						return el(
 							"section",
@@ -233,8 +218,7 @@ export function renderTagsEditor(
 			);
 			return;
 		}
-		// Names that differ only in case or in the escaped form are one tag (one file). An invalid tag's part is its
-		// file's
+		// Names with the same part are one tag (one file); an invalid tag's part is its file's
 		const parts = work.map((t) => (t.invalid ? tagRef(t) : tagPart(t.name)));
 		if (new Set(parts).size !== parts.length) {
 			status.textContent = tr("duplicateTagName", "Tag names must be unique");
@@ -380,11 +364,7 @@ export function renderTagsEditor(
 	return { isDirty: () => JSON.stringify(work) !== JSON.stringify(saved) };
 }
 
-/**
- * Builds the tags dialog (a modal <dialog id="tags-dialog"> in <body>, so lcty.v1.css styles it on every page) and wires
- * button to open it; the sidebar's tag button opens it on every page. onSaved(new definitions) is called after each
- * save. Returns open(), for other buttons that open the same dialog.
- */
+/** Builds the tags dialog, wires button to open it, and returns open(). */
 export function initTagsDialog(button, { onSaved, toast }) {
 	let editor = null; // { isDirty } of the editor while the dialog is open
 	const close = el("button", { type: "button" }, tr("close", "Close"));
@@ -424,8 +404,7 @@ export function initTagsDialog(button, { onSaved, toast }) {
 	dialog.addEventListener("click", (e) => {
 		if (e.target === dialog) tryClose();
 	});
-	// Opens the editor on the saved definitions, read again from the browser's copy (another tab of this browser may
-	// have changed them meanwhile; a change made elsewhere makes the save fail with 412, which loads the new set)
+	// Opens the editor on the saved definitions, read again from the browser's copy
 	const open = async () => {
 		let defs;
 		let etag;
@@ -498,13 +477,7 @@ function proposalPrompt(defs, tags) {
 	].join("\n");
 }
 
-/**
- * As a continuation of the current conversation, append one temporary user message asking for proposals (not saved to the conversation).
- * The prefix is identical to the previous state, so the cache applies. The conversation's tags are references; the
- * model sees and answers with the display names of the defined ones, and each proposal carries the file of its tag.
- * An invalid tag (a file without <lcty-t>) takes no memory, so it is left out like an undefined one.
- * Returns {proposals: [{tag, file, text}], tags: [{name, file}], timings}.
- */
+/** Asks the model for memory proposals for the conversation's defined tags, as a temporary continuation. */
 export async function proposeMemory({ conv, backend, defs, signal }) {
 	const chosen = conv.tags
 		.map((ref) => defs.find((d) => tagRef(d) === ref))
@@ -565,7 +538,7 @@ export async function proposeMemory({ conv, backend, defs, signal }) {
 	};
 }
 
-/** A dialog to accept / edit and accept / discard each proposal. Adds the approved ones. */
+/** A dialog to accept, edit or discard each proposal, which adds the approved ones. */
 export function openMemoryDialog({
 	dialog = document.querySelector("#memory-dialog"),
 	proposals,
@@ -575,8 +548,7 @@ export function openMemoryDialog({
 	toast,
 }) {
 	const items = proposals.map((p) => ({ ...p, keep: true }));
-	// Every element has a part (BEM, the block lcty-memory): the dialog is in <lcty-c>'s Shadow DOM, styled from the page
-	// with lcty-c::part(…)
+	// Every element has a part (BEM, the block lcty-memory), for lcty-c::part(…)
 	const status = el("p", { part: "lcty-memory__hint" });
 	const list = el(
 		"div",

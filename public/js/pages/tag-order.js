@@ -2,11 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The tag reorder page (/t/. LCTYSP-0005, LCTYSP-0009). Lists the tag files in their order (file-name order) with
-// their display names, lets the user move them, and on save renumbers them 00010, 00020, … and sends the whole set
-// with PUT /v1/tags; the contents of the tags are not changed. The tag editor has no order buttons: the order is
-// changed only here. An invalid tag (a file without <lcty-t>) is not listed: it is sent back as it is, and the server
-// keeps its file.
+// The tag reorder page, /t/: moves the tags and saves them renumbered (LCTYSP-0005, LCTYSP-0009).
 
 import { getTags, putTags } from "../api/lcty-t.js";
 import { tabRpc } from "../api/tab-rpc.js";
@@ -148,8 +144,7 @@ export function initTagOrderPage() {
 
 	(async () => {
 		state.settings = await loadSettings();
-		// The page edits the set, so it starts from the server's: initSidebar has already run sync_full, and the calls
-		// of a tab run in order, so this read comes after it (LCTYSP-0009)
+		// The page edits the set, so it reads it after initSidebar's sync_full (LCTYSP-0009)
 		await load();
 		panel.refresh();
 	})();

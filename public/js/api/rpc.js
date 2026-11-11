@@ -2,17 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The page's end of /v1/rpc (LCTYSP-0012, LCTYSP-0014): one WebSocket per tab, JSON-RPC 2.0 both ways.
-//
-//   const rpc = connectRpc({ receives, onNotify, onRequest, onOpen })
-//   await rpc.call(method, params)   the result, or a rejection with an RpcError (code, data) or a lost connection
-//   rpc.actorId                      the connection's actorId (null until initialize has answered)
-//
-// When the socket opens the client sends initialize with the methods the page receives (the keys of onNotify and
-// onRequest), then calls onOpen(). Requests sent before that wait for it. A notification goes to onNotify[method]; a
-// request of the server to onRequest[method], whose result (or a thrown error) is the answer. When the socket closes,
-// every request still waiting is rejected and the client opens a new one, waiting longer each time it fails (from
-// 1 s up to 30 s); it never replays what it missed: onOpen is called again, and the page reads what it needs anew.
+// The page's end of /v1/rpc: one WebSocket per tab, JSON-RPC 2.0 both ways (LCTYSP-0012, LCTYSP-0014).
 
 import { siteUrl } from "../site.js";
 
@@ -36,12 +26,7 @@ export function rpcUrl() {
 const RETRY_MIN_MS = 1000;
 const RETRY_MAX_MS = 30000;
 
-/**
- * Open the connection and keep it open. WebSocketImpl and setTimeoutImpl are for the tests.
- * @param {{ url?: URL | string, onNotify?: Record<string, (params: object) => void>,
- *   onRequest?: Record<string, (params: object) => unknown>, onOpen?: () => void,
- *   WebSocketImpl?: typeof WebSocket, setTimeoutImpl?: typeof setTimeout }} options
- */
+/** Open the connection and keep it open. */
 export function connectRpc({
 	url = rpcUrl(),
 	onNotify = {},
