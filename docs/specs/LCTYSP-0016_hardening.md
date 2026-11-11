@@ -93,6 +93,9 @@ In order. Each step is one pull request with its tests, and each leaves the serv
   so no other origin is ever given access.
 - **The size of a body:** every body of the HTTP API is at most 64 MiB, as `/v1/rpc`'s messages, checked from
   `Content-Length` before it is read.
+- **Not `Accept`:** the type of a response is fixed by its path and extension (`.json`, `.html`, `.js`, `/v1/` is
+  JSON), so there is nothing to negotiate and nothing to refuse with `406`. Refusing one would stop none of the
+  attacks above either: the origin and the type of the body do.
 
 ### 2. Answer with protective headers
 
@@ -103,7 +106,7 @@ On every response:
 
 - `Content-Security-Policy`, for a page:
   - `default-src 'self'`; `script-src 'self'`; `worker-src 'self'`
-  - `style-src 'self'`, and the inline style of tables (decision 2)
+  - `style-src 'self'`, and the inline style of tables (decision 1)
   - `img-src 'self' data:`; `font-src 'self'`
   - `connect-src 'self' http: https:`: the pages connect to llama-server, wherever the user set it (`'self'` covers
     the WebSocket of `/v1/rpc`; to be checked in Safari)
@@ -182,16 +185,13 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
 
 Each has the one this plan proposes first.
 
-1. **`Accept`:** not checked. A response of the HTTP API is JSON whatever `Accept` says, and refusing one (`406`)
-   would not stop any of the attacks above: the type of the body and the origin do. The other way: answer `406` to a
-   request of `/v1/` whose `Accept` does not admit `application/json`.
-2. **The inline style of tables:** allowed with `style-src-attr 'unsafe-inline'`, since a style attribute can only be
+1. **The inline style of tables:** allowed with `style-src-attr 'unsafe-inline'`, since a style attribute can only be
    `text-align:left|center|right` in a file (the allowlist) and a page makes the presentation itself. The other way:
    classes (`lcty-align-center` and the like) instead of `style`, which changes the presentation of LCTYSP-0013 and
    the files written so far.
-3. **The answer to a `Host` that is not served:** `421 Misdirected Request`, which says that the request reached a
+2. **The answer to a `Host` that is not served:** `421 Misdirected Request`, which says that the request reached a
    server that does not answer for that name. The other way: `403`.
-4. **The realm of Basic authentication:** kept as `lcty-rb`. OWASP advises a generic realm, since the name tells an
+3. **The realm of Basic authentication:** kept as `lcty-rb`. OWASP advises a generic realm, since the name tells an
    attacker which software answers; but the realm is what the browser shows when it asks for the password, and the
    user needs to know what asks. The other way: a generic realm (`RestrictedArea`), or one set by an option.
 
