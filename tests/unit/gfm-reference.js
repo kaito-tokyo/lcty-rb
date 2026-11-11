@@ -8,6 +8,45 @@
 // LCTYSP-0017 instead.
 
 import { readFileSync } from "node:fs";
+import { publicUrl } from "./node-unit.js";
+
+const {
+	ALIGNS,
+	BLOCK_NAMES,
+	BLOCK_QUOTE,
+	blockLines,
+	CODE_BLOCK,
+	B_A,
+	B_C,
+	B_D,
+	B_STR,
+	DOCUMENT,
+	F_AT,
+	F_FIRST,
+	F_NEXT,
+	F_PARENT,
+	HEADING,
+	HTML_BLOCK,
+	ITEM,
+	LIST,
+	PARAGRAPH,
+	TABLE,
+	THEMATIC_BREAK,
+} = await import(publicUrl("js/convert/gfm/gfm_blocks.js"));
+const {
+	CODE,
+	DEL,
+	EMPH,
+	HTML_INLINE,
+	IMAGE,
+	INLINE_NAMES,
+	inlineText,
+	LINEBREAK,
+	LINK,
+	SOFTBREAK,
+	STRONG,
+	TEXT,
+} = await import(publicUrl("js/convert/gfm/gfm_inlines.js"));
 
 const GFM = new URL("../gfm/", import.meta.url);
 
@@ -72,180 +111,208 @@ const TAGFILTER =
 const tagfilter = (s) => s.replace(TAGFILTER, "&lt;");
 
 /**
- * The document tree doc as GFM's reference HTML. options.tagfilter (true by default) writes raw HTML through the
- * tagfilter extension. As cmark-gfm does, a strong right inside a strong writes no tags of its own.
+ * The document doc ({ nodes, spans }, as parseGfm gives it), parsed from source, as GFM's reference HTML, or its block
+ * at row when row is given. options.tagfilter (true by default) writes raw HTML through the tagfilter extension. As
+ * cmark-gfm does, a strong right inside a strong writes no tags of its own.
  */
-export function referenceHtml(doc, { tagfilter: filter = true } = {}) {
+export function referenceHtml(
+	doc,
+	source,
+	{ tagfilter: filter = true } = {},
+	row = 0,
+) {
 	const raw = filter ? tagfilter : (s) => s;
+	const t = doc.nodes;
+	const n = t.i32;
+	const type = (i) => n[i << 3] & 0xff;
+	const slot = (i, f) => n[(i << 3) + f];
+	// a block's own field
+	const field = (i, f) => t.b32[(i << 3) + f];
+	const textOf = (i) => inlineText(source, t, doc.spans, i);
+	const lines = (i) => blockLines(source, t, doc.spans, i);
 	let out = "";
 	const cr = () => {
 		if (out !== "" && !out.endsWith("\n")) out += "\n";
 	};
-	const plain = (node) =>
-		node.children
-			.map((n) =>
-				n.type === "text" || n.type === "code" || n.type === "html_inline"
-					? n.view.join("")
-					: n.type === "softbreak" || n.type === "linebreak"
-						? "\n"
-						: plain(n),
-			)
-			.join("");
-	const tight = (node) =>
-		node.parent?.parent?.type === "list" && node.parent.parent.data.tight;
-	const render = (node) => {
-		const kids = () => {
-			for (const c of node.children) render(c);
-		};
-		switch (node.type) {
-			case "document":
-				kids();
+	const plain = (i) => {
+		let s = "";
+		for (let c = slot(i, F_FIRST); c !== -1; c = slot(c, F_NEXT)) {
+			const ty = type(c);
+			if (ty === TEXT || ty === CODE || ty === HTML_INLINE) s += textOf(c);
+			else if (ty === SOFTBREAK || ty === LINEBREAK) s += "\n";
+			else s += plain(c);
+		}
+		return s;
+	};
+	// a paragraph in an item of a tight list writes no <p>
+	const tight = (i) => {
+		const item = slot(i, F_PARENT);
+		const list = item === -1 ? -1 : slot(item, F_PARENT);
+		return list !== -1 && type(list) === LIST && field(list, B_D) === 1;
+	};
+	// a leaf's children are its inlines, a container's its blocks
+	const children = (i) => {
+		for (let c = slot(i, F_FIRST); c !== -1; c = slot(c, F_NEXT)) node(c);
+	};
+	const node = (i) => {
+		const ty = type(i);
+		switch (ty) {
+			case DOCUMENT:
+				children(i);
 				break;
-			case "paragraph":
-				if (tight(node)) kids();
+			case PARAGRAPH:
+				if (tight(i)) children(i);
 				else {
 					cr();
 					out += "<p>";
-					kids();
+					children(i);
 					out += "</p>";
 					cr();
 				}
 				break;
-			case "heading":
+			case HEADING:
 				cr();
-				out += `<h${node.data.level}>`;
-				kids();
-				out += `</h${node.data.level}>`;
+				out += `<h${field(i, B_A)}>`;
+				children(i);
+				out += `</h${field(i, B_A)}>`;
 				cr();
 				break;
-			case "block_quote":
+			case BLOCK_QUOTE:
 				cr();
 				out += "<blockquote>";
 				cr();
-				kids();
+				children(i);
 				cr();
 				out += "</blockquote>";
 				cr();
 				break;
-			case "list": {
-				const d = node.data;
-				const tag = d.type === "bullet" ? "ul" : "ol";
+			case LIST: {
+				const tag = field(i, B_A) === 1 ? "ol" : "ul";
+				const start = field(i, B_C);
 				cr();
 				out +=
-					tag === "ol" && d.start !== 1
-						? `<ol start="${d.start}">`
-						: `<${tag}>`;
+					tag === "ol" && start !== 1 ? `<ol start="${start}">` : `<${tag}>`;
 				cr();
-				kids();
+				children(i);
 				cr();
 				out += `</${tag}>`;
 				cr();
 				break;
 			}
-			case "item":
+			case ITEM:
 				out += "<li>";
-				if (node.data.task === "checked")
+				if (field(i, B_C) === 2)
 					out += '<input checked="" disabled="" type="checkbox"> ';
-				if (node.data.task === "unchecked")
-					out += '<input disabled="" type="checkbox"> ';
-				kids();
+				if (field(i, B_C) === 1) out += '<input disabled="" type="checkbox"> ';
+				children(i);
 				out += "</li>";
 				cr();
 				break;
-			case "code_block": {
+			case CODE_BLOCK: {
 				cr();
-				const lang = node.data.info.split(/[ \t\n]+/)[0];
+				const info = field(i, B_STR) === -1 ? "" : t.strings[field(i, B_STR)];
+				const lang = info.split(/[ \t\n]+/)[0];
 				out += lang
 					? `<pre><code class="language-${escapeXml(lang)}">`
 					: "<pre><code>";
-				out += `${escapeXml(node.view.map((l) => `${l}\n`).join(""))}</code></pre>`;
+				out += `${escapeXml(
+					lines(i)
+						.map((l) => `${l}\n`)
+						.join(""),
+				)}</code></pre>`;
 				cr();
 				break;
 			}
-			case "html_block":
+			case HTML_BLOCK:
 				cr();
-				out += raw(node.view.join("\n"));
+				out += raw(lines(i).join("\n"));
 				cr();
 				break;
-			case "thematic_break":
+			case THEMATIC_BREAK:
 				cr();
 				out += "<hr />";
 				cr();
 				break;
-			case "table": {
+			case TABLE: {
 				cr();
 				out += "<table>\n<thead>\n";
-				const [head, ...rows] = node.children;
-				const row = (r, tag) => {
+				const tr = (r, tag) => {
 					out += "<tr>\n";
-					for (const cell of r.children) {
-						out += cell.data.align
-							? `<${tag} align="${cell.data.align}">`
-							: `<${tag}>`;
-						for (const c of cell.children) render(c);
+					for (
+						let cell = slot(r, F_FIRST);
+						cell !== -1;
+						cell = slot(cell, F_NEXT)
+					) {
+						const align = ALIGNS[field(cell, B_A)];
+						out += align ? `<${tag} align="${align}">` : `<${tag}>`;
+						children(cell);
 						out += `</${tag}>\n`;
 					}
 					out += "</tr>\n";
 				};
-				row(head, "th");
+				const head = slot(i, F_FIRST);
+				tr(head, "th");
 				out += "</thead>\n";
-				if (rows.length) {
+				if (slot(head, F_NEXT) !== -1) {
 					out += "<tbody>\n";
-					for (const r of rows) row(r, "td");
+					for (let r = slot(head, F_NEXT); r !== -1; r = slot(r, F_NEXT))
+						tr(r, "td");
 					out += "</tbody>\n";
 				}
 				out += "</table>\n";
 				break;
 			}
-			case "text":
-				out += escapeXml(node.view.join(""));
+			case TEXT:
+				out += escapeXml(textOf(i));
 				break;
-			case "softbreak":
+			case SOFTBREAK:
 				out += "\n";
 				break;
-			case "linebreak":
+			case LINEBREAK:
 				out += "<br />\n";
 				break;
-			case "code":
-				out += `<code>${escapeXml(node.view.join(""))}</code>`;
+			case CODE:
+				out += `<code>${escapeXml(textOf(i))}</code>`;
 				break;
-			case "html_inline":
-				out += raw(node.view.join("\n"));
+			case HTML_INLINE:
+				out += raw(textOf(i));
 				break;
-			case "emph":
-			case "strong":
-			case "del": {
-				if (node.type === "strong" && node.parent?.type === "strong") {
-					kids();
+			case EMPH:
+			case STRONG:
+			case DEL: {
+				if (ty === STRONG && type(slot(i, F_PARENT)) === STRONG) {
+					children(i);
 					break;
 				}
-				const tag =
-					node.type === "emph"
-						? "em"
-						: node.type === "strong"
-							? "strong"
-							: "del";
+				const tag = ty === EMPH ? "em" : ty === STRONG ? "strong" : "del";
 				out += `<${tag}>`;
-				kids();
+				children(i);
 				out += `</${tag}>`;
 				break;
 			}
-			case "link":
-				out += `<a href="${escapeXml(node.data.destination)}"`;
-				if (node.data.title) out += ` title="${escapeXml(node.data.title)}"`;
-				out += ">";
-				kids();
-				out += "</a>";
+			case LINK:
+			case IMAGE: {
+				const k = slot(i, F_AT);
+				const title = t.strings[k + 1];
+				if (ty === LINK) {
+					out += `<a href="${escapeXml(t.strings[k])}"`;
+					if (title) out += ` title="${escapeXml(title)}"`;
+					out += ">";
+					children(i);
+					out += "</a>";
+				} else {
+					out += `<img src="${escapeXml(t.strings[k])}" alt="${escapeXml(plain(i))}"`;
+					if (title) out += ` title="${escapeXml(title)}"`;
+					out += " />";
+				}
 				break;
-			case "image":
-				out += `<img src="${escapeXml(node.data.destination)}" alt="${escapeXml(plain(node))}"`;
-				if (node.data.title) out += ` title="${escapeXml(node.data.title)}"`;
-				out += " />";
-				break;
+			}
 			default:
-				throw new Error(`no reference HTML for ${node.type}`);
+				throw new Error(
+					`no reference HTML for ${ty >= TEXT ? INLINE_NAMES[ty - TEXT] : BLOCK_NAMES[ty]}`,
+				);
 		}
 	};
-	render(doc);
+	node(row);
 	return out;
 }

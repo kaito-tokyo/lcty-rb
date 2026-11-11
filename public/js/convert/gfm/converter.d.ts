@@ -10,23 +10,40 @@
 // "A parsing strategy". BlockWatch is this module's own guess, no part of GFM, of when a streamed head may have ended
 // its block: it decides only how often advance is tried.
 
-import type * as Blocks from "./gfm_blocks.js";
-import type { DecodeName, LinkData } from "./gfm_blocks.js";
-import type { Document, InlineOptions } from "./gfm_inlines.js";
+import type {
+	DecodeName,
+	LinkData,
+	NodeTable,
+	Row,
+	SpanStore,
+} from "./gfm_blocks.js";
+import type { InlineOptions } from "./gfm_inlines.js";
 
 export type ParseOptions = InlineOptions;
 
-/** The first phase of text, advanced to its end: the document, the definitions, and the leaves to parse. */
+/** A document: its nodes, blocks and inlines in one tree from row 0, and their spans of its text. */
+export interface Document {
+	nodes: NodeTable;
+	spans: SpanStore;
+}
+
+/**
+ * The first phase of text, advanced to its end: the blocks and their spans, the definitions, and the rows of the
+ * leaves to parse, in the order of the text.
+ */
 export function parseBlocks(
 	text: string,
 	decodeName: DecodeName,
-): {
-	doc: Blocks.Document;
+): Document & {
 	refmap: ReadonlyMap<string, LinkData>;
-	leaves: (Blocks.Paragraph | Blocks.Heading | Blocks.TableCell)[];
+	leaves: Row[];
 };
 
-/** The document tree of text, in both phases: its blocks, and the inlines of each paragraph, heading and table cell. */
+/**
+ * The document tree of text, in both phases: its blocks, and the inlines of each paragraph, heading and table cell as
+ * the leaf's children. Its spans are offsets in text, which a reader keeps to read their text (leafText, blockLines,
+ * inlineText). The tables keep no room for more.
+ */
 export function parseGfm(
 	text: string,
 	decodeName: DecodeName,

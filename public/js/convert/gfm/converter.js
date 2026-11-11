@@ -4,12 +4,7 @@
 
 // Runs the GFM parts: a text, whole or streamed, block by block, then the inlines (converter.d.ts).
 
-import {
-	BlockParser,
-	isSpaceOrTab,
-	isThematicBreak,
-	NONE,
-} from "./gfm_blocks.js";
+import { BlockParser, isSpaceOrTab, isThematicBreak } from "./gfm_blocks.js";
 import { InlineParser } from "./gfm_inlines.js";
 
 /** The first phase of text, each top-level block advanced in turn to the end. */
@@ -23,19 +18,23 @@ export function parseBlocks(text, decodeName) {
 		head = step[0];
 		for (const leaf of step[3]) leaves.push(leaf);
 	}
-	return { doc: parser.doc, refmap: parser.refmap, leaves };
+	return {
+		nodes: parser.nodes,
+		spans: parser.spans,
+		refmap: parser.refmap,
+		leaves,
+	};
 }
 
 /** The document tree of text, in both phases. */
 export function parseGfm(text, decodeName, options = {}) {
-	const { doc, refmap, leaves } = parseBlocks(text, decodeName);
-	const inlines = new InlineParser(decodeName, refmap, options);
-	for (const leaf of leaves) {
-		const view = leaf.view;
-		leaf.view = NONE;
-		inlines.parse(leaf, view.length === 1 ? view[0] : view.join("\n"));
-	}
-	return doc;
+	const { nodes, spans, refmap, leaves } = parseBlocks(text, decodeName);
+	const parser = new InlineParser(decodeName, refmap, options);
+	for (const leaf of leaves) parser.parseLeaf(text, nodes, spans, leaf);
+	// the whole text read, the tables need no room for more
+	nodes.compact();
+	spans.compact();
+	return { nodes, spans };
 }
 
 // What BlockWatch takes the first block of a head to be, from its first line

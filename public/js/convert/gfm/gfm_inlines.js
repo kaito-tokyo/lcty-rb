@@ -5,26 +5,97 @@
 // The inline phase of GFM 0.29-gfm: items, marks, then the tree at once (gfm_inlines.d.ts).
 
 import {
-	appendChild,
 	CLOSETAG,
 	decodeEntity,
 	ESCAPABLE,
-	fitChildren,
-	NONE,
+	F_AT,
+	F_COUNT,
+	F_FIRST,
+	F_LAST,
+	F_NEXT,
+	F_OFFSET,
+	F_PARENT,
+	leafText,
 	normalizeLabel,
 	normalizeURI,
 	OPENTAG,
+	SPAN,
 	scanLinkDestination,
 	scanLinkLabel,
 	scanLinkTitle,
 	skipSpnl,
 } from "./gfm_blocks.js";
 
-/** @import { Inline } from "./gfm_inlines.js" */
+// The types of the inlines, as the codes of a row's type, after the blocks'
+export const TEXT = 16;
+export const CODE = 17;
+export const HTML_INLINE = 18;
+export const SOFTBREAK = 19;
+export const LINEBREAK = 20;
+export const EMPH = 21;
+export const STRONG = 22;
+export const DEL = 23;
+export const LINK = 24;
+export const IMAGE = 25;
+/** The name of each type of inline, by its code less TEXT. */
+export const INLINE_NAMES = Object.freeze([
+	"text",
+	"code",
+	"html_inline",
+	"softbreak",
+	"linebreak",
+	"emph",
+	"strong",
+	"del",
+	"link",
+	"image",
+]);
 
-/** A new inline node, of no view and no children. @returns {Inline} */
-function inline(type, offset, data = null) {
-	return { type, offset, view: NONE, parent: null, children: NONE, data };
+/** Add [start, end) of the parsed text (src 0) or of spans.extra (src 1) to the text of row, the last row with spans. */
+function addPiece(nodes, spans, row, src, start, end) {
+	const n = nodes.i32;
+	const R = row << 3;
+	const s = spans.i32;
+	const k = spans.length;
+	// a piece right after the row's last, in the same text, lengthens it
+	if (
+		n[R + F_COUNT] > 0 &&
+		s[(k - 1) * SPAN + 2] === src &&
+		s[(k - 1) * SPAN + 1] === start
+	) {
+		s[(k - 1) * SPAN + 1] = end;
+		return;
+	}
+	const i = spans.push(start, end, src);
+	if (n[R + F_COUNT] === 0) n[R + F_AT] = i;
+	n[R + F_COUNT]++;
+}
+
+/** Add s, a string not in the parsed text, to the text of row. */
+function addLiteral(nodes, spans, row, s) {
+	const start = spans.extra.length;
+	spans.extra += s;
+	addPiece(nodes, spans, row, 1, start, spans.extra.length);
+}
+
+/** Give row, a link or an image, its destination and title: strings[F_AT] and the one after (a link has no pieces). */
+function setLink(nodes, row, destination, title) {
+	nodes.i32[(row << 3) + F_AT] = nodes.addString(destination);
+	nodes.strings.push(title);
+}
+
+/** The text of row of nodes, its pieces joined, read from source, the text the inlines were parsed from. */
+export function inlineText(source, nodes, spans, row) {
+	const at = nodes.i32[(row << 3) + F_AT];
+	const end = at + nodes.i32[(row << 3) + F_COUNT];
+	const s = spans.i32;
+	let text = "";
+	for (let i = at; i < end; i++)
+		text += (s[i * SPAN + 2] === 0 ? source : spans.extra).slice(
+			s[i * SPAN],
+			s[i * SPAN + 1],
+		);
+	return text;
 }
 
 /** A character reference, matched where the parser is (sticky). */
@@ -74,11 +145,13 @@ const K_AUTOLINK = 7;
 const K_LINK_OPEN = 8;
 const K_LINK_CLOSE = 9;
 
-/** An item of step 1, always of this shape. */
+/** An item of step 1, always of this shape: its text [start, end) of the subject, or lit when not in it. */
 class Item {
-	constructor(kind, text, offset) {
+	constructor(kind, start, end, lit, offset) {
 		this.kind = kind;
-		this.text = text;
+		this.start = start;
+		this.end = end;
+		this.lit = lit;
 		this.offset = offset;
 		this.data = null; // a link's { destination, title, image }, an autolink's destination
 		this.opens = null; // the elements this run opens, outermost first
@@ -170,26 +243,24 @@ function charAt(s, i) {
 	return String.fromCodePoint(s.codePointAt(i));
 }
 
-/** A text node of one piece. */
-function textNode(s, offset) {
-	const n = inline("text", offset, null);
-	n.view = [s];
-	return n;
-}
-
-/** A link of an autolink: destination, and its text as its only child. */
-function autolinkNode(destination, text, offset) {
-	const link = inline("link", offset, { destination, title: "" });
-	appendChild(link, textNode(text, offset));
-	return link;
-}
-
 export class InlineParser {
 	/** refmap: the definitions of the whole text; autolink: whether extended autolinks are made. */
 	constructor(decodeName, refmap, { autolink = true } = {}) {
 		this.decodeName = decodeName;
 		this.autolink = autolink;
 		this.refmap = refmap;
+		// the tables the leaf being parsed writes its inlines into, the document's
+		this.nodes = null;
+		this.spans = null;
+		this.source = "";
+		// the leaf's lines: where each starts in its content (lineAt) and in the text of its pieces (lineSrc)
+		this.lineAt = new Uint32Array(64);
+		this.lineSrc = new Uint32Array(64);
+		this.lines = 0;
+		this.line = 0;
+		// where the subject starts in the content; 0 when the pieces are in source, 1 when in extra
+		this.shift = 0;
+		this.src = 0;
 		this.subject = "";
 		this.pos = 0;
 		this.items = [];
@@ -199,6 +270,13 @@ export class InlineParser {
 		this.nextSpecial = -1;
 		this.nextWww = -1;
 		this.nextScheme = -1;
+		// the next "\n" and "@" of the subject at or after a position (its length: none)
+		this.nextNewline = -1;
+		this.nextAt = -1;
+		// the NUL that nulAt last found in nulSource, looking from nulFrom
+		this.nulSource = "";
+		this.nulFrom = 0;
+		this.nul = -1;
 	}
 
 	/** The match of the sticky re where the parser is, the position moved past it, or null. */
@@ -218,14 +296,89 @@ export class InlineParser {
 		skipSpnl(this);
 	}
 
-	push(kind, text) {
-		const item = new Item(kind, text, this.pos);
+	/** An item of [start, end) of the subject. */
+	push(kind, start, end) {
+		const item = new Item(kind, start, end, null, this.pos);
 		this.items.push(item);
 		return item;
 	}
 
-	/** Parse content as the inlines of node, which becomes their parent. */
-	parse(node, content) {
+	/** An item of lit, a text not in the subject. */
+	pushLit(kind, lit) {
+		const item = new Item(kind, 0, 0, lit, this.pos);
+		this.items.push(item);
+		return item;
+	}
+
+	/** Whether the subject has a line ending in [start, end). */
+	newlineIn(start, end) {
+		if (this.nextNewline < start) {
+			const i = this.subject.indexOf("\n", start);
+			this.nextNewline = i === -1 ? this.subject.length : i;
+		}
+		return this.nextNewline < end;
+	}
+
+	/** Parse the content of leaf, a paragraph, a heading or a table cell of nodes, read from source, as its children. */
+	parseLeaf(source, nodes, spans, leaf) {
+		const content = leafText(source, nodes, spans, leaf);
+		const n = nodes.i32[(leaf << 3) + F_COUNT];
+		if (n > this.lineAt.length) {
+			this.lineAt = new Uint32Array(2 * n);
+			this.lineSrc = new Uint32Array(2 * n);
+		}
+		const at = nodes.i32[(leaf << 3) + F_AT];
+		const s32 = spans.i32;
+		let pos = 0;
+		let nul = false;
+		for (let k = 0; k < n; k++) {
+			const a = s32[(at + k) * SPAN];
+			const b = s32[(at + k) * SPAN + 1];
+			this.lineAt[k] = pos;
+			this.lineSrc[k] = a;
+			pos += b - a + 1;
+			if (!nul && this.nulAt(source, a) < b) nul = true;
+		}
+		this.source = source;
+		this.nodes = nodes;
+		this.spans = spans;
+		this.lines = n;
+		this.src = 0;
+		// a content not just its ranges joined (a NUL, a \| of a cell) is put in extra whole
+		if (nul || (n > 0 && pos - 1 !== content.length)) {
+			this.lines = 1;
+			this.lineAt[0] = 0;
+			this.lineSrc[0] = spans.extra.length;
+			spans.extra += content;
+			this.src = 1;
+		}
+		this.parse(leaf, content);
+	}
+
+	/** The first NUL of source at or after i (its length: none), looked for once ahead. */
+	nulAt(source, i) {
+		if (source !== this.nulSource || i < this.nulFrom || this.nul < i) {
+			const j = source.indexOf("\0", i);
+			this.nulSource = source;
+			this.nulFrom = i;
+			this.nul = j === -1 ? source.length : j;
+		}
+		return this.nul;
+	}
+
+	/** Add [start, end) of the subject to the text of row. */
+	piece(row, start, end) {
+		const c = start + this.shift;
+		let k = this.line;
+		while (k + 1 < this.lines && this.lineAt[k + 1] <= c) k++;
+		while (k > 0 && this.lineAt[k] > c) k--;
+		this.line = k;
+		const from = this.lineSrc[k] + (c - this.lineAt[k]);
+		addPiece(this.nodes, this.spans, row, this.src, from, from + (end - start));
+	}
+
+	/** Parse content as the inlines of root. */
+	parse(root, content) {
 		// the text without its leading and trailing spaces, tabs and line ends
 		const edge = (c) => c === " " || c === "\t" || c === "\n";
 		let a = 0;
@@ -234,6 +387,10 @@ export class InlineParser {
 		while (b > a && edge(content[b - 1])) b--;
 		this.subject =
 			a === 0 && b === content.length ? content : content.slice(a, b);
+		this.shift = a;
+		this.line = 0;
+		this.nextNewline = -1;
+		this.nextAt = -1;
 		this.pos = 0;
 		this.items = [];
 		this.delimiters = null;
@@ -243,7 +400,7 @@ export class InlineParser {
 		this.nextScheme = this.autolink ? this.subject.indexOf("://") : -1;
 		while (this.pos < this.subject.length) this.parseInline();
 		this.processEmphasis(null);
-		this.build(node);
+		this.build(root);
 		this.items = [];
 	}
 
@@ -266,7 +423,11 @@ export class InlineParser {
 				res = this.handleDelim(c);
 				break;
 			case "[":
-				this.addBracket(this.push(K_BRACKET, "["), this.pos, false);
+				this.addBracket(
+					this.push(K_BRACKET, this.pos, this.pos + 1),
+					this.pos,
+					false,
+				);
 				this.pos += 1;
 				res = true;
 				break;
@@ -292,7 +453,7 @@ export class InlineParser {
 				res = this.parseString();
 		}
 		if (!res) {
-			this.push(K_TEXT, c);
+			this.push(K_TEXT, this.pos, this.pos + 1);
 			this.pos += 1;
 		}
 	}
@@ -300,12 +461,24 @@ export class InlineParser {
 	parseNewline() {
 		this.pos += 1;
 		const last = this.items[this.items.length - 1];
-		if (last?.kind === K_TEXT && last.text.endsWith(" ")) {
-			const hard = last.text.endsWith("  ");
-			last.text = last.text.replace(reFinalSpace, "");
-			this.push(hard ? K_LINEBREAK : K_SOFTBREAK, "");
+		const s = this.subject;
+		if (
+			last?.kind === K_TEXT &&
+			(last.lit === null
+				? last.end > last.start && s[last.end - 1] === " "
+				: last.lit.endsWith(" "))
+		) {
+			let hard;
+			if (last.lit === null) {
+				hard = last.end - last.start >= 2 && s[last.end - 2] === " ";
+				while (last.end > last.start && s[last.end - 1] === " ") last.end--;
+			} else {
+				hard = last.lit.endsWith("  ");
+				last.lit = last.lit.replace(reFinalSpace, "");
+			}
+			this.push(hard ? K_LINEBREAK : K_SOFTBREAK, 0, 0);
 		} else {
-			this.push(K_SOFTBREAK, "");
+			this.push(K_SOFTBREAK, 0, 0);
 		}
 		this.match(reInitialSpace);
 		return true;
@@ -315,13 +488,13 @@ export class InlineParser {
 		this.pos += 1;
 		const c = this.peek();
 		if (c === "\n") {
-			this.push(K_LINEBREAK, "");
+			this.push(K_LINEBREAK, 0, 0);
 			this.pos += 1;
 		} else if (c !== undefined && reEscapable.test(c)) {
-			this.push(K_TEXT, c);
+			this.push(K_TEXT, this.pos, this.pos + 1);
 			this.pos += 1;
 		} else {
-			this.push(K_TEXT, "\\");
+			this.push(K_TEXT, this.pos - 1, this.pos);
 		}
 		return true;
 	}
@@ -337,24 +510,27 @@ export class InlineParser {
 			m = reTicks.exec(this.subject)
 		) {
 			if (m[0] === ticks) {
-				let contents = this.subject
-					.slice(afterOpenTicks, m.index)
-					.replace(/\n/g, " ");
-				if (
-					contents.length > 0 &&
-					/[^ ]/.test(contents) &&
-					contents[0] === " " &&
-					contents[contents.length - 1] === " "
-				)
-					contents = contents.slice(1, -1);
+				const s = this.subject;
+				let a = afterOpenTicks;
+				let b = m.index;
+				// one space off each end, when both are spaces and not all is (a line ending is a space)
+				const sp = (i) => s[i] === " " || s[i] === "\n";
+				let blank = true;
+				for (let i = a; i < b && blank; i++) if (!sp(i)) blank = false;
+				if (b > a && !blank && sp(a) && sp(b - 1)) {
+					a++;
+					b--;
+				}
 				this.pos = start;
-				this.push(K_CODE, contents);
+				if (this.newlineIn(a, b))
+					this.pushLit(K_CODE, s.slice(a, b).replace(/\n/g, " "));
+				else this.push(K_CODE, a, b);
 				this.pos = reTicks.lastIndex;
 				return true;
 			}
 		}
 		this.pos = start;
-		this.push(K_TEXT, ticks);
+		this.push(K_TEXT, start, afterOpenTicks);
 		this.pos = afterOpenTicks;
 		return true;
 	}
@@ -391,10 +567,7 @@ export class InlineParser {
 
 	handleDelim(c) {
 		const res = this.scanDelims(c);
-		const item = this.push(
-			K_DELIM,
-			this.subject.slice(this.pos, this.pos + res.n),
-		);
+		const item = this.push(K_DELIM, this.pos, this.pos + res.n);
 		this.pos += res.n;
 		if ((res.canOpen || res.canClose) && (c !== "~" || res.n <= 2)) {
 			this.delimiters = {
@@ -471,7 +644,7 @@ export class InlineParser {
 			closer.numdelims -= use;
 			opener.item.right += use;
 			closer.item.left += use;
-			const type = cc === "~" ? "del" : use === 1 ? "emph" : "strong";
+			const type = cc === "~" ? DEL : use === 1 ? EMPH : STRONG;
 			if (opener.item.opens === null) opener.item.opens = [type];
 			else opener.item.opens.unshift(type);
 			closer.item.closes += 1;
@@ -505,11 +678,15 @@ export class InlineParser {
 
 	parseBang() {
 		if (this.subject[this.pos + 1] !== "[") {
-			this.push(K_TEXT, "!");
+			this.push(K_TEXT, this.pos, this.pos + 1);
 			this.pos += 1;
 			return true;
 		}
-		this.addBracket(this.push(K_BRACKET, "!["), this.pos + 1, true);
+		this.addBracket(
+			this.push(K_BRACKET, this.pos, this.pos + 2),
+			this.pos + 1,
+			true,
+		);
 		this.pos += 2;
 		return true;
 	}
@@ -553,7 +730,7 @@ export class InlineParser {
 		};
 		const end = this.pos;
 		this.pos = closeAt;
-		this.push(K_LINK_CLOSE, "");
+		this.push(K_LINK_CLOSE, 0, 0);
 		this.pos = end;
 		this.processEmphasis(opener.previousDelimiter);
 		this.brackets = opener.previous;
@@ -604,7 +781,7 @@ export class InlineParser {
 		}
 		const end = this.pos;
 		this.pos = start;
-		this.push(K_AUTOLINK, m.slice(1, -1)).data = destination;
+		this.push(K_AUTOLINK, start + 1, end - 1).data = destination;
 		this.pos = end;
 		return true;
 	}
@@ -615,7 +792,8 @@ export class InlineParser {
 		if (m === null) return false;
 		const end = this.pos;
 		this.pos = start;
-		this.push(K_HTML, m);
+		if (this.newlineIn(start, end)) this.pushLit(K_HTML, m);
+		else this.push(K_HTML, start, end);
 		this.pos = end;
 		return true;
 	}
@@ -626,7 +804,7 @@ export class InlineParser {
 		if (m === null) return false;
 		const decoded = decodeEntity(m[0], this.decodeName);
 		if (decoded === null) return false;
-		this.push(K_TEXT, decoded);
+		this.pushLit(K_TEXT, decoded);
 		this.pos += m[0].length;
 		return true;
 	}
@@ -649,7 +827,7 @@ export class InlineParser {
 		if (this.nextWww !== -1 && this.nextWww < end) end = this.nextWww;
 		if (this.nextScheme !== -1 && this.nextScheme < end) end = this.nextScheme;
 		this.pos = start;
-		this.push(K_TEXT, this.subject.slice(start, end));
+		this.push(K_TEXT, start, end);
 		this.pos = end;
 		return true;
 	}
@@ -667,7 +845,7 @@ export class InlineParser {
 		const end = autolinkEnd(data, domain);
 		if (end === 0) return false;
 		const url = data.slice(0, end);
-		this.push(K_AUTOLINK, url).data = normalizeURI(`http://${url}`);
+		this.push(K_AUTOLINK, p, p + end).data = normalizeURI(`http://${url}`);
 		this.pos += end;
 		return true;
 	}
@@ -680,13 +858,11 @@ export class InlineParser {
 		if (s[p + 1] !== "/" || s[p + 2] !== "/") return false;
 		const last = this.items[this.items.length - 1];
 		if (last?.kind !== K_TEXT) return false;
+		const text = last.lit ?? s.slice(last.start, last.end);
 		let rewind = 0;
-		while (
-			rewind < last.text.length &&
-			isAsciiAlpha(last.text[last.text.length - rewind - 1])
-		)
+		while (rewind < text.length && isAsciiAlpha(text[text.length - rewind - 1]))
 			rewind++;
-		const scheme = last.text.slice(last.text.length - rewind);
+		const scheme = text.slice(text.length - rewind);
 		if (!["http", "https", "ftp"].includes(scheme.toLowerCase())) return false;
 		const data = s.slice(p + 3, runEnd(s, p + 3));
 		if (!isAsciiAlnum(data[0])) return false;
@@ -694,117 +870,190 @@ export class InlineParser {
 		if (domain === 0) return false;
 		const end = autolinkEnd(data, domain);
 		if (end === 0) return false;
-		last.text = last.text.slice(0, last.text.length - rewind);
 		const url = `${scheme}://${data.slice(0, end)}`;
 		this.pos = p - rewind;
-		this.push(K_AUTOLINK, url).data = normalizeURI(url);
+		if (last.lit === null) {
+			last.end -= rewind;
+			this.push(K_AUTOLINK, p - rewind, p + 3 + end).data = normalizeURI(url);
+		} else {
+			last.lit = last.lit.slice(0, last.lit.length - rewind);
+			this.pushLit(K_AUTOLINK, url).data = normalizeURI(url);
+		}
 		this.pos = p + 3 + end;
 		return true;
 	}
 
-	/** Step 3: the items, read once in order, as the children of node. */
-	build(node) {
-		const stack = [node];
-		let text = null;
+	/** Step 3: the items, read once in order, as the children of root. */
+	build(root) {
+		const t = this.nodes;
+		const sp = this.spans;
+		const stack = [root];
+		let top = root;
+		let text = -1;
+		let hasAt = false;
 		let inLink = 0;
-		const top = () => stack[stack.length - 1];
-		const addText = (s, offset) => {
+		const textRow = (offset) => {
+			if (text === -1) {
+				text = t.add(TEXT, offset);
+				t.appendInline(top, text);
+			}
+			return text;
+		};
+		// a range of the subject, or a literal, as the text of the open text node
+		const addRange = (a, b, offset) => {
+			if (a === b) return;
+			this.piece(textRow(offset), a, b);
+			if (this.autolink && !hasAt) {
+				if (this.nextAt < a) {
+					const i = this.subject.indexOf("@", a);
+					this.nextAt = i === -1 ? this.subject.length : i;
+				}
+				hasAt = this.nextAt < b;
+			}
+		};
+		const addLit = (s, offset) => {
 			if (s === "") return;
-			if (text === null) text = appendChild(top(), textNode(s, offset));
-			else text.view.push(s);
+			addLiteral(t, sp, textRow(offset), s);
+			if (!hasAt && s.includes("@")) hasAt = true;
+		};
+		const addItem = (item, offset) => {
+			if (item.lit === null) addRange(item.start, item.end, offset);
+			else addLit(item.lit, offset);
 		};
 		const endText = () => {
-			if (text !== null && this.autolink && inLink === 0) autolinkEmails(text);
-			text = null;
+			if (text !== -1 && hasAt && this.autolink && inLink === 0)
+				this.autolinkEmails(text);
+			text = -1;
+			hasAt = false;
 		};
-		const open = (n) => {
+		const open = (type, offset) => {
 			endText();
-			appendChild(top(), n);
+			const n = t.add(type, offset);
+			t.appendInline(top, n);
 			stack.push(n);
+			top = n;
+			return n;
 		};
 		const close = () => {
 			endText();
-			fitChildren(stack.pop());
+			stack.pop();
+			top = stack[stack.length - 1];
+		};
+		// a node of one piece of text, the item's
+		const leafOf = (type, item, parent) => {
+			const n = t.add(type, item.offset);
+			t.appendInline(parent, n);
+			if (item.lit === null) {
+				if (item.end > item.start) this.piece(n, item.start, item.end);
+			} else if (item.lit !== "") addLiteral(t, sp, n, item.lit);
+			return n;
 		};
 		for (const item of this.items) {
 			switch (item.kind) {
 				case K_TEXT:
 				case K_BRACKET:
-					addText(item.text, item.offset);
+					addItem(item, item.offset);
 					break;
 				case K_DELIM:
 					for (let i = 0; i < item.closes; i++) close();
-					addText(
-						item.text.slice(item.left, item.text.length - item.right),
+					addRange(
+						item.start + item.left,
+						item.end - item.right,
 						item.offset + item.left,
 					);
 					if (item.opens !== null)
-						for (const type of item.opens)
-							open(inline(type, item.offset, null));
+						for (const type of item.opens) open(type, item.offset);
 					break;
-				case K_LINK_OPEN:
-					open(
-						inline(item.data.image ? "image" : "link", item.offset, {
-							destination: item.data.destination,
-							title: item.data.title,
-						}),
-					);
+				case K_LINK_OPEN: {
+					const n = open(item.data.image ? IMAGE : LINK, item.offset);
+					setLink(t, n, item.data.destination, item.data.title);
 					inLink++;
 					break;
+				}
 				case K_LINK_CLOSE:
 					close();
 					inLink--;
 					break;
 				case K_CODE:
-				case K_HTML: {
+				case K_HTML:
 					endText();
-					const n = appendChild(
-						top(),
-						inline(item.kind === K_CODE ? "code" : "html_inline", item.offset),
-					);
-					n.view = [item.text];
+					leafOf(item.kind === K_CODE ? CODE : HTML_INLINE, item, top);
 					break;
-				}
 				case K_SOFTBREAK:
 				case K_LINEBREAK:
 					endText();
-					appendChild(
-						top(),
-						inline(
-							item.kind === K_SOFTBREAK ? "softbreak" : "linebreak",
+					t.appendInline(
+						top,
+						t.add(
+							item.kind === K_SOFTBREAK ? SOFTBREAK : LINEBREAK,
 							item.offset,
 						),
 					);
 					break;
-				case K_AUTOLINK:
+				case K_AUTOLINK: {
 					endText();
-					appendChild(top(), autolinkNode(item.data, item.text, item.offset));
+					const link = t.add(LINK, item.offset);
+					t.appendInline(top, link);
+					setLink(t, link, item.data, "");
+					leafOf(TEXT, item, link);
 					break;
+				}
 			}
 		}
 		endText();
-		fitChildren(node);
+	}
+
+	/** Turn the email addresses of text, the last row, into links, the row replaced by its pieces (GFM's postprocess). */
+	autolinkEmails(text) {
+		const t = this.nodes;
+		const sp = this.spans;
+		const s = inlineText(this.source, t, sp, text);
+		const parts = splitEmails(s);
+		if (parts.length === 3 && parts[0] === 0) return;
+		const T = text << 3;
+		const parent = t.i32[T + F_PARENT];
+		const offset = t.i32[T + F_OFFSET];
+		const at = t.i32[T + F_AT];
+		// of one piece, the parts are pieces of it; else literals
+		const single = t.i32[T + F_COUNT] === 1;
+		const src = sp.i32[at * SPAN + 2];
+		const base = sp.i32[at * SPAN];
+		// text is the last row and parent's last child; the one before it, found from the first, is the last now
+		const n = t.i32;
+		let prev = -1;
+		for (
+			let c = n[(parent << 3) + F_FIRST];
+			c !== text;
+			c = n[(c << 3) + F_NEXT]
+		)
+			prev = c;
+		n[(parent << 3) + F_LAST] = prev;
+		if (prev === -1) n[(parent << 3) + F_FIRST] = -1;
+		else n[(prev << 3) + F_NEXT] = -1;
+		t.length = text;
+		sp.length = at;
+		const textOf = (row, from, to) => {
+			if (single) addPiece(t, sp, row, src, base + from, base + to);
+			else addLiteral(t, sp, row, s.slice(from, to));
+		};
+		for (let i = 0; i < parts.length; i += 3) {
+			const from = parts[i + 1];
+			const to = parts[i + 2];
+			const row = t.add(TEXT, offset + from);
+			if (parts[i] === 1) {
+				const link = t.add(LINK, offset + from);
+				t.appendInline(parent, link);
+				setLink(t, link, normalizeURI(`mailto:${s.slice(from, to)}`), "");
+				t.appendInline(link, row);
+			} else t.appendInline(parent, row);
+			textOf(row, from, to);
+		}
 	}
 }
 
-/** Turn the email addresses of a text node into links, replacing it with the pieces (GFM's postprocess). */
-function autolinkEmails(node) {
-	const view = node.view;
-	if (!view.some((s) => s.includes("@"))) return;
-	const parts = splitEmails(
-		view.length === 1 ? view[0] : view.join(""),
-		node.offset,
-	);
-	if (parts.length === 1 && parts[0].type === "text") return;
-	const siblings = node.parent.children;
-	siblings.pop();
-	for (const p of parts) appendChild(node.parent, p);
-	node.parent = null;
-}
-
-/** The text s as text nodes and email links. */
-function splitEmails(s, offset) {
-	const nodes = [];
+/** The text s as parts of text (0) and email links (1): kind, from, to for each. */
+function splitEmails(s) {
+	const parts = [];
 	let from = 0;
 	let at = s.indexOf("@");
 	while (at !== -1) {
@@ -853,14 +1102,11 @@ function splitEmails(s, offset) {
 			continue;
 		}
 		const start = at - rewind;
-		if (start > from) nodes.push(textNode(s.slice(from, start), offset + from));
-		const addr = s.slice(start, at + end);
-		nodes.push(
-			autolinkNode(normalizeURI(`mailto:${addr}`), addr, offset + start),
-		);
+		if (start > from) parts.push(0, from, start);
+		parts.push(1, start, at + end);
 		from = at + end;
 		at = s.indexOf("@", from);
 	}
-	if (from < s.length) nodes.push(textNode(s.slice(from), offset + from));
-	return nodes;
+	if (from < s.length) parts.push(0, from, s.length);
+	return parts;
 }
