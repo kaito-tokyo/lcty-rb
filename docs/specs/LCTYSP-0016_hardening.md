@@ -130,13 +130,22 @@ On every response:
 - No `Server` header (OWASP lists it among the headers to remove); an error is answered with a short body of its own
   (JSON for `/v1/`, plain text otherwise) in UTF-8.
 
-What may be kept, as OWASP advises for sensitive content:
+What may be kept:
 
-- `Cache-Control: no-store, max-age=0` on what holds the user's data: the responses of `/v1/`, the conversation files
-  (`/c/<id>.html`) and the tag files (`/t/*.html`). No other program on the machine finds them in the browser's
-  cache.
+- `Cache-Control: private, no-cache` on what holds the user's data: the responses of `/v1/`, the conversation files
+  (`/c/<id>.html`) and the tag files (`/t/*.html`). `no-cache` makes the browser check its copy with the `ETag`
+  before it uses it (`304` when nothing changed), so a page shows what the server has, opens fast and keeps the
+  back-forward cache. `private` keeps them out of a shared cache: a caching proxy in front of a server without users
+  would otherwise hand one person's conversations to another. A response to a request with `Authorization` is kept out
+  of a shared cache anyway.
 - The code and styles (`/lcty.v1/`, `/js/`, the CSS) keep `Cache-Control: no-cache` with their `ETag`: they hold no
-  data, and revalidating them keeps a page fast.
+  data.
+- Not `no-store` (OWASP: `no-store, max-age=0` for sensitive content). It keeps a response out of the browser's own
+  cache, against another program on the device reading the cache. That attacker is out of scope here: the data
+  directory holds the conversations in plain text on the server's machine, which is often the same one, and a program
+  that reads the browser's cache reads its IndexedDB and settings, the API key among them, as well. On a phone the
+  browser's cache is closed to other apps. `no-store` would cost a full read of every conversation opened, and the
+  back-forward cache in some browsers, for no guard.
 
 Left out, with the reason:
 
@@ -205,7 +214,7 @@ send and to remove as data in its repository (`ci/headers_add.json` and `ci/head
 - `Cross-Origin-Opener-Policy: same-origin`
 - `Cross-Origin-Resource-Policy: same-origin`
 - `Permissions-Policy` with every feature turned off but `sync-xhr=(self)`
-- `Cache-Control: no-store, max-age=0` (on what holds the user's data, above)
+- `Cache-Control: no-store, max-age=0` (not taken: `private, no-cache` instead, above)
 - `X-DNS-Prefetch-Control: off`
 
 Its other advice that this plan follows:
@@ -216,4 +225,6 @@ Its other advice that this plan follows:
   `Access-Control-Allow-Origin`. lcty-rb allows no other origin, so every preflight fails.
 - CORS is a rule for the browser, not access control: the server checks the origin of a write itself (step 1).
 - A CSP matters for an API too, and directives such as `form-action` do not fall back to `default-src`.
-- Do not let sensitive responses be cached (`no-store`).
+
+Its advice that this plan does not follow: keeping sensitive responses out of the browser's cache (`no-store`), for
+the reasons above.
