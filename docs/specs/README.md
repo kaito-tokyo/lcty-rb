@@ -25,6 +25,7 @@ Specifications of lcty-rb. Each spec describes the current design of one topic a
 | [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) | Conversation file (`lcty-msg`)    | Draft     |
 | [LCTYSP-0014](LCTYSP-0014_browser-sync.md)               | Browser copies and sync           | Draft     |
 | [LCTYSP-0015](LCTYSP-0015_schema-versions.md)            | Schema versions                   | Draft     |
+| [LCTYSP-0016](LCTYSP-0016_hardening.md)                  | Hardening                         | Draft     |
 
 ## Gherkin features
 
