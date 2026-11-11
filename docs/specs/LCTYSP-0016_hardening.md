@@ -80,6 +80,10 @@ In order. Each step is one pull request with its tests, and each leaves the serv
   when it listens on `127.0.0.1` or `::1`, and the host of every `--allowed-origin`, each with the port. Any other is
   refused before a servlet sees it, the WebSocket of `/v1/rpc` included. Behind a reverse proxy the proxy's name is an
   allowed origin already, so it is allowed; a proxy that sends `Host: 127.0.0.1` is allowed too.
+  - **A `Host` that is not served is answered `421 Misdirected Request`:** RFC 9110 defines it for a request sent to a
+    server that cannot or will not answer for its target, which is this case. OWASP sets no status for it: its Secure
+    Headers Project, its testing guide (WSTG-INJT-17) and its verification standard (ASVS 5.0) say nothing of one.
+  - **A request without `Host`, or with more than one, is answered `400`,** as RFC 9112 requires.
 - **The origin of a write:** a request other than `GET` and `HEAD` is served only when its `Origin` is one of the
   allowed origins, or, without `Origin`, when `Sec-Fetch-Site` is `same-origin` or `none`. A request with neither
   header (`curl`, the tests) is served, as `/v1/rpc` serves one without `Origin`: it is not a browser, so it is not
@@ -132,6 +136,11 @@ On every response:
   through a DNS lookup
 - No `Server` header (OWASP lists it among the headers to remove); an error is answered with a short body of its own
   (JSON for `/v1/`, plain text otherwise) in UTF-8.
+- The realm of Basic authentication (`WWW-Authenticate: Basic realm="…"`) is the base URL (`Lcty.base_url`, `/`
+  by default), not `lcty-rb`: it does not name the software, as OWASP advises, and the servers one host serves under
+  paths of their own (`/lcty-a/`, `/lcty-b/` behind one proxy) are protection spaces of their own, so a browser never
+  tries the password of one on another. Whether a browser shows the realm is not taken into account. A base URL with
+  `"`, `\` or a control character is refused when the settings are read, so the realm needs no escaping.
 
 What may be kept:
 
@@ -183,17 +192,12 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
 
 ## Decisions to make
 
-Each has the one this plan proposes first.
+With the one this plan proposes first.
 
 1. **The inline style of tables:** allowed with `style-src-attr 'unsafe-inline'`, since a style attribute can only be
    `text-align:left|center|right` in a file (the allowlist) and a page makes the presentation itself. The other way:
    classes (`lcty-align-center` and the like) instead of `style`, which changes the presentation of LCTYSP-0013 and
    the files written so far.
-2. **The answer to a `Host` that is not served:** `421 Misdirected Request`, which says that the request reached a
-   server that does not answer for that name. The other way: `403`.
-3. **The realm of Basic authentication:** kept as `lcty-rb`. OWASP advises a generic realm, since the name tells an
-   attacker which software answers; but the realm is what the browser shows when it asks for the password, and the
-   user needs to know what asks. The other way: a generic realm (`RestrictedArea`), or one set by an option.
 
 ## OWASP Secure Headers Project
 
@@ -219,7 +223,8 @@ send and to remove as data in its repository (`ci/headers_add.json` and `ci/head
 
 Its other advice that this plan follows:
 
-- Remove the headers that tell which software answers, `Server` among them.
+- Remove the headers that tell which software answers, `Server` among them, and give `WWW-Authenticate` a realm
+  that does not name it.
 - Validate a preflight's `Origin`, `Access-Control-Request-Method` and `Access-Control-Request-Headers` against what
   is allowed, and answer one that fails with `403` and no CORS header; never copy `Origin` into
   `Access-Control-Allow-Origin`. lcty-rb allows no other origin, so every preflight fails.
