@@ -187,7 +187,8 @@ server data are in `public/lcty.v1/` with the frame that starts them.
   send a CSP header yet.)
 - The new conversation page (`/c/`) loads the same two classic scripts (`../lcty.v1/lcty.v1.cjs` and the language
   script), then its own entry `index.js` (`/c/index.js`) as a module script (deferred, so it never blocks rendering).
-- Markdown rendering is the ordinary module `js/ui/markdown.js` on every page.
+- Markdown rendering is the ordinary module `js/convert/markdown.js` on every page. `js/convert/` holds what turns a
+  text into the forms a message is kept in, its attribute and its `<article>`.
 
 ## Custom elements
 

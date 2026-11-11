@@ -6,7 +6,8 @@
 // title of its Scenario and one test.step per line of it, the Background first, so the two read side by side.
 //
 // js/ui/lcty-msg.js runs in a real browser on the test server's origin, on the empty unit page (which loads
-// /c/lcty.v1.js, so the elements are defined). The module is kept on window (M).
+// /c/lcty.v1.js, so the elements are defined). The module is kept on window (M), with the <article> builders of
+// js/convert/article.js.
 
 import { expect, test } from "@playwright/test";
 import { givenAPage } from "./unit-page.js";
@@ -16,9 +17,12 @@ const UUID =
 
 async function background(page, context) {
 	await givenAPage(page, context);
-	await test.step("And js/ui/lcty-msg.js is imported as window.M", () =>
+	await test.step("And js/ui/lcty-msg.js and js/convert/article.js are imported as window.M", () =>
 		page.evaluate(async () => {
-			window.M = await import("/js/ui/lcty-msg.js");
+			window.M = {
+				...(await import("/js/ui/lcty-msg.js")),
+				...(await import("/js/convert/article.js")),
+			};
 		}));
 }
 

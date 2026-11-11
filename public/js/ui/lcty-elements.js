@@ -17,14 +17,14 @@
 // Elements from the conversation file (dual recording. LCTYSP-0003) read the message from attributes and keep the saved presentation children as they are.
 // Per-element state lives in WeakMaps made on first use (state).
 
-import { tr } from "../i18n.js";
 import {
 	codeBlockHTML,
 	fenceParts,
 	renderBlock,
 	scanBlocks,
-} from "./markdown.js";
-import { textAttr } from "./text-attr.js";
+} from "../convert/markdown.js";
+import { textAttr } from "../convert/text-attr.js";
+import { tr } from "../i18n.js";
 
 const GENERATOR = "lcty.v1"; // The renderer that produced the saved presentation HTML (data-generator)
 

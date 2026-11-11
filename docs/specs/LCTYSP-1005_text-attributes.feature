@@ -2,16 +2,18 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/js/ui/text-attr.js (LCTYSP-0003, "Characters XML cannot represent"). Each Scenario is a test
+# The behaviour of public/js/convert/text-attr.js (LCTYSP-0003, "Characters XML cannot represent"). Each Scenario is a test
 # of the same title in tests/unit/text-attr.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1005 Reading text strings from attributes
 
   A text string of a conversation file (a message's content or thinking, the system prompt) is kept byte-exact in an
   attribute. Ruby writes it as name, or, only when it has characters XML cannot represent (C0 controls other than tab,
-  LF and CR, U+FFFE, U+FFFF), as name-base64: base64 of its UTF-8 bytes. textAttr(el, name) of js/ui/text-attr.js
+  LF and CR, U+FFFE, U+FFFF), as name-base64: base64 of its UTF-8 bytes. textAttr(el, name) of js/convert/text-attr.js
   reads the string back, whichever form was written. name-base64 is the one read when it is there; when it is not
   base64 of valid UTF-8 the text is unreadable and textAttr returns null, as it does when neither attribute is there.
+  textAttrOf(name, text) is the other way, for the elements a page appends: {name: text}, or {name-base64: …} when
+  XML cannot hold the text.
 
   Scenario: A plain attribute is read as it is
     Given an element with data-content "Hello, <world> & \"you\"\nsecond line"
@@ -73,3 +75,9 @@ Feature: LCTYSP-1005 Reading text strings from attributes
       | "/w==" (the byte ff, not UTF-8)              |
       | "wA==" (the byte c0, an incomplete sequence) |
       | "7aCA" (ed a0 80, a surrogate in UTF-8)      |
+
+  # The other way: a page writes the attributes of the elements it appends (js/ui/lcty-msg.js) with textAttrOf
+  Scenario: textAttrOf writes a text as it is, or as base64 when XML cannot hold it, and textAttr reads it back
+    When textAttrOf writes "a\u0009b" and "a\u0001b" under "data-content"
+    Then the first is {"data-content": "a\u0009b"} and the second has only data-content-base64
+    And textAttr reads each back as it was

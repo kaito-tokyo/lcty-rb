@@ -22,6 +22,8 @@ import {
 	nowIso,
 	showToast,
 } from "../js/common.js";
+import { replyArticle, userArticle } from "../js/convert/article.js";
+import { textAttr } from "../js/convert/text-attr.js";
 import { tr } from "../js/i18n.js";
 import { stream } from "../js/llm/client.js";
 import { buildRequest } from "../js/llm/history.js";
@@ -49,9 +51,7 @@ import {
 	historyOf,
 	lastElement,
 	msgAttrs,
-	replyArticle,
 	thinkingAttrs,
-	userArticle,
 } from "../js/ui/lcty-msg.js";
 // lcty.v1.async.mjs: the entry of the conversation page /c/<id>.html (LCTYSP-0005). Line 2 of a conversation file loads
 // lcty.v1.js (redirected to lcty.v1.cjs: the custom elements, defined at its end) and lcty.v1.lang-ja.js (Japanese
@@ -64,7 +64,6 @@ import {
 // file of LCTYSP-0003 is shown read-only until tools/convert.rb converts it. New conversations are made on the new
 // conversation page, /c/ next to it ("./", js/pages/new.js).
 import { initSidebar } from "../js/ui/sidebar.js";
-import { textAttr } from "../js/ui/text-attr.js";
 import { UUID_RE } from "../js/uuid.js";
 
 // The frame and the message list are <lcty-c> (built by lcty.v1.cjs during parsing. LCTYSP-0005). Its inner elements are taken from fields

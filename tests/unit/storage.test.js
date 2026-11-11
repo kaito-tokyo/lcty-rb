@@ -11,7 +11,7 @@
 // A request that fails without an answer is a fetch that rejects with a TypeError, as fetch does. A call of the
 // feature, such as appendLines("c1", []), is the function's name and JSON arguments.
 //
-// Stand-ins: toLine renders replies with js/ui/markdown.js, whose code blocks call tr() of js/i18n.js, so the global
+// Stand-ins: toLine renders replies with js/convert/markdown.js, whose code blocks call tr() of js/i18n.js, so the global
 // LctyT is made by useLctyT() (English). The requests that change conversations call requestMetaDbSync() of
 // js/api/meta-db.js, which waits for requestIdleCallback and then starts the meta sync worker; Node.js has neither, so
 // requestIdleCallback is a stand-in that never calls back: no sync runs here. The Scenarios about the sync (the meta
@@ -28,7 +28,7 @@ import {
 globalThis.requestIdleCallback = () => 0;
 await useLctyT();
 const storage = await import(publicUrl("js/api/storage.js"));
-const { renderMarkdown } = await import(publicUrl("js/ui/markdown.js"));
+const { renderMarkdown } = await import(publicUrl("js/convert/markdown.js"));
 
 // ---- Background ----
 

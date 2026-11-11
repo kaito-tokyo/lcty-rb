@@ -7,15 +7,16 @@
 // (/v1/rpc, LCTYSP-0012); the page puts the same element into its document, so the two never differ.
 //
 //   msgAttrs / thinkingAttrs / cmdAttrs   the attributes of an element, ready for c.append.*
-//   userArticle / replyArticle            the <article> of a user message and of the others (Markdown)
 //   elementOf(tag, attrs, innerHTML)       the element itself, for the document
 //   elementFromAttrs(tag, attrs)           an element another page wrote, its presentation made here from its text
 //   lastElement(container)                 the last element of the file in the document (null before the first)
 //   historyOf(container)                   {instructions, messages}: what the model is sent (LCTYSP-0013)
+//
+// Turning a text into the forms it is kept in, its attribute and its <article>, is in js/convert/.
 
 import { newMsgId } from "../common.js";
-import { renderMarkdown } from "./markdown.js";
-import { textAttr } from "./text-attr.js";
+import { replyArticle, userArticle } from "../convert/article.js";
+import { textAttr, textAttrOf } from "../convert/text-attr.js";
 
 const PREFIX = {
 	system: "sys-",
@@ -23,18 +24,11 @@ const PREFIX = {
 	user: "msg-u-",
 	model: "msg-m-",
 };
-// C0 controls other than tab, LF and CR, and U+FFFE / U+FFFF: an attribute of the file cannot hold them (LCTYSP-0003)
-// biome-ignore lint/suspicious/noControlCharactersInRegex: these are the characters looked for
-const XML_FORBIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/;
-
 /** The text attributes: the integrity placeholder, which the server fills in, and the text (base64 when needed). */
 function textAttrs(text) {
-	if (!XML_FORBIDDEN.test(text))
-		return { "data-content-integrity": "sha384-", "data-content": text };
-	const bytes = new TextEncoder().encode(text);
 	return {
 		"data-content-integrity": "sha384-",
-		"data-content-base64": btoa(String.fromCharCode(...bytes)),
+		...textAttrOf("data-content", text),
 	};
 }
 
@@ -64,23 +58,6 @@ export function cmdAttrs(op, at, error) {
 	const a = { id: `cmd-${newMsgId()}`, "data-op": op, "data-at": at };
 	if (error != null) a["data-error"] = error;
 	return a;
-}
-
-const escapeText = (s) =>
-	s
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll("\r", "&#13;");
-
-/** The <article> of a user message: its text alone (LCTYSP-0013). */
-export function userArticle(text) {
-	return `<article>${escapeText(text)}</article>`;
-}
-
-/** The <article> of a reply, a thinking or a system message: the text rendered as Markdown (markdown.js). */
-export function replyArticle(text) {
-	return `<article>${renderMarkdown(text)}</article>`;
 }
 
 /** An element of the file built from its attributes and presentation, as the server writes it. */

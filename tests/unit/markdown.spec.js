@@ -7,7 +7,7 @@
 // added in parentheses) and one test.step per line of it, so the two read side by side. The scenarios that check only
 // the HTML string run in Node.js (markdown.test.js).
 //
-// public/js/ui/markdown.js is imported into the empty unit page (tests/unit/unit-page.js), which loads /c/lcty.v1.js for
+// public/js/convert/markdown.js is imported into the empty unit page (tests/unit/unit-page.js), which loads /c/lcty.v1.js for
 // the LctyT that tr() needs, and its output is put into a <div> with innerHTML. Texts in the steps are written as in the
 // feature, where \n is a newline, \| is | and \\ is \; unquote() turns them into the text the module is given.
 
@@ -24,9 +24,9 @@ const A = (href, text) =>
 /** The first lines of every Scenario here: "Given a page on the server's origin" and the import of the module. */
 async function givenAPageWithTheModule(page, context, options) {
 	await givenAPage(page, context, options);
-	await test.step("And the module /js/ui/markdown.js is imported", async () => {
+	await test.step("And the module /js/convert/markdown.js is imported", async () => {
 		await page.evaluate(async () => {
-			window.md = await import("/js/ui/markdown.js");
+			window.md = await import("/js/convert/markdown.js");
 		});
 	});
 }

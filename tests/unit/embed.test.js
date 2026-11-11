@@ -6,7 +6,7 @@
 // its Scenario (an Examples row is added in parentheses) and one step per line of it, so the two read side by side.
 //
 // js/search/embed.js needs no browser: it runs in Node.js (node-unit.js). Nothing it imports (api/storage.js,
-// search/vectors.js and through them api/meta-db.js, ui/markdown.js, i18n.js) touches a browser global when it is
+// search/vectors.js and through them api/meta-db.js, convert/markdown.js, i18n.js) touches a browser global when it is
 // imported, and the functions used here only fetch. The module never reads location: "the page's origin" is only the
 // origin its relative URLs (/v1/vectors/…) resolve against, which routeFetch() supplies (ORIGIN, as the test server's
 // origin in a page), and a backend at /llm/ of it has the base_url ORIGIN + "/llm/". Every request is answered by the
