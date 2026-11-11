@@ -84,10 +84,19 @@ In order. Each step is one pull request with its tests, and each leaves the serv
     server that cannot or will not answer for its target, which is this case. OWASP sets no status for it: its Secure
     Headers Project, its testing guide (WSTG-INJT-17) and its verification standard (ASVS 5.0) say nothing of one.
   - **A request without `Host`, or with more than one, is answered `400`,** as RFC 9112 requires.
-- **The origin of a write:** a request other than `GET` and `HEAD` is served only when its `Origin` is one of the
-  allowed origins, or, without `Origin`, when `Sec-Fetch-Site` is `same-origin` or `none`. A request with neither
-  header (`curl`, the tests) is served, as `/v1/rpc` serves one without `Origin`: it is not a browser, so it is not
-  sent on a page's behalf.
+- **The origin of a write,** as OWASP's CSRF Prevention Cheat Sheet lays it out
+  ([below](#owasp-csrf-prevention-cheat-sheet)): a request other than `GET` and `HEAD` is served only when
+  - its `Sec-Fetch-Site`, when it has one, is `same-origin`: `cross-site` and `same-site` are refused, since no page
+    of another origin writes here, a sibling host of the same site included;
+  - and its `Origin`, when it has one, is one of the allowed origins. This is the fallback the Cheat Sheet requires:
+    a browser sends `Sec-Fetch-*` only to a potentially trustworthy URL (HTTPS, `localhost`, `127.0.0.0/8`, `::1`),
+    so a page reached over plain HTTP at an address of the local network sends `Origin` alone.
+
+  A refused write is answered `403` and logged with its `Origin` and `Sec-Fetch-Site`, as `/v1/rpc` logs an `Origin`
+  it refuses, so a page that a setting shuts out can be found. A request with neither header is served (`curl`, the
+  tests), as `/v1/rpc` serves one without `Origin`. The Cheat Sheet would refuse it for a sensitive endpoint
+  ("fail-safe"), but every browser sends `Origin` with these methods, so such a request is not one a page sent on the
+  user's behalf; and step 3 leaves no write in the HTTP API.
 - **The type of a body:** a request with a JSON body (every `POST` and `PUT` of the HTTP API but `PUT /v1/vectors`,
   whose body is binary) is refused with `415` unless its `Content-Type` is `application/json`. A page of another site
   cannot send that type without a preflight, which is never granted.
@@ -275,3 +284,34 @@ recommends a value. Where it differs from the Secure Headers Project, or adds to
 - `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`: left to the HTTPS proxy, above.
 - File downloads: `Content-Disposition: attachment` and `application/octet-stream` for files users provide. lcty-rb
   serves none for download: a conversation file is a page, and the vectors are `application/octet-stream`.
+
+## OWASP CSRF Prevention Cheat Sheet
+
+The [Cross-Site Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+(`cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.md` of OWASP/CheatSheetSeries, as of 2026-11-10)
+writes its advice for cookie sessions, but a browser sends Basic credentials with every request as it sends cookies,
+so the same attack applies. How the plan follows it:
+
+- **Fetch Metadata, with the origin as the fallback:** `Sec-Fetch-Site` is the primary signal, `cross-site` is refused
+  for a method that is not safe, `same-site` is refused unless sibling hosts are trusted (they are not), and the
+  `Origin` check is mandatory for browsers that send no `Sec-Fetch-*`: step 1. Over plain HTTP at a local address no
+  browser sends `Sec-Fetch-*`, so there the `Origin` check is all there is.
+- **No simple content types:** a JSON endpoint that takes `text/plain` is open to a cross-site form; `415` for any
+  other `Content-Type`: step 1.
+- **No state change on a safe method:** every `GET` of the HTTP API reads, and the writes of `/v1/rpc` go over a
+  WebSocket whose handshake checks `Origin` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md); ASVS 5.0 4.4.2).
+- **Client-side CSRF** (a page that turns what is in its own URL into a request): no page writes from its URL. The new
+  conversation page reads `?fork=` only to fill the input, which the user still sends, and `?q=` only to search.
+- **Log first, then enforce:** refusals are logged with what was checked (step 1). A personal server needs no
+  separate log-only period: the tests and the log show what a check shuts out.
+- **`Vary: Sec-Fetch-Site, Origin`:** not needed. Only the answer to a write depends on those headers, and no cache
+  keeps one.
+- **Not taken:**
+  - Tokens (synchronizer or signed double-submit cookies): they need state or cookies that lcty-rb does not have,
+    and the checks above cover the browsers it supports.
+  - A custom request header (`X-CSRF-Token`): `Content-Type: application/json` already makes a write a request that
+    needs a preflight, which no other origin passes. The Cheat Sheet notes that a browser bug could break that, which
+    is why the origin is checked as well.
+  - `SameSite` cookies: lcty-rb sets no cookie.
+  - Asking the user again (re-authentication, a confirmation) before a write: every write is the user's own action
+    on a page already, and deleting asks first.
