@@ -6,8 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0018: Markdown streaming
 
-- Status: Draft. `lcty-elements.js` streams a reply as [In the page](#in-the-page) says, but for the tail's box and
-  following the reply; [Open questions](#open-questions) lists what is not decided yet.
+- Status: Draft. `lcty-elements.js` streams a reply as [In the page](#in-the-page) says, with the tail's box and
+  following the reply of `tail-box.js`; [Open questions](#open-questions) lists what is not decided yet.
 - Related: [LCTYSP-0017](LCTYSP-0017_markdown.md) (the HTML of a complete text),
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams) (rendering streams),
   [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature) (the tests of the parser, streamed too)
@@ -72,8 +72,7 @@ heuristic that only has to look right for a moment, since whatever it shows is r
   [LCTYSP-0017](LCTYSP-0017_markdown.md): a parser of its own (the second choice of
   [Open questions](#open-questions) 1), which shares nothing with `convert/gfm/` and writes only LCTYSP-0017's
   elements and attributes. It draws the tail's text as a whole each frame, but for an open fenced code block, whose
-  code is appended to a text node. The tail's view is a plain `div.md-tail`, not yet the box below, and the page does
-  not follow the reply yet.
+  code is appended to a text node.
 
 ### The tail's box
 
@@ -83,26 +82,34 @@ inside a box of a fixed size, which is the case containment is for
 ([What the browser engines say](#what-the-browser-engines-say)), and the page's height changes a few times in a reply
 instead of every frame.
 
-- **The box is reserved.** Its height is given (see [Open questions](#open-questions)), and it is `contain: strict`
-  (size, layout and paint): its content never changes the layout around it, nor its size.
-- **It grows in steps.** The content is one element inside the box, laid out at its own height. When that height is
-  more than the box's, the box is made as tall as the content and a step more. The height is read without forcing a
-  layout: a `ResizeObserver` on the content reports it after the browser has laid the frame out, and the box is changed
-  in the next frame.
+- **The box is reserved.** It is `div.md-tail`, made with the reply's first delta, a third of the view's height high
+  (`innerHeight / 3`), and `contain: strict` (size, layout and paint): its content never changes the layout around it,
+  nor its size.
+- **It grows in steps.** The content is one element inside the box, `div.md-tail-content`, laid out at its own height.
+  When that height is more than the box's, the box is made as tall as the content and a step more, a third of the
+  view's height again. The height is read without forcing a layout: a `ResizeObserver` on the content reports it after
+  the browser has laid the frame out, and the box is changed in that callback, so the browser lays the page out once
+  more before it paints and no frame shows the content cut off.
 - **A commit does not move what is below.** When a block is committed, its HTML is added to the `<article>` above the
   box and its text leaves the tail, so the box is made smaller by the height the `<article>` gained, as far as the
-  content still fits: the reply's height stays, and the page does not jump at each commit.
+  content still fits: the reply's height stays, and the page does not jump at each commit. The same `ResizeObserver`
+  reads the `<article>`'s height. While the box is there the `<article>` is `display: flow-root`, so that its blocks'
+  margins are inside it and its height is all that a commit adds above the box.
 - **At the end the box goes.** When the reply ends the tail is empty, and the box is removed with the room left in it;
   the page's height falls once, by what was reserved and not used.
 
 The box also gives the page a simple measure of whether the reader is at the reply's end:
 
-- **Following the reply.** The page follows the reply from when at least 80% of the box comes into view: it keeps the
-  end of the tail's content in view as the content grows. It stops following when the box leaves the view entirely,
+- **Following the reply.** The page follows the reply from when at least 80% of the box comes into view (80% of the
+  view's height, when the box is taller than the view): it keeps the end of the tail's content in view as the content
+  grows, 16px above the composer. It stops following when the box leaves the view entirely,
   or when the reader scrolls: a scroll the page did not make itself, by a wheel, a touch, a key or the scroll bar,
   stops it at once, even with the box still in view, so the page never pulls the reader back. Following starts again
   only when the box comes into view again by 80%, as it does when the reader goes back to the end, or presses "To the
-  bottom". Whether the box is in view is read from an `IntersectionObserver` on it, with no read of layout.
+  bottom". Whether the box is in view is read from an `IntersectionObserver` on it, at every 5%, with no read of
+  layout. The reader's scrolls are told apart by their input, not by the scroll events, which the page's own changes
+  of height cause too; a scroll bar drawn over the page, as macOS's is, leaves no input to see, so dragging it does
+  not stop following.
 - **The one way the page scrolls by itself.** Following is the exception
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams) makes to scrolling being the user's: only while the
   reader is at the reply's end, and never on opening a page or sending.
@@ -232,9 +239,9 @@ under Measurements):
    whether the tail converter should avoid guesses that are often wrong.
 5. **Suggested next messages** ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams)) are shown as soon as
    the opening tag arrives. Whether the tail converter does that, as the page does now.
-6. **The size of the tail's box.** How tall it is reserved (a part of the view's height, or a number of lines), and how
-   much a step adds when it grows. A larger reserve grows less often but leaves more room unused at the end, which the
-   page loses at once when the box is removed.
+6. **The size of the tail's box.** Decided: a third of the view's height reserved, and a third more at each step
+   ([The tail's box](#the-tails-box)). A larger reserve grows less often but leaves more room unused at the end, which
+   the page loses at once when the box is removed.
 
 ## Measurements
 

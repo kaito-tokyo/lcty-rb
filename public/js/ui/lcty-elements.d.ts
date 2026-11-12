@@ -179,10 +179,11 @@ export function initComposer(
 // body <article>, LCTYSP-0018): the text is read as GFM a top-level block at a time. Each animation frame BlockWatch
 // says when to try BlockParser's advance, and each block it takes is committed: its inlines are parsed and it is
 // written once into the <article> by the committed converter, as DOM nodes (DomSink), so the <article> holds the
-// committed blocks only. The rest of the text, the tail, is drawn in a div.md-tail right after the <article>, outside
-// it, by markdown.js, a renderer of its own that only has to look right until its text is committed. An open code
-// block in the tail is appended to a text node instead of being redrawn. At the end every block is committed and the
-// tail is removed. Each flush dispatches a bubbling "md-render" event. viewSetText renders a whole text at once with
+// committed blocks only. The rest of the text, the tail, is drawn in the content of its box (TailBox, tail-box.d.ts),
+// right after the <article>, outside it, by markdown.js, a renderer of its own that only has to look right until its
+// text is committed. The box is made with the first delta and follows the reply while the reader is at its end. An
+// open code block in the tail is appended to a text node instead of being redrawn. At the end every block is committed
+// and the box is removed. Each flush dispatches a bubbling "md-render" event. viewSetText renders a whole text at once with
 // the committed converter and drops data-generator.
 //
 // Thinking (thoughtState / thoughtFlush / thoughtAppend / thoughtFinish): a reply's thinking view is part of
@@ -194,7 +195,8 @@ export function initComposer(
 // data-error and the ⓘ from data-timings / data-client. A message made on screen gets those attributes here; the
 // timings text goes into the popover the ⓘ opens, so filling it in after the first paint changes nothing on screen.
 //
-// Message list (<lcty-c>): the whole page (window) scrolls. Scrolling is the user's: nothing here scrolls the page.
+// Message list (<lcty-c>): the whole page (window) scrolls. Scrolling is the user's: nothing here scrolls the page but
+// the tail's box following a reply the reader is at the end of (tail-box.d.ts).
 // markLastUser: Undo shows only on the last user message; CSS cannot select it, so it is marked with data-last-user.
 //
 // initConversationElements: the thinking view is the element's own, from data-thinking (lcty.v1.cjs). Files written

@@ -630,7 +630,9 @@ lcty-message[data-role="user"] .user-text {
 	overflow-wrap: anywhere;
 }
 lcty-message[data-status="streaming"] > article:empty:last-child::after,
-lcty-message[data-status="streaming"] > .md-tail:empty::after {
+lcty-message[data-status="streaming"]
+	> .md-tail
+	> .md-tail-content:empty::after {
 	content: "▍";
 	color: var(--fg-dim);
 	animation: blink 1s steps(1) infinite;
@@ -781,6 +783,10 @@ lcty-msg.flash > article {
 }
 .table-wrap {
 	overflow-x: auto;
+}
+/* the tail's box (LCTYSP-0018): its height and contain: strict are set by tail-box.js */
+lcty-message > .md-tail > .md-tail-content > :first-child {
+	margin-top: 0;
 }
 /* a column's alignment (LCTYSP-0017: a class, as the Content Security Policy allows no inline style) */
 :is(th, td).align-left {

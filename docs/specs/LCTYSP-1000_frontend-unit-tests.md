@@ -55,7 +55,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | `js/convert/markdown.js`: the tail converter of LCTYSP-0018 |      67 |      15 |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                           |       0 |      19 |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      83 |
-| [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      32 |
+| [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      36 |
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                       |      15 |      45 |
 | [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel               |       0 |      22 |
 | [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references     |      62 |       0 |
