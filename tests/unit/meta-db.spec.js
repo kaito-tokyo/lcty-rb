@@ -352,7 +352,14 @@ test("A listener that throws does not stop the others", async ({
 }) => {
 	const warnings = [];
 	page.on("console", (msg) => {
-		if (msg.type() === "warning") warnings.push(msg.text());
+		// the text of the message, and of an Error logged as it is (Firefox gives only "Error" as the text)
+		if (msg.type() === "warning")
+			warnings.push(
+				msg.text(),
+				...msg
+					.args()
+					.map((arg) => arg.evaluate((v) => String(v?.message ?? v))),
+			);
 	});
 	await background(page, context);
 	await test.step("Given a listener that throws is registered with onMetaDbChange", () =>
@@ -378,7 +385,9 @@ test("A listener that throws does not stop the others", async ({
 	});
 	await test.step("And the error of the first listener is logged as a warning", async () => {
 		await expect
-			.poll(() => warnings.some((w) => w.includes("listener broke")))
+			.poll(async () =>
+				(await Promise.all(warnings)).some((w) => w.includes("listener broke")),
+			)
 			.toBe(true);
 	});
 });

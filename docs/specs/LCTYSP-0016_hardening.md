@@ -218,8 +218,8 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
 ### 4. Keep it checked
 
 - Each check and header has a backend scenario, run against a server with its settings.
-- The UI tests fail on any report of the Content Security Policy (`securitypolicyviolation`), in Chromium and WebKit,
-  so a policy that breaks a page is found before it ships.
+- The UI tests fail on any report of the Content Security Policy (`securitypolicyviolation`), in Chromium, WebKit and
+  Firefox, so a policy that breaks a page is found before it ships.
 - The headers are compared with OWASP's lists (`ci/headers_add.json` and `ci/headers_remove.json` of the Secure
   Headers Project) and with its HTTP Security Response Headers, CSRF Prevention and Content Security Policy Cheat
   Sheets when this spec is revised: what they add is either done here or listed as not taken, with the reason.
@@ -359,7 +359,7 @@ step 2 follows it:
 - **`style-src-attr`:** not needed; decision 1 made the alignment of tables a class.
 - **`Content-Security-Policy-Report-Only` first, and `report-to`:** not taken. There is no endpoint to collect
   reports, and one would be another way to write to the server; instead the UI tests fail on any violation in
-  Chromium and WebKit (step 4), before a policy ships.
+  Chromium, WebKit and Firefox (step 4), before a policy ships.
 - **A `<meta http-equiv="Content-Security-Policy">`:** the Cheat Sheet's way when headers cannot be set. A
   conversation file opened directly (`file://`) gets no header, and a meta tag in its head would give it the same
   policy but `frame-ancestors`. It changes the head of LCTYSP-0013, so it is left for later.

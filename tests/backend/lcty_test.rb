@@ -372,6 +372,27 @@ class LctyTest < Lcty::Scenarios
     false
   end
 
+  scenario 'Every response closes its connection' do
+    port = head = rest = nil
+    step('Given a server of Lcty.listen with the site mounted') { port = auth_server(nil) }
+    step('When / is requested over HTTP/1.1') do
+      s = TCPSocket.new('127.0.0.1', port)
+      s.write("GET / HTTP/1.1\r\nHost: 127.0.0.1:#{port}\r\n\r\n")
+      head = s.gets("\r\n\r\n")
+      # read returns once the server has closed the connection: nil when it has not within 5 seconds
+      rest = begin
+        Timeout.timeout(5) { s.read }
+      rescue Timeout::Error
+        nil
+      end
+      s.close
+    end
+    step('Then the response has the header Connection: close') do
+      assert_match(/^Connection: close\r$/i, head)
+    end
+    step('And the server closes the connection after it') { refute_nil rest }
+  end
+
   scenario 'The server listens on every address given, at one port' do
     skip 'this machine has no IPv6 loopback' unless ipv6_loopback?
     port = nil

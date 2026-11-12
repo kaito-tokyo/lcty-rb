@@ -126,10 +126,10 @@ Markdown.
 
 ## Tests
 
-The frontend unit tests that need no browser run in Node.js (26 or later, for its Web Workers) with its test runner, `node:test`; the other
-frontend tests run in Chromium and WebKit with [Playwright](https://playwright.dev/). Node.js is needed for them only;
-the server itself still needs nothing installed. The backend tests run on the server's Ruby with Minitest, which Ruby
-2.6 bundles.
+The frontend unit tests that need no browser run in Node.js (26 or later, for its Web Workers) with its test runner,
+`node:test`; the other frontend tests run in Chromium, WebKit and Firefox with [Playwright](https://playwright.dev/).
+Node.js is needed for them only; the server itself still needs nothing installed. The backend tests run on the server's
+Ruby with Minitest, which Ruby 2.6 bundles.
 
 - **Frontend unit tests** (`tests/unit/`): one module of `public/` on its own, such as a worker or a function. Their
   behaviour is written as Gherkin features, `docs/specs/LCTYSP-1xxx_*.feature`, and each feature is tested by one test
@@ -172,7 +172,8 @@ start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty
 (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's requests to it are answered by a fake in
 `tests/ui/fixtures.js`, so your conversations and models are never touched. Run one browser with
 `npm test -- --project='*-chromium'`, or watch the browser tests with `npm test -- --ui`. The unit tests run in
-parallel; the UI tests share the server's data directory, so they run one at a time, WebKit's after Chromium's.
+parallel; the UI tests share the server's data directory, so they run one at a time, and the browsers one after
+another: Chromium, WebKit, then Firefox.
 
 `npm run check:biome` lints and checks the formatting (JavaScript, JSON and Markdown) with the Biome version pinned in
 `package.json`, as CI does; `npx biome check --write` fixes the formatting. A bare `npx biome` without `npm install`

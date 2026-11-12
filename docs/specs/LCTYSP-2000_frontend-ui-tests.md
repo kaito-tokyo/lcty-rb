@@ -10,16 +10,17 @@ SPDX-License-Identifier: Apache-2.0
 - Related: [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-1000](LCTYSP-1000_frontend-unit-tests.md),
   [LCTYSP-3000](LCTYSP-3000_backend-unit-tests.md)
 - Implementation: `tests/ui/`: `fixtures.js` and the `*.spec.js`, run by Playwright (`playwright.config.js`, the
-  `ui-chromium` and `ui-webkit` projects), in CI by `.github/workflows/browser.yml`; `tests/unit/check-scenarios.js`
-  checks them against the features
+  `ui-chromium`, `ui-webkit` and `ui-firefox` projects), in CI by `.github/workflows/browser.yml`;
+  `tests/unit/check-scenarios.js` checks them against the features
 
 ## Summary
 
 The 2000 range holds what a user sees on the pages of the site, written as Gherkin features. LCTYSP-2000 is this
 document, the guide to the range; LCTYSP-2001 and on are the features. Each Scenario is one test in `tests/ui/`, run in
-a real browser (Chromium and WebKit, with Playwright) against the real server: `ruby lcty.rb` started with a new, empty
-data directory of its own. Only `llama-server` is not real: the browser talks to it directly, so the tests answer its
-requests inside the browser (`llm` in `tests/ui/fixtures.js`), and neither the real data nor the models are touched.
+a real browser (Chromium, WebKit and Firefox, with Playwright) against the real server: `ruby lcty.rb` started with a
+new, empty data directory of its own. Only `llama-server` is not real: the browser talks to it directly, so the tests
+answer its requests inside the browser (`llm` in `tests/ui/fixtures.js`), and neither the real data nor the models are
+touched.
 
 ## What belongs here
 
@@ -80,8 +81,8 @@ test("The new conversation page shows the sidebar and the creation card", async 
 });
 ```
 
-- The tests run one at a time (one worker per browser, WebKit's after Chromium's), since they share the server and its
-  data directory: the sidebar lists every conversation the tests have made.
+- The tests run one at a time (one worker per browser, the browsers one after another: Chromium, WebKit, then Firefox),
+  since they share the server and its data directory: the sidebar lists every conversation the tests have made.
 - Tag definitions are global, so a feature whose Scenarios make tags removes them after each test.
 - `LCTY_TEST_SERVER_URL` points the tests at a server that is already running instead (in CI, the container of
   `.devcontainer/ruby-2.6.10/compose.yml`), and `LCTY_TEST_KEEP_DATA=1` keeps the data directory to look at.

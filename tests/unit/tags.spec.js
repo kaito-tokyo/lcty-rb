@@ -69,8 +69,10 @@ async function background(page, context) {
 		await context.route("**/v1/tags", async (route) => {
 			const req = route.request();
 			if (req.method() === "PUT") {
+				// both recorded at once, as a test waits for the PUT and then reads its If-Match
+				const ifMatch = await req.headerValue("if-match");
 				server.puts.push(req.postDataJSON());
-				server.ifMatch.push(await req.headerValue("if-match"));
+				server.ifMatch.push(ifMatch);
 				return server.put(route);
 			}
 			return server.get(route);
@@ -206,6 +208,17 @@ const status = (page) =>
 	);
 const section = (page, i) => page.locator("section.tag-edit").nth(i);
 const nameInput = (page, i) => section(page, i).locator(".tag-edit-head input");
+/** Change the name field of tag i to name, as a user's input. */
+async function fillName(page, i, name) {
+	const input = nameInput(page, i);
+	await input.fill(name);
+	// Playwright's fill in Firefox drops control characters: the value is set and its input event sent instead
+	if ((await input.inputValue()) !== name)
+		await input.evaluate((el, value) => {
+			el.value = value;
+			el.dispatchEvent(new Event("input", { bubbles: true }));
+		}, name);
+}
 const promptInput = (page, i) =>
 	section(page, i).locator("label.field textarea");
 const button = (page, name) => page.getByRole("button", { name, exact: true });
@@ -526,7 +539,7 @@ for (const { caseName, name, shown } of [
 		const server = await background(page, context);
 		await givenTheEditor(page);
 		await test.step(`When the name of "go" is changed to ${shown} and Save is clicked`, async () => {
-			await nameInput(page, 1).fill(name);
+			await fillName(page, 1, name);
 			await clickSave(page, server);
 		});
 		await test.step(`Then the status says that the tag name ${shown} cannot be used`, async () => {
@@ -551,7 +564,7 @@ for (const { caseName, name } of [
 		const server = await background(page, context);
 		await givenTheEditor(page);
 		await test.step(`When the name of "go" is changed to "${name}" and Save is clicked`, async () => {
-			await nameInput(page, 1).fill(name);
+			await fillName(page, 1, name);
 			await clickSave(page, server);
 		});
 		await test.step('Then the status says "Tag names must be unique"', async () => {

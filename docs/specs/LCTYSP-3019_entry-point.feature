@@ -111,6 +111,13 @@ Feature: LCTYSP-3019 The entry point
     When Lcty.listen is given that port to ask for
     Then it raises Lcty::PortError "the port <port> (LCTY_PORT or PORT) is in use"
 
+  # A browser may keep a connection it no longer uses (Firefox does), and WEBrick serves 100 at a time
+  Scenario: Every response closes its connection
+    Given a server of Lcty.listen with the site mounted
+    When / is requested over HTTP/1.1
+    Then the response has the header Connection: close
+    And the server closes the connection after it
+
   # Several addresses (--bind-ip) share one port. IPv6 is needed for these two: without ::1 they are skipped
   Scenario: The server listens on every address given, at one port
     Given a free port
