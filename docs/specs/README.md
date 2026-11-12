@@ -28,6 +28,7 @@ Specifications of lcty-rb. Each spec describes the current design of one topic a
 | [LCTYSP-0016](LCTYSP-0016_hardening.md)                  | Hardening                         | Draft     |
 | [LCTYSP-0017](LCTYSP-0017_markdown.md)                   | Markdown                          | Draft     |
 | [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md)         | Markdown streaming                | Draft     |
+| [LCTYSP-0019](LCTYSP-0019_server-embedding.md)           | Embedding on the server           | Draft     |
 
 ## Gherkin features
 
