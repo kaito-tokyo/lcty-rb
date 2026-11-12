@@ -9,7 +9,7 @@
 // composeDraft and proposeMemory of js/tags.js need no DOM: they run in Node.js (node-unit.js). The editor and the
 // dialogs (renderTagsEditor, initTagsDialog, openMemoryDialog) stay in the browser, in tests/unit/tags.spec.js. The
 // names, file names and references of js/tag-names.js are LCTYSP-1020 (tests/unit/tag-names.test.js).
-// Importing js/tags.js needs nothing absent in Node.js (its imports api/storage.js, api/meta-db.js and convert/markdown.js
+// Importing js/tags.js needs nothing absent in Node.js (its imports api/storage.js, api/meta-db.js and convert/reply.js
 // only touch Worker, IndexedDB and localStorage when called). tr() needs the global LctyT and
 // document.documentElement.lang, made by useLctyT() (the stand-in of node-unit.js). GET and PUT /v1/tags,
 // POST /v1/tags/:file/memory and the fake llama-server at http://llm.test are answered by routeFetch(), which also

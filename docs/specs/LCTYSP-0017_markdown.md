@@ -36,7 +36,7 @@ renderer, and the server drops it if it does.
   emoji shortcodes, no wiki links.
 - **How a text is cut into blocks and inlines is GFM's**, to the letter: the precedence of blocks and inlines, lazy
   continuation lines, the tight and loose lists, the delimiter rules of emphasis, the matching of brackets in links,
-  backslash escapes, entity and numeric character references, tabs. Where `markdown.js` and GFM disagree, GFM is right.
+  backslash escapes, entity and numeric character references, tabs. Where the renderer and GFM disagree, GFM is right.
 - **Every text is valid.** GFM has no syntax errors: any string has one reading. So the renderer never refuses a text,
   and the same text always gives the same HTML, byte for byte.
 - **The text is read as it is stored** (the attribute of [LCTYSP-0003](LCTYSP-0003_conversation-file.md), decoded from
@@ -176,16 +176,16 @@ The choices this spec makes where GFM leaves the output to the renderer, or wher
 
 ## What changes
 
-- **`markdown.js`** is replaced by a GFM parser and a converter that builds the DOM itself (no HTML string, no
-  `innerHTML`): the pages render with `convert/gfm/` through `convert/reply.js`. `markdown.js`, which reads with
-  regular expressions a subset close to GFM (no setext headings, indented code, reference links, images, character
-  references, task list items or extended autolinks with `www.`, and emphasis that does not follow GFM's delimiter
-  rules), is left only as the tail converter of [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md) for now, writing
-  alignments as classes too.
+- **`markdown.js` is replaced** by a GFM parser and a converter that builds the DOM itself (no HTML string, no
+  `innerHTML`): the pages render with `convert/gfm/` through `convert/reply.js`. `markdown.js` read with regular
+  expressions a subset close to GFM (no setext headings, indented code, reference links, images, character references,
+  task list items or extended autolinks with `www.`, and emphasis that did not follow GFM's delimiter rules). It is
+  removed; the tail of a reply streaming in is shown by the tail converter of
+  [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md), `convert/tail.js`.
 - **Tests.** [LCTYSP-1026](LCTYSP-1026_committed-converter.feature) has GFM's examples: each example of the GFM spec,
   with the expected HTML its reference gives, mapped to this spec's output by the tables above. The examples whose
   output this spec makes different (raw HTML, images, soft line breaks, task list items) are listed with their own
-  expected HTML. [LCTYSP-1014](LCTYSP-1014_markdown.feature) stays the tests of `markdown.js`.
+  expected HTML. The tests of `markdown.js`, LCTYSP-1014, are withdrawn with it.
 - **The server's allowlist** follows [Nothing else](#nothing-else): `th[class]` and `td[class]` replace `th[style]` and
   `td[style]`, and class values are checked against the list instead of any word.
 - **Files already saved** keep their presentations; their text, in the attributes, is never lost. A presentation of

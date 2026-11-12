@@ -52,7 +52,6 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search           |      25 |       0 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing                |      27 |       0 |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      28 |       0 |
-| [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | `js/convert/markdown.js`: the tail converter of LCTYSP-0018 |      67 |      15 |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                           |       0 |      19 |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      83 |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      36 |
@@ -65,6 +64,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | `js/api/tab-rpc.js`: the tab's connection                   |       5 |       0 |
 | [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)                 | `js/convert/gfm/converter.js`: parsing GFM                  |      17 |       0 |
 | [LCTYSP-1026](LCTYSP-1026_committed-converter.feature)        | `js/convert/gfm/committed.js`: GFM as lcty-rb's HTML        |      28 |       0 |
+| [LCTYSP-1027](LCTYSP-1027_tail-converter.feature)             | `js/convert/tail.js`: the tail of a reply                   |      26 |       3 |
 
 ## How a feature is written
 

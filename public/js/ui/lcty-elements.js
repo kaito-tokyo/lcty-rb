@@ -8,13 +8,8 @@ import { DomSink, writeCommitted } from "../convert/gfm/committed.js";
 import { BlockWatch, parseGfm } from "../convert/gfm/converter.js";
 import { BlockParser } from "../convert/gfm/gfm_blocks.js";
 import { InlineParser } from "../convert/gfm/gfm_inlines.js";
-import {
-	codeBlockHTML,
-	fenceParts,
-	renderBlock,
-	scanBlocks,
-} from "../convert/markdown.js";
 import { decodeName, replyOptions } from "../convert/reply.js";
+import { drawTail, tailNodes } from "../convert/tail.js";
 import { textAttr } from "../convert/text-attr.js";
 import { tr } from "../i18n.js";
 import { TailBox } from "./tail-box.js";
@@ -53,7 +48,6 @@ function viewState(view) {
 			doc: null,
 			// the tail's box, reserved from the first delta to the end
 			box: null,
-			fence: null,
 		};
 		views().set(view, s);
 	}
@@ -85,43 +79,18 @@ function viewCommit(view, s) {
 	}
 }
 
-/** Draw the tail in its box after the <article> with markdown.js, a renderer of its own (LCTYSP-0018). */
+/** Draw the tail in its box after the <article> with the tail converter, changing what is drawn already (LCTYSP-0018). */
 function viewTail(view, s) {
 	if (s.done) {
 		s.box?.remove();
 		s.box = null;
-		s.fence = null;
 		return;
 	}
 	s.box ??= new TailBox(view);
-	const tail = s.box.content;
-	const text = s.text.slice(s.head);
-	if (text.trim() === "") {
-		tail.replaceChildren();
-		s.fence = null;
-		return;
-	}
-	const blocks = scanBlocks(text, false);
-	if (blocks.length === 1 && blocks[0].kind === "fence") {
-		// an open code block grows at its end: its code is appended to a text node
-		const block = blocks[0];
-		const start = s.head + block.start;
-		const { lang, code } = fenceParts(block);
-		let f = s.fence;
-		if (!f || f.start !== start || f.lang !== lang || code.length < f.len) {
-			tail.innerHTML = codeBlockHTML(lang, "");
-			const node = document.createTextNode("");
-			tail.querySelector("code").append(node);
-			f = s.fence = { start, lang, node, len: 0 };
-		}
-		if (code.length > f.len) {
-			f.node.appendData(code.slice(f.len));
-			f.len = code.length;
-		}
-	} else {
-		s.fence = null;
-		tail.innerHTML = blocks.map((b) => renderBlock(b)).join("");
-	}
+	drawTail(
+		s.box.content,
+		tailNodes(s.text.slice(s.head), { ...replyOptions(), decodeName }),
+	);
 }
 
 function viewFlush(view, s) {

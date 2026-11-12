@@ -68,11 +68,20 @@ heuristic that only has to look right for a moment, since whatever it shows is r
   tail.
 - **The cost of a frame does not grow with the reply.** A committed block is written once; a frame's work is the new
   characters, the blocks taken, and the tail's redraw, which costs the tail's length at most.
-- **For now the tail converter is `markdown.js`,** the renderer the pages had before
-  [LCTYSP-0017](LCTYSP-0017_markdown.md): a parser of its own (the second choice of
-  [Open questions](#open-questions) 1), which shares nothing with `convert/gfm/` and writes only LCTYSP-0017's
-  elements and attributes. It draws the tail's text as a whole each frame, but for an open fenced code block, whose
-  code is appended to a text node.
+- **The tail converter is `convert/tail.js`,** a parser of its own (the second choice of
+  [Open questions](#open-questions) 1), which imports nothing and shares nothing with `convert/gfm/`
+  ([LCTYSP-1027](LCTYSP-1027_tail-converter.feature)):
+  - Each frame it reads the whole tail again, blocks and inlines, as GFM reads them where that is simple, and gives the
+    nodes that show it, LCTYSP-0017's elements and attributes only. A complete text that uses only what it reads gives
+    what the committed converter writes.
+  - It makes no guess that the next characters often undo: what is not closed yet (`**`, a backtick, a link without
+    its `)`) is text, a table is a table only from its delimiter row, and a line that may still grow does not make the
+    lines above a table or a setext heading. A reference link is its text as written, and a suggested next message is
+    a button from its opening tag, its text running to the end of the line.
+  - It changes the view rather than writing it again ([DOM writes](#dom-writes)): an element of the same tag and
+    attributes is kept and its children compared in turn, a text that grows at its end is appended to its text node,
+    and only what differs is made, replaced or removed. An open fenced code block writes its last line without a line
+    end, so its code grows in one text node.
 
 ### The tail's box
 
@@ -120,7 +129,8 @@ How streamed Markdown is put into the DOM elsewhere, as of 2026-11 (see [Sources
 
 - **Everything again, each chunk.** The text so far is converted whole and set with `innerHTML`. Chrome's guide on
   rendering streamed LLM responses calls this the slow way: every chunk makes the browser remove and rebuild what it
-  had, and parse and lay out the whole again. lcty-rb's `markdown.js` avoids it already, by fixing finished blocks.
+  had, and parse and lay out the whole again. lcty-rb's renderer before LCTYSP-0017 avoided it already, by fixing
+  finished blocks.
 - **Append only.** A streaming parser writes elements as the characters come and never changes one it has written
   (`streaming-markdown`, which Chrome's guide shows; it appends with `appendChild`, and plain text with `append`, not
   `textContent +=`). It is cheap, and what was streamed stays selectable, but its guesses are final: it is "optimistic",
@@ -209,7 +219,8 @@ under Measurements):
 
 ## Open questions
 
-1. **What the tail converter shows.** The committed boundary is a top-level block, so a long list or block quote stays
+1. **What the tail converter shows.** Decided: a parser of its own, `convert/tail.js` ([In the page](#in-the-page)).
+   The committed boundary is a top-level block, so a long list or block quote stays
    in the tail until it ends. In replies written by a model, the tail was over 500 characters for 18–77% of the stream
    (see [Measurements](#measurements)). Choices:
    - **Plain text.** The tail's characters, escaped, its line ends as `<br>`. Nothing to get wrong, but the Markdown's
@@ -231,14 +242,15 @@ under Measurements):
    definitions read so far. A definition that comes later changes how an earlier block reads, so at the end the DOM
    would not be the whole text's. Choices: write the committed blocks again at the end when a definition came after
    the first committed block; or only those with a bracket that matched no definition.
-3. **Code blocks in the tail.** An unfinished fenced code block grows line by line, and is often the longest tail. The
-   page now appends its code to a text node instead of redrawing it. Whether the tail converter keeps that, and how it
-   knows the tail is a code block.
-4. **What moves when a block is committed.** The committed HTML may differ from the tail's view of the same text (a
-   paragraph that turns out to be a table's header row, a list that turns out loose). How much the layout may move, and
-   whether the tail converter should avoid guesses that are often wrong.
-5. **Suggested next messages** ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams)) are shown as soon as
-   the opening tag arrives. Whether the tail converter does that, as the page does now.
+3. **Code blocks in the tail.** Decided: an unfinished fenced code block, often the longest tail, grows in one text
+   node, as the tail converter changes the view rather than writing it again and writes an open block's last line
+   without a line end.
+4. **What moves when a block is committed.** Decided: the tail converter avoids guesses that are often wrong. The
+   committed HTML may still differ from the tail's view of the same text (a list that turns out loose, a definition
+   that comes after its use, what the heuristic does not read), and the view then changes once at the commit.
+5. **Suggested next messages** ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams)). Decided: the tail
+   converter shows one as soon as its opening tag arrives, its text running to its closing tag or the end of its
+   line.
 6. **The size of the tail's box.** Decided: a third of the view's height reserved, and a third more at each step
    ([The tail's box](#the-tails-box)). A larger reserve grows less often but leaves more room unused at the end, which
    the page loses at once when the box is removed.
