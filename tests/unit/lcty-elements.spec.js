@@ -414,6 +414,174 @@ test("An unfinished code block grows in one text node", async ({
 	});
 });
 
+/** A few animation frames, for the observers of the tail's box to report and the page to settle. */
+const settle = (page) =>
+	page.evaluate(async () => {
+		for (let i = 0; i < 4; i++) await window.frame();
+	});
+
+/** The tail's box of window.r: its height, its contain, the view's height and the content's text and bottom. */
+const tailBox = (page) =>
+	page.evaluate(() => {
+		const box = window.r.querySelector(":scope > article + .md-tail");
+		if (!box) return null;
+		const content = box.querySelector(":scope > .md-tail-content");
+		return {
+			height: box.getBoundingClientRect().height,
+			contain: getComputedStyle(box).contain,
+			view: innerHeight,
+			text: content.textContent,
+			contentHeight: content.getBoundingClientRect().height,
+			contentBottom: content.getBoundingClientRect().bottom,
+			page: document.scrollingElement.scrollHeight,
+		};
+	});
+
+/** Text of n lines of an open code block, which stays in the tail. */
+const codeLines = (n, from = 0) =>
+	Array.from({ length: n }, (_, i) => `line ${from + i}\n`).join("");
+
+test("The tail is drawn in a box a third of the view high", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAStreamingReply(page);
+	await test.step('When appendText adds "Hello" and a frame is drawn', async () => {
+		await page.evaluate(() => window.E.appendText(window.r, "Hello"));
+		await settle(page);
+	});
+	await test.step('Then the box after its <article> holds "Hello", is contain: strict and a third of the view high', async () => {
+		const box = await tailBox(page);
+		expect(box.text).toBe("Hello");
+		expect(box.contain).toBe("strict");
+		expect(Math.abs(box.height - Math.round(box.view / 3))).toBeLessThanOrEqual(
+			1,
+		);
+	});
+});
+
+test("The tail's box grows by a third of the view when its content does not fit", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAStreamingReply(page);
+	await test.step("When appendText adds an open code block of 80 lines and the frames are drawn", async () => {
+		await page.evaluate(
+			(text) => window.E.appendText(window.r, text),
+			`\`\`\`\n${codeLines(80)}`,
+		);
+		await settle(page);
+	});
+	await test.step("Then the box is as tall as its content and a third of the view more", async () => {
+		const box = await tailBox(page);
+		expect(box.contentHeight).toBeGreaterThan(box.view / 3);
+		expect(
+			Math.abs(
+				box.height - (Math.ceil(box.contentHeight) + Math.round(box.view / 3)),
+			),
+		).toBeLessThanOrEqual(1);
+	});
+});
+
+test("A commit gives the room of the tail's box to the <article>", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAStreamingReply(page);
+	let before;
+	await test.step("And the tail is a paragraph of 30 lines in its box", async () => {
+		await page.evaluate(
+			(text) => window.E.appendText(window.r, text),
+			codeLines(30),
+		);
+		await settle(page);
+		before = await tailBox(page);
+	});
+	await test.step("When appendText adds a blank line, which commits the paragraph, and the frames are drawn", async () => {
+		await page.evaluate(() => window.E.appendText(window.r, "\n"));
+		await settle(page);
+	});
+	await test.step("Then the <article> holds the paragraph, the box is smaller by what the <article> gained, and the page's height stays", async () => {
+		const after = await tailBox(page);
+		const article = await page.evaluate(
+			() =>
+				window.r.querySelector(":scope > article").getBoundingClientRect()
+					.height,
+		);
+		expect(article).toBeGreaterThan(0);
+		expect(after.text).toBe("");
+		expect(
+			Math.abs(before.height - article - after.height),
+		).toBeLessThanOrEqual(2);
+		expect(Math.abs(after.page - before.page)).toBeLessThanOrEqual(2);
+	});
+});
+
+test("The page follows a reply whose box is in view until the reader scrolls", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await test.step("Given a page twice the view high", async () => {
+		await page.evaluate(() => {
+			const above = document.createElement("div");
+			above.style.height = `${2 * innerHeight}px`;
+			window.c.before(above);
+		});
+	});
+	await givenAStreamingReply(page, "And a streaming reply below it");
+	const append = async (from) => {
+		await page.evaluate(
+			(text) => window.E.appendText(window.r, text),
+			codeLines(20, from),
+		);
+		await settle(page);
+	};
+	const endInView = async () => {
+		const box = await tailBox(page);
+		return box.contentBottom <= box.view;
+	};
+	await test.step("And the page is scrolled to its end, so the box is in view", async () => {
+		await page.evaluate(() => window.E.appendText(window.r, "```\n"));
+		await settle(page);
+		await page.evaluate(() =>
+			scrollTo(0, document.scrollingElement.scrollHeight),
+		);
+		await settle(page);
+	});
+	await test.step("When appendText adds 20 lines of code, then 20 more, with frames drawn after each", async () => {
+		await append(0);
+		await append(20);
+	});
+	await test.step("Then the end of the tail's content is in view", async () => {
+		expect(await endInView()).toBe(true);
+	});
+	await test.step("When the reader turns the wheel up and 20 more lines are added", async () => {
+		await page.mouse.move(100, 100);
+		await page.mouse.wheel(0, -40);
+		await settle(page);
+		await append(40);
+	});
+	await test.step("Then the end of the tail's content is no longer in view", async () => {
+		expect(await endInView()).toBe(false);
+	});
+	await test.step("When the page is scrolled to its top and back to its end, and 20 more lines are added", async () => {
+		await page.evaluate(() => scrollTo(0, 0));
+		await settle(page);
+		await page.evaluate(() =>
+			scrollTo(0, document.scrollingElement.scrollHeight),
+		);
+		await settle(page);
+		await append(60);
+	});
+	await test.step("Then the end of the tail's content is in view again", async () => {
+		expect(await endInView()).toBe(true);
+	});
+});
+
 test("Thinking is counted while it streams and shown when it is open", async ({
 	page,
 	context,

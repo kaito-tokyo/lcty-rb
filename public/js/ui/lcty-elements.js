@@ -17,6 +17,7 @@ import {
 import { decodeName, replyOptions } from "../convert/reply.js";
 import { textAttr } from "../convert/text-attr.js";
 import { tr } from "../i18n.js";
+import { TailBox } from "./tail-box.js";
 
 const GENERATOR = "lcty.v1.gfm"; // The renderer that produced the saved presentation HTML (data-generator)
 
@@ -50,7 +51,8 @@ function viewState(view) {
 			inlines: new InlineParser(decodeName, parser.refmap),
 			watch: new BlockWatch(),
 			doc: null,
-			tail: null,
+			// the tail's box, reserved from the first delta to the end
+			box: null,
 			fence: null,
 		};
 		views().set(view, s);
@@ -83,19 +85,21 @@ function viewCommit(view, s) {
 	}
 }
 
-/** Draw the tail after the <article> with markdown.js, a renderer of its own (LCTYSP-0018). */
+/** Draw the tail in its box after the <article> with markdown.js, a renderer of its own (LCTYSP-0018). */
 function viewTail(view, s) {
-	const text = s.text.slice(s.head);
-	if (s.done || text.trim() === "") {
-		s.tail?.remove();
-		s.tail = null;
+	if (s.done) {
+		s.box?.remove();
+		s.box = null;
 		s.fence = null;
 		return;
 	}
-	if (!s.tail) {
-		s.tail = document.createElement("div");
-		s.tail.className = "md-tail";
-		view.after(s.tail);
+	s.box ??= new TailBox(view);
+	const tail = s.box.content;
+	const text = s.text.slice(s.head);
+	if (text.trim() === "") {
+		tail.replaceChildren();
+		s.fence = null;
+		return;
 	}
 	const blocks = scanBlocks(text, false);
 	if (blocks.length === 1 && blocks[0].kind === "fence") {
@@ -105,9 +109,9 @@ function viewTail(view, s) {
 		const { lang, code } = fenceParts(block);
 		let f = s.fence;
 		if (!f || f.start !== start || f.lang !== lang || code.length < f.len) {
-			s.tail.innerHTML = codeBlockHTML(lang, "");
+			tail.innerHTML = codeBlockHTML(lang, "");
 			const node = document.createTextNode("");
-			s.tail.querySelector("code").append(node);
+			tail.querySelector("code").append(node);
 			f = s.fence = { start, lang, node, len: 0 };
 		}
 		if (code.length > f.len) {
@@ -116,7 +120,7 @@ function viewTail(view, s) {
 		}
 	} else {
 		s.fence = null;
-		s.tail.innerHTML = blocks.map((b) => renderBlock(b)).join("");
+		tail.innerHTML = blocks.map((b) => renderBlock(b)).join("");
 	}
 }
 
@@ -137,7 +141,7 @@ function viewSetText(view, text) {
 	const old = views().get(view);
 	if (old) {
 		viewCancel(old);
-		old.tail?.remove();
+		old.box?.remove();
 	}
 	views().delete(view);
 	view.replaceChildren();

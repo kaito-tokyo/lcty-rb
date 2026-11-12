@@ -70,6 +70,33 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     When appendText adds " = 1;" and a frame is drawn
     Then the same text node now holds "let a = 1;"
 
+  Scenario: The tail is drawn in a box a third of the view high
+    Given a streaming reply
+    When appendText adds "Hello" and a frame is drawn
+    Then the box after its <article> holds "Hello", is contain: strict and a third of the view high
+
+  Scenario: The tail's box grows by a third of the view when its content does not fit
+    Given a streaming reply
+    When appendText adds an open code block of 80 lines and the frames are drawn
+    Then the box is as tall as its content and a third of the view more
+
+  Scenario: A commit gives the room of the tail's box to the <article>
+    Given a streaming reply
+    And the tail is a paragraph of 30 lines in its box
+    When appendText adds a blank line, which commits the paragraph, and the frames are drawn
+    Then the <article> holds the paragraph, the box is smaller by what the <article> gained, and the page's height stays
+
+  Scenario: The page follows a reply whose box is in view until the reader scrolls
+    Given a page twice the view high
+    And a streaming reply below it
+    And the page is scrolled to its end, so the box is in view
+    When appendText adds 20 lines of code, then 20 more, with frames drawn after each
+    Then the end of the tail's content is in view
+    When the reader turns the wheel up and 20 more lines are added
+    Then the end of the tail's content is no longer in view
+    When the page is scrolled to its top and back to its end, and 20 more lines are added
+    Then the end of the tail's content is in view again
+
   Scenario: Thinking is counted while it streams and shown when it is open
     Given a streaming reply
     When appendThinking adds "abc" and "de" and a frame is drawn
