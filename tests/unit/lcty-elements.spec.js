@@ -370,6 +370,36 @@ test("Finishing a streamed reply fixes every block", async ({
 	});
 });
 
+test("A link reference definition after its use makes the blocks written before it link", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAStreamingReply(page);
+	const article = () =>
+		page.evaluate(() => window.r.querySelector(":scope > article").innerHTML);
+	await test.step('When appendText adds "See [docs].\\n\\n" and a frame is drawn', async () => {
+		await page.evaluate(async () => {
+			window.E.appendText(window.r, "See [docs].\n\n");
+			await window.frame();
+		});
+	});
+	await test.step('Then its <article> holds the paragraph "See [docs]." as text', async () => {
+		expect(await article()).toBe("<p>See [docs].</p>");
+	});
+	await test.step('When appendText adds "[docs]: https://e.org\\n\\nNext\\n\\n" and a frame is drawn', async () => {
+		await page.evaluate(async () => {
+			window.E.appendText(window.r, "[docs]: https://e.org\n\nNext\n\n");
+			await window.frame();
+		});
+	});
+	await test.step('Then its <article> holds <p>See <a href="https://e.org" target="_blank" rel="noopener noreferrer">docs</a>.</p><p>Next</p>', async () => {
+		expect(await article()).toBe(
+			'<p>See <a href="https://e.org" target="_blank" rel="noopener noreferrer">docs</a>.</p><p>Next</p>',
+		);
+	});
+});
+
 test("An unfinished code block grows in one text node", async ({
 	page,
 	context,

@@ -46,6 +46,8 @@ function viewState(view) {
 			inlines: new InlineParser(decodeName, parser.refmap),
 			watch: new BlockWatch(),
 			doc: null,
+			// the blocks written into the <article>
+			blocks: 0,
 			// the tail's box, reserved from the first delta to the end
 			box: null,
 		};
@@ -60,6 +62,8 @@ function viewCommit(view, s) {
 	let head = s.text.slice(s.head);
 	for (;;) {
 		if (!s.done && !s.watch.mayEnd(head)) return;
+		const defs = parser.refmap.size;
+		const written = s.blocks;
 		const step = parser.advance(head, s.done, s.head);
 		if (step === undefined) continue;
 		s.watch.reset();
@@ -73,10 +77,25 @@ function viewCommit(view, s) {
 			s.doc ??= { nodes: parser.nodes, spans: parser.spans, ...replyOptions() };
 			s.doc.source = s.text;
 			writeCommitted(s.doc, step[2], new DomSink(view));
+			s.blocks++;
 		}
 		head = step[0];
 		s.head = s.text.length - head.length;
+		// a link reference definition after blocks written: they are written again, knowing it
+		if (parser.refmap.size > defs && written > 0) viewRewrite(view, s);
 	}
+}
+
+/** Write the <article> again: the committed text, parsed whole, as the committed converter writes it. */
+function viewRewrite(view, s) {
+	const source = s.text.slice(0, s.head);
+	const { nodes, spans } = parseGfm(source, decodeName);
+	view.replaceChildren();
+	writeCommitted(
+		{ source, nodes, spans, ...replyOptions() },
+		0,
+		new DomSink(view),
+	);
 }
 
 /** Draw the tail in its box after the <article> with the tail converter, changing what is drawn already (LCTYSP-0018). */

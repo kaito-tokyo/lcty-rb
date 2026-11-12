@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # LCTYSP-0018: Markdown streaming
 
 - Status: Draft. `lcty-elements.js` streams a reply as [In the page](#in-the-page) says, with the tail's box and
-  following the reply of `tail-box.js`; [Open questions](#open-questions) lists what is not decided yet.
+  following the reply of `tail-box.js`; every question of [Open questions](#open-questions) is decided.
 - Related: [LCTYSP-0017](LCTYSP-0017_markdown.md) (the HTML of a complete text),
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams) (rendering streams),
   [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature) (the tests of the parser, streamed too)
@@ -31,8 +31,13 @@ heuristic that only has to look right for a moment, since whatever it shows is r
 - **When to try `advance` is a guess.** `BlockWatch` (`js/convert/gfm/converter.js`) reads each complete line of the
   tail once and says when the tail may have ended its first block. It may say yes too often, never too seldom for long:
   a block it misses is taken at the next yes, or at the end.
-- **A committed block is final.** Its HTML is made once, by the committed converter, and is never changed afterwards
-  (but see [Open questions](#open-questions), link reference definitions).
+- **A committed block is final.** Its HTML is made once, by the committed converter, and is never changed afterwards,
+  but for one case: a link reference definition that comes after its use.
+- **A definition after its use writes the committed blocks again.** A block's inlines are parsed when it is committed,
+  with the definitions read so far. When a block that is committed brings a definition the document did not have, and
+  blocks were committed before it, the committed text is parsed whole and the `<article>` written again from it, so a
+  reference link used before its definition becomes a link at once. It costs the committed text's length, once for each
+  block that brings new definitions; a definition of a label already defined changes nothing, as the first one counts.
 - **Committing replaces the tail's view of that text.** Whatever was shown for the text of a block that is committed,
   by the tail converter, is removed, and the committed block's HTML takes its place. The page never merges or patches
   the two: the committed HTML is always made afresh from the committed block.
@@ -238,10 +243,10 @@ under Measurements):
    - **The closed children first.** An open list's or block quote's children that have closed are written as committed
      ones before the rest. An item closes when the next one starts, but a list's tightness is known only at its end, so
      a list that turns out loose has its items written again.
-2. **Link reference definitions after their use.** A block's inlines are parsed when it is committed, with the
-   definitions read so far. A definition that comes later changes how an earlier block reads, so at the end the DOM
-   would not be the whole text's. Choices: write the committed blocks again at the end when a definition came after
-   the first committed block; or only those with a bracket that matched no definition.
+2. **Link reference definitions after their use.** Decided: the committed blocks are written again as soon as a
+   block brings a new definition ([The commit boundary](#the-commit-boundary)), so the DOM at the end is the whole
+   text's. Writing again only the blocks with a bracket that matched no definition would cost less, but needs the
+   inline parser to tell which those are, and a reply rarely has a definition at all.
 3. **Code blocks in the tail.** Decided: an unfinished fenced code block, often the longest tail, grows in one text
    node, as the tail converter changes the view rather than writing it again and writes an open block's last line
    without a line end.
