@@ -98,7 +98,8 @@ instead of every frame.
 
 - **The box is reserved.** It is `div.md-tail`, made with the reply's first delta, a third of the view's height high
   (`innerHeight / 3`), and `contain: strict` (size, layout and paint): its content never changes the layout around it,
-  nor its size.
+  nor its size. It is `overflow-anchor: none` too: the browser's scroll anchoring would otherwise take a node of the
+  tail as its anchor and move the page when that node is drawn again or committed (a commit moved it by 9px).
 - **It grows in steps.** The content is one element inside the box, `div.md-tail-content`, laid out at its own height.
   When that height is more than the box's, the box is made as tall as the content and a step more, a third of the
   view's height again. The height is read without forcing a layout: a `ResizeObserver` on the content reports it after
@@ -115,15 +116,17 @@ instead of every frame.
 The box also gives the page a simple measure of whether the reader is at the reply's end:
 
 - **Following the reply.** The page follows the reply from when at least 80% of the box comes into view (80% of the
-  view's height, when the box is taller than the view): it keeps the end of the tail's content in view as the content
-  grows, 16px above the composer. It stops following when the box leaves the view entirely,
-  or when the reader scrolls: a scroll the page did not make itself, by a wheel, a touch, a key or the scroll bar,
-  stops it at once, even with the box still in view, so the page never pulls the reader back. Following starts again
-  only when the box comes into view again by 80%, as it does when the reader goes back to the end, or presses "To the
-  bottom". Whether the box is in view is read from an `IntersectionObserver` on it, at every 5%, with no read of
-  layout. The reader's scrolls are told apart by their input, not by the scroll events, which the page's own changes
-  of height cause too; a scroll bar drawn over the page, as macOS's is, leaves no input to see, so dragging it does
-  not stop following.
+  view's height, when the box is taller than the view): it keeps the end of the tail's content 16px above the composer
+  as the content grows. It puts the end there from above as well as from below, so after "To the bottom", which goes
+  to the page's end, the room left in the box moves below the view instead of showing under the content. It stops
+  following when the box leaves the view entirely, or when the reader scrolls: a scroll the page did not make itself,
+  by a wheel, a touch, a key or the scroll bar, stops it at once, even with the box still in view, so the page never
+  pulls the reader back. Following starts again only when the box comes into view again by 80%, as it does when the
+  reader goes back to the end, or presses "To the bottom". Whether the box is in view is read from an
+  `IntersectionObserver` on it, at every 5%, with no read of layout. The reader's scrolls are told apart mostly by
+  their input, as a scroll event cannot say who made it. A scroll bar drawn over the page, as macOS's is, leaves no
+  input to see, so while following, a scroll up from where the page last put the view stops it too; a scroll down is
+  let be, as the page's own growth may make one.
 - **The one way the page scrolls by itself.** Following is the exception
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams) makes to scrolling being the user's: only while the
   reader is at the reply's end, and never on opening a page or sending.

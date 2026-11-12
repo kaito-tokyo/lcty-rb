@@ -12,7 +12,8 @@
  * is drawn.
  *
  * - The box is reserved: its height is set here, a third of the view's at first, and it is contain: strict, so what is
- *   drawn in it never lays out what is around it.
+ *   drawn in it never lays out what is around it, and overflow-anchor: none, so that the browser's scroll anchoring
+ *   never moves the page for what is drawn in it.
  * - While the box is there, the <article> is display: flow-root, so that its children's margins are inside it and
  *   its height is all that a commit adds above the box.
  * - It grows in steps: when the content is taller than the box, the box is made as tall as the content and a third of
@@ -20,10 +21,11 @@
  * - A commit does not move what is below: when the <article> grows, the box gives up as much, as far as the content
  *   still fits, so the reply's height stays.
  * - Following: from when at least 80% of the box is in view (of the view's height, when the box is taller than the
- *   view), the end of the content is kept in view, 16px above the composer of the <lcty-c> it is in (or the view's
- *   bottom). It stops when no part of the box is in view, or when the reader scrolls: a wheel, a touch move, a key that
- *   scrolls the page (arrows, Page Up and Down, Home, End, Space) pressed outside a field, or a press on the page's
- *   scroll bar. It starts again only when the box comes into view by 80% again, after it was less.
+ *   view), the end of the content is kept 16px above the composer of the <lcty-c> it is in (or the view's bottom),
+ *   from above as from below, so that the room left in the box stays below the view. It stops when no part of the box
+ *   is in view, or when the reader scrolls: a wheel, a touch move, a key that scrolls the page (arrows, Page Up and
+ *   Down, Home, End, Space) pressed outside a field, a press on the page's scroll bar, or a scroll up that the box did
+ *   not make. It starts again only when the box comes into view by 80% again, after it was less.
  */
 export class TailBox {
 	/** Make the box right after article, a reply's <article>, and start watching it. */
@@ -45,9 +47,11 @@ export class TailBox {
 // The heights are read without forcing a layout. A ResizeObserver on the content and on the <article> reports their
 // heights after the browser has laid the frame out; the box's new height is set in that callback, so the browser lays
 // the page out once more before it paints, and the frame never shows the content cut off. While following, the
-// content's end is brought into view there too, as layout is then clean. An IntersectionObserver on the box says how
-// much of it is in view, at every 5%; nothing reads the scroll position.
+// content's end is put in its place there too, as layout is then clean. An IntersectionObserver on the box says how
+// much of it is in view, at every 5%.
 //
-// What scrolls is told apart by its input, not by the scroll: a scroll event cannot say who made it, and the page's
-// own changes of height move the scroll position too. The listeners are added once, on the window, for every box. A
-// scroll bar drawn over the page (macOS's) leaves no press on the page to see, so dragging it does not stop following.
+// The reader's scrolls are told apart mostly by their input, as a scroll event cannot say who made it. A scroll bar
+// drawn over the page (macOS's) leaves no input to see, so a scroll event is read too: while following, a scroll up
+// from where the box last left the page (scrolled, set after each scroll the box makes) stops it. A scroll down is let
+// be, as the page's own growth may make one, and following brings the content's end back to its place. The listeners
+// are added once, on the window, for every box.

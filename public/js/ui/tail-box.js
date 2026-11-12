@@ -50,6 +50,17 @@ function listen() {
 		const root = document.documentElement;
 		if (e.target === root && e.clientX >= root.clientWidth) stop();
 	});
+	// a scroll up the page did not make, such as a drag of a scroll bar drawn over the page, which gives no input
+	addEventListener(
+		"scroll",
+		() => {
+			for (const b of boxes) {
+				if (b.following && scrollY < b.scrolled - 1) b.unfollow();
+				b.scrolled = scrollY;
+			}
+		},
+		{ passive: true },
+	);
 }
 
 /** The tail's box after article: its content is where the tail is drawn. */
@@ -63,6 +74,8 @@ export class TailBox {
 		this.box.append(this.content);
 		this.height = part();
 		this.box.style.contain = "strict";
+		// the browser's scroll anchoring would move the page as the tail is drawn again under it
+		this.box.style.overflowAnchor = "none";
 		this.box.style.height = `${this.height}px`;
 		// the <article>'s margins inside it, so that its height is all a commit adds above the box
 		article.style.display = "flow-root";
@@ -71,6 +84,8 @@ export class TailBox {
 		this.articleHeight = null;
 		this.contentHeight = 0;
 		this.following = false;
+		// where the page was scrolled to last, by the page or by the reader
+		this.scrolled = scrollY;
 		// whether coming into view by FOLLOW starts following: not again until the box has been out of it
 		this.armed = true;
 		this.resize = new ResizeObserver((entries) => this.resized(entries));
@@ -127,13 +142,17 @@ export class TailBox {
 		}
 	}
 
-	/** Bring the content's end into view above the composer. */
+	/** Put the content's end right above the composer. */
 	toEnd() {
 		const dock = this.article.closest("lcty-c")?.dock;
 		const limit =
 			(dock ? dock.getBoundingClientRect().top : innerHeight) - MARGIN;
 		const end = this.content.getBoundingClientRect().bottom;
-		if (end > limit) scrollBy(0, end - limit);
+		// above the composer too, so that the room left in the box stays below the view
+		if (Math.abs(end - limit) >= 1) {
+			scrollBy(0, end - limit);
+			this.scrolled = scrollY;
+		}
 	}
 
 	/** Stop following, as the reader scrolled. */

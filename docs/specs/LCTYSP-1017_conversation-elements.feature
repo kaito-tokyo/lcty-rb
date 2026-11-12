@@ -80,7 +80,7 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
   Scenario: The tail is drawn in a box a third of the view high
     Given a streaming reply
     When appendText adds "Hello" and a frame is drawn
-    Then the box after its <article> holds "Hello", is contain: strict and a third of the view high
+    Then the box after its <article> holds "Hello", is contain: strict, overflow-anchor: none and a third of the view high
 
   Scenario: The tail's box grows by a third of the view when its content does not fit
     Given a streaming reply
@@ -103,6 +103,20 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     Then the end of the tail's content is no longer in view
     When the page is scrolled to its top and back to its end, and 20 more lines are added
     Then the end of the tail's content is in view again
+
+  Scenario: Following keeps the end of the tail's content right above the bottom of the view
+    Given a page twice the view high
+    And a streaming reply below it
+    And the page is scrolled to its end, so the box is in view
+    When appendText adds 20 lines of code and the frames are drawn
+    Then the end of the tail's content is 16px above the bottom of the view, and the room left in the box below it
+
+  Scenario: A scroll up that no input made stops following
+    Given a page twice the view high
+    And a streaming reply below it
+    And the page is scrolled to its end, so the box is in view
+    When a script scrolls the page up by 200px and 20 lines of code are added
+    Then the end of the tail's content is not in view
 
   Scenario: Thinking is counted while it streams and shown when it is open
     Given a streaming reply
