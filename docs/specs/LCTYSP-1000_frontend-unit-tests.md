@@ -17,10 +17,10 @@ SPDX-License-Identifier: Apache-2.0
 
 The 1000 range holds the behaviour of the browser's code in `public/`, one module at a time, written as Gherkin
 features. LCTYSP-1000 is this document, the guide to the range; LCTYSP-1001 and on are the features. Each Scenario is
-one test in `tests/unit/`. A Scenario that needs a browser runs in a real one (Chromium and WebKit, with Playwright) on
-the test server's origin, on an empty page, so nothing but the test touches it; it says so with the line "Given a page
-on the server's origin". Every other Scenario runs in Node.js (`node:test`), which imports the module straight from
-`public/`: it takes a second instead of a minute and needs neither the server nor the browsers.
+one test in `tests/unit/`. A Scenario that needs a browser runs in a real one (Chromium, WebKit and Firefox, with
+Playwright) on the test server's origin, on an empty page, so nothing but the test touches it; it says so with the line
+"Given a page on the server's origin". Every other Scenario runs in Node.js (`node:test`), which imports the module
+straight from `public/`: it takes a second instead of a minute and needs neither the server nor the browsers.
 
 ## What belongs here
 
@@ -175,16 +175,17 @@ test:node` uses) and Playwright's JSON reporter.
 - **Node.js.** 26 or later, run as `node --experimental-web-worker --localstorage-file=:memory: --require
   ./tests/unit/node-preload.cjs --test` (`npm run test:node`; Node.js 24 has no Web Workers). Each test file runs in a
   process of its own, its tests one after another; a test that replaces a global (`fetch`) puts it back when it ends.
-- **Browsers.** Chromium and WebKit, as for the UI tests; every browser test runs in both.
+- **Browsers.** Chromium, WebKit and Firefox, as for the UI tests; every browser test runs in all three.
 - **Server.** The browser tests share the server the UI tests start (`playwright.config.js`): port 45290 by default
   (`LCTY_TEST_PORT` to change it), with an empty data directory in the temporary folder. Unit tests use it only to
   serve `public/`.
 - **State.** Every browser test gets a new browser context, so `localStorage` and IndexedDB start empty. In Node.js,
   `scenario()` empties `localStorage` before every Scenario.
 - **Parallel.** Because a unit test answers every request it makes and keeps its state in its own context, the browser
-  unit tests run in parallel, every test on its own (`fullyParallel`, projects `unit-chromium` and `unit-webkit`, which
-  run only the `*.spec.js`). The UI tests share the server's data directory, so they run one at a time (`ui-chromium`,
-  then `ui-webkit`). A unit test must therefore never depend on another test or on the server's data.
+  unit tests run in parallel, every test on its own (`fullyParallel`, projects `unit-chromium`, `unit-webkit` and
+  `unit-firefox`, which run only the `*.spec.js`). The UI tests share the server's data directory, so they run one at a
+  time (`ui-chromium`, then `ui-webkit`, then `ui-firefox`). A unit test must therefore never depend on another test or
+  on the server's data.
 
 ## Running the tests
 

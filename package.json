@@ -7,7 +7,7 @@
 		"test:node": "node --experimental-web-worker --localstorage-file=:memory: --require ./tests/unit/node-preload.cjs --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./tests/unit/scenarios-reporter.js --test-reporter-destination=stdout \"tests/unit/*.test.js\"",
 		"test:unit": "npm run test:node && playwright test tests/unit",
 		"test:ui": "playwright test tests/ui",
-		"test:ui:install": "playwright install chromium webkit",
+		"test:ui:install": "playwright install chromium webkit firefox",
 		"test:backend": "ruby tests/backend/run.rb",
 		"check:scenarios": "node tests/unit/check-scenarios.js",
 		"check:biome": "biome check"

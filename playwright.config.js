@@ -22,7 +22,7 @@ if (!external)
 
 // The unit tests answer every request they make themselves (LCTYSP-1000), so they run in parallel. The UI tests share
 // one server and one data directory (the sidebar lists every conversation the tests make), so they run one at a time:
-// one worker per browser, and WebKit's after Chromium's.
+// one worker per browser, and the browsers one after another: Chromium, WebKit, then Firefox.
 const unit = {
 	testDir: "tests/unit",
 	testMatch: "*.spec.js",
@@ -44,12 +44,19 @@ export default defineConfig({
 	projects: [
 		{ name: "unit-chromium", ...unit, use: { ...devices["Desktop Chrome"] } },
 		{ name: "unit-webkit", ...unit, use: { ...devices["Desktop Safari"] } },
+		{ name: "unit-firefox", ...unit, use: { ...devices["Desktop Firefox"] } },
 		{ name: "ui-chromium", ...ui, use: { ...devices["Desktop Chrome"] } },
 		{
 			name: "ui-webkit",
 			...ui,
 			use: { ...devices["Desktop Safari"] },
 			dependencies: ["ui-chromium"],
+		},
+		{
+			name: "ui-firefox",
+			...ui,
+			use: { ...devices["Desktop Firefox"] },
+			dependencies: ["ui-webkit"],
 		},
 	],
 	webServer: external
