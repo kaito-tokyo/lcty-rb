@@ -175,16 +175,18 @@ export function initComposer(
 
 // Internals:
 //
-// Streaming a reply (viewState / viewCommit / viewTail / viewFlush / viewSetText / viewAppend / viewFinish, the reply
-// body <article>, LCTYSP-0018): the text is read as GFM a top-level block at a time. Each animation frame BlockWatch
-// says when to try BlockParser's advance, and each block it takes is committed: its inlines are parsed and it is
-// written once into the <article> by the committed converter, as DOM nodes (DomSink), so the <article> holds the
-// committed blocks only. The rest of the text, the tail, is drawn in the content of its box (TailBox, tail-box.d.ts),
-// right after the <article>, outside it, by the tail converter (convert/tail.js), which reads it with a heuristic of its
-// own each frame and changes only what differs from what is drawn, so an open code block's code grows in one text
-// node. The box is made with the first delta and follows the reply while the reader is at its end. At the end every
-// block is committed and the box is removed. Each flush dispatches a bubbling "md-render" event. viewSetText renders a whole text at once with
-// the committed converter and drops data-generator.
+// Streaming a reply (viewState / viewCommit / viewRewrite / viewTail / viewFlush / viewSetText / viewAppend /
+// viewFinish, the reply body <article>, LCTYSP-0018): the text is read as GFM a top-level block at a time. Each
+// animation frame BlockWatch says when to try BlockParser's advance, and each block it takes is committed: its inlines
+// are parsed and it is written once into the <article> by the committed converter, as DOM nodes (DomSink), so the
+// <article> holds the committed blocks only. The rest of the text, the tail, is drawn in the content of its box
+// (TailBox, tail-box.d.ts), right after the <article>, outside it, by the tail converter (convert/tail.js), which reads
+// it with a heuristic of its own each frame and changes only what differs from what is drawn, so an open code block's
+// code grows in one text node. The box is made with the first delta and follows the reply while the reader is at its
+// end. At the end every block is committed and the box is removed. When a block committed brings a link reference
+// definition and blocks were written before it, the <article> is written again from the committed text parsed whole
+// (viewRewrite), so a reference link used before its definition becomes a link. Each flush dispatches a bubbling "md-
+// render" event. viewSetText renders a whole text at once with the committed converter and drops data-generator.
 //
 // Thinking (thoughtState / thoughtFlush / thoughtAppend / thoughtFinish): a reply's thinking view is part of
 // <lcty-message> (its Shadow DOM, lcty.v1.cjs), built from data-thinking. While the reply streams in, the text is kept

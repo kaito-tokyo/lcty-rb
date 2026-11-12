@@ -63,6 +63,13 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     Then its <article> holds the paragraphs "Hello world" and "Second", and no tail follows it
     And its status is "completed"
 
+  Scenario: A link reference definition after its use makes the blocks written before it link
+    Given a streaming reply
+    When appendText adds "See [docs].\n\n" and a frame is drawn
+    Then its <article> holds the paragraph "See [docs]." as text
+    When appendText adds "[docs]: https://e.org\n\nNext\n\n" and a frame is drawn
+    Then its <article> holds <p>See <a href="https://e.org" target="_blank" rel="noopener noreferrer">docs</a>.</p><p>Next</p>
+
   Scenario: An unfinished code block grows in one text node
     Given a streaming reply
     When appendText adds "```js\nlet a" and a frame is drawn
