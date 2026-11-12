@@ -6,13 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0017: Markdown
 
-- Status: Draft. The rules below are what the renderer is to do; `markdown.js` does not follow them all yet (see
-  [What changes](#what-changes)).
+- Status: Draft. The pages render with the GFM parser and the committed converter (`convert/reply.js`); see
+  [What changes](#what-changes).
 - Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md#presentation-allowlist) (the presentation allowlist),
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md) (rendering streams, suggested next messages),
   [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the `<article>` of a message),
   [LCTYSP-0016](LCTYSP-0016_hardening.md) (the Content Security Policy),
-  [LCTYSP-1014](LCTYSP-1014_markdown.feature) (the tests of `markdown.js`),
+  [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature) and [LCTYSP-1026](LCTYSP-1026_committed-converter.feature) (the tests
+  of the parser and the converter),
   [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md) (the DOM while a text streams in)
 
 ## Summary
@@ -175,16 +176,20 @@ The choices this spec makes where GFM leaves the output to the renderer, or wher
 
 ## What changes
 
-- **`markdown.js`** is replaced by a GFM parser that builds the DOM itself (no HTML string, no `innerHTML`). Today it
-  reads with regular expressions a subset close to GFM: no setext headings, indented code, reference links, images,
-  character references, task list items or extended autolinks with `www.`, and emphasis that does not follow GFM's
-  delimiter rules. The first goal is the DOM of a complete text; its behaviour while a text streams in comes after.
-- **Tests.** [LCTYSP-1014](LCTYSP-1014_markdown.feature) gets GFM's examples: each example of the GFM spec, with the
-  expected HTML its reference gives, mapped to this spec's output by the tables above. The examples whose output this
-  spec makes different (raw HTML, images, soft line breaks, task list items) are listed with their own expected HTML.
+- **`markdown.js`** is replaced by a GFM parser and a converter that builds the DOM itself (no HTML string, no
+  `innerHTML`): the pages render with `convert/gfm/` through `convert/reply.js`. `markdown.js`, which reads with
+  regular expressions a subset close to GFM (no setext headings, indented code, reference links, images, character
+  references, task list items or extended autolinks with `www.`, and emphasis that does not follow GFM's delimiter
+  rules), is left only as the tail converter of [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md) for now, writing
+  alignments as classes too.
+- **Tests.** [LCTYSP-1026](LCTYSP-1026_committed-converter.feature) has GFM's examples: each example of the GFM spec,
+  with the expected HTML its reference gives, mapped to this spec's output by the tables above. The examples whose
+  output this spec makes different (raw HTML, images, soft line breaks, task list items) are listed with their own
+  expected HTML. [LCTYSP-1014](LCTYSP-1014_markdown.feature) stays the tests of `markdown.js`.
 - **The server's allowlist** follows [Nothing else](#nothing-else): `th[class]` and `td[class]` replace `th[style]` and
   `td[style]`, and class values are checked against the list instead of any word.
-- **Files already saved** keep their presentations; their text, in the attributes, is never lost, and a presentation
-  of an older renderer can be made again from it (`data-generator`, [LCTYSP-0003](LCTYSP-0003_conversation-file.md)).
-  Until it is, the `style` of an old table is ignored under the Content Security Policy and its columns lose their
-  alignment.
+- **Files already saved** keep their presentations; their text, in the attributes, is never lost. A presentation of
+  `markdown.js` (`data-generator="lcty.v1"`, [LCTYSP-0003](LCTYSP-0003_conversation-file.md)) is rendered again from
+  it when the page loads, as this renderer's is `lcty.v1.gfm`. An `<article>` of
+  [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) has no `data-generator` and keeps what was saved: there
+  the `style` of an old table is ignored under the Content Security Policy and its columns lose their alignment.

@@ -31,7 +31,7 @@ module Chatty
     # Text strings (the attribute is the source of truth; base64 only when it has unwritable characters) and display-only values. Not checked
     TEXT_KEYS = %w[content thinking instructions content_html title error].freeze
     CMD_OP_RE = /\A[a-z][a-z0-9-]{0,31}\z/.freeze # Command names (lcty-cmd data-op)
-    GENERATOR = 'lcty.v1' # The renderer that produced the presentation HTML (data-generator)
+    GENERATOR = 'lcty.v1.gfm' # The renderer that produced the presentation HTML (data-generator)
 
     # Check the strings in a line object (except the text strings)
     def check_chars!(obj, path = 'line')
@@ -72,20 +72,33 @@ module Chatty
       nil
     end
 
-    # Allowlist for presentation HTML (only the elements and attributes markdown.js emits). Other elements keep only their contents; DROP removes them with their contents
+    # Allowlist for presentation HTML: the elements and attributes of LCTYSP-0017's output ("Nothing else") and no
+    # more. Other elements keep only their contents; DROP removes them with their contents
     ALLOWED = {
       'p' => [], 'br' => [], 'hr' => [], 'strong' => [], 'em' => [], 'del' => [], 'blockquote' => [],
       'h1' => [], 'h2' => [], 'h3' => [], 'h4' => [], 'h5' => [], 'h6' => [],
       'ul' => [], 'ol' => ['start'], 'li' => [], 'pre' => [], 'code' => ['data-lang'],
-      'table' => [], 'thead' => [], 'tbody' => [], 'tr' => [], 'th' => ['style'], 'td' => ['style'],
+      'table' => [], 'thead' => [], 'tbody' => [], 'tr' => [], 'th' => ['class'], 'td' => ['class'],
       'a' => %w[href target rel], 'div' => ['class'], 'span' => ['class'], 'button' => %w[type class]
     }.freeze
     DROP = %w[script style template iframe object embed noscript svg math head title meta link base form input textarea select].freeze
     ATTR_OK = {
       'href' => %r{\A(?:https?:|mailto:)}i, 'target' => /\A_blank\z/, 'rel' => /\Anoopener noreferrer\z/,
-      'style' => /\Atext-align:(?:left|center|right)\z/, 'start' => /\A\d{1,9}\z/,
-      'class' => /\A[\w -]{1,100}\z/, 'type' => /\Abutton\z/, 'data-lang' => /\A[^<>"]{0,40}\z/
+      'start' => /\A\d{1,9}\z/, 'type' => /\Abutton\z/, 'data-lang' => /\A[^<>"]{0,40}\z/
     }.freeze
+    # The classes each element may have, as LCTYSP-0017 lists them
+    ALIGN_CLASSES = %w[align-left align-center align-right].freeze
+    CLASSES = {
+      'div' => %w[codeblock codebar table-wrap], 'span' => ['lang', 'task', 'task done'],
+      'button' => %w[select suggestion], 'th' => ALIGN_CLASSES, 'td' => ALIGN_CLASSES
+    }.freeze
+
+    # Whether element name may have the attribute attr of value
+    def attr_ok?(name, attr, value)
+      return false unless ALLOWED[name]&.include?(attr)
+      return CLASSES[name].include?(value) if attr == 'class'
+      ATTR_OK[attr].match?(value)
+    end
 
     # Parse presentation HTML with gumbo, filter it through the allowlist, and add it as children of parent
     def add_presentation(parent, html, doc)
@@ -100,7 +113,7 @@ module Chatty
           name = n.name.downcase
           if (attrs = ALLOWED[name])
             e = Nokogiri::XML::Node.new(name, doc)
-            attrs.each { |a| (v = n[a]) && ATTR_OK[a].match?(v) && (e[a] = v) }
+            attrs.each { |a| (v = n[a]) && attr_ok?(name, a, v) && (e[a] = v) }
             copy_clean(n.children, e, doc)
             parent.add_child(e)
           elsif !DROP.include?(name)
@@ -318,7 +331,7 @@ module Chatty
           # Thinking is the attribute only: it has no presentation in the file (the page builds one from it, LCTYSP-0003)
           thinking = obj['thinking'].to_s
           set_text(e, 'data-thinking', thinking) unless thinking.empty?
-          # The browser renders the presentation HTML with markdown.js and sends it. Without it, leave this empty and the module renders from the attribute
+          # The browser renders the presentation HTML with the committed converter (reply.js) and sends it. Without it, leave this empty and the module renders from the attribute
           html = obj['content_html']
           md = node(doc, 'article', html.is_a?(String) ? { 'data-generator' => GENERATOR } : {})
           add_presentation(md, html, doc) if html.is_a?(String)

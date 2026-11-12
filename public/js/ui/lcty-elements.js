@@ -4,18 +4,23 @@
 
 // Features of the conversation elements: plain functions on the elements lcty.v1.cjs builds (LCTYSP-0005, LCTYSP-0003).
 
+import { DomSink, writeCommitted } from "../convert/gfm/committed.js";
+import { BlockWatch, parseGfm } from "../convert/gfm/converter.js";
+import { BlockParser } from "../convert/gfm/gfm_blocks.js";
+import { InlineParser } from "../convert/gfm/gfm_inlines.js";
 import {
 	codeBlockHTML,
 	fenceParts,
 	renderBlock,
 	scanBlocks,
 } from "../convert/markdown.js";
+import { decodeName, replyOptions } from "../convert/reply.js";
 import { textAttr } from "../convert/text-attr.js";
 import { tr } from "../i18n.js";
 
-const GENERATOR = "lcty.v1"; // The renderer that produced the saved presentation HTML (data-generator)
+const GENERATOR = "lcty.v1.gfm"; // The renderer that produced the saved presentation HTML (data-generator)
 
-// ---- Incremental Markdown rendering (the reply body <article>. LCTYSP-0005) ----
+// ---- Streaming a reply (its <article> the committed blocks, the tail after it. LCTYSP-0018) ----
 
 // Module state. The maps are made on first use, so the module only declares
 const state = {
@@ -25,7 +30,7 @@ const state = {
 	handlers: {},
 };
 
-/** reply body <article> => { text, committed, done, raf, tail, fence } */
+/** reply body <article> => its stream (viewState) */
 function views() {
 	state.viewMap ??= new WeakMap();
 	return state.viewMap;
@@ -34,45 +39,69 @@ function views() {
 function viewState(view) {
 	let s = views().get(view);
 	if (!s) {
+		const parser = new BlockParser(decodeName);
 		s = {
 			text: "",
-			committed: 0,
+			// where the tail starts in text: what is before it is committed
+			head: 0,
 			done: false,
 			raf: 0,
+			parser,
+			inlines: new InlineParser(decodeName, parser.refmap),
+			watch: new BlockWatch(),
+			doc: null,
 			tail: null,
 			fence: null,
 		};
 		views().set(view, s);
 	}
-	if (!s.tail) {
-		s.tail = document.createElement("div");
-		s.tail.className = "md-tail";
-		view.append(s.tail);
-	}
 	return s;
 }
 
-function viewFlush(view, s) {
-	const blocks = scanBlocks(s.text.slice(s.committed), s.done);
-	let html = "";
-	let advance = 0;
-	let i = 0;
-	for (; i < blocks.length && blocks[i].complete; i++) {
-		html += renderBlock(blocks[i]);
-		advance = blocks[i].end;
+/** Commit the blocks the tail has ended, each written once into the <article>. */
+function viewCommit(view, s) {
+	const { parser } = s;
+	let head = s.text.slice(s.head);
+	for (;;) {
+		if (!s.done && !s.watch.mayEnd(head)) return;
+		const step = parser.advance(head, s.done, s.head);
+		if (step === undefined) continue;
+		s.watch.reset();
+		if (step[1] === undefined) {
+			s.head = s.text.length;
+			return;
+		}
+		for (const leaf of step[3])
+			s.inlines.parseLeaf(s.text, parser.nodes, parser.spans, leaf);
+		if (step[2] !== -1) {
+			s.doc ??= { nodes: parser.nodes, spans: parser.spans, ...replyOptions() };
+			s.doc.source = s.text;
+			writeCommitted(s.doc, step[2], new DomSink(view));
+		}
+		head = step[0];
+		s.head = s.text.length - head.length;
 	}
-	if (i > 0) {
-		const t = document.createElement("template");
-		t.innerHTML = html;
-		view.insertBefore(t.content, s.tail);
-		s.committed += advance;
-		s.tail.replaceChildren();
+}
+
+/** Draw the tail after the <article> with markdown.js, a renderer of its own (LCTYSP-0018). */
+function viewTail(view, s) {
+	const text = s.text.slice(s.head);
+	if (s.done || text.trim() === "") {
+		s.tail?.remove();
+		s.tail = null;
 		s.fence = null;
+		return;
 	}
-	const rest = blocks.slice(i);
-	if (rest.length === 1 && rest[0].kind === "fence") {
-		const block = rest[0];
-		const start = s.committed + block.start;
+	if (!s.tail) {
+		s.tail = document.createElement("div");
+		s.tail.className = "md-tail";
+		view.after(s.tail);
+	}
+	const blocks = scanBlocks(text, false);
+	if (blocks.length === 1 && blocks[0].kind === "fence") {
+		// an open code block grows at its end: its code is appended to a text node
+		const block = blocks[0];
+		const start = s.head + block.start;
 		const { lang, code } = fenceParts(block);
 		let f = s.fence;
 		if (!f || f.start !== start || f.lang !== lang || code.length < f.len) {
@@ -87,8 +116,13 @@ function viewFlush(view, s) {
 		}
 	} else {
 		s.fence = null;
-		s.tail.innerHTML = rest.map((b) => renderBlock(b)).join("");
+		s.tail.innerHTML = blocks.map((b) => renderBlock(b)).join("");
 	}
+}
+
+function viewFlush(view, s) {
+	viewCommit(view, s);
+	viewTail(view, s);
 	view.dispatchEvent(new Event("md-render", { bubbles: true }));
 }
 
@@ -100,14 +134,21 @@ function viewCancel(s) {
 /** Render all at once */
 function viewSetText(view, text) {
 	view.removeAttribute("data-generator");
-	view.replaceChildren();
 	const old = views().get(view);
-	if (old) viewCancel(old);
+	if (old) {
+		viewCancel(old);
+		old.tail?.remove();
+	}
 	views().delete(view);
-	const s = viewState(view);
-	s.text = text ?? "";
-	s.done = true;
-	viewFlush(view, s);
+	view.replaceChildren();
+	const source = text ?? "";
+	const { nodes, spans } = parseGfm(source, decodeName);
+	writeCommitted(
+		{ source, nodes, spans, ...replyOptions() },
+		0,
+		new DomSink(view),
+	);
+	view.dispatchEvent(new Event("md-render", { bubbles: true }));
 }
 
 function viewAppend(view, delta) {
@@ -127,6 +168,7 @@ function viewFinish(view) {
 	s.done = true;
 	viewCancel(s);
 	viewFlush(view, s);
+	views().delete(view);
 }
 
 // ---- Thinking (while a reply is generated) ----
@@ -427,11 +469,6 @@ export function initConversationElements(container, h = {}) {
 			viewSetText(view, messageOf(el).content);
 	}
 	markLastUser(container);
-	// "Select all" on code blocks; older replies' "Copy" buttons (button.copy) are relabelled and work the same way
-	for (const btn of container.querySelectorAll(
-		":scope > lcty-message > article .codebar button.copy",
-	))
-		btn.textContent = tr("selectAll", "Select all");
 	// Suggested next messages (<suggestion-for-user-turn> in a reply): put the text into the composer to edit and send
 	container.addEventListener("click", (e) => {
 		const btn = e.target.closest?.(
@@ -443,7 +480,7 @@ export function initConversationElements(container, h = {}) {
 	});
 	container.addEventListener("click", (e) => {
 		const btn = e.target.closest?.(
-			":is(lcty-message, lcty-msg) > article .codebar :is(button.select, button.copy)",
+			":is(lcty-message, lcty-msg) > article .codebar button.select",
 		);
 		if (!btn) return;
 		const code = btn.closest(".codeblock")?.querySelector("code");

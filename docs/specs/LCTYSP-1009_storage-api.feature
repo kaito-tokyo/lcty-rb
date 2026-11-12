@@ -33,10 +33,10 @@ Feature: LCTYSP-1009 The client of the HTTP API
     When toLine is called with it
     Then it returns {"type": "message", "id": "m2", "role": "assistant", "content": "**bold** text", "content_html": "<p><strong>bold</strong> text</p>"}
 
-  Scenario: The HTML of a reply is what renderMarkdown makes of its content
+  Scenario: The HTML of a reply is what replyHtml makes of its content
     Given an assistant message whose content has a heading, a list, a table, a code block and a link
     When toLine is called with it
-    Then its content_html equals renderMarkdown of the content
+    Then its content_html equals replyHtml of the content
 
   Scenario: A reply without content carries empty HTML
     Given the assistant message {"id": "m3", "role": "assistant"}

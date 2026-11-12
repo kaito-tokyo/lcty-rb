@@ -184,7 +184,7 @@ When the connection is open and `initialize` has answered:
   - **The element is built here,** from the tag and attributes of the record: no HTML comes over `/v1/rpc`
     ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)). Its `<article>` is made from its text as the page makes its own: a
     user message's is the text alone, a model or system message's and a thinking's the Markdown rendered by
-    `markdown.js`. The page's DOM never holds HTML another page made.
+    `convert/reply.js` ([LCTYSP-0017](LCTYSP-0017_markdown.md)). The page's DOM never holds HTML another page made.
   - **An `lcty-cmd` is another page's lock:** it is added marked held ("A reply is being made in another tab") and
     never runs here; the page sends nothing while it is the last element, and the record that removes it removes it
     here too. One with `data-error` shows itself as failed.

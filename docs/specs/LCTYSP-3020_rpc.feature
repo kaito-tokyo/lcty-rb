@@ -129,6 +129,13 @@ Feature: LCTYSP-3020 The RPC protocol
       | a <script> in its article              |
       | a user article other than its text     |
       | a control character in data-content    |
+      | a class LCTYSP-0017 does not list      |
+      | a style in its article                 |
+
+  Scenario: A model article of the forms of LCTYSP-0017 is appended
+    Given a conversation
+    When a model message is appended whose article has a code block, an aligned table, a task box and a suggestion
+    Then it is appended
 
   Scenario: The server fills in the integrity placeholder
     Given a conversation

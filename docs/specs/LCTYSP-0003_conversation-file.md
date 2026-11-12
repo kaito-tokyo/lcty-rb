@@ -140,21 +140,25 @@ conversation page ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 - **Children are for display.** Without scripts the file still reads as a conversation with headings and lists. On
   load the elements use the saved children as they are; Markdown is not rendered again.
 - **The browser renders the reply's presentation HTML and sends it.** Appended lines carry `content_html`, rendered
-  with the same `markdown.js` used on screen, so what is saved matches what was shown (a separate Ruby renderer would
-  drift). Without `content_html` (for example through the API directly), `<article>` is written empty and the page
-  renders it from the attribute on load.
+  with the same converter used on screen (`convert/reply.js`, [LCTYSP-0017](LCTYSP-0017_markdown.md)), so what is
+  saved matches what was shown (a separate Ruby renderer would drift). Without `content_html` (for example through
+  the API directly), `<article>` is written empty and the page renders it from the attribute on load.
 - Presentation of user messages is built by Ruby from the text.
-- **Renderer version.** Presentation HTML carries `data-generator="lcty.v1"`. A future renderer can re-render from the
-  attributes, which are never lost.
+- **Renderer version.** Presentation HTML carries `data-generator="lcty.v1.gfm"`, the GFM renderer of
+  [LCTYSP-0017](LCTYSP-0017_markdown.md). A presentation of another renderer (`lcty.v1`, `markdown.js`'s, before it)
+  is not kept: the page renders it again from the attributes, which are never lost, and the server does not read it
+  as `content_html`.
 
 ### Presentation allowlist
 
-Ruby parses `content_html` with gumbo (`Nokogiri::HTML5`) and keeps only what `markdown.js` emits:
+Ruby parses `content_html` with gumbo (`Nokogiri::HTML5`) and keeps only what the converter emits, the list of
+[LCTYSP-0017](LCTYSP-0017_markdown.md#nothing-else):
 
 - Elements: `p br hr strong em del blockquote h1–h6 ul ol li pre code table thead tbody tr th td a div span button`.
-- Attributes: `ol[start]` (digits), `code[data-lang]`, `th/td[style]` (only `text-align:left|center|right`),
-  `a[href]` (only `http:`, `https:`, `mailto:`), `a[target=_blank]`, `a[rel="noopener noreferrer"]`, `div/span/button[class]`,
-  `button[type=button]`.
+- Attributes: `ol[start]` (digits), `code[data-lang]`, `th/td[class]` (`align-left`, `align-center`, `align-right`),
+  `a[href]` (only `http:`, `https:`, `mailto:`), `a[target=_blank]`, `a[rel="noopener noreferrer"]`, `div[class]`
+  (`codeblock`, `codebar`, `table-wrap`), `span[class]` (`lang`, `task`, `task done`), `button[class]` (`select`,
+  `suggestion`), `button[type=button]`. A class is the whole value, one of those of its element.
 - `script style template iframe object embed noscript svg math head title meta link base form input textarea select`
   are dropped with their contents; other elements are unwrapped (their contents are kept).
 

@@ -2,9 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/js/convert/markdown.js (LCTYSP-0005 "Rendering streams", LCTYSP-0003 "Presentation allowlist").
-# Each Scenario is a test of the same title in tests/unit/markdown.test.js (in Node.js) or, when it puts the HTML into a
-# page, in tests/unit/markdown.spec.js (in the browser), whose steps are the lines below.
+# The behaviour of public/js/convert/markdown.js, now the tail converter of LCTYSP-0018 (the pages render a complete
+# text with LCTYSP-1026's converter). Each Scenario is a test of the same title in tests/unit/markdown.test.js (in
+# Node.js) or, when it puts the HTML into a page, in tests/unit/markdown.spec.js (in the browser), whose steps are the
+# lines below.
 
 Feature: LCTYSP-1014 Rendering Markdown to HTML
 

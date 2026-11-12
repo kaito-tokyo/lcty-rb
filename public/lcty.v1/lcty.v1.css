@@ -629,8 +629,8 @@ lcty-message[data-role="user"] .user-text {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 }
-lcty-message[data-status="streaming"] > article:empty::after,
-lcty-message[data-status="streaming"] .md-tail:empty::after {
+lcty-message[data-status="streaming"] > article:empty:last-child::after,
+lcty-message[data-status="streaming"] > .md-tail:empty::after {
 	content: "▍";
 	color: var(--fg-dim);
 	animation: blink 1s steps(1) infinite;
@@ -667,7 +667,8 @@ lcty-message::part(lcty-message__thinking-body) {
 	overflow-y: auto;
 }
 /* markdown (the reply's <article>) */
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail) {
 	display: block;
 	overflow-wrap: anywhere;
 }
@@ -676,50 +677,56 @@ lcty-message.flash > article,
 lcty-msg.flash > article {
 	animation: flash 1.6s ease-out;
 } /* a search hit opened */
-.md-tail {
-	display: contents;
-}
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article > :first-child,
-.md-tail > :first-child {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	> :first-child {
 	margin-top: 0;
 }
 :is(lcty-message, lcty-msg[data-role="model"])
-	> article
+	> :is(article, .md-tail)
 	:is(p, ul, ol, blockquote, .codeblock, .table-wrap) {
 	margin: 0.55em 0;
 }
 :is(lcty-message, lcty-msg[data-role="model"])
-	> article
+	> :is(article, .md-tail)
 	:is(h1, h2, h3, h4, h5, h6) {
 	line-height: 1.35;
 	margin: 1em 0 0.4em;
 }
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article :is(ul, ol) {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	:is(ul, ol) {
 	padding-left: 1.6em;
 }
 :is(lcty-message, lcty-msg:where([data-role="model"]))
-	> article
+	> :is(article, .md-tail)
 	li
 	> :is(ul, ol) {
 	margin: 0.15em 0;
 }
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article blockquote {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	blockquote {
 	border-left: 3px solid var(--border);
 	margin-left: 0;
 	padding-left: 12px;
 	color: var(--fg-dim);
 }
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article hr {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	hr {
 	border: 0;
 	border-top: 1px solid var(--border);
 	margin: 1.2em 0;
 }
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article a {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	a {
 	color: var(--accent);
 }
 /* Suggested next messages (<suggestion-for-user-turn>): a click puts the text into the composer */
 :is(lcty-message, lcty-msg:where([data-role="model"]))
-	> article
+	> :is(article, .md-tail)
 	button.suggestion {
 	font: inherit;
 	color: var(--accent);
@@ -735,12 +742,12 @@ lcty-msg.flash > article {
 	cursor: pointer;
 }
 :is(lcty-message, lcty-msg[data-role="model"])
-	> article
+	> :is(article, .md-tail)
 	button.suggestion:hover {
 	background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 :is(lcty-message, lcty-msg:where([data-role="model"]))
-	> article
+	> :is(article, .md-tail)
 	:not(pre)
 	> code {
 	background: var(--bg-code);
@@ -761,7 +768,7 @@ lcty-msg.flash > article {
 	color: var(--fg-dim);
 	border-bottom: 1px solid var(--border);
 }
-.codebar :is(.select, .copy) {
+.codebar .select {
 	margin-left: auto;
 	padding: 0 8px;
 	border-color: transparent;
@@ -775,14 +782,30 @@ lcty-msg.flash > article {
 .table-wrap {
 	overflow-x: auto;
 }
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article table {
+/* a column's alignment (LCTYSP-0017: a class, as the Content Security Policy allows no inline style) */
+:is(th, td).align-left {
+	text-align: left;
+}
+:is(th, td).align-center {
+	text-align: center;
+}
+:is(th, td).align-right {
+	text-align: right;
+}
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	table {
 	border-collapse: collapse;
 }
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article :is(th, td) {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	:is(th, td) {
 	border: 1px solid var(--border);
 	padding: 4px 10px;
 }
-:is(lcty-message, lcty-msg:where([data-role="model"])) > article th {
+:is(lcty-message, lcty-msg:where([data-role="model"]))
+	> :is(article, .md-tail)
+	th {
 	background: var(--bg-side);
 }
 

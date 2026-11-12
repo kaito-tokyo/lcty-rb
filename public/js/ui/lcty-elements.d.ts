@@ -175,10 +175,15 @@ export function initComposer(
 
 // Internals:
 //
-// Incremental Markdown rendering (viewState / viewFlush / viewSetText / viewAppend / viewFinish, the reply body
-// <article>, LCTYSP-0005): finished blocks are fixed in the DOM; only the unfinished block is redrawn inside .md-tail.
-// An unfinished code block is appended to a text node instead of being redrawn. Each flush dispatches a bubbling
-// "md-render" event. viewSetText renders all at once and drops data-generator.
+// Streaming a reply (viewState / viewCommit / viewTail / viewFlush / viewSetText / viewAppend / viewFinish, the reply
+// body <article>, LCTYSP-0018): the text is read as GFM a top-level block at a time. Each animation frame BlockWatch
+// says when to try BlockParser's advance, and each block it takes is committed: its inlines are parsed and it is
+// written once into the <article> by the committed converter, as DOM nodes (DomSink), so the <article> holds the
+// committed blocks only. The rest of the text, the tail, is drawn in a div.md-tail right after the <article>, outside
+// it, by markdown.js, a renderer of its own that only has to look right until its text is committed. An open code
+// block in the tail is appended to a text node instead of being redrawn. At the end every block is committed and the
+// tail is removed. Each flush dispatches a bubbling "md-render" event. viewSetText renders a whole text at once with
+// the committed converter and drops data-generator.
 //
 // Thinking (thoughtState / thoughtFlush / thoughtAppend / thoughtFinish): a reply's thinking view is part of
 // <lcty-message> (its Shadow DOM, lcty.v1.cjs), built from data-thinking. While the reply streams in, the text is kept
@@ -194,8 +199,8 @@ export function initComposer(
 //
 // initConversationElements: the thinking view is the element's own, from data-thinking (lcty.v1.cjs). Files written
 // before that may still have a <lcty-thinking> child of their own (hidden by lcty.v1.css); it is dropped. Replies
-// without saved presentation HTML (data-generator other than "lcty.v1", e.g. created through the API directly) are
-// rendered from the attribute. "Select all" on code blocks selects the code, to copy it with the browser's own copy
-// (no clipboard API, which needs a secure context). Replies saved before have a "Copy" button (button.copy) in their
-// presentation HTML; it is relabelled and works the same way. Suggested next messages (<suggestion-for-user-turn> in a
-// reply, button.suggestion) put their text into the composer to edit and send.
+// without saved presentation HTML of this renderer (data-generator other than "lcty.v1.gfm": none, as when created
+// through the API directly, or "lcty.v1", markdown.js's before LCTYSP-0017) are rendered from the attribute. "Select
+// all" on code blocks selects the code, to copy it with the browser's own copy (no clipboard API, which needs a secure
+// context). Suggested next messages (<suggestion-for-user-turn> in a reply, button.suggestion) put their text into the
+// composer to edit and send.

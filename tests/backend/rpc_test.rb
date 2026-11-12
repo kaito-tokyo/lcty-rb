@@ -203,7 +203,9 @@ class RpcTest < Lcty::Scenarios
     'an id prefix of another role' => ->(t) { [{ 'data-role' => 'model', 'id' => "msg-u-#{Chatty::Uuid.v7}", 'data-at' => t, 'data-content' => 'x' }, '<article><p>x</p></article>'] },
     'a <script> in its article' => ->(t) { [{ 'data-role' => 'model', 'id' => "msg-m-#{Chatty::Uuid.v7}", 'data-at' => t, 'data-content' => 'x' }, '<article><script>alert(1)</script></article>'] },
     'a user article other than its text' => ->(t) { [{ 'data-role' => 'user', 'id' => "msg-u-#{Chatty::Uuid.v7}", 'data-at' => t, 'data-content' => 'x' }, '<article><b>x</b></article>'] },
-    'a control character in data-content' => ->(t) { [{ 'data-role' => 'model', 'id' => "msg-m-#{Chatty::Uuid.v7}", 'data-at' => t, 'data-content' => "a\u0001b" }, '<article><p>x</p></article>'] }
+    'a control character in data-content' => ->(t) { [{ 'data-role' => 'model', 'id' => "msg-m-#{Chatty::Uuid.v7}", 'data-at' => t, 'data-content' => "a\u0001b" }, '<article><p>x</p></article>'] },
+    'a class LCTYSP-0017 does not list' => ->(t) { [{ 'data-role' => 'model', 'id' => "msg-m-#{Chatty::Uuid.v7}", 'data-at' => t, 'data-content' => 'x' }, '<article><p><span class="codeblock">x</span></p></article>'] },
+    'a style in its article' => ->(t) { [{ 'data-role' => 'model', 'id' => "msg-m-#{Chatty::Uuid.v7}", 'data-at' => t, 'data-content' => 'x' }, '<article><div class="table-wrap"><table><tbody><tr><td style="text-align:left">x</td></tr></tbody></table></div></article>'] }
   }
   faults.each do |fault, build|
     scenario "An element that breaks a rule of the format is refused (#{fault})" do
@@ -215,6 +217,21 @@ class RpcTest < Lcty::Scenarios
       end
       step('Then the error is 3') { assert_equal 3, r['error']['code'] }
     end
+  end
+
+  scenario 'A model article of the forms of LCTYSP-0017 is appended' do
+    cid = r = nil
+    step('Given a conversation') { cid = create }
+    step('When a model message is appended whose article has a code block, an aligned table, a task box and a suggestion') do
+      inner = '<article><div class="codeblock"><div class="codebar"><span class="lang">js</span>' \
+              '<button type="button" class="select">Select all</button></div><pre><code data-lang="js">x</code></pre></div>' \
+              '<div class="table-wrap"><table><thead><tr><th class="align-right">a</th></tr></thead>' \
+              '<tbody><tr><td class="align-right">1</td></tr></tbody></table></div>' \
+              '<ul><li><span class="task done">☑</span> a</li></ul>' \
+              '<p><button type="button" class="suggestion">Go on</button></p></article>'
+      r = append(cid, nil, model_attrs('x'), inner)
+    end
+    step('Then it is appended') { assert_nil r['error'] }
   end
 
   scenario 'The server fills in the integrity placeholder' do

@@ -54,19 +54,19 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     Given a streaming reply
     When appendText adds "Hello **wor" and "ld**\n\nSecond" in one task
     Then its <article> shows no text before the next animation frame
-    And after the next animation frame it shows "Hello world" in a fixed paragraph and "Second" in the unfinished tail
+    And after the next animation frame its <article> holds "Hello world" in a committed paragraph, and the tail after it "Second"
 
   Scenario: Finishing a streamed reply fixes every block
     Given a streaming reply with the text "Hello **world**\n\nSecond" appended
     And the status is removed from its message
     When finishMessage settles it
-    Then its <article> holds the paragraphs "Hello world" and "Second" and an empty unfinished tail
+    Then its <article> holds the paragraphs "Hello world" and "Second", and no tail follows it
     And its status is "completed"
 
   Scenario: An unfinished code block grows in one text node
     Given a streaming reply
     When appendText adds "```js\nlet a" and a frame is drawn
-    Then the unfinished tail shows a code block "js" with the code "let a"
+    Then the tail after its <article> shows a code block "js" with the code "let a"
     When appendText adds " = 1;" and a frame is drawn
     Then the same text node now holds "let a = 1;"
 
@@ -120,10 +120,11 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     Then it returns the user and model messages as id, role, time and content, with the bare ids and model as assistant
 
   Scenario: Starting prepares the messages of the file
-    Given the container holds a user message, a reply with saved presentation HTML, a reply without it and an old <lcty-thinking> child, and a reply with timings
+    Given the container holds a user message, a reply with saved presentation HTML, a reply without it and an old <lcty-thinking> child, a reply with timings, and a reply an older renderer saved
     When initConversationElements starts
     Then the reply with saved presentation HTML keeps it
     And the reply without it is rendered from data-content
+    And the reply an older renderer saved is rendered again from data-content
     And the old <lcty-thinking> child is removed
     And the reply with timings has its timings popover filled in
     And only the user message has data-last-user
@@ -142,7 +143,7 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     Then the composer holds "Tell me more" and has the focus
 
   Scenario: Select all selects the code of a code block
-    Given the container holds a reply of the file with a saved code block whose button is the old "Copy"
+    Given the container holds a reply of the file whose text is the code block "```js\nlet a = 1;\n```", without its presentation
     When initConversationElements starts
     Then the button says "Select all"
     When the button is clicked
