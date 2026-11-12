@@ -187,8 +187,10 @@ server data are in `public/lcty.v1/` with the frame that starts them.
   send a CSP header yet.)
 - The new conversation page (`/c/`) loads the same two classic scripts (`../lcty.v1/lcty.v1.cjs` and the language
   script), then its own entry `index.js` (`/c/index.js`) as a module script (deferred, so it never blocks rendering).
-- Markdown rendering is the ordinary module `js/convert/markdown.js` on every page. `js/convert/` holds what turns a
-  text into the forms a message is kept in, its attribute and its `<article>`.
+- Markdown rendering is the GFM parser and the committed converter in `js/convert/gfm/`, which the pages call through
+  the ordinary module `js/convert/reply.js` ([LCTYSP-0017](LCTYSP-0017_markdown.md)); a reply streaming in is drawn
+  as [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md) says. `js/convert/` holds what turns a text into the forms a
+  message is kept in, its attribute and its `<article>`.
 
 ## Custom elements
 
@@ -457,8 +459,9 @@ Rendering must stay cheaper than generation:
 
 - Deltas arrive per token (a few bytes, about 50 per second). Receiving one only appends to a string buffer.
 - Drawing is batched with `requestAnimationFrame`, once per frame.
-- Markdown rendering fixes finished blocks in the DOM and redraws only the last, unfinished block (redrawing everything
-  would be O(n²)). An unfinished code block is appended to a text node instead of being redrawn.
+- Markdown rendering writes each committed block once into the `<article>` and redraws only the tail after it
+  (redrawing everything would be O(n²); [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md)). An unfinished code block in
+  the tail is appended to a text node instead of being redrawn.
 - Thinking is collapsed. While a reply streams in, its text is added to the body only while it is open.
 - Markdown to HTML always escapes text and only allows `http:`, `https:` and `mailto:` link URLs. LLM output is never put
   into the DOM as raw HTML.

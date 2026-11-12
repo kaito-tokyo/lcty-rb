@@ -297,7 +297,7 @@ function renderTable(lines) {
 					: "",
 	);
 	const cell = (tag, c, i) =>
-		`<${tag}${aligns[i] ? ` style="text-align:${aligns[i]}"` : ""}>${inline(c)}</${tag}>`;
+		`<${tag}${aligns[i] ? ` class="align-${aligns[i]}"` : ""}>${inline(c)}</${tag}>`;
 	const th = head.map((c, i) => cell("th", c, i)).join("");
 	const rows = lines
 		.slice(2)

@@ -4,7 +4,7 @@
 
 // The presentation of a message, the <article> of the file, made from its text (LCTYSP-0013).
 
-import { renderMarkdown } from "./markdown.js";
+import { replyHtml } from "./reply.js";
 
 const escapeText = (s) =>
 	s
@@ -18,7 +18,7 @@ export function userArticle(text) {
 	return `<article>${escapeText(text)}</article>`;
 }
 
-/** The <article> of a reply, a thinking or a system message: the text rendered as Markdown (markdown.js). */
+/** The <article> of a reply, a thinking or a system message: the text rendered as GFM (reply.js). */
 export function replyArticle(text) {
-	return `<article>${renderMarkdown(text)}</article>`;
+	return `<article>${replyHtml(text)}</article>`;
 }

@@ -123,10 +123,15 @@ Feature: LCTYSP-3002 Conversation files as HTML
   Scenario: Presentation HTML is filtered through the allowlist
     Given an assistant message whose content_html holds a heading, a script, an unknown element, a javascript: link and a code block
     When it is written and read back
-    Then the article has data-generator="lcty.v1"
+    Then the article has data-generator="lcty.v1.gfm"
     And the script is dropped with its contents and the unknown element keeps only its contents
     And the link keeps only its allowed attributes and the code keeps data-lang
     And the content_html read back is the filtered HTML
+
+  Scenario: A class is kept only where LCTYSP-0017 lists it
+    Given an assistant message whose content_html holds aligned cells, a cell with a style, task and suggestion classes and classes of other elements
+    When it is written and read back
+    Then the alignment classes, "task done" and "suggestion" are kept, and a style and the other classes are dropped
 
   Scenario: Without content_html the article is empty
     When an assistant message without content_html is written and read back

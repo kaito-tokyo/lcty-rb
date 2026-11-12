@@ -205,7 +205,10 @@ test("A table aligns its columns and fills missing cells", async ({
 			const div = document.createElement("div");
 			div.innerHTML = h;
 			const cells = (row) =>
-				[...row.children].map((c) => [c.textContent, c.style.textAlign]);
+				[...row.children].map((c) => [
+					c.textContent,
+					c.className.replace(/^align-/, ""),
+				]);
 			return {
 				wraps: div.children.length === 1 && div.firstElementChild.className,
 				tables: div.querySelectorAll(".table-wrap > table").length,

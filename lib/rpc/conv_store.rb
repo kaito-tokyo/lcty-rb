@@ -399,7 +399,7 @@ module Lcty
           next if n == article || n.text?
           raise Error.new(INVALID, "presentation: <#{n.name}> is not allowed") unless n.element? && Chatty::ConvHtml::ALLOWED.key?(n.name)
           n.attributes.each do |name, a|
-            ok = Chatty::ConvHtml::ALLOWED[n.name].include?(name) && (re = Chatty::ConvHtml::ATTR_OK[name]) && re.match?(a.value)
+            ok = Chatty::ConvHtml.attr_ok?(n.name, name, a.value)
             raise Error.new(INVALID, "presentation: #{n.name}[#{name}] is not allowed") unless ok
           end
         end

@@ -28,7 +28,7 @@ import {
 globalThis.requestIdleCallback = () => 0;
 await useLctyT();
 const storage = await import(publicUrl("js/api/storage.js"));
-const { renderMarkdown } = await import(publicUrl("js/convert/markdown.js"));
+const { replyHtml } = await import(publicUrl("js/convert/reply.js"));
 
 // ---- Background ----
 
@@ -191,7 +191,7 @@ scenario(
 );
 
 scenario(
-	"The HTML of a reply is what renderMarkdown makes of its content",
+	"The HTML of a reply is what replyHtml makes of its content",
 	async ({ step, t }) => {
 		await background(step, t);
 		let message;
@@ -209,17 +209,14 @@ scenario(
 		await step("When toLine is called with it", () => {
 			result = {
 				html: storage.toLine(message).content_html,
-				expected: renderMarkdown(message.content),
+				expected: replyHtml(message.content),
 			};
 		});
-		await step(
-			"Then its content_html equals renderMarkdown of the content",
-			() => {
-				expect(result.html).toBe(result.expected);
-				expect(result.html).toContain("<h1>");
-				expect(result.html).toContain("<table>");
-			},
-		);
+		await step("Then its content_html equals replyHtml of the content", () => {
+			expect(result.html).toBe(result.expected);
+			expect(result.html).toContain("<h1>");
+			expect(result.html).toContain("<table>");
+		});
 	},
 );
 

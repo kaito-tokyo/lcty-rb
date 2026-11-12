@@ -4,7 +4,7 @@
 
 // Client for the lcty.rb storage API (LCTYSP-0006, LCTYSP-0003, LCTYSP-0005).
 
-import { renderMarkdown } from "../convert/markdown.js";
+import { replyHtml } from "../convert/reply.js";
 import { siteUrl } from "../site.js";
 
 /** The error of a failed request, with the HTTP status as status. */
@@ -42,8 +42,7 @@ function conv(id) {
 /** Message → line to append; replies also carry content_html (LCTYSP-0003). */
 export function toLine(m) {
 	const line = { type: "message", ...m };
-	if (m.role === "assistant")
-		line.content_html = renderMarkdown(m.content || "");
+	if (m.role === "assistant") line.content_html = replyHtml(m.content || "");
 	return line;
 }
 

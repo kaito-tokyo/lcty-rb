@@ -25,8 +25,8 @@ export interface Message {
 
 /**
  * Message → line to append ({type: "message", ...m}). Replies (role "assistant") also carry presentation HTML in
- * content_html (dual recording, LCTYSP-0003). It is rendered with the same markdown.js as the screen, so what is saved
- * matches what is shown.
+ * content_html (dual recording, LCTYSP-0003). It is rendered with the same converter as the screen (convert/reply.js),
+ * so what is saved matches what is shown.
  */
 export function toLine<M extends Message>(
 	m: M,

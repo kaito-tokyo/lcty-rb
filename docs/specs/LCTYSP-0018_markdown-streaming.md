@@ -6,8 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0018: Markdown streaming
 
-- Status: Draft. The rules below are what the page is to do; `lcty-elements.js` still streams with `markdown.js`.
-  [Open questions](#open-questions) lists what is not decided yet.
+- Status: Draft. `lcty-elements.js` streams a reply as [In the page](#in-the-page) says, but for the tail's box and
+  following the reply; [Open questions](#open-questions) lists what is not decided yet.
 - Related: [LCTYSP-0017](LCTYSP-0017_markdown.md) (the HTML of a complete text),
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams) (rendering streams),
   [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature) (the tests of the parser, streamed too)
@@ -68,6 +68,12 @@ heuristic that only has to look right for a moment, since whatever it shows is r
   tail.
 - **The cost of a frame does not grow with the reply.** A committed block is written once; a frame's work is the new
   characters, the blocks taken, and the tail's redraw, which costs the tail's length at most.
+- **For now the tail converter is `markdown.js`,** the renderer the pages had before
+  [LCTYSP-0017](LCTYSP-0017_markdown.md): a parser of its own (the second choice of
+  [Open questions](#open-questions) 1), which shares nothing with `convert/gfm/` and writes only LCTYSP-0017's
+  elements and attributes. It draws the tail's text as a whole each frame, but for an open fenced code block, whose
+  code is appended to a text node. The tail's view is a plain `div.md-tail`, not yet the box below, and the page does
+  not follow the reply yet.
 
 ### The tail's box
 

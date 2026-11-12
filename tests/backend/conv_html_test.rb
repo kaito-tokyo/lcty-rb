@@ -324,7 +324,7 @@ class ConvHtmlTest < Lcty::Scenarios
       doc = ConvHtml.document([meta, obj])
       article = elements(doc).last.at_xpath('article')
     end
-    step('Then the article has data-generator="lcty.v1"') { assert_equal 'lcty.v1', article['data-generator'] }
+    step('Then the article has data-generator="lcty.v1.gfm"') { assert_equal 'lcty.v1.gfm', article['data-generator'] }
     step('And the script is dropped with its contents and the unknown element keeps only its contents') do
       inner = article.to_xhtml
       refute_includes inner, 'script'
@@ -343,6 +343,27 @@ class ConvHtmlTest < Lcty::Scenarios
                    '<a href="https://example.com/" rel="noopener noreferrer">good</a>' \
                    '<pre><code data-lang="ruby">p 1</code></pre>',
                    messages(ConvHtml.decode(doc).map(&:first))[0]['content_html']
+    end
+  end
+
+  scenario 'A class is kept only where LCTYSP-0017 lists it' do
+    html = '<div class="table-wrap"><table><thead><tr><th class="align-right">a</th><th style="text-align:left">b</th></tr></thead>' \
+           '<tbody><tr><td class="align-center">1</td><td class="x">2</td></tr></tbody></table></div>' \
+           '<p><span class="task done">☑</span> <span class="codeblock">x</span>' \
+           '<button type="button" class="suggestion">s</button><button type="button" class="copy">c</button></p>'
+    out = nil
+    step('Given an assistant message whose content_html holds aligned cells, a cell with a style, task and suggestion classes and classes of other elements') do
+      out = { 'type' => 'message', 'role' => 'assistant', 'content' => 'x', 'content_html' => html }
+    end
+    step('When it is written and read back') do
+      out = messages(ConvHtml.decode(ConvHtml.document([meta, out])).map(&:first))[0]['content_html']
+    end
+    step('Then the alignment classes, "task done" and "suggestion" are kept, and a style and the other classes are dropped') do
+      assert_equal '<div class="table-wrap"><table><thead><tr><th class="align-right">a</th><th>b</th></tr></thead>' \
+                   '<tbody><tr><td class="align-center">1</td><td>2</td></tr></tbody></table></div>' \
+                   '<p><span class="task done">☑</span> <span>x</span>' \
+                   '<button type="button" class="suggestion">s</button><button type="button">c</button></p>',
+                   out
     end
   end
 

@@ -320,17 +320,18 @@ test("Streamed text is drawn once per animation frame", async ({
 	await test.step("Then its <article> shows no text before the next animation frame", async () => {
 		expect(before).toBe("");
 	});
-	await test.step('And after the next animation frame it shows "Hello world" in a fixed paragraph and "Second" in the unfinished tail', async () => {
+	await test.step('And after the next animation frame its <article> holds "Hello world" in a committed paragraph, and the tail after it "Second"', async () => {
 		await page.evaluate(() => window.frame());
 		expect(
 			await page.evaluate(() => {
 				const a = window.r.querySelector(":scope > article");
-				return [...a.children].map((e) => [e.className, e.textContent]);
+				const tail = a.nextElementSibling;
+				return {
+					article: [...a.children].map((e) => [e.tagName, e.textContent]),
+					tail: [tail.className, tail.textContent],
+				};
 			}),
-		).toEqual([
-			["", "Hello world"],
-			["md-tail", "Second"],
-		]);
+		).toEqual({ article: [["P", "Hello world"]], tail: ["md-tail", "Second"] });
 	});
 });
 
@@ -350,21 +351,19 @@ test("Finishing a streamed reply fixes every block", async ({
 		});
 	});
 	await whenFinishMessageSettlesIt(page);
-	await test.step('Then its <article> holds the paragraphs "Hello world" and "Second" and an empty unfinished tail', async () => {
+	await test.step('Then its <article> holds the paragraphs "Hello world" and "Second", and no tail follows it', async () => {
 		expect(
 			await page.evaluate(() => {
 				const a = window.r.querySelector(":scope > article");
-				return [...a.children].map((e) => [
-					e.tagName.toLowerCase(),
-					e.className,
-					e.innerHTML,
-				]);
+				return {
+					article: a.innerHTML,
+					next: a.nextElementSibling,
+				};
 			}),
-		).toEqual([
-			["p", "", "Hello <strong>world</strong>"],
-			["p", "", "Second"],
-			["div", "md-tail", ""],
-		]);
+		).toEqual({
+			article: "<p>Hello <strong>world</strong></p><p>Second</p>",
+			next: null,
+		});
 	});
 	await test.step('And its status is "completed"', async () => {
 		expect((await messageState(page)).status).toBe("completed");
@@ -383,10 +382,10 @@ test("An unfinished code block grows in one text node", async ({
 			await window.frame();
 		});
 	});
-	await test.step('Then the unfinished tail shows a code block "js" with the code "let a"', async () => {
+	await test.step('Then the tail after its <article> shows a code block "js" with the code "let a"', async () => {
 		expect(
 			await page.evaluate(() => {
-				const tail = window.r.querySelector(":scope > article > .md-tail");
+				const tail = window.r.querySelector(":scope > article + .md-tail");
 				const code = tail.querySelector(".codeblock code");
 				window.node = code.firstChild;
 				return {
@@ -676,13 +675,14 @@ test("Starting prepares the messages of the file", async ({
 	context,
 }) => {
 	await background(page, context);
-	await test.step("Given the container holds a user message, a reply with saved presentation HTML, a reply without it and an old <lcty-thinking> child, and a reply with timings", async () => {
+	await test.step("Given the container holds a user message, a reply with saved presentation HTML, a reply without it and an old <lcty-thinking> child, a reply with timings, and a reply an older renderer saved", async () => {
 		await fileMessages(
 			page,
 			`<lcty-message id="c-msg-u1" data-role="user" data-content="q"><div class="user-text">q</div></lcty-message>
-			<lcty-message id="c-msg-r1" data-role="assistant" data-content="**x**"><article data-generator="lcty.v1"><p>saved</p></article></lcty-message>
+			<lcty-message id="c-msg-r1" data-role="assistant" data-content="**x**"><article data-generator="lcty.v1.gfm"><p>saved</p></article></lcty-message>
 			<lcty-message id="c-msg-r2" data-role="assistant" data-content="**new**"><lcty-thinking>old</lcty-thinking><article></article></lcty-message>
-			<lcty-message id="c-msg-r3" data-role="assistant" data-content="t" data-timings='{"cache_n":0,"prompt_n":2,"prompt_ms":100}'><article data-generator="lcty.v1"><p>t</p></article></lcty-message>`,
+			<lcty-message id="c-msg-r3" data-role="assistant" data-content="t" data-timings='{"cache_n":0,"prompt_n":2,"prompt_ms":100}'><article data-generator="lcty.v1.gfm"><p>t</p></article></lcty-message>
+			<lcty-message id="c-msg-r4" data-role="assistant" data-content="*o*"><article data-generator="lcty.v1"><p>old</p></article></lcty-message>`,
 		);
 	});
 	await test.step("When initConversationElements starts", async () => {
@@ -698,9 +698,10 @@ test("Starting prepares the messages of the file", async ({
 		expect(await article("c-msg-r1")).toBe("<p>saved</p>");
 	});
 	await test.step("And the reply without it is rendered from data-content", async () => {
-		expect(await article("c-msg-r2")).toBe(
-			'<p><strong>new</strong></p><div class="md-tail"></div>',
-		);
+		expect(await article("c-msg-r2")).toBe("<p><strong>new</strong></p>");
+	});
+	await test.step("And the reply an older renderer saved is rendered again from data-content", async () => {
+		expect(await article("c-msg-r4")).toBe("<p><em>o</em></p>");
 	});
 	await test.step("And the old <lcty-thinking> child is removed", async () => {
 		expect(
@@ -717,7 +718,13 @@ test("Starting prepares the messages of the file", async ({
 		).toBe("Input 2 tok (cached 0 / computed 2, 0.10s)");
 	});
 	await test.step("And only the user message has data-last-user", async () => {
-		expect(await lastUserMarks(page)).toEqual([true, false, false, false]);
+		expect(await lastUserMarks(page)).toEqual([
+			true,
+			false,
+			false,
+			false,
+			false,
+		]);
 	});
 });
 
@@ -730,7 +737,7 @@ test("The buttons of a message call the handlers with the message", async ({
 		await fileMessages(
 			page,
 			`<lcty-message id="c-msg-u1" data-role="user" data-content="q"><div class="user-text">q</div></lcty-message>
-			<lcty-message id="c-msg-r1" data-role="assistant" data-content="a"><article data-generator="lcty.v1"><p>a</p></article></lcty-message>`,
+			<lcty-message id="c-msg-r1" data-role="assistant" data-content="a"><article data-generator="lcty.v1.gfm"><p>a</p></article></lcty-message>`,
 		);
 	});
 	await test.step("When initConversationElements starts with the handlers onUndo, onFork and onRegenerate", async () => {
@@ -801,10 +808,10 @@ test("Select all selects the code of a code block", async ({
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given the container holds a reply of the file with a saved code block whose button is the old "Copy"', async () => {
+	await test.step('Given the container holds a reply of the file whose text is the code block "```js\\nlet a = 1;\\n```", without its presentation', async () => {
 		await fileMessages(
 			page,
-			`<lcty-message id="c-msg-r1" data-role="assistant" data-content="code"><article data-generator="lcty.v1"><p>before</p><div class="codeblock"><div class="codebar"><span class="lang">js</span><button type="button" class="copy">Copy</button></div><pre><code>let a = 1;</code></pre></div></article></lcty-message>`,
+			`<lcty-message id="c-msg-r1" data-role="assistant" data-content="\`\`\`js&#10;let a = 1;&#10;\`\`\`"><article></article></lcty-message>`,
 		);
 	});
 	await test.step("When initConversationElements starts", async () => {
@@ -817,7 +824,8 @@ test("Select all selects the code of a code block", async ({
 		await page.locator(".codebar button").click();
 	});
 	await test.step("Then the selection is the code of the block", async () => {
-		expect(await page.evaluate(() => getSelection().toString())).toBe(
+		// the code's last line end is selected by some engines and not others
+		expect(await page.evaluate(() => getSelection().toString().trimEnd())).toBe(
 			"let a = 1;",
 		);
 	});
