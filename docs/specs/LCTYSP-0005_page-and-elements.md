@@ -113,6 +113,11 @@ a module imported once the page has loaded attaches every feature without blocki
   of `lcty.v1/`, the page entries and the rest of `public/`. It is started in the root of the repository: the files of
   the site are found from the working directory. Nothing is gzipped (the server is usually on the same machine). Shared
   parts live in `lib/`: settings (`lib/config.rb`) and storage (`lib/store.rb`).
+- **Every connection is closed after its response** (`Connection: close`). WEBrick serves 100 connections at a time
+  and waits up to 30 seconds for the next request on an idle one, while a browser may keep a connection it no longer
+  uses: Firefox keeps those of a closed window, and its UI tests filled the server so that every request waited. A
+  new connection costs little when the server is on the same machine or the same network; a WebSocket of `/v1/rpc`
+  stays open as it always has.
 - **`openapi.yaml` at the root of the repository lists every path and method of the site** (paths and methods only; the
   bodies are in the specs). [LCTYSP-3021](LCTYSP-3021_openapi.feature) checks it against `Lcty.mount_all`: every path
   it lists is answered, and no other file of `public/` is.

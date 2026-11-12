@@ -133,8 +133,14 @@ module Lcty
         AccessLog: [],
         DoNotReverseLookup: true
       }
-      # A request without valid credentials is answered 401 with a Basic challenge (raised as a status)
-      config[:RequestCallback] = ->(req, res) { auth.authenticate(req, res) } if auth
+      # Every connection is closed once its response is sent (Connection: close): WEBrick serves 100 connections at a
+      # time and waits up to 30 seconds for the next request on an idle one, while a browser may keep one it no longer
+      # uses (Firefox keeps those of a closed window), so idle ones would fill the server. A request without valid
+      # credentials is answered 401 with a Basic challenge (raised as a status)
+      config[:RequestCallback] = lambda do |req, res|
+        res.keep_alive = false
+        auth&.authenticate(req, res)
+      end
       server = WEBrick::HTTPServer.new(config)
       begin
         ips.each do |ip|
