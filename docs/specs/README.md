@@ -53,7 +53,6 @@ for the backend ones).
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | Vector records and the vector store           | `tests/unit/vectors.test.js`                                 |
 | [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | Embedding and indexing                        | `tests/unit/embed.test.js`                                   |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | The semantic search worker                    | `tests/unit/fuzzy-search-worker.test.js`                     |
-| [LCTYSP-1014](LCTYSP-1014_markdown.feature)                   | Rendering Markdown to HTML                    | `tests/unit/markdown.test.js`, `tests/unit/markdown.spec.js` |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | Command tags                                  | `tests/unit/lcty-cmd.spec.js`                                |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | The elements of a conversation file           | `tests/unit/conversation-file-elements.spec.js`              |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | Messages and the composer of a conversation   | `tests/unit/lcty-elements.spec.js`                           |
@@ -65,6 +64,7 @@ for the backend ones).
 | [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | The tab's connection to /v1/rpc               | `tests/unit/tab-rpc.test.js`                                 |
 | [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)                 | Parsing GitHub Flavored Markdown              | `tests/unit/gfm-parser.test.js`                              |
 | [LCTYSP-1026](LCTYSP-1026_committed-converter.feature)        | Writing GFM as the HTML of lcty-rb            | `tests/unit/gfm-committed.test.js`                           |
+| [LCTYSP-1027](LCTYSP-1027_tail-converter.feature)             | Showing the tail of a reply                   | `tests/unit/gfm-tail.test.js`, `tests/unit/gfm-tail.spec.js` |
 | [LCTYSP-2001](LCTYSP-2001_new-conversation-page.feature)      | The new conversation page /c/                 | `tests/ui/new-conversation.spec.js`                          |
 | [LCTYSP-2002](LCTYSP-2002_conversation-page.feature)          | The conversation page                         | `tests/ui/conversation.spec.js`                              |
 | [LCTYSP-2003](LCTYSP-2003_sidebar.feature)                    | The sidebar                                   | `tests/ui/sidebar.spec.js`                                   |
@@ -99,6 +99,10 @@ git.
   when `lcty.rb` replaced the servlets of the site and nothing was bundled or gzipped any more. The servlets that took
   their place are [LCTYSP-3018](LCTYSP-3018_site-servlets.feature), and the entry point
   [LCTYSP-3019](LCTYSP-3019_entry-point.feature).
+- LCTYSP-1014 Rendering Markdown to HTML: removed with `js/convert/markdown.js`, whose place the GFM parser and the
+  committed converter ([LCTYSP-1025](LCTYSP-1025_gfm-parser.feature),
+  [LCTYSP-1026](LCTYSP-1026_committed-converter.feature)) and the tail converter
+  ([LCTYSP-1027](LCTYSP-1027_tail-converter.feature)) took.
 
 ## Number ranges
 

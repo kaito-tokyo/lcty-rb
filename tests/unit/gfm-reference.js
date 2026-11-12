@@ -316,3 +316,67 @@ export function referenceHtml(
 	node(row);
 	return out;
 }
+
+// The tokens of an HTML string of LCTYSP-0017's one form: a tag (its slash, name and attributes) or text
+const reToken =
+	/<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:[^>"']|"[^"]*"|'[^']*')*)>|([^<]+)/g;
+const attrsOf = (s) =>
+	Object.fromEntries(
+		[...s.matchAll(/([a-z-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]),
+	);
+
+// The elements and attributes of LCTYSP-0017's "Nothing else", each attribute with the values it may take (null: any)
+const ALLOWED = {
+	p: {},
+	br: {},
+	hr: {},
+	h1: {},
+	h2: {},
+	h3: {},
+	h4: {},
+	h5: {},
+	h6: {},
+	blockquote: {},
+	ul: {},
+	li: {},
+	pre: {},
+	table: {},
+	thead: {},
+	tbody: {},
+	tr: {},
+	strong: {},
+	em: {},
+	del: {},
+	ol: { start: null },
+	code: { "data-lang": null },
+	th: { class: ["align-left", "align-center", "align-right"] },
+	td: { class: ["align-left", "align-center", "align-right"] },
+	a: { href: null, target: ["_blank"], rel: ["noopener noreferrer"] },
+	div: { class: ["codeblock", "codebar", "table-wrap"] },
+	span: { class: ["lang", "task", "task done"] },
+	button: { type: ["button"], class: ["select", "suggestion"] },
+};
+
+/** What is wrong with html as LCTYSP-0017's output: elements, attributes or nesting, as messages. */
+export function problemsOf(html) {
+	const problems = [];
+	const stack = [];
+	for (const t of html.matchAll(reToken)) {
+		if (t[4] !== undefined) continue;
+		const tag = t[2];
+		if (!(tag in ALLOWED)) problems.push(`element ${tag}`);
+		if (t[1] === "/") {
+			if (stack.pop() !== tag) problems.push(`</${tag}> out of order`);
+			continue;
+		}
+		for (const [name, value] of Object.entries(attrsOf(t[3]))) {
+			const values = ALLOWED[tag]?.[name];
+			if (values === undefined) problems.push(`attribute ${tag}[${name}]`);
+			else if (values !== null && !values.includes(value))
+				problems.push(`${tag}[${name}="${value}"]`);
+		}
+		if (tag !== "br" && tag !== "hr") stack.push(tag);
+	}
+	if (stack.length > 0) problems.push(`unclosed ${stack.join(" ")}`);
+	return problems;
+}
