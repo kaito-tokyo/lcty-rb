@@ -459,6 +459,8 @@ const tailBox = (page) =>
 		return {
 			height: box.getBoundingClientRect().height,
 			contain: getComputedStyle(box).contain,
+			anchor: getComputedStyle(box).overflowAnchor,
+			bottom: box.getBoundingClientRect().bottom,
 			view: innerHeight,
 			text: content.textContent,
 			contentHeight: content.getBoundingClientRect().height,
@@ -481,10 +483,11 @@ test("The tail is drawn in a box a third of the view high", async ({
 		await page.evaluate(() => window.E.appendText(window.r, "Hello"));
 		await settle(page);
 	});
-	await test.step('Then the box after its <article> holds "Hello", is contain: strict and a third of the view high', async () => {
+	await test.step('Then the box after its <article> holds "Hello", is contain: strict, overflow-anchor: none and a third of the view high', async () => {
 		const box = await tailBox(page);
 		expect(box.text).toBe("Hello");
 		expect(box.contain).toBe("strict");
+		expect(box.anchor).toBe("none");
 		expect(Math.abs(box.height - Math.round(box.view / 3))).toBeLessThanOrEqual(
 			1,
 		);
@@ -609,6 +612,69 @@ test("The page follows a reply whose box is in view until the reader scrolls", a
 	});
 	await test.step("Then the end of the tail's content is in view again", async () => {
 		expect(await endInView()).toBe(true);
+	});
+});
+
+/** A page twice the view high above a streaming reply of an open code block, scrolled to its end, so it is followed. */
+async function givenAFollowedReply(page) {
+	await test.step("Given a page twice the view high", async () => {
+		await page.evaluate(() => {
+			const above = document.createElement("div");
+			above.style.height = `${2 * innerHeight}px`;
+			window.c.before(above);
+		});
+	});
+	await givenAStreamingReply(page, "And a streaming reply below it");
+	await test.step("And the page is scrolled to its end, so the box is in view", async () => {
+		await page.evaluate(() => window.E.appendText(window.r, "```\n"));
+		await settle(page);
+		await page.evaluate(() =>
+			scrollTo(0, document.scrollingElement.scrollHeight),
+		);
+		await settle(page);
+	});
+}
+
+test("Following keeps the end of the tail's content right above the bottom of the view", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAFollowedReply(page);
+	await test.step("When appendText adds 20 lines of code and the frames are drawn", async () => {
+		await page.evaluate(
+			(text) => window.E.appendText(window.r, text),
+			codeLines(20),
+		);
+		await settle(page);
+	});
+	await test.step("Then the end of the tail's content is 16px above the bottom of the view, and the room left in the box below it", async () => {
+		const box = await tailBox(page);
+		expect(Math.abs(box.contentBottom - (box.view - 16))).toBeLessThanOrEqual(
+			2,
+		);
+		expect(box.bottom).toBeGreaterThan(box.view);
+	});
+});
+
+test("A scroll up that no input made stops following", async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAFollowedReply(page);
+	await test.step("When a script scrolls the page up by 200px and 20 lines of code are added", async () => {
+		await page.evaluate(() => scrollBy(0, -200));
+		await settle(page);
+		await page.evaluate(
+			(text) => window.E.appendText(window.r, text),
+			codeLines(20),
+		);
+		await settle(page);
+	});
+	await test.step("Then the end of the tail's content is not in view", async () => {
+		const box = await tailBox(page);
+		expect(box.contentBottom).toBeGreaterThan(box.view);
 	});
 });
 
