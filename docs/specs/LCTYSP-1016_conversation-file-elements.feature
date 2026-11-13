@@ -396,12 +396,13 @@ Feature: LCTYSP-1016 The elements of a conversation file
     When the tag name "C#" is clicked
     Then tag is fired with {"name": "C#"}
 
-  Scenario: The sidebar holds its links, the search box and the list
+  Scenario: The sidebar holds its links, the search box, the list and the tag menu
     Given the body holds <lcty-sidebar></lcty-sidebar>
-    Then its Shadow DOM is its field nav, the search box and its field list (part lcty-sidebar__list)
-    And the nav holds the link "+ New chat" to "../c/" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"
+    Then its Shadow DOM is its field nav, the search box, its field list (part lcty-sidebar__list) and its field tagMenu
+    And the nav holds the link "+ New chat" to "../c/" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Tags: search or edit", "Reload the list" and "Settings"
     And they have the parts "lcty-sidebar__new lcty-sidebar__link lcty-button lcty-button--primary", "lcty-sidebar__tags lcty-sidebar__link lcty-button", "lcty-sidebar__refresh lcty-sidebar__link lcty-button" and "lcty-sidebar__settings lcty-sidebar__link lcty-button"
     And the search box holds its field search, a search field with the placeholder "Search chats", and its field searchStatus
+    And the tag menu is an empty popover "auto" with the id "tag-menu" and the part "lcty-sidebar__tag-menu", the target of the tag button
 
   Scenario: The sidebar's list is filled from IndexedDB
     Given the database "lcty_c" holds "a" updated on 2026-11-01, "b" updated on 2026-11-03 and "c" updated on 2026-11-03 in "c_meta", the count 4 of "a" in "c_recordcount" and the version of "c_meta" in "sync"

@@ -150,6 +150,10 @@ type LctyTextKey =
 	| "defaultsLoadFailed"
 	| "noTagsYet"
 	| "editTags"
+	| "tagMenu"
+	| "searchByTag"
+	| "edit"
+	| "editTagNamed"
 	| "confirmCloseTags"
 	| "forkTitle"
 	| "forkFrom"
@@ -291,11 +295,13 @@ declare class LctyConvListElement extends HTMLElement {
 
 /**
  * <lcty-sidebar>: the sidebar shared by every page (the conversation page has it inside lcty-c's Shadow DOM, the
- * other pages put it in <body>). Its Shadow DOM holds the nav (new conversation, refresh, settings), the search box and the
- * conversation list. Search and selection are attached by js/ui/sidebar.js.
+ * other pages put it in <body>). Its Shadow DOM holds the nav (new conversation, tags, refresh, settings), the search
+ * box, the conversation list and the tag menu. Search, selection and the tag menu's contents are attached by
+ * js/ui/sidebar.js.
  *
- * Parts: lcty-sidebar__nav / __link (each link) / __new / __refresh / __settings / __search-box / __search /
- * __search-status / __list, and lcty-button (--primary) on the links.
+ * Parts: lcty-sidebar__nav / __link (each link) / __new / __tags / __refresh / __settings / __search-box / __search /
+ * __search-status / __list / __tag-menu, and lcty-button (--primary) on the links. js/ui/tag-menu.js fills the tag
+ * menu with the parts lcty-sidebar__tag-menu-list / -item / -search / -edit / -empty / -foot / -foot-button.
  *
  * When it is in the document it fills its list from the browser's copy of every conversation's meta, before any module
  * has loaded: IndexedDB "lcty_c" (store "c_meta"; only read, never created). It also sets its list's data-tag-defs and
@@ -306,8 +312,14 @@ declare class LctySidebarElement extends HTMLElement {
 	static readonly _: typeof LctyT._;
 	/** "New conversation" link to /, opened in a new window (target="_blank" rel="noopener"; part lcty-sidebar__new) */
 	newLink: HTMLAnchorElement;
-	/** Opens the tags dialog (tag editor) attached by js/ui/sidebar.js (part lcty-sidebar__tags) */
+	/** Opens the tag menu (popovertarget="tag-menu", no script; part lcty-sidebar__tags) */
 	tagsButton: HTMLButtonElement;
+	/**
+	 * The tag menu (LCTYSP-0009): an empty popover (popover="auto", id "tag-menu", part lcty-sidebar__tag-menu), the
+	 * last child of the Shadow DOM, which js/ui/tag-menu.js fills with the tags, each to put in the search box or to
+	 * edit on its file's page, and with the buttons for the tags dialog and the reorder page.
+	 */
+	tagMenu: HTMLDivElement;
 	/**
 	 * Fetches the list again, throwing the browser's copy of the meta away; attached by js/ui/sidebar.js
 	 * (part lcty-sidebar__refresh)

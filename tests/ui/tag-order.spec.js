@@ -21,10 +21,14 @@ test.afterEach(async ({ request }) => {
 	await putTags(request, []);
 });
 
-/** Open the tags dialog from the sidebar of the new conversation page /c/. */
+/** Open the tags dialog from the sidebar's tag menu on the new conversation page /c/. */
 async function openTagsDialog(page) {
 	await openNewPage(page);
 	await page.locator('[part~="lcty-sidebar__tags"]').click();
+	await page
+		.locator('[part~="lcty-sidebar__tag-menu"]')
+		.getByRole("button", { name: "タグを編集" })
+		.click();
 }
 
 /** The tags listed on the reorder page. */

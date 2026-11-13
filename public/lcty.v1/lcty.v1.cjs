@@ -79,7 +79,7 @@
 			part: "lcty-c__sidebar",
 			// its parts (and its list's) under their own names: lcty-c::part(lcty-sidebar__nav) and so on
 			exportparts:
-				"lcty-button, lcty-button--primary, lcty-sidebar__nav, lcty-sidebar__link, lcty-sidebar__new, lcty-sidebar__refresh, lcty-sidebar__settings, lcty-sidebar__search-box, lcty-sidebar__search, lcty-sidebar__search-status, lcty-sidebar__list, lcty-conv-list__empty, lcty-conv-list__items, lcty-conv-list__entry, lcty-conv-list__item, lcty-conv-list__item--current, lcty-conv-list__title, lcty-conv-list__snippet, lcty-conv-list__tags, lcty-conv-list__tag, lcty-conv-list__tag-name, lcty-conv-list__meta",
+				"lcty-button, lcty-button--primary, lcty-sidebar__nav, lcty-sidebar__link, lcty-sidebar__new, lcty-sidebar__refresh, lcty-sidebar__settings, lcty-sidebar__search-box, lcty-sidebar__search, lcty-sidebar__search-status, lcty-sidebar__list, lcty-sidebar__tag-menu, lcty-sidebar__tag-menu-list, lcty-sidebar__tag-menu-item, lcty-sidebar__tag-menu-search, lcty-sidebar__tag-menu-edit, lcty-sidebar__tag-menu-empty, lcty-sidebar__tag-menu-foot, lcty-sidebar__tag-menu-foot-button, lcty-conv-list__empty, lcty-conv-list__items, lcty-conv-list__entry, lcty-conv-list__item, lcty-conv-list__item--current, lcty-conv-list__title, lcty-conv-list__snippet, lcty-conv-list__tags, lcty-conv-list__tag, lcty-conv-list__tag-name, lcty-conv-list__meta",
 		});
 		this.titleInput = $(document.createElement("input"), {
 			id: "conv-title",
@@ -505,14 +505,20 @@
 			{ href: "../c/", target: "_blank", rel: "noopener" },
 			_("newConversation", "+ New chat"),
 		);
-		// opens the tags dialog (the tag editor, LCTYSP-0009), attached by js/ui/sidebar.js
+		// the tag menu: a popover listing the tags, opened by the tag button (popovertarget, no script); js/ui/sidebar.js
+		// fills it in (LCTYSP-0009)
+		this.tagMenu = $(document.createElement("div"), "tag-menu", {
+			id: "tag-menu",
+			popover: "auto",
+		});
 		this.tagsButton = $(
 			document.createElement("button"),
 			"tags",
 			{
 				type: "button",
-				title: _("editTags", "Edit tags"),
-				"aria-label": _("editTags", "Edit tags"),
+				popovertarget: "tag-menu",
+				title: _("tagMenu", "Tags: search or edit"),
+				"aria-label": _("tagMenu", "Tags: search or edit"),
 			},
 			_("tags", "Tags"),
 		);
@@ -577,6 +583,7 @@
 			this.nav,
 			this.searchBox,
 			this.list,
+			this.tagMenu,
 		);
 	}
 

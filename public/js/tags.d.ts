@@ -8,7 +8,7 @@
 //  - (the name rules, file names and references are in tag-names.js)
 //  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
 //  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the
-//    sidebar (and, for one tag, on the page of its tag file)
+//    sidebar's tag menu (and, for one tag, on the page of its tag file)
 //  - proposeMemory / openMemoryDialog: gets memory proposals from a conversation and adds only the approved ones
 
 import type { Backend } from "./common.js";
@@ -61,8 +61,8 @@ export function renderTagsEditor(
 
 /**
  * Builds the tags dialog (a modal <dialog id="tags-dialog"> in <body>, so lcty.v1.css styles it on every page) and
- * wires button to open it; the sidebar's tag button opens it on every page. onSaved(new definitions) is called after
- * each save. Returns open(), for other buttons that open the same dialog.
+ * wires button to open it; タグを編集 in the sidebar's tag menu opens it on every page. onSaved(new definitions) is
+ * called after each save. Returns open(), for other buttons that open the same dialog.
  *
  * Closing with unsaved edits asks first (the close button, Esc and a click on the backdrop). Opening reads the saved
  * definitions again from the browser's copy (another tab of this browser may have changed them meanwhile; a change
