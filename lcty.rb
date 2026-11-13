@@ -6,7 +6,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # lcty-rb: static file server + JSON document store.
-# Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the LLM (LCTYSP-0001).
+# Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the chat model (LCTYSP-0001); it
+# starts a llama-server of its own for the embedding model of semantic search (LCTYSP-0019).
 #
 #   /usr/bin/ruby lcty.rb                            # => http://127.0.0.1:45280, or the next free port up to 45379
 #   LCTY_PORT=8080 /usr/bin/ruby lcty.rb             # => http://127.0.0.1:8080 (that port only; PORT if unset)
@@ -37,6 +38,7 @@ require_relative 'lib/store'
 require_relative 'lib/v1/servlet'
 require_relative 'lib/servlets'
 require_relative 'lib/rpc/servlet'
+require_relative 'lib/embedding'
 
 module Lcty
   # The path the site is served under (Chatty.base_url: --base-url or LCTY_BASE_URL), starting and ending with "/"
@@ -198,6 +200,10 @@ module Lcty
       abort "lcty-rb: #{e.message}"
     end
     mount_all(s)
+    # The vector pair and the embedding server of semantic search (LCTYSP-0019): started without waiting for it, and
+    # its changes announced to the pages over /v1/rpc
+    Chatty::Embedding.notifier = ->(method, params) { Rpc::HUB.broadcast(method, params) }
+    Chatty::Embedding.start
     # Ctrl-C (INT) and launchd's TERM. A trap handler may not take a Mutex, which closing the connections does, so the
     # stop runs on a thread of its own
     %w[INT TERM].each { |sig| trap(sig) { Thread.new { stop(s) } } }
@@ -209,7 +215,11 @@ module Lcty
     $stderr.puts "lcty-rb: settings: #{settings}"
     users = auth ? "#{Chatty.basic_users.keys.join(', ')} (realm #{auth.realm.inspect})" : 'none (no --basic-auth)'
     $stderr.puts "lcty-rb: basic authentication: #{users}"
-    s.start
+    begin
+      s.start
+    ensure
+      Chatty::Embedding.stop # the child llama-server goes with the server
+    end
   end
 end
 

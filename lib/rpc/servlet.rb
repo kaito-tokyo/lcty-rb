@@ -22,6 +22,7 @@ require 'webrick'
 require 'yaml'
 require_relative 'websocket'
 require_relative 'conv_store'
+require_relative '../embedding'
 
 module Lcty
   module Rpc
@@ -175,6 +176,15 @@ module Lcty
         peers.size
       end
 
+      # Send a notification that is not a change of c/ or t/ (vectors.<name>.changed) to every connection that
+      # receives method, under the lock so that it keeps its order with the changes
+      def broadcast(method, params)
+        @lock.synchronize do
+          text = nil
+          @conns.each { |c| c.push(text ||= JSON.generate('jsonrpc' => '2.0', 'method' => method, 'params' => params)) if c.receives.include?(method) }
+        end
+      end
+
       # Follow the elements of one conversation (nil: none), replacing what the connection followed. Done under the
       # lock, so the last id and the version returned are those right before the first notification it will get.
       def subscribe(peer, cid)
@@ -232,7 +242,7 @@ module Lcty
         peer.receives = Set.new(receives)
         peer.actor_id ||= SecureRandom.uuid # one per connection, kept if initialize is sent again
         { 'protocol' => 'lcty-rpc-prototype', 'version' => HUB.version, 'actorId' => peer.actor_id,
-          'capabilities' => { 'receives' => METHODS.keys } }
+          'capabilities' => { 'receives' => METHODS.keys + Rpc.vector_methods.keys } }
       end,
 
       'rpc.discover' => ->(_p, _peer) { DOC },
@@ -260,6 +270,8 @@ module Lcty
           [{ 'store' => 'c_html', 'op' => 'unappend', 'row' => { 'cid' => p['cid'], 'id' => p['id'] } },
            Rpc.meta_record(p['cid']), Rpc.count_record(p['cid'], count)]
         end
+        # Its rows of the vector pair are filled with NaN (LCTYSP-0019), after the line is gone from the file
+        Chatty::Embedding.messages_removed([Regexp.last_match(1)]) if /\Amsg-[um]-(.+)\z/ =~ p['id'].to_s
         { 'version' => version }
       end,
 
@@ -349,11 +361,32 @@ module Lcty
       end
     }.freeze
 
+    UNAVAILABLE = 7 # semantic search cannot be used now: no embedding server, or it is not ready
+
+    # Embed a query for the vector pair: {text} => {vector}, the 256 Float32 LE of the query (L2-normalized) in base64
+    # (LCTYSP-0019)
+    EMBED = lambda do |p, _peer|
+      text = p['text']
+      raise Error.new(INVALID_PARAMS, 'text must be a string') unless text.is_a?(String)
+      max = Chatty::Embedding::Indexer::PART_CHARS
+      raise Error.new(INVALID, "text must be at most #{max} characters") if text.size > max
+      { 'vector' => Base64.strict_encode64(Chatty::Embedding.embed_query(text).pack('e*')) }
+    rescue Chatty::Embedding::Unavailable => e
+      raise Error.new(UNAVAILABLE, "semantic search is unavailable: #{e.message}")
+    end
+
     module_function
+
+    # The methods named after the vector pair (that of the model of the settings until lib/embedding.rb is started,
+    # when they answer UNAVAILABLE): vectors.<name>.embed
+    def vector_methods
+      { "vectors.#{Chatty::Embedding.name || Chatty::Embedding.pair_name}.embed" => EMBED }
+    end
 
     # Append one element of tag after the element named, and announce it with a c_html record of the element as written:
     # its tag and attributes, not its presentation. No HTML goes to a browser over /v1/rpc: a page makes the
-    # presentation itself, from the text in the attributes (LCTYSP-0012)
+    # presentation itself, from the text in the attributes (LCTYSP-0012). A user or model message is queued for
+    # embedding (LCTYSP-0019).
     def append(p, peer, tag, inner)
       attrs = nil
       version = HUB.commit(peer) do
@@ -361,6 +394,9 @@ module Lcty
         [{ 'store' => 'c_html', 'op' => 'append',
            'row' => { 'cid' => p['cid'], 'after' => p['after'], 'tag' => tag, 'attrs' => attrs } },
          meta_record(p['cid']), count_record(p['cid'], count)]
+      end
+      if tag == 'lcty-msg' && %w[user model].include?(attrs['data-role'])
+        Chatty::Embedding.message_added(p['cid'], attrs['id'].sub(/\Amsg-[um]-/, ''))
       end
       { 'version' => version, 'attrs' => attrs }
     end
@@ -382,7 +418,7 @@ module Lcty
         return error_response(req.is_a?(Hash) ? req['id'] : nil, INVALID_REQUEST, 'invalid request')
       end
       notification = !req.key?('id')
-      fn = METHODS[req['method']]
+      fn = METHODS[req['method']] || vector_methods[req['method']]
       result =
         begin
           raise Error.new(METHOD_NOT_FOUND, "method not found: #{req['method']}") unless fn

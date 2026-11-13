@@ -95,7 +95,10 @@ module Chatty
   # The settings that take several values (once per option); their environment variable takes one only, since the
   # environment is for starting the server quickly, and more are given as options (LCTYSP-0010)
   SETTING_LISTS = %i[bind_ips allowed_origins basic_users].freeze
-  SETTING_DEFAULTS = { bind_ips: ['127.0.0.1'].freeze, base_url: '/', allowed_origins: nil, basic_users: [].freeze }.freeze
+  SETTING_DEFAULTS = {
+    bind_ips: ['127.0.0.1'].freeze, base_url: '/', allowed_origins: nil, basic_users: [].freeze,
+    llama_server: 'llama-server', embedding_hf_repo: 'ggml-org/embeddinggemma-2-GGUF:Q8_0', embedding: true
+  }.freeze
   OPTION_OF = { bind_ips: '--bind-ip', allowed_origins: '--allowed-origin', basic_users: '--basic-auth' }.freeze
 
   # The options of lcty.rb, the same for the file and the command line; what they set goes into into
@@ -116,6 +119,15 @@ module Chatty
         raise SettingsError, "--basic-auth: the user #{user[0].inspect} is given twice" if users.assoc(user[0])
         users << user
       end
+      # The embedding server of semantic search, a child process (LCTYSP-0019)
+      o.on('--llama-server=PATH', 'the llama-server to start for the embedding model (default llama-server, from ' \
+                                  'PATH)') { |v| into[:llama_server] = v }
+      o.on('--embedding-hf-repo=REPO:TAG', 'the embedding model, as --hf-repo of llama-server (default ' \
+                                           'ggml-org/embeddinggemma-2-GGUF:Q8_0)') do |v|
+        raise SettingsError, "--embedding-hf-repo: not REPO:TAG: #{v.inspect}" unless %r{\A[^\s:]+/[^\s:]+:[^\s:]+\z}.match?(v)
+        into[:embedding_hf_repo] = v
+      end
+      o.on('--no-embedding', 'start no embedding server: keyword search only') { into[:embedding] = false }
       # Each server of a machine needs a port of its own, so it is not kept with the data (LCTYSP-0010)
       o.on('--port=PORT', 'not an option: set LCTY_PORT or PORT') do
         raise SettingsError, 'the port is not an option; set LCTY_PORT or PORT'
@@ -223,6 +235,21 @@ module Chatty
     # The users of Basic authentication, {user => PHC string}; empty when no request needs credentials
     def basic_users
       @settings[:basic_users].to_h.freeze
+    end
+
+    # The llama-server lcty.rb starts for the embedding model (LCTYSP-0019)
+    def llama_server
+      @settings[:llama_server]
+    end
+
+    # The embedding model, as --hf-repo of llama-server
+    def embedding_hf_repo
+      @settings[:embedding_hf_repo]
+    end
+
+    # Whether the embedding server is started (false: --no-embedding)
+    def embedding?
+      @settings[:embedding]
     end
   end
 

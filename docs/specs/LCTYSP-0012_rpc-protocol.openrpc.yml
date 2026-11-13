@@ -507,6 +507,35 @@ methods:
     errors:
       - $ref: "#/components/errors/NotFound"
 
+  - name: vectors.eg2_264.embed
+    x-receiver: server
+    summary: Embed a query for semantic search (LCTYSP-0019)
+    description: >-
+      Named after the vector pair open now (eg2_264 for the default model; another --embedding-hf-repo names another
+      pair, and the method with it). The server embeds the text with the prefix "task: search result | query: " and
+      answers its first 256 dimensions, L2-normalized, as the 1,024 bytes of 256 Float32 LE in base64: the query the
+      worker's kernel takes.
+    paramStructure: by-name
+    params:
+      - name: text
+        required: true
+        schema:
+          type: string
+          maxLength: 6000
+    result:
+      name: query
+      schema:
+        type: object
+        required: [vector]
+        properties:
+          vector:
+            description: 256 Float32 LE, in base64
+            type: string
+            contentEncoding: base64
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/Unavailable"
+
   # ---- Requests the server sends (with an id: the page answers) ----
 
   - name: c.cmd.holds
@@ -532,6 +561,37 @@ methods:
             type: boolean
 
   # ---- Notifications the server sends (no result: always sent without an id) ----
+
+  - name: vectors.eg2_264.changed
+    x-receiver: page
+    summary: Rows of the vector pair were appended or invalidated (LCTYSP-0019)
+    description: >-
+      Sent to the connections that receive it whenever the pair changes. Its parameters are those of
+      GET /v1/vectors.eg2_264.json, so the page need not fetch it again. It carries no version: it is not a change of
+      c/ or t/, and a new generation comes only with a new run of the server.
+    paramStructure: by-name
+    params:
+      - name: rev
+        required: true
+        description: The generation, milliseconds since the Unix epoch
+        schema:
+          type: integer
+      - name: count
+        required: true
+        description: The number of records, the header included
+        schema:
+          type: integer
+      - name: invalid
+        required: true
+        description: The NaN rows, as ranges [first, last] of record numbers, ascending
+        schema:
+          type: array
+          items:
+            type: array
+            items:
+              type: integer
+            minItems: 2
+            maxItems: 2
 
   - name: c.batch.updated
     x-receiver: page
@@ -823,3 +883,6 @@ components:
         properties:
           cid:
             type: string
+    Unavailable:
+      code: 7
+      message: semantic search is unavailable (no embedding server, or it is not ready)
