@@ -258,6 +258,16 @@ module Chatty
         nil
       end
 
+      # The command line of pid ('' when it is not running or cannot be read): /proc on Linux, where ps may be missing
+      # (the dev container), else ps
+      def self.command_line(pid)
+        proc_path = "/proc/#{pid}/cmdline"
+        return File.binread(proc_path).tr("\0", ' ') if File.directory?('/proc/self')
+        `ps -o command= -p #{pid}`.to_s
+      rescue SystemCallError
+        ''
+      end
+
       # A child of a server that did not stop cleanly: TERM it when its pid still runs llama-server with its socket
       def stop_left_behind
         return unless File.exist?(@pid_path)
@@ -265,7 +275,7 @@ module Chatty
         FileUtils.rm_f(@pid_path)
         pid = Integer(pid.to_s, 10, exception: false)
         return unless pid
-        cmd = `ps -o command= -p #{pid}`.to_s
+        cmd = LlamaServer.command_line(pid)
         return unless sock && cmd.include?('llama-server') && cmd.include?(sock)
         say "stopping llama-server (pid #{pid}) left behind by a server that did not stop cleanly"
         Process.kill('TERM', pid) rescue nil
