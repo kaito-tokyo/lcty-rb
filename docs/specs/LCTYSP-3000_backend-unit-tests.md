@@ -54,6 +54,9 @@ changed.
 | [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `tools/convert.rb`               |
 | [LCTYSP-3024](LCTYSP-3024_password.feature)          | `lib/password.rb`: the password hashes               |
 | [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)        | `lib/basic_auth.rb`: Basic authentication            |
+| [LCTYSP-3026](LCTYSP-3026_vector-pair.feature)       | `lib/embedding/vector_pair.rb`: the vector pair      |
+| [LCTYSP-3027](LCTYSP-3027_embedding-server.feature)  | `lib/embedding/llama_server.rb`: embedding server    |
+| [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)  | `lib/embedding.rb`: indexing, serving, queries       |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.

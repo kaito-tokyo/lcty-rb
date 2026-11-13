@@ -81,6 +81,13 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
 
     Basic sends the password itself; from outside the machine, put HTTPS in front of the server (a reverse proxy). A
     `.htdigest` of an older version stops the server: give its users with `--basic-auth`, then remove it.
+  - Embedding on the server (LCTYSP-0019, in progress: the pages do not use it yet): lcty.rb starts a `llama-server` of
+    its own for the embedding model, on a UNIX socket, and embeds every message in the background.
+    - `--llama-server=PATH`: the `llama-server` to start (default `llama-server`, from `PATH`).
+    - `--embedding-hf-repo=REPO:TAG`: the model, as `--hf-repo` of llama-server (default
+      `ggml-org/embeddinggemma-2-GGUF:Q8_0`).
+    - `--no-embedding`: start no embedding server. A `llama-server` that cannot be started is not an error either:
+      the server logs why and goes on without it. The child's own output goes to `_llama-server.log`.
 - Everything else (the `llama-server` URL, API key, model names) is set in the settings dialog (the ⚙︎ button in the sidebar) and stored in the
   browser. The default API key is `<hostname>-<user>`, the same as `run-llama-cpp.sh` uses.
 
@@ -99,6 +106,9 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 - `c-former/`: every conversation file as it was before `tools/convert.rb` converted it.
 - `lcty_fuzzy_search.sqlite`: the vectors of semantic search. They are derived, but only the browser can make them
   again (it does so while a page is open), so they are kept.
+- `lcty_fuzzy_search.eg2_264.dat` and `.idx`: the vectors the server makes of every message (LCTYSP-0019), to replace
+  `lcty_fuzzy_search.sqlite`. They are kept too: making them again embeds every message. `lcty_embedding.pid` names
+  the server's `llama-server` while it runs.
 - Files starting with `_` are derived (the search index) and are made anew at every start.
 
 Back up everything that does not start with `_`:

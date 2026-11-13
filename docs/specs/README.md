@@ -90,6 +90,9 @@ for the backend ones).
 | [LCTYSP-3023](LCTYSP-3023_convert.feature)                    | Converting the conversation files             | `tests/backend/convert_c_test.rb`                            |
 | [LCTYSP-3024](LCTYSP-3024_password.feature)                   | Password hashes                               | `tests/backend/password_test.rb`                             |
 | [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)                 | Basic authentication                          | `tests/backend/basic_auth_test.rb`                           |
+| [LCTYSP-3026](LCTYSP-3026_vector-pair.feature)                | Vector pair                                   | `tests/backend/vector_pair_test.rb`                          |
+| [LCTYSP-3027](LCTYSP-3027_embedding-server.feature)           | Embedding server                              | `tests/backend/llama_server_test.rb`                         |
+| [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)           | Embedding on the server                       | `tests/backend/server_embedding_test.rb`                     |
 ### Withdrawn features
 
 These numbers were used by features that were removed with what they tested. They are not reused; the features are in

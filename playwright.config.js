@@ -62,7 +62,8 @@ export default defineConfig({
 	webServer: external
 		? undefined
 		: {
-				command: "/usr/bin/ruby lcty.rb",
+				// No embedding server (LCTYSP-0019): the tests never start a model
+				command: "/usr/bin/ruby lcty.rb --no-embedding",
 				url: `http://127.0.0.1:${PORT}/`,
 				reuseExistingServer: false,
 				env: {

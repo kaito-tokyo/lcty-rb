@@ -199,11 +199,19 @@ paths:
   /v1/vectors.eg2_264.dat:
     get:
       tags: [API]
-      summary: The vector binary of the default embedding model (LCTYSP-0008)
+      summary: >-
+        With Range, bytes of the rows of the vector pair (LCTYSP-0019; 206, 412 when If-Match is not the generation);
+        without it, the vector binary of the default embedding model (LCTYSP-0008)
   /v1/vectors.eg2_264.idx:
     get:
       tags: [API]
-      summary: The index of the vector binary (LCTYSP-0008)
+      summary: >-
+        With Range, bytes of the ids of the vector pair (LCTYSP-0019); without it, the index of the vector binary
+        (LCTYSP-0008)
+  /v1/vectors.eg2_264.json:
+    get:
+      tags: [API]
+      summary: The generation, the count and the invalid rows of the vector pair (LCTYSP-0019)
   /v1/rpc:
     get:
       tags: [API]

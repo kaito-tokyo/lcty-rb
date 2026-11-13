@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# A stand-in for llama-server in the backend tests (LCTYSP-3027, LCTYSP-3028): it listens on the UNIX socket of --host
+# and answers GET /health and POST /v1/embeddings, one request per connection, with a vector of 768 numbers made from
+# each input text. It prints its command line and the LLAMA_* variables of its environment, which go to the child log.
+#
+#   FAKE_LLAMA_DIMS     the numbers of each vector (default 768)
+#   FAKE_LLAMA_EXIT     exit with 3 this many seconds after it started
+#   FAKE_LLAMA_DELAY    seconds before it listens (it is not ready meanwhile)
+
+require 'json'
+require 'socket'
+require 'zlib'
+
+$stdout.sync = true
+puts "argv #{ARGV.join(' ')}"
+puts "env #{ENV.keys.select { |k| k.start_with?('LLAMA_') }.sort.join(' ')}"
+sock = ARGV[ARGV.index('--host') + 1]
+dims = Integer(ENV.fetch('FAKE_LLAMA_DIMS', '768'))
+Thread.new { sleep Float(ENV['FAKE_LLAMA_EXIT']); exit! 3 } if ENV['FAKE_LLAMA_EXIT']
+sleep Float(ENV['FAKE_LLAMA_DELAY']) if ENV['FAKE_LLAMA_DELAY']
+trap('TERM') { exit! 0 }
+
+# The vector of a text: a function of its CRC-32, so the same text always gets the same vector
+def vector(text, dims)
+  seed = Zlib.crc32(text)
+  Array.new(dims) { |i| Math.sin(seed + i) }
+end
+
+server = UNIXServer.new(sock)
+loop do
+  c = server.accept
+  head = +''
+  head << c.gets.to_s until head.end_with?("\r\n\r\n") || c.eof?
+  length = head[/^content-length:\s*(\d+)/i, 1].to_i
+  body = length.positive? ? c.read(length) : ''
+  status, out =
+    if head.start_with?('GET /health')
+      [200, '{"status":"ok"}']
+    elsif head.start_with?('POST /v1/embeddings')
+      inputs = JSON.parse(body)['input']
+      [200, JSON.generate('data' => inputs.each_with_index.map { |t, i| { 'index' => i, 'embedding' => vector(t, dims) } })]
+    else
+      [404, '{}']
+    end
+  c.write("HTTP/1.1 #{status} X\r\nContent-Type: application/json\r\nContent-Length: #{out.bytesize}\r\n" \
+          "Connection: close\r\n\r\n#{out}")
+  c.close
+end

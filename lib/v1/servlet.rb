@@ -12,6 +12,7 @@ require 'securerandom'
 require 'digest'
 require_relative '../store'
 require_relative 'vector_db'
+require_relative '../embedding'
 
 module Chatty
   module V1
@@ -48,6 +49,8 @@ module Chatty
       end
 
       def route(method, parts, req, res)
+        return if method == 'GET' && parts.size == 1 && serve_pair(parts[0], req, res)
+
         case [method, parts.join('/')]
         when ['GET', 'defaults.json']
           return json(res, 200, V1.defaults)
@@ -142,11 +145,14 @@ module Chatty
           # t.batch.updated for its tags (LCTYSP-0014)
           id = parts[1]
           path = Store.conv_path(id)
+          gone = []
           Chatty.commit('c.batch.updated') do
             next [] unless File.exist?(path)
+            gone = Embedding.message_ids_of(path)
             File.unlink(path)
             %w[c_meta c_recordcount].map { |s| { 'store' => s, 'op' => 'delete', 'row' => { 'cid' => id } } }
           end
+          Embedding.messages_removed(gone) # their rows of the vector pair are filled with NaN (LCTYSP-0019)
           INDEX.remove(id)
           TAGS.delete_conversation_tags(id)
           C_STORE.delete_stats_of(id) # what was measured of its replies (lcty_c.sqlite)
@@ -154,6 +160,62 @@ module Chatty
         else
           raise HttpError.new(404, 'no such endpoint')
         end
+      end
+
+      PAIR_FILE_RE = /\Avectors\.([0-9a-z]+_\d+)\.(json|dat|idx)\z/.freeze
+
+      # The vector pair of LCTYSP-0019 (lib/embedding.rb): GET vectors.<name>.json, and .dat and .idx with Range. A
+      # request for .dat or .idx without Range is left to the distribution of LCTYSP-0008, which the pages fetch until
+      # they move to the pair. Returns whether it answered.
+      def serve_pair(file, req, res)
+        m = PAIR_FILE_RE.match(file)
+        pair = Embedding.pair
+        return false unless m
+        return json(res, 503, 'error' => 'the vector pair is not open') if pair.nil? && m[2] == 'json'
+        return false unless pair && m[1] == Embedding.name
+        return serve_summary(pair, req, res) if m[2] == 'json'
+        return false unless req['range']
+
+        serve_range(pair, m[2].to_sym, req, res)
+      end
+
+      # The JSON of the pair, revalidated by an ETag of its content
+      def serve_summary(pair, req, res)
+        body = JSON.generate(pair.summary)
+        etag = %("#{Digest::SHA256.hexdigest(body)[0, 32]}")
+        res['ETag'] = etag
+        res['Cache-Control'] = 'no-cache'
+        return res.status = 304 if req['if-none-match'].to_s.split(/\s*,\s*/).include?(etag)
+
+        json_body(res, 200, body)
+        true
+      end
+
+      # bytes=<first>-<last> of .dat or .idx: 206, or 412 when If-Match names another generation, or 416
+      def serve_range(pair, kind, req, res)
+        etag = %("#{pair.rev}")
+        res['ETag'] = etag
+        if (im = req['if-match']) && im.strip != '*' && !im.split(/\s*,\s*/).include?(etag)
+          return json(res, 412, 'error' => 'another generation of the pair')
+        end
+        r = /\Abytes=(\d+)-(\d+)\z/.match(req['range'].to_s.strip)
+        first, last = r && [r[1].to_i, r[2].to_i]
+        body, size = first && first <= last ? pair.read(kind, first, last) : [nil, pair.read(kind, 0, 0)[1]]
+        unless body
+          res['Content-Range'] = "bytes */#{size}"
+          return json(res, 416, 'error' => 'only bytes=<first>-<last> within the file')
+        end
+        res.status = 206
+        res['Content-Type'] = 'application/octet-stream'
+        res['Content-Range'] = "bytes #{first}-#{first + body.bytesize - 1}/#{size}"
+        res.body = body
+        true
+      end
+
+      def json_body(res, status, body)
+        res.status = status
+        res['Content-Type'] = 'application/json; charset=utf-8'
+        res.body = body
       end
 
       def reindex(id)

@@ -6,8 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0019: Embedding on the server
 
-- Status: Draft. Nothing of it is implemented: the browser still embeds rounds
-  ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)).
+- Status: Draft. The server's part is implemented: the embedding server, the vector pair, the indexer, the JSON, the
+  pair served by `Range`, `vectors.eg2_264.embed` and `vectors.eg2_264.changed` (`lib/embedding.rb`,
+  `lib/embedding/`; [LCTYSP-3026](LCTYSP-3026_vector-pair.feature), [LCTYSP-3027](LCTYSP-3027_embedding-server.feature),
+  [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)). The browser does not use it yet: it still embeds rounds and
+  fetches the distribution of [LCTYSP-0008](LCTYSP-0008_vector-binary.md), which `/v1/vectors.eg2_264.dat` and `.idx`
+  keep answering to a request without `Range`. What goes when the browser moves (the vector binary, the SQLite DB,
+  `embed.js`, the setting `embedding_model`) is still there. The query's vector comes back as bytes in base64
+  ([Open questions](#open-questions), 3).
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0002](LCTYSP-0002_llm-backend.md),
   [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md),
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md),
