@@ -5,7 +5,8 @@
 // fuzzy_search.worker.js: semantic search off the main thread (LCTYSP-0008, LCTYSP-0019). A classic worker with no
 // imports, started by js/search/vectors.js as new Worker(siteUrl("fuzzy_search.worker.js")), at the root of the site. It
 // is not a /c/ file: it works on the server's vector data, which a conversation file opened on its own does not need
-// (LCTYSP-0005). bdot264.wasm is found next to this file (self.location), the vector pair at the URLs the page gives.
+// (LCTYSP-0005). bdot264.wasm and the vector pair (v1/vectors.eg2_264.*) are found from this file's own URL
+// (self.location, the root of the site): a message never names a URL to fetch.
 //
 // It keeps a copy of the server's vector pair in memory and brings it up to date from the pair's JSON (LCTYSP-0019):
 // another generation (rev) replaces the copy, the same one fetches only the records past the copy's end, with Range
@@ -15,7 +16,7 @@
 // the wasm cannot be used (the engine rejects it, or the 256 MiB memory cannot be made), the same scores are computed in
 // JavaScript over the same layout.
 //
-//   { id, op: "load", json, dat, idx, summary? } (URLs; summary: the JSON's content, when the page has it already)
+//   { id, op: "load", summary? } (summary: the JSON's content, when the page has it already)
 //     → { id, rows }
 //   { id, op: "search", query: Float32Array(256), k, allow }
 //     → { id, results: [[msgId, score], …] } (the k best ids by their best row, descending; allow: the ids that may
@@ -36,6 +37,12 @@ const ROWS = 0x110000;
 const MAX_ROWS = 250000;
 const PAGES = 4096; // 256 MiB, as bdot264 imports it
 const QNAN = 0x7fc00000;
+// The files of the vector pair of the default embedding model, at the root of the site like this file (LCTYSP-0019)
+const PAIR = {
+	json: new URL("v1/vectors.eg2_264.json", self.location),
+	dat: new URL("v1/vectors.eg2_264.dat", self.location),
+	idx: new URL("v1/vectors.eg2_264.idx", self.location),
+};
 
 const state = {
 	kernel: null,
@@ -85,12 +92,18 @@ function uuid(b, off) {
 async function summaryOf(url) {
 	const r = await fetch(url, { cache: "no-cache" }); // revalidated by its ETag
 	if (!r.ok) throw new Error(`failed to fetch the vectors (HTTP ${r.status})`);
-	const s = await r.json();
+	return checked(await r.json());
+}
+
+/** s when it is the JSON of a pair (also a summary the page gives), else an Error */
+function checked(s) {
+	const int = Number.isSafeInteger;
 	if (
-		!Number.isSafeInteger(s?.rev) ||
-		!Number.isSafeInteger(s.count) ||
+		!int(s?.rev) ||
+		!int(s.count) ||
 		s.count < 1 ||
-		!Array.isArray(s.invalid)
+		!Array.isArray(s.invalid) ||
+		!s.invalid.every((r) => Array.isArray(r) && int(r[0]) && int(r[1]))
 	)
 		throw new Error("broken vectors (not the JSON of a pair)");
 	return s;
@@ -129,7 +142,7 @@ function room(n, memory) {
 }
 
 /** Bring the copy up to the summary s; Stale when the generation changed meanwhile */
-async function sync(urls, { rev, count, invalid }) {
+async function sync({ rev, count, invalid }) {
 	const n = count - 1; // rows, the header left out
 	if (n > MAX_ROWS)
 		throw new Error(`too many vectors (${n}; the limit is ${MAX_ROWS})`);
@@ -138,8 +151,8 @@ async function sync(urls, { rev, count, invalid }) {
 	let idBytes = null;
 	if (n > from) {
 		[rows, idBytes] = await Promise.all([
-			range(urls.dat, rev, (from + 1) * REC, count * REC - 1),
-			range(urls.idx, rev, (from + 1) * ID, count * ID - 1),
+			range(PAIR.dat, rev, (from + 1) * REC, count * REC - 1),
+			range(PAIR.idx, rev, (from + 1) * ID, count * ID - 1),
 		]);
 	}
 	const { memory } = await kernel();
@@ -182,11 +195,12 @@ async function sync(urls, { rev, count, invalid }) {
 }
 
 /** Bring the copy up to date (from summary, or else from the JSON); returns the row count. */
-async function load({ json, dat, idx, summary }) {
+async function load({ summary }) {
 	for (let attempt = 0; attempt < 3; attempt++) {
-		const s = attempt === 0 && summary ? summary : await summaryOf(json);
+		const s =
+			attempt === 0 && summary ? checked(summary) : await summaryOf(PAIR.json);
 		try {
-			return await sync({ dat, idx }, s);
+			return await sync(s);
 		} catch (e) {
 			if (!(e instanceof Stale)) throw e;
 		}

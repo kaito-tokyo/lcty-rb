@@ -68,14 +68,7 @@ export function createVectorStore() {
 
 		/** Bring the worker's copy up to date (concurrent calls share one load) */
 		async refresh(summary) {
-			const at = (ext) => siteUrl(`v1/vectors.${PAIR}.${ext}`).href;
-			state.loading ||= call({
-				op: "load",
-				json: at("json"),
-				dat: at("dat"),
-				idx: at("idx"),
-				summary,
-			})
+			state.loading ||= call({ op: "load", summary })
 				.then((r) => {
 					state.rows = r.rows;
 				})

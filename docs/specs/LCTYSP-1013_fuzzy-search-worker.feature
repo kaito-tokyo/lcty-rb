@@ -9,9 +9,11 @@
 Feature: LCTYSP-1013 The semantic search worker
 
   The worker is started with new Worker(siteUrl("fuzzy_search.worker.js")) (a classic worker; js/search/vectors.js
-  starts it, LCTYSP-1011). It answers each message with a message of the same id. { op: "load", json, dat, idx } brings
-  its copy of the server's vector pair up to date and answers { rows }, the number of rows of the copy: it fetches the
-  pair's JSON ({ rev, count, invalid }), or takes it from summary when the message has one, and then, with Range and
+  starts it, LCTYSP-1011). It answers each message with a message of the same id. { op: "load", summary } brings its
+  copy of the server's vector pair up to date and answers { rows }, the number of rows of the copy. The pair is
+  /v1/vectors.eg2_264.json, .dat and .idx of the worker's own site, found from its own URL: a message names no URL to
+  fetch. It fetches the pair's JSON ({ rev, count, invalid }), or takes it from summary when the message has one (checked
+  as the JSON is), and then, with Range and
   If-Match of the generation rev, the records of .dat (256 Float32 and 32 zero bytes each, 1,056 bytes) and of .idx (16
   bytes each) that the copy lacks, never record 0, the header. Another generation replaces the copy; the same one
   fetches only the records past its end. The rows of the invalid ranges are filled with NaN, so they never score. A 412
@@ -147,6 +149,18 @@ Feature: LCTYSP-1013 The semantic search worker
     Then it answers with the message's id and 2 rows
     And the JSON was not requested
     And a search with k 3 answers the ids "b" and "a"
+
+  Scenario: A summary that is not that of a pair answers an error
+    Given the pair holds the rows of "a" and "b" in the generation 1
+    When the worker is sent a load of the pair with the summary {"rev": 1, "count": 3, "invalid": [["x", 2]]}
+    Then it answers with the message's id and the error "broken vectors (not the JSON of a pair)"
+    And the JSON was not requested
+
+  Scenario: URLs in a load message are not fetched
+    Given the pair holds the rows of "a" and "b" in the generation 1
+    When the worker is sent a load of the pair whose message also names json, dat and idx at http://elsewhere.test
+    Then it answers with the message's id and 2 rows
+    And nothing was requested from elsewhere.test
 
   Scenario Outline: A failed load answers an error and keeps the copy
     Given the pair holds the rows of "a" and "b" in the generation 1

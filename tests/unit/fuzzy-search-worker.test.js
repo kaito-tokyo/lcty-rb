@@ -85,7 +85,8 @@ const abort = () => {
  * and server.invalid are the pair; server.json replaces its JSON; server.onJson(n) runs after the n-th request of the
  * JSON; server.fail is an answer per file (json, dat, idx) that replaces the pair's; server.cut drops bytes from the
  * end of a file's answer; server.wasm is the answer of /bdot264.wasm (undefined: the real file). server.requests counts
- * the requests and server.asked keeps the Range and If-Match of each request of .dat and .idx.
+ * the requests, server.asked keeps the Range and If-Match of each request of .dat and .idx, and server.hosts the host of
+ * every request.
  */
 async function background(step, t) {
 	const server = {
@@ -99,13 +100,15 @@ async function background(step, t) {
 		wasm: () => undefined,
 		requests: { json: 0, dat: 0, idx: 0, wasm: 0 },
 		asked: { dat: [], idx: [] },
+		hosts: [],
 		workers: {},
 	};
 	await step(
 		"Given the vector pair of /v1/vectors.eg2_264.json, .dat and .idx is answered by the test",
 		() => {
 			routeFetch(t, (request) => {
-				const path = new URL(request.url).pathname;
+				const { host, pathname: path } = new URL(request.url);
+				server.hosts.push(host);
 				if (path === JSON_PATH) {
 					const n = ++server.requests.json;
 					if (server.fail.json) return server.fail.json(request);
@@ -178,11 +181,7 @@ function send(server, msg, name = "w") {
 }
 
 const load = (server, name, extra = {}) =>
-	send(
-		server,
-		{ op: "load", json: JSON_PATH, dat: DAT, idx: IDX, ...extra },
-		name,
-	);
+	send(server, { op: "load", ...extra }, name);
 const search = (server, k, extra = {}, name) =>
 	send(server, { op: "search", query: QUERY, k, ...extra }, name);
 
@@ -593,6 +592,49 @@ scenario(
 		await thenSearchAnswers(step, server, ["b", "a"]);
 	},
 );
+
+scenario(
+	"A summary that is not that of a pair answers an error",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenAB(step, server);
+		let result;
+		await step(
+			'When the worker is sent a load of the pair with the summary {"rev": 1, "count": 3, "invalid": [["x", 2]]}',
+			async () => {
+				result = await load(server, "w", {
+					summary: { rev: 1, count: 3, invalid: [["x", 2]] },
+				});
+			},
+		);
+		await thenError(step, result, "broken vectors (not the JSON of a pair)");
+		await step("And the JSON was not requested", () => {
+			expect(server.requests.json).toBe(0);
+		});
+	},
+);
+
+scenario("URLs in a load message are not fetched", async ({ step, t }) => {
+	const server = await background(step, t);
+	await givenAB(step, server);
+	let result;
+	await step(
+		"When the worker is sent a load of the pair whose message also names json, dat and idx at http://elsewhere.test",
+		async () => {
+			const at = (ext) => `http://elsewhere.test/v1/vectors.eg2_264.${ext}`;
+			result = await load(server, "w", {
+				json: at("json"),
+				dat: at("dat"),
+				idx: at("idx"),
+			});
+		},
+	);
+	await thenRows(step, result, 2);
+	await step("And nothing was requested from elsewhere.test", () => {
+		expect(server.hosts).not.toContain("elsewhere.test");
+		expect(server.requests).toMatchObject({ json: 1, dat: 1, idx: 1 });
+	});
+});
 
 for (const { change, error, apply } of [
 	{

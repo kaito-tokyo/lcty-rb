@@ -50,7 +50,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      22 |       4 |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the copies of the list                 |       0 |       9 |
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: the vector store and query vectors  |      22 |       0 |
-| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      31 |       0 |
+| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      33 |       0 |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                           |       0 |      19 |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      83 |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      39 |

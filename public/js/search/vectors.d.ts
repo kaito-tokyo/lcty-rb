@@ -62,7 +62,8 @@ export interface VectorStore {
 /**
  * Semantic search in a worker (fuzzy_search.worker.js at the root of the site): it keeps a copy of the vector pair and
  * scores the query against every row with bdot264 (LCTYSP-0008). The main thread only sends messages; the worker
- * starts on first use. The worker is given the pair as whole URLs (siteUrl, LCTYSP-0005).
+ * starts on first use. The worker finds the pair from its own URL at the root of the site (LCTYSP-0005): the page
+ * sends it no URL, so nothing the page is given can make the worker fetch from elsewhere.
  */
 export function createVectorStore(): VectorStore;
 
