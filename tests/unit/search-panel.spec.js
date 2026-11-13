@@ -10,22 +10,16 @@
 // workers, lcty_c and lcty_t) and the real semantic search worker (/fuzzy_search.worker.js). The tab's /v1/rpc
 // connection is a stand-in (window.rpc, answering window.lists) handed to readMetaDbFrom and
 // readTagsOfConversationsFrom, and the notifications are passed to applyMetaBatch and applyTagBatch, so the workers
-// store the copies as they do in a page. Every request is answered by a route the test sets (server.*), which also
-// records it: the tags, the keyword search, the snippets, the rounds of the conversations, the defaults, the
-// distribution files (one-hot rows, so the query's scores are known) and the embeddings of the fake llama-server.
+// store the copies as they do in a page; the same stand-in answers vectors.eg2_264.embed with the query vector
+// (window.embedded keeps the texts it was asked). Every request is answered by a route the test sets (server.*), which
+// also records it: the tags, the keyword search, the snippets, the rounds of the conversations and the vector pair
+// (its JSON, and its rows and ids by Range; one-hot rows, so the query's scores are known).
 // What the panel shows is read from the list (its links) and from the items it gave list.show(), kept in window.shown.
 
 import { expect, test } from "@playwright/test";
 import { givenAPage } from "./unit-page.js";
 
-const LLM_URL = "http://llm.test";
-const CORS = {
-	"Access-Control-Allow-Origin": "*",
-	"Access-Control-Allow-Headers": "Content-Type, Authorization",
-	"Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-/** The rounds (user message ids, UUIDv7) by the names the feature gives them. */
+/** The messages (UUIDv7) by the names the feature gives them: a round is the id of its user message. */
 const R = {
 	"r-a": "01900000-0000-7000-8000-00000000000a",
 	"r-a1": "01900000-0000-7000-8000-0000000000a1",
@@ -33,6 +27,7 @@ const R = {
 	"r-b": "01900000-0000-7000-8000-00000000000b",
 	"r-c": "01900000-0000-7000-8000-00000000000c",
 	"r-z": "01900000-0000-7000-8000-00000000000f",
+	"m-a": "01900000-0000-7000-8000-0000000000aa",
 };
 
 /** A row of c_meta as c.list and c.batch.updated give it (LCTYSP-0014). */
@@ -77,21 +72,41 @@ const TAGS = [
 	{ file: "00020-x.html", name: "x", ops: [], prompt: "", memory: [] },
 ];
 
-/** The distribution files of these rounds: row i is the unit vector e_i (256 × f32 LE and 32 zero bytes). */
-function distribution(ids) {
-	const dat = Buffer.alloc(ids.length * 1056);
-	const idx = Buffer.alloc(ids.length * 16);
+const REV = 1763000000000;
+
+/** The vector pair of these messages: record 0 is the header, record i + 1 the unit vector e_i and the id of the ith. */
+function pairOf(ids) {
+	const n = ids.length + 1;
+	const dat = Buffer.alloc(n * 1056);
+	const idx = Buffer.alloc(n * 16);
 	ids.forEach((id, i) => {
-		dat.writeFloatLE(1, i * 1056 + i * 4);
-		Buffer.from(id.replaceAll("-", ""), "hex").copy(idx, i * 16);
+		dat.writeFloatLE(1, (i + 1) * 1056 + i * 4);
+		Buffer.from(id.replaceAll("-", ""), "hex").copy(idx, (i + 1) * 16);
 	});
-	return { dat, idx };
+	return { json: { rev: REV, count: n, invalid: [] }, dat, idx };
 }
 
-/** The query's embedding: 3, 2, 1 in the first dimensions, so it scores the rows 3/√14, 2/√14 and 1/√14. */
-const QUERY_EMBEDDING = Array.from({ length: 768 }, (_, i) =>
-	i < 3 ? 3 - i : 0,
-);
+/** The query vector, as vectors.eg2_264.embed answers it: (3, 2, 1, 0, …)/√14, scoring the rows 0.802, 0.535, 0.267. */
+const QUERY = Buffer.from(
+	Float32Array.from({ length: 256 }, (_, i) =>
+		i < 3 ? (3 - i) / Math.sqrt(14) : 0,
+	).buffer,
+).toString("base64");
+
+/** Answer a request for bytes of .dat or .idx by its Range, as the server does. */
+function answerRange(route, body) {
+	const headers = route.request().headers();
+	if (headers["if-match"] && headers["if-match"] !== `"${REV}"`)
+		return route.fulfill({ status: 412, body: "stale" });
+	const [, first, last] = /^bytes=(\d+)-(\d+)$/.exec(headers.range ?? "") ?? [];
+	if (first === undefined) return route.fulfill({ body });
+	return route.fulfill({
+		status: 206,
+		contentType: "application/octet-stream",
+		headers: { "Content-Range": `bytes ${first}-${last}/${body.length}` },
+		body: body.subarray(Number(first), Number(last) + 1),
+	});
+}
 
 // ---- Background ----
 
@@ -118,35 +133,36 @@ async function background(page, context) {
 					entry.done = true;
 				});
 			};
-			window.settings = null;
-			// The tab's /v1/rpc connection: answers what window.lists holds
+			// The tab's /v1/rpc connection: answers what window.lists holds, and embeds a query with window.query
 			window.lists = {};
+			window.embedded = [];
+			window.embedError = null;
 			window.rpc = {
-				call: async (method) => structuredClone(window.lists[method]),
+				call: async (method, params) => {
+					if (method !== "vectors.eg2_264.embed")
+						return structuredClone(window.lists[method]);
+					window.embedded.push(params.text);
+					if (window.embedError) throw window.embedError;
+					return { vector: window.query };
+				},
 			};
 		});
+		await page.evaluate((q) => {
+			window.query = q;
+		}, QUERY);
 	});
-	const empty = distribution([]);
 	const server = {
 		tags: [],
 		searches: [],
 		snippets: [],
 		conversations: 0,
-		defaults: 0,
-		embeddings: [],
 		search: (route) => route.fulfill({ json: { results: [] } }),
 		snippet: (route) => route.fulfill({ json: {} }),
 		list: (route) => route.fulfill({ json: [] }),
-		defaultsAnswer: (route) =>
-			route.fulfill({ json: { embedding_model: "emb" } }),
-		files: empty,
-		embed: (route) =>
-			route.fulfill({
-				headers: CORS,
-				json: { data: [{ index: 0, embedding: QUERY_EMBEDDING }] },
-			}),
+		pair: pairOf([]),
+		pairJson: (route) => route.fulfill({ json: server.pair.json }),
 	};
-	await test.step("And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations, GET /v1/defaults.json, the distribution files and the embeddings of http://llm.test are answered by the test", async () => {
+	await test.step("And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations and the vector pair are answered by the test, and vectors.eg2_264.embed by the tab's connection", async () => {
 		await context.route("**/v1/tags", (route) =>
 			route.fulfill({
 				headers: { ETag: '"t1"' },
@@ -165,25 +181,13 @@ async function background(page, context) {
 			server.conversations++;
 			return server.list(route);
 		});
-		await context.route("**/v1/defaults.json", (route) => {
-			server.defaults++;
-			return server.defaultsAnswer(route);
-		});
+		await context.route("**/v1/vectors.eg2_264.json", (route) =>
+			server.pairJson(route),
+		);
 		for (const ext of ["dat", "idx"])
 			await context.route(`**/v1/vectors.eg2_264.${ext}`, (route) =>
-				route.fulfill({
-					contentType: "application/octet-stream",
-					headers: { ETag: `"${server.files.dat.length}"` },
-					body: server.files[ext],
-				}),
+				answerRange(route, server.pair[ext]),
 			);
-		await context.route(`${LLM_URL}/**`, (route) => {
-			const req = route.request();
-			if (req.method() === "OPTIONS")
-				return route.fulfill({ status: 204, headers: CORS });
-			server.embeddings.push({ url: req.url(), body: req.postDataJSON() });
-			return server.embed(route);
-		});
 	});
 	await test.step('And GET /v1/tags defines the tags "y" and then "x"', () => {
 		server.tags = TAGS;
@@ -224,7 +228,7 @@ function createPanel(page) {
 			list: document.getElementById("list"),
 			box: document.getElementById("box"),
 			status: document.getElementById("status"),
-			getSettings: () => window.settings,
+			rpc: () => window.rpc,
 		});
 	});
 }
@@ -309,27 +313,24 @@ function searchReturns(server, rounds) {
 
 // ---- Semantic search ----
 
-async function givenSemanticSearch(server, page) {
-	await test.step('And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"', async () => {
-		await page.evaluate((url) => {
-			window.settings = {
-				backends: [{ id: "local", base_url: url, embedding_model: "emb" }],
-				default_backend: "local",
-			};
-		}, LLM_URL);
-	});
-	await test.step('And GET /v1/conversations maps the rounds "r-a" to "a", "r-b" to "b" and "r-c" to "c"', () => {
+const embedded = (page) => page.evaluate(() => window.embedded);
+
+async function givenTheRounds(server) {
+	await test.step('And GET /v1/conversations gives "a" the round "r-a", "b" the round "r-b" and "c" the round "r-c"', () => {
 		server.list = (route) =>
 			route.fulfill({
-				json: [
-					{ id: "a", message_ids: [R["r-a"]] },
-					{ id: "b", message_ids: [R["r-b"]] },
-					{ id: "c", message_ids: [R["r-c"]] },
-				],
+				json: ["a", "b", "c"].map((c) => ({
+					id: c,
+					message_rounds: [[R[`r-${c}`], R[`r-${c}`]]],
+				})),
 			});
 	});
-	await test.step('And the distribution files hold the rounds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267', () => {
-		server.files = distribution([R["r-a"], R["r-b"], R["r-c"]]);
+}
+
+async function givenSemanticSearch(server) {
+	await givenTheRounds(server);
+	await test.step('And the vector pair holds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267', () => {
+		server.pair = pairOf([R["r-a"], R["r-b"], R["r-c"]]);
 	});
 }
 
@@ -591,8 +592,8 @@ test("A keyword search shows the rounds the server found, in rank order", async 
 		]);
 		expect(await statusText(page)).toBe("");
 	});
-	await test.step("And nothing was sent to GET /v1/defaults.json or POST /v1/snippets", () => {
-		expect([server.defaults, server.snippets]).toEqual([0, []]);
+	await test.step("And nothing was sent to POST /v1/snippets", () => {
+		expect(server.snippets).toEqual([]);
 	});
 });
 
@@ -781,7 +782,7 @@ test("A semantic search is merged with the keyword search by RRF", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheLoadedPanel(page);
-	await givenSemanticSearch(server, page);
+	await givenSemanticSearch(server);
 	await test.step('And POST /v1/search returns the round "r-b" of "b" with a snippet', () =>
 		searchReturns(server, [["r-b", "b"]]));
 	await test.step('And POST /v1/snippets returns snippets for "r-a" and "r-c"', () => {
@@ -794,13 +795,8 @@ test("A semantic search is merged with the keyword search by RRF", async ({
 			});
 	});
 	await whenSetQuerySearches(page, "hello");
-	await test.step('Then the query "task: search result | query: hello" is embedded by http://llm.test/v1/embeddings with the model "emb"', () => {
-		expect(server.embeddings).toEqual([
-			{
-				url: `${LLM_URL}/v1/embeddings`,
-				body: { model: "emb", input: ["task: search result | query: hello"] },
-			},
-		]);
+	await test.step('Then vectors.eg2_264.embed is asked for the text "hello"', async () => {
+		expect(await embedded(page)).toEqual(["hello"]);
 	});
 	let items;
 	await test.step('And the list shows "b", "a" and "c", in the order of 1/61 + 1/62, 1/61 and 1/63', async () => {
@@ -833,13 +829,57 @@ test("A semantic search is merged with the keyword search by RRF", async ({
 	});
 });
 
+test("A reply's hit counts once for its round, with the better score", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheLoadedPanel(page);
+	await test.step('And GET /v1/conversations gives "a" the round "r-a" with its reply "m-a", and "b" the round "r-b"', () => {
+		server.list = (route) =>
+			route.fulfill({
+				json: [
+					{
+						id: "a",
+						message_rounds: [
+							[R["r-a"], R["r-a"]],
+							[R["m-a"], R["r-a"]],
+						],
+					},
+					{ id: "b", message_rounds: [[R["r-b"], R["r-b"]]] },
+				],
+			});
+	});
+	await test.step('And the vector pair holds "m-a", "r-b" and "r-a", which the query scores 0.802, 0.535 and 0.267', () => {
+		server.pair = pairOf([R["m-a"], R["r-b"], R["r-a"]]);
+	});
+	await test.step("And POST /v1/search returns no rounds", () =>
+		searchReturns(server, []));
+	await whenSetQuerySearches(page, "hello");
+	let items;
+	await test.step('Then the list shows "a" with the round "r-a" and "b" with the round "r-b"', async () => {
+		items = (await lastShown(page)).items;
+		expect(items.map((i) => [i.id, i.chunk_id])).toEqual([
+			["a", R["r-a"]],
+			["b", R["r-b"]],
+		]);
+		expect(await listIds(page)).toEqual(["a", "b"]);
+	});
+	await test.step('And the sources of "a" are "semantic:0.802" and of "b" "semantic:0.535"', () => {
+		expect(items.map((i) => i.sources)).toEqual([
+			["semantic:0.802"],
+			["semantic:0.535"],
+		]);
+	});
+});
+
 test("tag: filters limit the semantic hits to the conversations with the tags", async ({
 	page,
 	context,
 }) => {
 	const server = await background(page, context);
 	await givenTheLoadedPanel(page);
-	await givenSemanticSearch(server, page);
+	await givenSemanticSearch(server);
 	await test.step("And POST /v1/search returns no rounds", () =>
 		searchReturns(server, []));
 	await whenSetQuerySearches(page, "hello tag:x");
@@ -852,14 +892,14 @@ test("The rounds of the conversations are fetched once until the list changes", 
 }) => {
 	const server = await background(page, context);
 	await givenTheLoadedPanel(page);
-	await givenSemanticSearch(server, page);
+	await givenSemanticSearch(server);
 	await test.step('When setQuery searches "hello" and then "world"', async () => {
 		await setQuery(page, "hello");
 		await setQuery(page, "world");
 	});
-	await test.step("Then GET /v1/conversations was fetched once", () => {
+	await test.step("Then GET /v1/conversations was fetched once", async () => {
 		expect(server.conversations).toBe(1);
-		expect(server.embeddings).toHaveLength(2);
+		expect(await embedded(page)).toEqual(["hello", "world"]);
 	});
 	await test.step('When the tab\'s connection reads c.list and c.recordcount.list again at the version "b007.2"', async () => {
 		await holdLists(page, listsOf("b007.2", CONVERSATIONS));
@@ -875,31 +915,29 @@ test("The rounds of the conversations are fetched once until the list changes", 
 
 for (const { failure, error, fail } of [
 	{
-		failure: 'GET /v1/defaults.json says "other"',
-		error: "the vectors are for other, not emb",
-		fail: (server) => {
-			server.defaultsAnswer = (route) =>
-				route.fulfill({ json: { embedding_model: "other" } });
-		},
-	},
-	{
-		failure: 'the embeddings answer with the status 503 and "down"',
-		error: "down",
-		fail: (server) => {
-			server.embed = (route) =>
-				route.fulfill({
-					status: 503,
-					headers: CORS,
-					json: { error: { message: "down" } },
+		failure: 'vectors.eg2_264.embed answers the error 7 "no embedding server"',
+		error: "no embedding server",
+		fail: (_server, page) =>
+			page.evaluate(async () => {
+				const { RpcError } = await import("/js/api/rpc.js");
+				window.embedError = new RpcError({
+					code: 7,
+					message: "no embedding server",
 				});
+			}),
+	},
+	{
+		failure: "GET /v1/vectors.eg2_264.json answers with the status 503",
+		error: "failed to fetch the vectors (HTTP 503)",
+		fail: (server) => {
+			server.pairJson = (route) => route.fulfill({ status: 503, body: "off" });
 		},
 	},
 	{
-		failure: 'GET /v1/defaults.json answers with the status 500 and "boom"',
+		failure: 'GET /v1/conversations answers with the status 500 and "boom"',
 		error: "500 boom",
 		fail: (server) => {
-			server.defaultsAnswer = (route) =>
-				route.fulfill({ status: 500, body: "boom" });
+			server.list = (route) => route.fulfill({ status: 500, body: "boom" });
 		},
 	},
 ]) {
@@ -909,15 +947,8 @@ for (const { failure, error, fail } of [
 	}) => {
 		const server = await background(page, context);
 		await givenTheLoadedPanel(page);
-		await test.step('And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"', async () => {
-			await page.evaluate((url) => {
-				window.settings = {
-					backends: [{ id: "local", base_url: url, embedding_model: "emb" }],
-					default_backend: "local",
-				};
-			}, LLM_URL);
-		});
-		await test.step(`And ${failure}`, () => fail(server));
+		await givenTheRounds(server);
+		await test.step(`And ${failure}`, () => fail(server, page));
 		await test.step('And POST /v1/search returns the rounds "r-a" of "a"', () =>
 			searchReturns(server, [["r-a", "a"]]));
 		await whenSetQuerySearches(page, "hello");
@@ -929,33 +960,3 @@ for (const { failure, error, fail } of [
 		});
 	});
 }
-
-test("Without an embedding model only the keywords are searched", async ({
-	page,
-	context,
-}) => {
-	const server = await background(page, context);
-	await givenTheLoadedPanel(page);
-	await test.step("And the settings have no embedding model", async () => {
-		await page.evaluate((url) => {
-			window.settings = {
-				backends: [{ id: "local", base_url: url, embedding_model: "" }],
-				default_backend: "local",
-			};
-		}, LLM_URL);
-	});
-	await test.step('And POST /v1/search returns the rounds "r-a" of "a"', () =>
-		searchReturns(server, [["r-a", "a"]]));
-	await whenSetQuerySearches(page, "hello");
-	await test.step('Then the list shows "a" and the status is empty', async () => {
-		expect(await listIds(page)).toEqual(["a"]);
-		expect(await statusText(page)).toBe("");
-	});
-	await test.step("And nothing was sent to GET /v1/defaults.json, GET /v1/conversations or the embeddings", () => {
-		expect([server.defaults, server.conversations, server.embeddings]).toEqual([
-			0,
-			0,
-			[],
-		]);
-	});
-});

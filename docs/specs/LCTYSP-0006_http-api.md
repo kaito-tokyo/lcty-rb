@@ -52,14 +52,17 @@ lcty.rb answers `/v1/*` on the same origin as the pages. Bodies are JSON unless 
 
 ## Vectors
 
-| Method | Path                                                                        | Content                                                                                                                                                                                                                                                                             |
-| ------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/v1/vectors/pending?model=&limit=`                                         | Rounds waiting for embeddings: `[{id, rev, parts: [text, …]}]`, newest first, `limit` 1–16 (default 16).                                                                                                                                                                            |
-| PUT    | `/v1/vectors?model=&magic=lctyvLE0&size=3072&entry_count=&rev=<id>:<rev>,…` | Register vectors. Body: a registration vector binary (`application/octet-stream`, 768 dims). The vectors of each id in the body are replaced. Returns `{accepted, stale: [ids]}`. Up to 16 ids per request.                                                                         |
-| GET    | `/v1/vectors.eg2_264.dat`, `/v1/vectors.eg2_264.idx`                        | The distribution files of the default embedding model (256 dims, merged): `vectors.eg2_264.dat`, the rows in the kernel's memory layout, and `vectors.eg2_264.idx`, 16 bytes per row ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)). Both carry the same `ETag`; 304 when unchanged. |
+The server embeds every message itself and keeps the vectors in a pair of files; nothing outside the server registers
+vectors ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)).
 
-- `model` may contain only `[A-Za-z0-9._-]` (it becomes part of file names).
-- Details of the format and the checks are in [LCTYSP-0008](LCTYSP-0008_vector-binary.md).
+| Method | Path                                                 | Content                                                                                                                                                                                          |
+| ------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/v1/vectors.eg2_264.json`                           | The pair's generation, its number of records and its invalid rows: `{rev, count, invalid: [[first, last], …]}`, with an `ETag` of its content (304 when unchanged); 503 before the pair is open. |
+| GET    | `/v1/vectors.eg2_264.dat`, `/v1/vectors.eg2_264.idx` | The rows (1,056 bytes each) and the ids (16 bytes each) of the pair, by `Range: bytes=<first>-<last>` (206) or whole (200). `ETag: "<rev>"`; `If-Match` of another generation is 412.            |
+
+- `eg2_264` names the pair of the default embedding model; another `--embedding-hf-repo` names another one
+  ([LCTYSP-0019](LCTYSP-0019_server-embedding.md#settings)). A query is embedded over `/v1/rpc`
+  (`vectors.eg2_264.embed`, [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)).
 
 ## Tags and memory
 
@@ -87,5 +90,3 @@ See [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) for the meaning of tags and me
 ## Limits
 
 - Request bodies are limited to 64 MiB (413 otherwise).
-- The rev list of `PUT /v1/vectors` is in the URL, and WEBrick accepts request lines of up to 2,083 bytes, which is why
-  one PUT carries at most 16 ids.

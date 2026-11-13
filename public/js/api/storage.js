@@ -73,25 +73,6 @@ export function getDefaults() {
 }
 
 // ---- Search index (LCTYSP-0006, LCTYSP-0007) ----
-/** Rounds waiting for embeddings: [{id, rev, parts: [text, …]}] */
-export function vectorsPending(model, limit = 16) {
-	return request(
-		"GET",
-		`v1/vectors/pending?model=${encodeURIComponent(model)}&limit=${limit}`,
-	);
-}
-/** Replace the vectors of the ids in revs with those in body (LCTYSP-0008). */
-export async function putVectors(model, revs, { body, size, count }) {
-	const rev = revs.map(([id, r]) => `${id}:${r}`).join(",");
-	const qs = `model=${encodeURIComponent(model)}&magic=lctyvLE0&size=${size}&entry_count=${count}&rev=${rev}`;
-	const r = await fetch(siteUrl(`v1/vectors?${qs}`), {
-		method: "PUT",
-		headers: { "Content-Type": "application/octet-stream" },
-		body,
-	});
-	if (!r.ok) throw httpError(r.status, await r.text());
-	return r.json();
-}
 /** Keyword search: {q, tags, limit} → {results: [{id, conv_id, snippet}]} (in rank order) */
 export function searchConversations(body) {
 	return request("POST", "v1/search", body);

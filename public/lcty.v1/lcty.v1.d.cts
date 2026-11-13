@@ -56,7 +56,6 @@ type LctyTextKey =
 	| "composerPlaceholder"
 	| "send"
 	| "stop"
-	| "indexFailed"
 	| "settingsLoadFailed"
 	| "saveFailed"
 	| "addTag"
@@ -161,7 +160,6 @@ type LctyTextKey =
 	| "baseUrlLabel"
 	| "apiKeyLabel"
 	| "chatModelLabel"
-	| "embeddingModelLabel"
 	| "resetDefaults"
 	| "testConnection";
 

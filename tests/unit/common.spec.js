@@ -4,12 +4,12 @@
 
 // LCTYSP-1004: the scenarios of docs/specs/LCTYSP-1004_common.feature that need the browser, written by hand. Each
 // test has the title of its Scenario (an Examples row is added in parentheses) and one test.step per line of it, so the
-// two read side by side. The Scenarios of the times, the ids, backendOf(), convUrl(), the settings in localStorage and
-// the indexer that shows no toast run in Node.js (common.test.js).
+// two read side by side. The Scenarios of the times, the ids, backendOf(), convUrl() and the settings in localStorage
+// run in Node.js (common.test.js).
 //
 // js/common.js runs in a real browser on the test server's origin, on the empty page of unit-page.js. The time is set
-// with page.clock, and every request the module makes (GET /v1/defaults.json, GET /v1/vectors/pending) is answered by a
-// route, so the server's data does not matter.
+// with page.clock, and every request the module makes (GET /v1/defaults.json) is answered by a route, so the server's
+// data does not matter.
 
 import { expect, test } from "@playwright/test";
 import { givenAPage } from "./unit-page.js";
@@ -52,36 +52,6 @@ async function theToastSays(page, line, text) {
 			{ text, hidden: false, role: "status", children: 0 },
 		]);
 	});
-}
-
-/** The settings of the pages with one backend whose embedding model is model. */
-function settingsWith(model) {
-	return {
-		backends: [
-			{
-				id: "local",
-				label: "llama-server",
-				base_url: "http://127.0.0.1:9",
-				api: "responses",
-				api_key: "",
-				model: "chat",
-				embedding_model: model,
-				extra: {},
-			},
-		],
-		default_backend: "local",
-	};
-}
-
-/** GET /v1/vectors/pending answered by answer; returns the URLs requested. */
-async function routePending(context, answer) {
-	const urls = [];
-	await context.route("**/v1/vectors/pending**", (route) => {
-		const url = new URL(route.request().url());
-		urls.push(`${url.pathname}${url.search}`);
-		return answer(route);
-	});
-	return urls;
 }
 
 // ---- query() ----
@@ -236,73 +206,3 @@ for (const { lang, toast } of [
 		await theToastSays(page, `And the toast says "${toast}"`, toast);
 	});
 }
-
-// ---- appIndexer() ----
-
-test("The indexer asks for the pending rounds of the embedding model", async ({
-	page,
-	context,
-}) => {
-	await givenAPage(page, context);
-	let urls;
-	await test.step("Given GET /v1/vectors/pending returns no rounds", async () => {
-		urls = await routePending(context, (route) => route.fulfill({ json: [] }));
-	});
-	await test.step('When the indexer of appIndexer() with settings whose embedding model is "embed" is kicked', () =>
-		common(
-			page,
-			({ appIndexer }, settings) => appIndexer(() => settings).kick(),
-			settingsWith("embed"),
-		));
-	await test.step("Then GET /v1/vectors/pending?model=embed&limit=16 is sent once", () => {
-		expect(urls).toEqual(["/v1/vectors/pending?model=embed&limit=16"]);
-	});
-	await test.step("And no toast is shown", async () => {
-		expect(await toasts(page)).toEqual([]);
-	});
-});
-
-test("The indexer shows only its first failure in a toast", async ({
-	page,
-	context,
-}) => {
-	await givenAPage(page, context);
-	let urls;
-	await test.step('Given GET /v1/vectors/pending answers with the status 500 and the body "boom"', async () => {
-		urls = await routePending(context, (route) =>
-			route.fulfill({ status: 500, body: "boom" }),
-		);
-	});
-	await test.step('When the indexer of appIndexer() with settings whose embedding model is "embed" is kicked', () =>
-		common(
-			page,
-			async ({ appIndexer }, settings) => {
-				window.lctyTest = { indexer: appIndexer(() => settings) };
-				await window.lctyTest.indexer.kick();
-			},
-			settingsWith("embed"),
-		));
-	await theToastSays(
-		page,
-		'Then the toast says "Failed to index: 500 boom"',
-		"Failed to index: 500 boom",
-	);
-	await test.step("When the toast is hidden and the indexer is kicked again", () =>
-		page.evaluate(async () => {
-			document.getElementById("toast").hidden = true;
-			await window.lctyTest.indexer.kick();
-		}));
-	await test.step("Then GET /v1/vectors/pending was sent twice", () => {
-		expect(urls).toHaveLength(2);
-	});
-	await test.step("And the toast is still hidden", async () => {
-		expect(await toasts(page)).toEqual([
-			{
-				text: "Failed to index: 500 boom",
-				hidden: true,
-				role: "status",
-				children: 0,
-			},
-		]);
-	});
-});

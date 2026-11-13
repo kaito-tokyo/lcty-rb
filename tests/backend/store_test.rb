@@ -493,12 +493,34 @@ class StoreTest < Lcty::Scenarios
     step('Then the newer one comes before the older one') { assert_equal [newer, older], list.map { |c| c['id'] } }
     step('And each has its id, title, created_at, updated_at_hint, the number of messages and its current tags') do
       assert_equal({ 'id' => newer, 'title' => 'Listed', 'created_at' => AT, 'updated_at_hint' => Time.at(4_000_000_100).iso8601,
-                     'messages' => 3, 'tags' => ['l'] }, list[0].reject { |k, _| k == 'message_ids' })
+                     'messages' => 3, 'tags' => ['l'] }, list[0].reject { |k, _| %w[message_ids message_rounds].include?(k) })
       assert_nil list[1]['title']
       assert_equal 1, list[1]['messages']
     end
     step('And message_ids are the ids of its own user messages, not the inherited ones') do
       assert_equal [own['id']], list[0]['message_ids']
+    end
+  end
+
+  scenario 'message_rounds pair each own message with its round' do
+    background
+    u1 = user('q1')
+    a1 = assistant('r1')
+    inherited = user('old', 'inherited' => true)
+    a2 = assistant('reply to the inherited one')
+    u2 = user('q2')
+    a3 = assistant('r2')
+    summary = nil
+    step('Given a conversation of a round, an inherited question with its reply, and another round') do
+      id = create([u1, a1, inherited, a2, u2, a3])
+      summary = Store.summarize(path_of(id))
+    end
+    step('Then its message_rounds pair each own user message with itself and each reply with the question before it') do
+      assert_equal [[u1['id'], u1['id']], [a1['id'], u1['id']], [u2['id'], u2['id']], [a3['id'], u2['id']]],
+                   summary['message_rounds']
+    end
+    step('And a reply to an inherited question has no round') do
+      refute_includes summary['message_rounds'].map(&:first), a2['id']
     end
   end
 

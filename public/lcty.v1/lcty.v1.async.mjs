@@ -15,13 +15,7 @@ import {
 	onTabRequest,
 	tabRpc,
 } from "../js/api/tab-rpc.js";
-import {
-	appIndexer,
-	backendOf,
-	loadSettings,
-	nowIso,
-	showToast,
-} from "../js/common.js";
+import { backendOf, loadSettings, nowIso, showToast } from "../js/common.js";
 import { replyArticle, userArticle } from "../js/convert/article.js";
 import { textAttr } from "../js/convert/text-attr.js";
 import { tr } from "../js/i18n.js";
@@ -92,7 +86,6 @@ const backend = () => backendOf(state.settings);
 
 // Sidebar: search and conversation list, shared by every page (<lcty-sidebar> inside the container. LCTYSP-0005, LCTYSP-0007)
 const panel = initSidebar(log.sidebar, {
-	getSettings: () => state.settings,
 	// A round of this conversation: scroll to it instead of reloading
 	onSelect: ({ id, chunkId }) => {
 		if (id !== cid) return false;
@@ -106,7 +99,6 @@ const panel = initSidebar(log.sidebar, {
 		if (state.conv) renderTags();
 	},
 });
-const indexer = appIndexer(() => state.settings);
 const splitTags = (s) => (s || "").split(/\s+/).filter(Boolean);
 
 // ---- Building the conversation ----
@@ -556,7 +548,6 @@ async function generate(cmd, controller) {
 		state.abort = null;
 		setBusy(false);
 		panel.refresh();
-		indexer.kick();
 	}
 }
 
@@ -852,5 +843,4 @@ window.addEventListener("beforeunload", (e) => {
 	}
 	panel.current = cid;
 	panel.refresh();
-	indexer.kick();
 })();

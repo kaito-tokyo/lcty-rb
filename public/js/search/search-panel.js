@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0008, LCTYSP-0014).
+// Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0014, LCTYSP-0019).
 
 import {
 	getTags,
@@ -12,15 +12,14 @@ import {
 import { onMetaDbChange, readMetaDb } from "../api/meta-db.js";
 import {
 	fetchSnippets,
-	getDefaults,
 	listConversations,
 	searchConversations,
 } from "../api/storage.js";
-import { backendOf, showToast } from "../common.js";
+import { tabRpc } from "../api/tab-rpc.js";
+import { showToast } from "../common.js";
 import { tr } from "../i18n.js";
 import { tagPart, tagRef } from "../tag-names.js";
-import { embeddingConfig, embedQuery } from "./embed.js";
-import { createVectorStore } from "./vectors.js";
+import { createVectorStore, embedQuery } from "./vectors.js";
 
 const RRF_K = 60;
 
@@ -43,9 +42,9 @@ function byOrder(tags, order) {
 }
 
 /** Wire the sidebar's search box to its conversation list. */
-export function createSearchPanel({ list, box, status, getSettings }) {
+export function createSearchPanel({ list, box, status, rpc = tabRpc }) {
 	const vectors = createVectorStore(); // One per page: each page creates one search panel
-	// all: the list; stale: the copy is out of date; rounds: {convOf, idsOf}, on demand
+	// all: the list; stale: the copy is out of date; rounds: {convOf, roundOf, idsOf}, on demand
 	const state = {
 		all: [],
 		stale: false,
@@ -61,52 +60,50 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 		list.current = state.current;
 	}
 
-	// The rounds each conversation owns (user message ids), only for semantic search
+	// The messages each conversation owns and their rounds (message_rounds), only for semantic search
 	async function rounds() {
 		if (!state.rounds) {
 			const list = await listConversations();
+			const pairs = list.flatMap((c) =>
+				(c.message_rounds || []).map(([m, r]) => [m, r, c.id]),
+			);
 			state.rounds = {
-				idsOf: new Map(list.map((c) => [c.id, c.message_ids || []])),
-				convOf: new Map(
-					list.flatMap((c) => (c.message_ids || []).map((m) => [m, c.id])),
+				idsOf: new Map(
+					list.map((c) => [c.id, (c.message_rounds || []).map(([m]) => m)]),
 				),
+				convOf: new Map(pairs.map(([m, , cid]) => [m, cid])),
+				roundOf: new Map(pairs.map(([m, r]) => [m, r])),
 			};
 		}
 		return state.rounds;
 	}
 
-	// The distribution files hold the vectors of the default embedding model only (LCTYSP-0008)
-	let defaults = null;
-	async function checkModel(cfg) {
-		defaults ||= getDefaults().catch((e) => {
-			defaults = null;
-			throw e;
-		});
-		const { embedding_model } = await defaults;
-		if (cfg.model !== embedding_model)
-			throw new Error(
-				`the vectors are for ${embedding_model}, not ${cfg.model}`,
-			);
-	}
-
-	// [[msgId, score], …] and the map from a round to its conversation
-	async function semantic(cfg, text, hasTags, filtered) {
-		await checkModel(cfg);
-		const [vec, { idsOf, convOf }] = await Promise.all([
-			embedQuery(cfg, text),
+	// [[roundId, score], …], the best message of each round, and the map from a round to its conversation
+	async function semantic(text, hasTags, filtered) {
+		const [vec, { idsOf, convOf, roundOf }] = await Promise.all([
+			embedQuery(rpc(), text),
 			rounds(),
 			vectors.refresh(),
 		]);
-		// With tag: filters, only the rounds of the matching conversations are allowed
+		// With tag: filters, only the messages of the matching conversations are allowed
 		const allow = filtered
 			? state.all
 					.filter((c) => hasTags(c.id))
 					.flatMap((c) => idsOf.get(c.id) || [])
 			: null;
-		const hits = await vectors.search(vec, 50, {
+		const found = await vectors.search(vec, 50, {
 			allow,
 			accept: (id) => hasTags(convOf.get(id)),
 		});
+		// A hit is a message (LCTYSP-0019): keyword search and snippets are by round, so each counts for its round
+		const seen = new Set();
+		const hits = [];
+		for (const [id, score] of found) {
+			const round = roundOf.get(id) ?? id;
+			if (seen.has(round)) continue;
+			seen.add(round);
+			hits.push([round, score]);
+		}
 		return { hits, convOf };
 	}
 
@@ -141,24 +138,20 @@ export function createSearchPanel({ list, box, status, getSettings }) {
 				tr("noMatches", "No matching conversations"),
 			);
 		}
-		const s = getSettings();
-		const cfg = s ? embeddingConfig(backendOf(s)) : null;
 		let note = "";
 		try {
 			const [kw, sem] = await Promise.all([
 				searchConversations({ q: text, tags, limit: 50 }).then(
 					(r) => r.results,
 				),
-				cfg
-					? semantic(cfg, text, hasTags, tags.length > 0).catch((e) => {
-							note = tr(
-								"semanticUnavailable",
-								"Semantic search is unavailable ({error}); searching by keywords only",
-								{ error: e.message },
-							);
-							return { hits: [], convOf: new Map() };
-						})
-					: { hits: [], convOf: new Map() },
+				semantic(text, hasTags, tags.length > 0).catch((e) => {
+					note = tr(
+						"semanticUnavailable",
+						"Semantic search is unavailable ({error}); searching by keywords only",
+						{ error: e.message },
+					);
+					return { hits: [], convOf: new Map() };
+				}),
 			]);
 			if (mySeq !== seq) return; // Drop the result if a newer search has started
 			// RRF: add 1/(k + rank) per round

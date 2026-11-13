@@ -42,16 +42,15 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)                     | `lcty.v1.c.worker.cjs`: the copies of c/ in the browser     |       0 |      25 |
 | [LCTYSP-1002](LCTYSP-1002_uuid-v7.feature)                    | `js/uuid.js`: message ids as UUIDv7                         |      21 |       0 |
 | [LCTYSP-1003](LCTYSP-1003_ui-texts.feature)                   | `js/i18n.js` and the language files: UI texts               |      22 |      10 |
-| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings               |      34 |      10 |
+| [LCTYSP-1004](LCTYSP-1004_common.feature)                     | `js/common.js`: ids, times, URLs and settings               |      31 |       8 |
 | [LCTYSP-1005](LCTYSP-1005_text-attributes.feature)            | `js/convert/text-attr.js`: text attributes and base64       |      18 |       0 |
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                         |      23 |       0 |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API    |      29 |       0 |
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation        |      17 |       0 |
-| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      26 |       4 |
+| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      22 |       4 |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the copies of the list                 |       0 |       9 |
-| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: vector records and search           |      25 |       0 |
-| [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | `js/search/embed.js`: embedding and indexing                |      27 |       0 |
-| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      28 |       0 |
+| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: the vector store and query vectors  |      22 |       0 |
+| [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      33 |       0 |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | `js/ui/lcty-cmd.js`: command tags                           |       0 |      19 |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      83 |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      39 |

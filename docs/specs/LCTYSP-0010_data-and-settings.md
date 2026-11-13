@@ -39,21 +39,22 @@ from it is built in memory on request and never written to disk. It has no schem
 
 **Rule: the SQLite files are cut as the browser's IndexedDB databases are,** one per resource, each with one integer
 version, `PRAGMA user_version`, brought up by code at startup; a newer one is refused
-([LCTYSP-0015](LCTYSP-0015_schema-versions.md)). At startup the server also renames `tags.sqlite` to `lcty_t.sqlite`,
-carries the vectors of the old `_index.sqlite` over to `lcty_fuzzy_search.sqlite` once, and deletes the cache files of
-the layout before that (`_vectors.*`).
+([LCTYSP-0015](LCTYSP-0015_schema-versions.md)). At startup the server also renames `tags.sqlite` to `lcty_t.sqlite`.
+The vectors of semantic search are not in SQLite: they are the vector pair of LCTYSP-0019. The
+`lcty_fuzzy_search.sqlite` of an older version, whose vectors the browser made, is not read any more and may be deleted.
 
-| File                                          | Kind                                                                                                                             | Rebuilt by                                                                                                                                             |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `c/*.html`                                    | Source (conversations; same layout as the URL `/c/<id>.html`)                                                                    | —                                                                                                                                                      |
-| `c/lcty.v1.js`, `c/lcty.v1.css`               | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                                                                                      |
-| `lcty_t.sqlite`                               | Source (the current tags of conversations, `t_has_many_c`; tag definitions and memory are `t/`, below)                           | —                                                                                                                                                      |
-| `lcty_c.sqlite`                               | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `tools/convert.rb`)                  | —                                                                                                                                                      |
-| `server_settings.txt`                         | Source (the options of lcty.rb, one per line; [below](#settings))                                                                |
-| `.htdigest`                                   | Not read (the Digest users of an older version: the server does not start with it, [below](#authentication))                     | —                                                                                                                                                      |
-| `c-former/*.html`                             | Source (every conversation file as it was before `tools/convert.rb` converted it; never deleted)                                 | —                                                                                                                                                      |
-| `lcty_fuzzy_search.sqlite` (+ `-wal`, `-shm`) | The vectors of every embedding model: derived, but only the browser can make them again, so they are kept and backed up          | Re-embedded by the browser while a page is open, when lost ([LCTYSP-0008](LCTYSP-0008_vector-binary.md))                                               |
-| `_index.sqlite` (+ `-wal`, `-shm`)            | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
+| File                                   | Kind                                                                                                                             | Rebuilt by                                                                                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `c/*.html`                             | Source (conversations; same layout as the URL `/c/<id>.html`)                                                                    | —                                                                                                                                                      |
+| `c/lcty.v1.js`, `c/lcty.v1.css`        | Copies (what reading a conversation offline needs, from `public/lcty.v1/`: at startup, rewritten only when changed; LCTYSP-0005) | —                                                                                                                                                      |
+| `lcty_t.sqlite`                        | Source (the current tags of conversations, `t_has_many_c`; tag definitions and memory are `t/`, below)                           | —                                                                                                                                                      |
+| `lcty_c.sqlite`                        | Source (what was measured of the replies of conversations of LCTYSP-0013; `c.stats.put` and `tools/convert.rb`)                  | —                                                                                                                                                      |
+| `server_settings.txt`                  | Source (the options of lcty.rb, one per line; [below](#settings))                                                                |
+| `.htdigest`                            | Not read (the Digest users of an older version: the server does not start with it, [below](#authentication))                     | —                                                                                                                                                      |
+| `c-former/*.html`                      | Source (every conversation file as it was before `tools/convert.rb` converted it; never deleted)                                 | —                                                                                                                                                      |
+| `lcty_fuzzy_search.<pair>.dat`, `.idx` | The vector pair of an embedding model (`eg2_264` by default): derived, but making it again embeds every message, so it is kept   | Embedded again by the server when lost ([LCTYSP-0019](LCTYSP-0019_server-embedding.md))                                                                |
+| `lcty_embedding.pid`                   | The pid and socket of the server's own `llama-server` while it runs                                                              | Written when it starts; a file left by a crash stops that child at the next start                                                                      |
+| `_index.sqlite` (+ `-wal`, `-shm`)     | Derived (rounds and FTS, the tags of conversations for filtering, the counts of messages and of elements)                        | Discarded and rebuilt from the conversation files at every start ([LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0015](LCTYSP-0015_schema-versions.md)) |
 
 ### Tag files
 
@@ -256,19 +257,20 @@ browser.
 - `localStorage` is per origin: `http://127.0.0.1:45280` and `http://localhost:45280` keep separate settings.
 - Changes apply from the next page load. The connection test uses the values in the form, saved or not.
 
-| Browser setting   | Default                 | Meaning                                              |
-| ----------------- | ----------------------- | ---------------------------------------------------- |
-| `base_url`        | `http://127.0.0.1:9931` | llama-server (router mode) endpoint                  |
-| `api_key`         | `<hostname>-<user>`     | API key (empty sends none)                           |
-| `model`           | `gemma-4-26b-a4b-it`    | Chat model name (a section of the router INI)        |
-| `embedding_model` | `embeddinggemma-2`      | Embedding model name. Empty disables semantic search |
+| Browser setting | Default                 | Meaning                                       |
+| --------------- | ----------------------- | --------------------------------------------- |
+| `base_url`      | `http://127.0.0.1:9931` | llama-server (router mode) endpoint           |
+| `api_key`       | `<hostname>-<user>`     | API key (empty sends none)                    |
+| `model`         | `gemma-4-26b-a4b-it`    | Chat model name (a section of the router INI) |
+
+- The embedding model is not a browser setting: the server embeds, with the model of `--embedding-hf-repo`
+  ([LCTYSP-0019](LCTYSP-0019_server-embedding.md#settings)). An `embedding_model` stored by an older version is
+  ignored.
 
 - **The API key is not a secret.** llama-server listens on 127.0.0.1 only. The key guards against connecting to the
   wrong server by accident: `llm-backend/run-llama-cpp.sh` uses the same `<hostname>-<user>` by default, so a mismatch
   shows up as 401.
 
-- The embedding dimension is fixed by the vector format (768 registered, 256 distributed) and is not a setting
-  ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)).
 - A default system prompt for new conversations is not a setting; tag drafts take that role
   ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
 

@@ -36,7 +36,6 @@ LctyT.addLang("ja", {
 	composerPlaceholder: "メッセージ（Enter で送信、Shift+Enter で改行）",
 	send: "送信",
 	stop: "停止",
-	indexFailed: "索引への登録に失敗しました: {error}",
 	settingsLoadFailed: "設定の読み込みに失敗しました: {error}",
 	saveFailed: "保存に失敗しました: {error}",
 	addTag: "タグを付ける",
@@ -157,7 +156,6 @@ LctyT.addLang("ja", {
 	baseUrlLabel: "接続先（llama-server）",
 	apiKeyLabel: "API キー",
 	chatModelLabel: "チャットモデル",
-	embeddingModelLabel: "埋め込みモデル（空にすると意味検索を使いません）",
 	resetDefaults: "初期値に戻す",
 	testConnection: "接続テスト",
 });

@@ -12,7 +12,6 @@ export interface Backend {
 	api: string;
 	api_key: string;
 	model: string;
-	embedding_model: string;
 	extra: Record<string, unknown>;
 }
 
@@ -45,15 +44,6 @@ export function backendOf(settings: AppSettings, id?: string | null): Backend;
  * (id="c-msg-<UUIDv7>", LCTYSP-0003).
  */
 export function convUrl(id: string, msgId?: string | null): string;
-
-/**
- * Index registration (LCTYSP-0007): the page's indexer, configured from the embedding model of getSettings()'s
- * default backend (nothing is indexed while getSettings() is null). Every page calls kick() after saving and on open.
- * Only the first failure is shown, as a toast.
- */
-export function appIndexer(getSettings: () => AppSettings | null): {
-	kick(): Promise<void>;
-};
 
 // Settings (LCTYSP-0010): the server only provides defaults (/v1/defaults.json). Changes made on /settings are kept in
 // localStorage (key "lcty.settings.v1", SETTINGS_KEY), and only the values that differ from the defaults are stored,

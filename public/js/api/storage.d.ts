@@ -60,23 +60,6 @@ export function getDefaults(): Promise<unknown>;
 
 // ---- Search index (LCTYSP-0006, LCTYSP-0007) ----
 
-/** Rounds waiting for embeddings of model (at most limit, 16 by default): [{id, rev, parts: [text, …]}]. */
-export function vectorsPending(
-	model: string,
-	limit?: number,
-): Promise<{ id: string; rev: number | string; parts: string[] }[]>;
-
-/**
- * Register vectors of model. revs: [[id, rev], …]; records: { body: registration vector binary, size: bytes per
- * vector, count: number of records }. The vectors of the ids sent are replaced by those in the body (LCTYSP-0008). The
- * server checks magic (lctyvLE0), size and entry_count in the query against the body.
- */
-export function putVectors(
-	model: string,
-	revs: [id: string, rev: number | string][],
-	records: { body: BodyInit; size: number; count: number },
-): Promise<unknown>;
-
 /** Keyword search: {q, tags, limit} → {results: [{id, conv_id, snippet}]} (in rank order). */
 export function searchConversations(body: {
 	q: string;

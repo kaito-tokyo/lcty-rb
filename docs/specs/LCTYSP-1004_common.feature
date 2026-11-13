@@ -15,9 +15,7 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
   one of its messages, c/<id>.html of the site (siteUrl of js/site.js, LCTYSP-0005). The settings are the defaults of GET /v1/defaults.json overlaid with the changes stored in
   localStorage "lcty.settings.v1": storeSettings keeps only the values that differ from the defaults, mergeSettings
   overlays them, ignoring unknown keys and values of another type, and loadSettings turns the result into the one
-  backend the pages use, or shows a toast and returns null when the defaults cannot be loaded. appIndexer(getSettings)
-  is the indexer of the pages (LCTYSP-0007): it reads the settings at every kick, does nothing without an embedding
-  model and shows its first failure in a toast.
+  backend the pages use, or shows a toast and returns null when the defaults cannot be loaded.
 
   Scenario: query() returns the first element that matches
     Given a page on the server's origin
@@ -179,7 +177,7 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
       | nothing   |
 
   Scenario: loadSettings() makes the backend of the pages from the defaults and the stored changes
-    Given GET /v1/defaults.json returns { base_url: "http://d", api_key: "k", model: "m", embedding_model: "e" }
+    Given GET /v1/defaults.json returns { base_url: "http://d", api_key: "k", model: "m" }
     And localStorage "lcty.settings.v1" holds {"model":"other"}
     When loadSettings() is called
     Then it returns the one backend "local" of the default backend "local", with the model "other" and the rest of the defaults
@@ -196,35 +194,3 @@ Feature: LCTYSP-1004 Ids, times, URLs and settings
       | lang | toast                                 |
       | en   | Failed to load the settings: 500 boom |
       | ja   | 設定の読み込みに失敗しました: 500 boom              |
-
-  Scenario: The indexer does nothing without settings
-    Given GET /v1/vectors/pending is answered by the test
-    When the indexer of appIndexer() with no settings is kicked
-    Then no request is sent to /v1/vectors/pending
-
-  Scenario: The indexer does nothing without an embedding model
-    Given GET /v1/vectors/pending is answered by the test
-    When the indexer of appIndexer() with settings whose embedding model is "" is kicked
-    Then no request is sent to /v1/vectors/pending
-
-  Scenario: The indexer asks for the pending rounds of the embedding model
-    Given a page on the server's origin
-    Given GET /v1/vectors/pending returns no rounds
-    When the indexer of appIndexer() with settings whose embedding model is "embed" is kicked
-    Then GET /v1/vectors/pending?model=embed&limit=16 is sent once
-    And no toast is shown
-
-  Scenario: The indexer reads the settings at every kick
-    Given GET /v1/vectors/pending returns no rounds
-    And the indexer of appIndexer() has no settings
-    When it is kicked, then given settings whose embedding model is "embed" and kicked again
-    Then GET /v1/vectors/pending?model=embed&limit=16 is sent once
-
-  Scenario: The indexer shows only its first failure in a toast
-    Given a page on the server's origin
-    Given GET /v1/vectors/pending answers with the status 500 and the body "boom"
-    When the indexer of appIndexer() with settings whose embedding model is "embed" is kicked
-    Then the toast says "Failed to index: 500 boom"
-    When the toast is hidden and the indexer is kicked again
-    Then GET /v1/vectors/pending was sent twice
-    And the toast is still hidden

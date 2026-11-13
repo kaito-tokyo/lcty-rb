@@ -5,8 +5,9 @@
 // Shared fixtures of the UI tests.
 //
 // - llm: a fake llama-server. The browser talks to llama-server directly (LCTYSP-0001, LCTYSP-0002), so the tests point
-//   the settings at LLM_URL and answer its requests inside the browser context (POST /v1/responses as SSE,
-//   POST /v1/embeddings). Replies are queued per test with llm.reply(…); with none queued it answers DEFAULT_REPLY.
+//   the settings at LLM_URL and answer its requests inside the browser context (POST /v1/responses as SSE). Replies are
+//   queued per test with llm.reply(…); with none queued it answers DEFAULT_REPLY. Embedding is the server's
+//   (LCTYSP-0019), which the UI tests start without it (--no-embedding).
 // - Helpers that create conversations through the HTTP API (LCTYSP-0006) and that wait until a page's module has
 //   attached its features.
 
@@ -18,7 +19,6 @@ export { expect };
 export const LLM_URL = "http://llm.test";
 export const DEFAULT_REPLY = "了解しました。";
 const SETTINGS_KEY = "lcty.settings.v1"; // js/common.js
-const EMBEDDING_DIM = 768; // js/search/vectors.js FULL_DIM
 
 const CORS = {
 	"Access-Control-Allow-Origin": "*",
@@ -60,16 +60,6 @@ class FakeLlm {
 		if (req.method() === "OPTIONS")
 			return route.fulfill({ status: 204, headers: CORS });
 		const path = new URL(req.url()).pathname;
-		if (path === "/v1/embeddings") {
-			const { input } = req.postDataJSON();
-			const data = input.map((_, index) => ({
-				index,
-				embedding: Array.from({ length: EMBEDDING_DIM }, (_, k) =>
-					k === 0 ? 1 : 0,
-				),
-			}));
-			return route.fulfill({ headers: CORS, json: { data } });
-		}
 		if (path === "/v1/responses") {
 			this.requests.push(req.postDataJSON());
 			const r = this.queue.shift() || { text: DEFAULT_REPLY };

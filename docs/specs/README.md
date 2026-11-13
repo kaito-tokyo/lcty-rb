@@ -8,27 +8,27 @@ SPDX-License-Identifier: Apache-2.0
 
 Specifications of lcty-rb. Each spec describes the current design of one topic and the reasons behind it.
 
-| ID                                                       | Title                             | Status    |
-| -------------------------------------------------------- | --------------------------------- | --------- |
-| [LCTYSP-0001](LCTYSP-0001_architecture.md)               | Architecture                      | Accepted  |
-| [LCTYSP-0002](LCTYSP-0002_llm-backend.md)                | LLM backend                       | Accepted  |
-| [LCTYSP-0003](LCTYSP-0003_conversation-file.md)          | Conversation file                 | Accepted  |
-| [LCTYSP-0004](LCTYSP-0004_editing.md)                    | Editing a conversation            | Accepted  |
-| [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)          | Pages and custom elements         | Accepted  |
-| [LCTYSP-0006](LCTYSP-0006_http-api.md)                   | HTTP API                          | Accepted  |
-| [LCTYSP-0007](LCTYSP-0007_search.md)                     | Search                            | Accepted  |
-| [LCTYSP-0008](LCTYSP-0008_vector-binary.md)              | Vector binary and semantic search | Accepted  |
-| [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)            | Tags and memory                   | Accepted  |
-| [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)          | Data directory and settings       | Accepted  |
-| [LCTYSP-0011](LCTYSP-0011_module-bundler.md)             | Module bundler                    | Withdrawn |
-| [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)               | RPC protocol                      | Draft     |
-| [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) | Conversation file (`lcty-msg`)    | Draft     |
-| [LCTYSP-0014](LCTYSP-0014_browser-sync.md)               | Browser copies and sync           | Draft     |
-| [LCTYSP-0015](LCTYSP-0015_schema-versions.md)            | Schema versions                   | Draft     |
-| [LCTYSP-0016](LCTYSP-0016_hardening.md)                  | Hardening                         | Draft     |
-| [LCTYSP-0017](LCTYSP-0017_markdown.md)                   | Markdown                          | Draft     |
-| [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md)         | Markdown streaming                | Draft     |
-| [LCTYSP-0019](LCTYSP-0019_server-embedding.md)           | Embedding on the server           | Draft     |
+| ID                                                       | Title                             | Status                    |
+| -------------------------------------------------------- | --------------------------------- | ------------------------- |
+| [LCTYSP-0001](LCTYSP-0001_architecture.md)               | Architecture                      | Accepted                  |
+| [LCTYSP-0002](LCTYSP-0002_llm-backend.md)                | LLM backend                       | Accepted                  |
+| [LCTYSP-0003](LCTYSP-0003_conversation-file.md)          | Conversation file                 | Accepted                  |
+| [LCTYSP-0004](LCTYSP-0004_editing.md)                    | Editing a conversation            | Accepted                  |
+| [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)          | Pages and custom elements         | Accepted                  |
+| [LCTYSP-0006](LCTYSP-0006_http-api.md)                   | HTTP API                          | Accepted                  |
+| [LCTYSP-0007](LCTYSP-0007_search.md)                     | Search                            | Accepted                  |
+| [LCTYSP-0008](LCTYSP-0008_vector-binary.md)              | Vector binary and semantic search | Superseded by LCTYSP-0019 |
+| [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)            | Tags and memory                   | Accepted                  |
+| [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)          | Data directory and settings       | Accepted                  |
+| [LCTYSP-0011](LCTYSP-0011_module-bundler.md)             | Module bundler                    | Withdrawn                 |
+| [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)               | RPC protocol                      | Draft                     |
+| [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) | Conversation file (`lcty-msg`)    | Draft                     |
+| [LCTYSP-0014](LCTYSP-0014_browser-sync.md)               | Browser copies and sync           | Draft                     |
+| [LCTYSP-0015](LCTYSP-0015_schema-versions.md)            | Schema versions                   | Draft                     |
+| [LCTYSP-0016](LCTYSP-0016_hardening.md)                  | Hardening                         | Draft                     |
+| [LCTYSP-0017](LCTYSP-0017_markdown.md)                   | Markdown                          | Draft                     |
+| [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md)         | Markdown streaming                | Draft                     |
+| [LCTYSP-0019](LCTYSP-0019_server-embedding.md)           | Embedding on the server           | Draft                     |
 
 ## Gherkin features
 
@@ -51,8 +51,7 @@ for the backend ones).
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | Building the request from a conversation      | `tests/unit/history.test.js`                                 |
 | [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | The client of the HTTP API                    | `tests/unit/storage.test.js`, `tests/unit/storage.spec.js`   |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | The copies of the list of conversations       | `tests/unit/meta-db.spec.js`                                 |
-| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | Vector records and the vector store           | `tests/unit/vectors.test.js`                                 |
-| [LCTYSP-1012](LCTYSP-1012_embedding.feature)                  | Embedding and indexing                        | `tests/unit/embed.test.js`                                   |
+| [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | The vector store and the query embedding      | `tests/unit/vectors.test.js`                                 |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | The semantic search worker                    | `tests/unit/fuzzy-search-worker.test.js`                     |
 | [LCTYSP-1015](LCTYSP-1015_commands.feature)                   | Command tags                                  | `tests/unit/lcty-cmd.spec.js`                                |
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | The elements of a conversation file           | `tests/unit/conversation-file-elements.spec.js`              |
@@ -76,8 +75,6 @@ for the backend ones).
 | [LCTYSP-3003](LCTYSP-3003_store.feature)                      | Storing conversations, tags and memory        | `tests/backend/store_test.rb`                                |
 | [LCTYSP-3004](LCTYSP-3004_search-index.feature)               | The search index                              | `tests/backend/search_index_test.rb`                         |
 | [LCTYSP-3005](LCTYSP-3005_tag-store.feature)                  | The tag store                                 | `tests/backend/tag_store_test.rb`                            |
-| [LCTYSP-3006](LCTYSP-3006_vector-records.feature)             | Vector binary records                         | `tests/backend/vector_records_test.rb`                       |
-| [LCTYSP-3007](LCTYSP-3007_vector-db.feature)                  | Vector DB                                     | `tests/backend/vector_db_test.rb`                            |
 | [LCTYSP-3008](LCTYSP-3008_server-settings.feature)            | Server settings                               | `tests/backend/config_test.rb`                               |
 | [LCTYSP-3012](LCTYSP-3012_http-api.feature)                   | HTTP API                                      | `tests/backend/v1_servlet_test.rb`                           |
 | [LCTYSP-3014](LCTYSP-3014_tag-files.feature)                  | Tag files                                     | `tests/backend/tag_files_test.rb`                            |
@@ -107,6 +104,11 @@ git.
   committed converter ([LCTYSP-1025](LCTYSP-1025_gfm-parser.feature),
   [LCTYSP-1026](LCTYSP-1026_committed-converter.feature)) and the tail converter
   ([LCTYSP-1027](LCTYSP-1027_tail-converter.feature)) took.
+- LCTYSP-1012 Embedding and indexing, LCTYSP-3006 Vector binary records and LCTYSP-3007 Vector DB: removed with
+  `js/search/embed.js`, `lib/v1/vector_records.rb` and `lib/v1/vector_db.rb`, when the server took over embedding
+  (LCTYSP-0019). Their place is taken by the vector pair, the embedding server and the indexer
+  ([LCTYSP-3026](LCTYSP-3026_vector-pair.feature), [LCTYSP-3027](LCTYSP-3027_embedding-server.feature),
+  [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)).
 
 ## Number ranges
 

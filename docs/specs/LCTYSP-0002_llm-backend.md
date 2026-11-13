@@ -12,8 +12,9 @@ SPDX-License-Identifier: Apache-2.0
 ## Summary
 
 The browser streams replies from llama-server through the Responses API and keeps the prefix of every request
-identical so that llama-server's prompt cache applies. One llama-server in router mode serves both the chat model and
-the embedding model on a single port.
+identical so that llama-server's prompt cache applies. One llama-server in router mode serves the chat model on a
+single port. The embedding model is not the router's: lcty.rb starts a llama-server of its own for it
+([LCTYSP-0019](LCTYSP-0019_server-embedding.md)).
 
 ## Responses API
 
@@ -91,8 +92,10 @@ controls such as `id_slot`, and llama-server keeps its default `--slot-prompt-si
 
 ## llama-server in router mode
 
-- **A single port (:12345) serves both the chat model and the embedding model.** Configuration is
-  `server/llama-router.ini`; `server/start-llama-router.sh` starts it.
+- **A single port serves the chat model.** Configuration is `llm-backend/llama-cpp.ini`;
+  `llm-backend/run-llama-cpp.sh` starts it. The section `[embeddinggemma-2]` left it when the server took over
+  embedding (LCTYSP-0019): left there, the model would be loaded twice. The table below keeps its settings, which
+  lcty.rb's own llama-server uses.
 - Each model runs as a child process and requests are routed by `model`. CORS, the API key and cache behavior are the
   same as when running a single model (measured).
 
@@ -122,12 +125,11 @@ The browser builds one backend from its settings ([LCTYSP-0010](LCTYSP-0010_data
 	"api": "responses",
 	"api_key": "…",
 	"model": "gemma-4-26b-a4b-it",
-	"embedding_model": "embeddinggemma-2",
 	"extra": {}
 }
 ```
 
-- The embedding dimension is fixed by the vector format ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)) and is not a setting.
+- The embedding model is not a backend setting: the server embeds ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)).
 
 ## Verified assumptions
 

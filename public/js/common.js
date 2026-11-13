@@ -6,7 +6,6 @@
 
 import { getDefaults } from "./api/storage.js";
 import { tr } from "./i18n.js";
-import { createIndexer, embeddingConfig } from "./search/embed.js";
 import { siteUrl } from "./site.js";
 import { uuidv7 } from "./uuid.js";
 
@@ -72,24 +71,6 @@ export function convUrl(id, msgId) {
 	).href;
 }
 
-/** The page's indexer for index registration (LCTYSP-0007). */
-export function appIndexer(getSettings) {
-	let shown = false;
-	return createIndexer({
-		getConfig: () => {
-			const s = getSettings();
-			return s ? embeddingConfig(backendOf(s)) : null;
-		},
-		onError: (e) => {
-			if (shown) return;
-			shown = true;
-			showToast(
-				tr("indexFailed", "Failed to index: {error}", { error: e.message }),
-			);
-		},
-	});
-}
-
 // ---- Settings (LCTYSP-0010): only the values that differ from the defaults, in localStorage ----
 const SETTINGS_KEY = "lcty.settings.v1";
 
@@ -137,7 +118,6 @@ function toAppSettings(v) {
 				api: "responses",
 				api_key: v.api_key,
 				model: v.model,
-				embedding_model: v.embedding_model,
 				extra: {},
 			},
 		],

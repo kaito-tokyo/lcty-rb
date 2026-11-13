@@ -183,6 +183,11 @@ Feature: LCTYSP-3003 Storing conversations and their tags
     And each has its id, title, created_at, updated_at_hint, the number of messages and its current tags
     And message_ids are the ids of its own user messages, not the inherited ones
 
+  Scenario: message_rounds pair each own message with its round
+    Given a conversation of a round, an inherited question with its reply, and another round
+    Then its message_rounds pair each own user message with itself and each reply with the question before it
+    And a reply to an inherited question has no round
+
   Scenario: A file whose name is not a conversation id is skipped once with a warning
     Given a file "copy of x.html" in data/c
     When Store.conversation_paths is called twice

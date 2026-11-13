@@ -67,13 +67,6 @@ export function initSettingsDialog(button) {
 			required: "",
 			spellcheck: "false",
 		}),
-		field(
-			tr(
-				"embeddingModelLabel",
-				"Embedding model (leave empty to turn off semantic search)",
-			),
-			{ type: "text", name: "embedding_model", spellcheck: "false" },
-		),
 		el(
 			"div",
 			{ class: "dialog-buttons" },
@@ -173,9 +166,7 @@ export function initSettingsDialog(button) {
 			});
 			if (!r.ok) throw new Error(`HTTP ${r.status}`);
 			const ids = ((await r.json()).data || []).map((m) => m.id);
-			const missing = [v.model, v.embedding_model].filter(
-				(m) => m && !ids.includes(m),
-			);
+			const missing = [v.model].filter((m) => m && !ids.includes(m));
 			status.textContent = tr("connected", "Connected: {models}{missing}", {
 				models: ids.join(", ") || tr("noModelList", "(no model list)"),
 				missing: missing.length

@@ -6,7 +6,7 @@
 
 import { getTags, putTags } from "../api/lcty-t.js";
 import { tabRpc } from "../api/tab-rpc.js";
-import { loadSettings, showToast } from "../common.js";
+import { showToast } from "../common.js";
 import { localize, tr } from "../i18n.js";
 import { renumber } from "../tag-names.js";
 import { initSidebar } from "../ui/sidebar.js";
@@ -23,14 +23,12 @@ export function initTagOrderPage() {
 
 	// saved and work are the tags that can be moved; invalid is sent back as it is
 	const state = {
-		settings: null,
 		saved: [],
 		work: [],
 		invalid: [],
 		etag: null,
 	};
 	const panel = initSidebar(sidebar, {
-		getSettings: () => state.settings,
 		// The tags dialog saved: show its set (it may have added, renamed or deleted tags)
 		onTagsSaved: () => load(),
 	});
@@ -143,7 +141,6 @@ export function initTagOrderPage() {
 	});
 
 	(async () => {
-		state.settings = await loadSettings();
 		// The page edits the set, so it reads it after initSidebar's sync_full (LCTYSP-0009)
 		await load();
 		panel.refresh();
