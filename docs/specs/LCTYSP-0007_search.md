@@ -52,8 +52,8 @@ CREATE TABLE c_recordcount (cid TEXT PRIMARY KEY, count INTEGER NOT NULL);  -- c
 
 - **No schema version:** the file is discarded at every start (`SearchIndex.discard`) and the tables are made anew,
   so a change to them needs no migration; the full sync fills them.
-- The vectors are `lcty_fuzzy_search.sqlite`, attached to the same connection
-  ([LCTYSP-0008](LCTYSP-0008_vector-binary.md#vector-db)).
+- The vectors are not here: they are the vector pair of the server
+  ([LCTYSP-0019](LCTYSP-0019_server-embedding.md#the-vector-db)).
 
 ## Keyword search (server)
 
@@ -66,23 +66,26 @@ CREATE TABLE c_recordcount (cid TEXT PRIMARY KEY, count INTEGER NOT NULL);  -- c
 
 ## Semantic search (browser)
 
-- The query is embedded with the prefix `task: search result | query: `; documents are embedded with
-  `title: none | text: ` (EmbeddingGemma 2's recommended prompts). Titles are not embedded because they can change.
-- Scoring runs in the browser over the distribution files (256 dims, brute force with WASM SIMD) and takes the
-  best score per id ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)).
-- When the embedding model is not configured or not running, only keyword search is used and a notice is shown.
+- The server embeds the query with the prefix `task: search result | query: ` (`vectors.eg2_264.embed` of `/v1/rpc`);
+  it embedded every user and model message with `title: none | text: ` (EmbeddingGemma 2's recommended prompts).
+  Titles are not embedded because they can change ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)).
+- Scoring runs in the browser over the worker's copy of the vector pair (256 dims, brute force with WASM SIMD) and
+  takes the best score per id ([LCTYSP-0008](LCTYSP-0008_vector-binary.md#search-in-the-browser)).
+- When the server has no embedding server ready, only keyword search is used and a notice is shown.
 
 ## Merging (browser)
 
 ```
-browser: embed the query                       ┐ in parallel
+browser → /v1/rpc vectors.eg2_264.embed {text} ┐ in parallel
 browser → POST /v1/search {q, tags}           ┘
-browser: vector search over the downloaded binary
+browser: vector search over the worker's copy of the vector pair, each hit counted for its round
 browser: merge with RRF (score = Σ 1 / (60 + rank)), keep the best round per conversation (up to 30)
 browser → POST /v1/snippets {ids, q}          only for rounds without a snippet (semantic-only hits)
 ```
 
-- Rounds are mapped to conversations with `message_ids` from `GET /v1/conversations`. The sidebar's list comes from
+- A semantic hit is a message, user or model ([LCTYSP-0019](LCTYSP-0019_server-embedding.md#what-is-embedded)). It is
+  mapped to its round and its conversation with `message_rounds` from `GET /v1/conversations` (each own message with
+  the user message of its round), and the best message of a round counts for it. The sidebar's list comes from
   the browser's copy of the meta ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)), so this is fetched only when a
   semantic search runs, and kept until the list changes. `tag:` filters use the tags of the browser's copy
   `t_has_many_c` ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).

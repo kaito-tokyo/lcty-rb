@@ -2,26 +2,28 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The behaviour of public/js/search/search-panel.js (LCTYSP-0005, LCTYSP-0007, LCTYSP-0008, LCTYSP-0010). Each Scenario
+# The behaviour of public/js/search/search-panel.js (LCTYSP-0005, LCTYSP-0007, LCTYSP-0014, LCTYSP-0019). Each Scenario
 # is a test of the same title in tests/unit/search-panel.spec.js, whose steps are the lines below.
 
 Feature: LCTYSP-1019 The search panel of the sidebar
 
-  createSearchPanel({list, box, status, getSettings}) gives the sidebar's <lcty-conv-list>, search box and status
-  their behaviour on every page. With an empty box the list is the browser's copies of the list of conversations
+  createSearchPanel({list, box, status, rpc}) gives the sidebar's <lcty-conv-list>, search box and status their
+  behaviour on every page. With an empty box the list is the browser's copies of the list of conversations
   (LCTYSP-0014): their meta and number of elements (api/meta-db.js, lcty_c) and their tags (api/lcty-t.js,
   t_has_many_c of lcty_t, in the order of the tag files, undefined tags after), newest first, read again whenever this
   tab has stored a change of them. tag:name terms filter by tag; other text is searched by keywords on the server
-  (POST /v1/search) and, when an embedding model is set, semantically in the browser (the query embedded by
-  llama-server, scored by the search worker against the distribution files), and the two are merged with RRF, keeping
-  the best round of each conversation. Rounds without a snippet get one from POST /v1/snippets. The panel's refresh()
-  reads the list from the copies again, setQuery(q) searches at once, and current marks the conversation of the page.
-  The tab's /v1/rpc connection is a stand-in here: the copies are filled through the modules' own functions.
+  (POST /v1/search) and semantically: the server embeds the query (vectors.eg2_264.embed over the tab's /v1/rpc
+  connection, rpc()) and the search worker scores it against its copy of the server's vector pair. A semantic hit is a
+  user or model message; GET /v1/conversations says the round of each (message_rounds), and each round counts once,
+  with its best message. The two are merged with RRF, keeping the best round of each conversation. Rounds without a
+  snippet get one from POST /v1/snippets. The panel's refresh() reads the list from the copies again, setQuery(q)
+  searches at once, and current marks the conversation of the page. The tab's /v1/rpc connection is a stand-in here:
+  the copies are filled through the modules' own functions.
 
   Background:
     Given a page on the server's origin
     And a search box, a status and a <lcty-conv-list> in the page
-    And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations, GET /v1/defaults.json, the distribution files and the embeddings of http://llm.test are answered by the test
+    And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations and the vector pair are answered by the test, and vectors.eg2_264.embed by the tab's connection
     And GET /v1/tags defines the tags "y" and then "x"
     And the lists of the tab's connection hold at the version "b007.1" "a" (4 elements, tags "w", "x" and "y", newest), "b" (2 elements, tag "x") and "c" (6 elements, no tags, oldest)
 
@@ -84,7 +86,7 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     Then POST /v1/search is sent the query "hello world", no tags and the limit 50
     And the list shows "b" and "a", each linked to its round with its snippet
     And the sources of both are "keyword" and the status is empty
-    And nothing was sent to GET /v1/defaults.json or POST /v1/snippets
+    And nothing was sent to POST /v1/snippets
 
   Scenario: A keyword search keeps the best round of each conversation in the list
     Given the lists have been read into the copies and refresh() has shown them
@@ -131,32 +133,38 @@ Feature: LCTYSP-1019 The search panel of the sidebar
 
   Scenario: A semantic search is merged with the keyword search by RRF
     Given the lists have been read into the copies and refresh() has shown them
-    And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
-    And GET /v1/conversations maps the rounds "r-a" to "a", "r-b" to "b" and "r-c" to "c"
-    And the distribution files hold the rounds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
+    And GET /v1/conversations gives "a" the round "r-a", "b" the round "r-b" and "c" the round "r-c"
+    And the vector pair holds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
     And POST /v1/search returns the round "r-b" of "b" with a snippet
     And POST /v1/snippets returns snippets for "r-a" and "r-c"
     When setQuery searches "hello"
-    Then the query "task: search result | query: hello" is embedded by http://llm.test/v1/embeddings with the model "emb"
+    Then vectors.eg2_264.embed is asked for the text "hello"
     And the list shows "b", "a" and "c", in the order of 1/61 + 1/62, 1/61 and 1/63
     And the sources of "b" are "keyword" and "semantic:0.535", of "a" "semantic:0.802" and of "c" "semantic:0.267"
     And POST /v1/snippets is sent the rounds "r-a" and "r-c" with the query "hello", and their snippets are shown
     And the status is empty
 
+  Scenario: A reply's hit counts once for its round, with the better score
+    Given the lists have been read into the copies and refresh() has shown them
+    And GET /v1/conversations gives "a" the round "r-a" with its reply "m-a", and "b" the round "r-b"
+    And the vector pair holds "m-a", "r-b" and "r-a", which the query scores 0.802, 0.535 and 0.267
+    And POST /v1/search returns no rounds
+    When setQuery searches "hello"
+    Then the list shows "a" with the round "r-a" and "b" with the round "r-b"
+    And the sources of "a" are "semantic:0.802" and of "b" "semantic:0.535"
+
   Scenario: tag: filters limit the semantic hits to the conversations with the tags
     Given the lists have been read into the copies and refresh() has shown them
-    And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
-    And GET /v1/conversations maps the rounds "r-a" to "a", "r-b" to "b" and "r-c" to "c"
-    And the distribution files hold the rounds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
+    And GET /v1/conversations gives "a" the round "r-a", "b" the round "r-b" and "c" the round "r-c"
+    And the vector pair holds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
     And POST /v1/search returns no rounds
     When setQuery searches "hello tag:x"
     Then the list shows "a" and "b"
 
   Scenario: The rounds of the conversations are fetched once until the list changes
     Given the lists have been read into the copies and refresh() has shown them
-    And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
-    And GET /v1/conversations maps the rounds "r-a" to "a", "r-b" to "b" and "r-c" to "c"
-    And the distribution files hold the rounds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
+    And GET /v1/conversations gives "a" the round "r-a", "b" the round "r-b" and "c" the round "r-c"
+    And the vector pair holds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
     When setQuery searches "hello" and then "world"
     Then GET /v1/conversations was fetched once
     When the tab's connection reads c.list and c.recordcount.list again at the version "b007.2"
@@ -164,7 +172,7 @@ Feature: LCTYSP-1019 The search panel of the sidebar
 
   Scenario Outline: Without semantic search the keyword results are shown with a notice
     Given the lists have been read into the copies and refresh() has shown them
-    And the settings have the embedding model "emb" at http://llm.test and GET /v1/defaults.json says "emb"
+    And GET /v1/conversations gives "a" the round "r-a", "b" the round "r-b" and "c" the round "r-c"
     And <failure>
     And POST /v1/search returns the rounds "r-a" of "a"
     When setQuery searches "hello"
@@ -172,15 +180,7 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     And the status says "Semantic search is unavailable (<error>); searching by keywords only"
 
     Examples:
-      | failure                                                      | error                              |
-      | GET /v1/defaults.json says "other"                           | the vectors are for other, not emb |
-      | the embeddings answer with the status 503 and "down"         | down                               |
-      | GET /v1/defaults.json answers with the status 500 and "boom" | 500 boom                           |
-
-  Scenario: Without an embedding model only the keywords are searched
-    Given the lists have been read into the copies and refresh() has shown them
-    And the settings have no embedding model
-    And POST /v1/search returns the rounds "r-a" of "a"
-    When setQuery searches "hello"
-    Then the list shows "a" and the status is empty
-    And nothing was sent to GET /v1/defaults.json, GET /v1/conversations or the embeddings
+      | failure                                                                | error                                  |
+      | vectors.eg2_264.embed answers the error 7 "no embedding server"        | no embedding server                    |
+      | GET /v1/vectors.eg2_264.json answers with the status 503               | failed to fetch the vectors (HTTP 503) |
+      | GET /v1/conversations answers with the status 500 and "boom"           | 500 boom                               |

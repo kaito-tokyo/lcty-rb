@@ -20,12 +20,11 @@ import { initTagsDialog } from "../tags.js";
 import { initSettingsDialog } from "./settings-dialog.js";
 
 /** Attach the sidebar's features to sidebar and return its search panel. */
-export function initSidebar(sidebar, { getSettings, onSelect, onTagsSaved }) {
+export function initSidebar(sidebar, { onSelect, onTagsSaved }) {
 	const panel = createSearchPanel({
 		list: sidebar.list,
 		box: sidebar.search,
 		status: sidebar.searchStatus,
-		getSettings,
 	});
 	// The items are links: the browser follows one unless the page handled the choice
 	sidebar.list.addEventListener("select", (e) => {

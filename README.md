@@ -17,12 +17,12 @@ Ruby server on your own machine. Conversations are plain HTML files you can open
 
 - macOS's own Ruby, `/usr/bin/ruby` (2.6). It already has everything the server uses (WEBrick, SQLite3, Nokogiri):
   there is nothing to install.
-- `llama-server` from llama.cpp, for the chat model and the embedding model.
+- `llama-server` from llama.cpp on `PATH`, for the chat model and the embedding model.
 - A current browser (Chrome or Safari).
 
 ## Run
 
-Start the models (router mode: the chat and embedding models in `llm-backend/llama-cpp.ini`, on port 9931):
+Start the chat model (router mode: the models of `llm-backend/llama-cpp.ini`, on port 9931):
 
 ```bash
 llm-backend/run-llama-cpp.sh
@@ -34,8 +34,9 @@ Start the server and open http://127.0.0.1:45280/:
 /usr/bin/ruby lcty.rb
 ```
 
-The browser talks to `llama-server` directly; the Ruby server serves the pages and keeps the conversations, the tags
-and the search index.
+The browser talks to the chat model's `llama-server` directly; the Ruby server serves the pages and keeps the
+conversations, the tags and the search index. For semantic search it starts a `llama-server` of its own with the
+embedding model (downloaded at the first start) and embeds every message in the background.
 
 Outside macOS, the dev container `.devcontainer/ruby-2.6.10` gives the same Ruby and libraries (`ruby:2.6.10` with the
 `Gemfile`, installed into its image; rebuild it after changing the `Gemfile`). Run `ruby lcty.rb` in it; port 45280 is
@@ -81,8 +82,8 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
 
     Basic sends the password itself; from outside the machine, put HTTPS in front of the server (a reverse proxy). A
     `.htdigest` of an older version stops the server: give its users with `--basic-auth`, then remove it.
-  - Embedding on the server (LCTYSP-0019, in progress: the pages do not use it yet): lcty.rb starts a `llama-server` of
-    its own for the embedding model, on a UNIX socket, and embeds every message in the background.
+  - Semantic search (LCTYSP-0019): lcty.rb starts a `llama-server` of its own for the embedding model, on a UNIX
+    socket, and embeds every message (of conversations in the `lcty-msg` format, below) in the background.
     - `--llama-server=PATH`: the `llama-server` to start (default `llama-server`, from `PATH`).
     - `--embedding-hf-repo=REPO:TAG`: the model, as `--hf-repo` of llama-server (default
       `ggml-org/embeddinggemma-2-GGUF:Q8_0`).
@@ -104,11 +105,10 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 - `lcty_c.sqlite`: the timings, usage and client of the replies of conversations in the new format (`lcty-msg`),
   written by the server and by `tools/convert.rb` (below).
 - `c-former/`: every conversation file as it was before `tools/convert.rb` converted it.
-- `lcty_fuzzy_search.sqlite`: the vectors of semantic search. They are derived, but only the browser can make them
-  again (it does so while a page is open), so they are kept.
-- `lcty_fuzzy_search.eg2_264.dat` and `.idx`: the vectors the server makes of every message (LCTYSP-0019), to replace
-  `lcty_fuzzy_search.sqlite`. They are kept too: making them again embeds every message. `lcty_embedding.pid` names
-  the server's `llama-server` while it runs.
+- `lcty_fuzzy_search.eg2_264.dat` and `.idx`: the vectors of semantic search, which the server makes of every message
+  (LCTYSP-0019). They are derived, but making them again embeds every message, so they are kept. The
+  `lcty_fuzzy_search.sqlite` of an older version, whose vectors the browser made, is not read any more and can be
+  deleted. `lcty_embedding.pid` names the server's `llama-server` while it runs.
 - Files starting with `_` are derived (the search index) and are made anew at every start.
 
 Back up everything that does not start with `_`:

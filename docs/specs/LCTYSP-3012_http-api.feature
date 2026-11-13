@@ -10,14 +10,15 @@ Feature: LCTYSP-3012 HTTP API
 
   Chatty::V1::Servlet, mounted at /v1, answers the JSON API on the same origin as the pages: the defaults of the
   browser settings, conversations (create, read, append, pop, delete and the lists), keyword search and snippets, the
-  tag files (get-all and replace-all with an ETag, and adding memory), and the vectors (the pending rounds, registration and the distribution files). Bodies
+  tag files (get-all and replace-all with an ETag, and adding memory), and the vector pair of semantic search (its JSON,
+  and its files by Range: LCTYSP-3028). Bodies
   are JSON unless stated otherwise, and every error is {"error": "…"} with an HTTP status. Paths and query values are
   read as UTF-8, and request bodies are limited to 64 MiB.
 
   Scenario: The defaults of the browser settings
     When GET /v1/defaults.json is requested
     Then the status is 200 and the body is JSON
-    And it has the base_url "http://127.0.0.1:9931", the model "gemma-4-26b-a4b-it" and the embedding_model "embeddinggemma-2"
+    And it has the base_url "http://127.0.0.1:9931" and the model "gemma-4-26b-a4b-it", and no embedding_model
     And its api_key is the host name and the user joined by "-"
 
   Scenario: A new conversation is created and listed
@@ -246,69 +247,6 @@ Feature: LCTYSP-3012 HTTP API
       | POST /v1/tags/<file>/memory with a blank text        | 400    | "text is required"                                  |
       | POST /v1/tags/<file>/memory with an array            | 400    | "body must be an object"                            |
 
-  Scenario: The rounds waiting for embeddings
-    Given a conversation with a round of the user text "question" and the assistant text "answer"
-    When GET /v1/vectors/pending is requested with a model
-    Then the round is listed with its id, its revision and the parts ["question\n\nanswer"]
-
-  Scenario: The pending list is newest first and its limit is kept between 1 and 16
-    Given a conversation with 17 rounds, each newer than any other round
-    When GET /v1/vectors/pending is requested with a model
-    Then with the limit 2 it lists the 2 newest rounds, newest first
-    And with the limit 0 it lists 1 round
-    And with the limit 100 it lists 16 rounds
-
-  Scenario Outline: The pending list needs a valid model
-    When GET /v1/vectors/pending is requested with <model>
-    Then the status is 400 with the error <error>
-
-    Examples:
-      | model         | error                            |
-      | no model      | "model is required"              |
-      | the model a/b | "invalid model name: \"a/b\""    |
-
-  Scenario: Registered vectors take their round off the pending list
-    Given a round waiting for embeddings with a model
-    When PUT /v1/vectors sends a vector for it with its revision
-    Then the status is 200 and the body is {"accepted": 1, "stale": []}
-    And the round is no longer pending for that model
-
-  Scenario: A vector for an old revision is stale
-    Given a round waiting for embeddings with a model
-    When PUT /v1/vectors sends a vector for it with another revision
-    Then the body is {"accepted": 0, "stale": [<its id>]}
-    And the round is still pending for that model
-
-  Scenario Outline: A vector registration that is not valid is rejected with 400
-    Given a round waiting for embeddings with a model
-    When PUT /v1/vectors sends <request>
-    Then the status is 400 with the error <error>
-
-    Examples:
-      | request                                 | error                                                         |
-      | no model                                | "model is required"                                           |
-      | 17 revisions                            | "at most 16 ids per request"                                  |
-      | the magic lctyvBE0                      | "magic must be lctyvLE0"                                      |
-      | the size 1024                           | "size must be 3072"                                           |
-      | the entry_count 0                       | "entry_count must be a positive integer"                      |
-      | the entry_count 2 with one record       | "body must be 2 records of 3104 bytes"                        |
-      | a record with a wrong control block     | "record 0: bad control block (expected lctyvLE0 + 3072)"      |
-      | a record without a revision             | "rev is missing for <its id>"                                 |
-      | a zero vector                           | "vector must be finite and non-zero"                          |
-
-  Scenario: The distribution files carry one ETag and answer 304 when unchanged
-    When GET /v1/vectors.eg2_264.dat and GET /v1/vectors.eg2_264.idx are requested
-    Then both are 200 application/octet-stream with the same ETag
-    And the .dat has 1,056 bytes per row and the .idx 16 bytes per row, for the same number of rows
-    And GET /v1/vectors.eg2_264.dat with If-None-Match of that ETag answers 304 without a body
-
-  Scenario: The distribution files follow a registered vector
-    Given the ETag of the distribution files
-    When PUT /v1/vectors registers a vector of the model "embeddinggemma-2" for a new round
-    Then GET /v1/vectors.eg2_264.idx has another ETag
-    And its rows include the id of the round
-    And the row of the round in the .dat is the first 256 dimensions of its vector, of length 1, followed by 32 zero bytes
-
   Scenario Outline: An unknown endpoint is 404
     When <request> is requested
     Then the status is 404 with the error "no such endpoint"
@@ -316,6 +254,8 @@ Feature: LCTYSP-3012 HTTP API
     Examples:
       | request                         |
       | GET /v1/nope                    |
+      | GET /v1/vectors/pending         |
+      | PUT /v1/vectors                 |
       | DELETE /v1/defaults.json        |
       | PATCH /v1/conversations         |
       | GET /v1/tags/a/memory           |

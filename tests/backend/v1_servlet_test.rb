@@ -21,8 +21,6 @@ require 'v1/servlet'
 
 class V1ServletTest < Lcty::Scenarios
   Uuid = Chatty::Uuid
-  Records = Chatty::V1::VectorRecords
-  DIM = Chatty::V1::VectorDB::DIM
 
   # The port of the server, started at the first request and shut down when the tests have run.
   def self.port
@@ -168,37 +166,6 @@ class V1ServletTest < Lcty::Scenarios
     tag
   end
 
-  def pending(model, limit = nil)
-    res = http('GET', "/v1/vectors/pending?model=#{model}#{limit ? "&limit=#{limit}" : ''}")
-    assert_equal 200, res.status, res.raw
-    res.json
-  end
-
-  # A conversation with one round, waiting for embeddings with a model: [round id, model, rev]
-  def pending_round
-    u = user("#{unique_word} question")
-    create([u, assistant('answer')])
-    model = new_model
-    entry = pending(model).find { |p| p['id'] == u['id'] }
-    assert entry, 'the round is pending'
-    [u['id'], model, entry['rev']]
-  end
-
-  # A 768-dimension vector of length 1 with 1.0 at k
-  def unit_vector(k = 0)
-    Array.new(DIM) { |i| i == k ? 1.0 : 0.0 }.pack('e*')
-  end
-
-  def vector_query(model, revs, count, overrides = {})
-    q = { 'model' => model, 'magic' => 'lctyvLE0', 'size' => (DIM * 4).to_s, 'entry_count' => count.to_s,
-          'rev' => revs.map { |id, rev| "#{id}:#{rev}" }.join(',') }.merge(overrides)
-    q.reject { |_, v| v.nil? }.map { |k, v| "#{k}=#{v}" }.join('&')
-  end
-
-  def put_vectors(query, body)
-    http('PUT', "/v1/vectors?#{query}", body, 'content-type' => 'application/octet-stream')
-  end
-
   scenario 'The defaults of the browser settings' do
     res = nil
     step('When GET /v1/defaults.json is requested') { res = http('GET', '/v1/defaults.json') }
@@ -207,10 +174,10 @@ class V1ServletTest < Lcty::Scenarios
       assert_equal 'application/json; charset=utf-8', res.header['content-type']
       assert_kind_of Hash, res.json
     end
-    step('And it has the base_url "http://127.0.0.1:9931", the model "gemma-4-26b-a4b-it" and the embedding_model "embeddinggemma-2"') do
+    step('And it has the base_url "http://127.0.0.1:9931" and the model "gemma-4-26b-a4b-it", and no embedding_model') do
       assert_equal 'http://127.0.0.1:9931', res.json['base_url']
       assert_equal 'gemma-4-26b-a4b-it', res.json['model']
-      assert_equal 'embeddinggemma-2', res.json['embedding_model']
+      refute res.json.key?('embedding_model')
     end
     step('And its api_key is the host name and the user joined by "-"') do
       assert_equal "#{Socket.gethostname}-#{ENV['USER']}", res.json['api_key']
@@ -730,168 +697,10 @@ class V1ServletTest < Lcty::Scenarios
     end
   end
 
-  scenario 'The rounds waiting for embeddings' do
-    round = user('question')
-    list = nil
-    step('Given a conversation with a round of the user text "question" and the assistant text "answer"') do
-      create([round, assistant('answer')])
-    end
-    step('When GET /v1/vectors/pending is requested with a model') { list = pending(new_model) }
-    step('Then the round is listed with its id, its revision and the parts ["question\n\nanswer"]') do
-      entry = list.find { |p| p['id'] == round['id'] }
-      assert entry, 'pending'
-      assert_equal %w[id parts rev], entry.keys.sort
-      assert_match(/\A[0-9a-f]{16}\z/, entry['rev'])
-      assert_equal ["question\n\nanswer"], entry['parts']
-    end
-  end
-
-  scenario 'The pending list is newest first and its limit is kept between 1 and 16' do
-    users = Array.new(17) { |i| user("round #{i}") }
-    model = nil
-    step('Given a conversation with 17 rounds, each newer than any other round') do
-      create(users.flat_map { |u| [u, assistant('ok')] })
-    end
-    step('When GET /v1/vectors/pending is requested with a model') { model = new_model }
-    step('Then with the limit 2 it lists the 2 newest rounds, newest first') do
-      assert_equal [users[16]['id'], users[15]['id']], pending(model, 2).map { |p| p['id'] }
-    end
-    step('And with the limit 0 it lists 1 round') { assert_equal 1, pending(model, 0).size }
-    step('And with the limit 100 it lists 16 rounds') { assert_equal 16, pending(model, 100).size }
-  end
-
-  [
-    ['no model', '"model is required"', '/v1/vectors/pending', 'model is required'],
-    ['the model a/b', '"invalid model name: \"a/b\""', '/v1/vectors/pending?model=a%2Fb', 'invalid model name: "a/b"']
-  ].each do |label, error_label, path, message|
-    scenario "The pending list needs a valid model (#{label})" do
-      res = nil
-      step("When GET /v1/vectors/pending is requested with #{label}") { res = http('GET', path) }
-      step("Then the status is 400 with the error #{error_label}") { assert_error res, 400, message }
-    end
-  end
-
-  scenario 'Registered vectors take their round off the pending list' do
-    id = model = rev = res = nil
-    step('Given a round waiting for embeddings with a model') { id, model, rev = pending_round }
-    step('When PUT /v1/vectors sends a vector for it with its revision') do
-      res = put_vectors(vector_query(model, { id => rev }, 1), Records.pack(id, unit_vector))
-    end
-    step('Then the status is 200 and the body is {"accepted": 1, "stale": []}') do
-      assert_equal 200, res.status, res.raw
-      assert_equal({ 'accepted' => 1, 'stale' => [] }, res.json)
-    end
-    step('And the round is no longer pending for that model') do
-      refute_includes pending(model).map { |p| p['id'] }, id
-    end
-  end
-
-  scenario 'A vector for an old revision is stale' do
-    id = model = res = nil
-    step('Given a round waiting for embeddings with a model') { id, model, = pending_round }
-    step('When PUT /v1/vectors sends a vector for it with another revision') do
-      res = put_vectors(vector_query(model, { id => '0123456789abcdef' }, 1), Records.pack(id, unit_vector))
-    end
-    step('Then the body is {"accepted": 0, "stale": [<its id>]}') do
-      assert_equal 200, res.status, res.raw
-      assert_equal({ 'accepted' => 0, 'stale' => [id] }, res.json)
-    end
-    step('And the round is still pending for that model') { assert_includes pending(model).map { |p| p['id'] }, id }
-  end
-
-  [
-    ['no model', '"model is required"', 'model is required',
-     ->(id, _, rev) { [vector_query(nil, { id => rev }, 1), Records.pack(id, unit_vector)] }],
-    ['17 revisions', '"at most 16 ids per request"', 'at most 16 ids per request',
-     lambda do |id, model, rev|
-       revs = { id => rev }
-       16.times { revs[Uuid.v7] = rev }
-       [vector_query(model, revs, 1), Records.pack(id, unit_vector)]
-     end],
-    ['the magic lctyvBE0', '"magic must be lctyvLE0"', 'magic must be lctyvLE0',
-     ->(id, model, rev) { [vector_query(model, { id => rev }, 1, 'magic' => 'lctyvBE0'), Records.pack(id, unit_vector)] }],
-    ['the size 1024', '"size must be 3072"', 'size must be 3072',
-     ->(id, model, rev) { [vector_query(model, { id => rev }, 1, 'size' => '1024'), Records.pack(id, unit_vector)] }],
-    ['the entry_count 0', '"entry_count must be a positive integer"', 'entry_count must be a positive integer',
-     ->(id, model, rev) { [vector_query(model, { id => rev }, 0), Records.pack(id, unit_vector)] }],
-    ['the entry_count 2 with one record', '"body must be 2 records of 3104 bytes"', 'body must be 2 records of 3104 bytes',
-     ->(id, model, rev) { [vector_query(model, { id => rev }, 2), Records.pack(id, unit_vector)] }],
-    ['a record with a wrong control block', '"record 0: bad control block (expected lctyvLE0 + 3072)"',
-     'record 0: bad control block (expected lctyvLE0 + 3072)',
-     ->(id, model, rev) { [vector_query(model, { id => rev }, 1), 'lctyvBE0'.b + Records.pack(id, unit_vector)[8..-1]] }],
-    ['a record without a revision', '"rev is missing for <its id>"', :rev_missing,
-     ->(id, model, _) { [vector_query(model, {}, 1), Records.pack(id, unit_vector)] }],
-    ['a zero vector', '"vector must be finite and non-zero"', 'vector must be finite and non-zero',
-     ->(id, model, rev) { [vector_query(model, { id => rev }, 1), Records.pack(id, ("\0" * DIM * 4).b)] }]
-  ].each do |label, error_label, message, request|
-    scenario "A vector registration that is not valid is rejected with 400 (#{label})" do
-      id = model = rev = res = nil
-      step('Given a round waiting for embeddings with a model') { id, model, rev = pending_round }
-      step("When PUT /v1/vectors sends #{label}") { res = put_vectors(*instance_exec(id, model, rev, &request)) }
-      step("Then the status is 400 with the error #{error_label}") do
-        assert_error res, 400, message == :rev_missing ? "rev is missing for #{id}" : message
-        assert_includes pending(model).map { |p| p['id'] }, id
-      end
-    end
-  end
-
-  scenario 'The distribution files carry one ETag and answer 304 when unchanged' do
-    dat = idx = nil
-    step('When GET /v1/vectors.eg2_264.dat and GET /v1/vectors.eg2_264.idx are requested') do
-      dat = http('GET', '/v1/vectors.eg2_264.dat')
-      idx = http('GET', '/v1/vectors.eg2_264.idx')
-    end
-    step('Then both are 200 application/octet-stream with the same ETag') do
-      [dat, idx].each do |r|
-        assert_equal 200, r.status
-        assert_equal 'application/octet-stream', r.header['content-type']
-      end
-      refute_nil dat.header['etag']
-      assert_equal dat.header['etag'], idx.header['etag']
-    end
-    step('And the .dat has 1,056 bytes per row and the .idx 16 bytes per row, for the same number of rows') do
-      assert_equal 0, dat.raw.to_s.bytesize % 1056
-      assert_equal 0, idx.raw.to_s.bytesize % 16
-      assert_equal dat.raw.to_s.bytesize / 1056, idx.raw.to_s.bytesize / 16
-    end
-    step('And GET /v1/vectors.eg2_264.dat with If-None-Match of that ETag answers 304 without a body') do
-      res = http('GET', '/v1/vectors.eg2_264.dat', nil, 'If-None-Match' => dat.header['etag'])
-      assert_equal 304, res.status
-      assert_equal dat.header['etag'], res.header['etag']
-      assert_equal '', res.raw.to_s
-    end
-  end
-
-  scenario 'The distribution files follow a registered vector' do
-    etag = idx = id = nil
-    vector = unit_vector(5)
-    step('Given the ETag of the distribution files') { etag = http('GET', '/v1/vectors.eg2_264.idx').header['etag'] }
-    step('When PUT /v1/vectors registers a vector of the model "embeddinggemma-2" for a new round') do
-      u = user("#{unique_word} distributed")
-      create([u, assistant('ok')])
-      id = u['id']
-      rev = pending('embeddinggemma-2').find { |p| p['id'] == id }['rev']
-      res = put_vectors(vector_query('embeddinggemma-2', { id => rev }, 1), Records.pack(id, vector))
-      assert_equal({ 'accepted' => 1, 'stale' => [] }, res.json)
-    end
-    step('Then GET /v1/vectors.eg2_264.idx has another ETag') do
-      idx = http('GET', '/v1/vectors.eg2_264.idx')
-      refute_equal etag, idx.header['etag']
-    end
-    row = nil
-    step('And its rows include the id of the round') do
-      row = idx.raw.b.scan(/.{16}/m).index(Uuid.to_bytes(id))
-      refute_nil row
-    end
-    step('And the row of the round in the .dat is the first 256 dimensions of its vector, of length 1, followed by 32 zero bytes') do
-      dat = http('GET', '/v1/vectors.eg2_264.dat')
-      assert_equal idx.header['etag'], dat.header['etag']
-      assert_equal vector[0, 1024] + ("\0" * 32).b, dat.raw.b[row * 1056, 1056]
-    end
-  end
-
   [
     ['GET /v1/nope', ->() { http('GET', '/v1/nope') }],
+    ['GET /v1/vectors/pending', ->() { http('GET', '/v1/vectors/pending?model=embeddinggemma-2') }],
+    ['PUT /v1/vectors', ->() { http('PUT', '/v1/vectors?model=embeddinggemma-2', 'x', 'content-type' => 'application/octet-stream') }],
     ['DELETE /v1/defaults.json', ->() { http('DELETE', '/v1/defaults.json') }],
     ['PATCH /v1/conversations', ->() { http('PATCH', '/v1/conversations', {}) }],
     ['GET /v1/tags/a/memory', ->() { http('GET', '/v1/tags/a/memory') }],

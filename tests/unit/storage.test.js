@@ -300,20 +300,6 @@ for (const [call, method, url, body, type] of [
 	],
 	["getDefaults()", "GET", "/v1/defaults.json", "none", "none"],
 	[
-		'vectorsPending("eg/2")',
-		"GET",
-		"/v1/vectors/pending?model=eg%2F2&limit=16",
-		"none",
-		"none",
-	],
-	[
-		'vectorsPending("eg", 4)',
-		"GET",
-		"/v1/vectors/pending?model=eg&limit=4",
-		"none",
-		"none",
-	],
-	[
 		'searchConversations({"q": "x", "tags": ["t"], "limit": 5})',
 		"POST",
 		"/v1/search",
@@ -374,55 +360,11 @@ scenario(
 	},
 );
 
-scenario(
-	"putVectors sends the vector binary with its query",
-	async ({ step, t }) => {
-		const server = await background(step, t);
-		await givenTheServerAnswers(step, server, { accepted: 2, stale: [] });
-		const bytes = Array.from({ length: 16 }, (_, i) => i + 1);
-		let result;
-		await step(
-			'When putVectors is called with the model "eg/2", the revs [["r1", 3], ["r2", 4]] and a body of 16 bytes for 2 records of 8 bytes',
-			async () => {
-				result = {
-					value: await storage.putVectors(
-						"eg/2",
-						[
-							["r1", 3],
-							["r2", 4],
-						],
-						{ body: new Uint8Array(bytes), size: 8, count: 2 },
-					),
-				};
-			},
-		);
-		await step(
-			"Then one request PUT /v1/vectors?model=eg%2F2&magic=lctyvLE0&size=8&entry_count=2&rev=r1:3,r2:4 is sent",
-			() => {
-				expect(server.requests.map((r) => `${r.method} ${r.url}`)).toEqual([
-					"PUT /v1/vectors?model=eg%2F2&magic=lctyvLE0&size=8&entry_count=2&rev=r1:3,r2:4",
-				]);
-			},
-		);
-		await step(
-			"And its Content-Type is application/octet-stream and its body is the 16 bytes",
-			() => {
-				expect(server.requests[0].contentType).toBe("application/octet-stream");
-				expect(server.requests[0].bytes).toEqual(bytes);
-			},
-		);
-		await step('And it resolves to {"accepted": 2, "stale": []}', () => {
-			expect(result).toEqual({ value: { accepted: 2, stale: [] } });
-		});
-	},
-);
-
 for (const [call, status, text, message] of [
 	["listConversations()", 500, "boom", "500 boom"],
 	['getConversation("nope")', 404, "not found", "404 not found"],
 	["createConversation({}, [])", 409, "already exists", "409 already exists"],
 	['popMessages("c1", 0)', 409, "too far back", "409 too far back"],
-	['putVectors("eg", [], {})', 400, "bad magic", "400 bad magic"],
 ]) {
 	scenario(
 		`An answer that is not OK becomes an Error with the status and the body (${call})`,

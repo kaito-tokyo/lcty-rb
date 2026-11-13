@@ -33,30 +33,28 @@ changed.
 
 ## The features
 
-| ID                                                   | Part of the server                                   |
-| ---------------------------------------------------- | ---------------------------------------------------- |
-| [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)           | `lib/uuid.rb`: message ids as UUIDv7                 |
-| [LCTYSP-3002](LCTYSP-3002_conversation-html.feature) | `lib/conv_html.rb`: the conversation file format     |
-| [LCTYSP-3003](LCTYSP-3003_store.feature)             | `lib/store.rb`: conversations and their tags         |
-| [LCTYSP-3004](LCTYSP-3004_search-index.feature)      | `lib/search_index.rb`: the keyword search index      |
-| [LCTYSP-3005](LCTYSP-3005_tag-store.feature)         | `lib/tag_store.rb`: `tags.sqlite`                    |
-| [LCTYSP-3006](LCTYSP-3006_vector-records.feature)    | `lib/v1/vector_records.rb`: the vector binary format |
-| [LCTYSP-3007](LCTYSP-3007_vector-db.feature)         | `lib/v1/vector_db.rb`: the vector DB                 |
-| [LCTYSP-3008](LCTYSP-3008_server-settings.feature)   | `lib/config.rb`: the server's settings               |
-| [LCTYSP-3012](LCTYSP-3012_http-api.feature)          | `lib/v1/servlet.rb`: the HTTP API `/v1/`             |
-| [LCTYSP-3014](LCTYSP-3014_tag-files.feature)         | `lib/tag_files.rb`: the tag files in `t/`            |
-| [LCTYSP-3016](LCTYSP-3016_file-types.feature)        | `lcty.rb`: the types of the files served             |
-| [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)     | `lib/servlets.rb`: the servlets of the site          |
-| [LCTYSP-3019](LCTYSP-3019_entry-point.feature)       | `lcty.rb`: the entry point                           |
-| [LCTYSP-3020](LCTYSP-3020_rpc.feature)               | `lib/rpc/`: the RPC protocol at `/v1/rpc`            |
-| [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)         | `lib/rpc/`: several pages over `/v1/rpc` at once     |
-| [LCTYSP-3021](LCTYSP-3021_openapi.feature)           | `openapi.yaml`: every path the site answers          |
-| [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `tools/convert.rb`               |
-| [LCTYSP-3024](LCTYSP-3024_password.feature)          | `lib/password.rb`: the password hashes               |
-| [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)        | `lib/basic_auth.rb`: Basic authentication            |
-| [LCTYSP-3026](LCTYSP-3026_vector-pair.feature)       | `lib/embedding/vector_pair.rb`: the vector pair      |
-| [LCTYSP-3027](LCTYSP-3027_embedding-server.feature)  | `lib/embedding/llama_server.rb`: embedding server    |
-| [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)  | `lib/embedding.rb`: indexing, serving, queries       |
+| ID                                                   | Part of the server                                |
+| ---------------------------------------------------- | ------------------------------------------------- |
+| [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)           | `lib/uuid.rb`: message ids as UUIDv7              |
+| [LCTYSP-3002](LCTYSP-3002_conversation-html.feature) | `lib/conv_html.rb`: the conversation file format  |
+| [LCTYSP-3003](LCTYSP-3003_store.feature)             | `lib/store.rb`: conversations and their tags      |
+| [LCTYSP-3004](LCTYSP-3004_search-index.feature)      | `lib/search_index.rb`: the keyword search index   |
+| [LCTYSP-3005](LCTYSP-3005_tag-store.feature)         | `lib/tag_store.rb`: `tags.sqlite`                 |
+| [LCTYSP-3008](LCTYSP-3008_server-settings.feature)   | `lib/config.rb`: the server's settings            |
+| [LCTYSP-3012](LCTYSP-3012_http-api.feature)          | `lib/v1/servlet.rb`: the HTTP API `/v1/`          |
+| [LCTYSP-3014](LCTYSP-3014_tag-files.feature)         | `lib/tag_files.rb`: the tag files in `t/`         |
+| [LCTYSP-3016](LCTYSP-3016_file-types.feature)        | `lcty.rb`: the types of the files served          |
+| [LCTYSP-3018](LCTYSP-3018_site-servlets.feature)     | `lib/servlets.rb`: the servlets of the site       |
+| [LCTYSP-3019](LCTYSP-3019_entry-point.feature)       | `lcty.rb`: the entry point                        |
+| [LCTYSP-3020](LCTYSP-3020_rpc.feature)               | `lib/rpc/`: the RPC protocol at `/v1/rpc`         |
+| [LCTYSP-3022](LCTYSP-3022_rpc-pages.feature)         | `lib/rpc/`: several pages over `/v1/rpc` at once  |
+| [LCTYSP-3021](LCTYSP-3021_openapi.feature)           | `openapi.yaml`: every path the site answers       |
+| [LCTYSP-3023](LCTYSP-3023_convert.feature)           | `lib/convert_c.rb`: `tools/convert.rb`            |
+| [LCTYSP-3024](LCTYSP-3024_password.feature)          | `lib/password.rb`: the password hashes            |
+| [LCTYSP-3025](LCTYSP-3025_basic-auth.feature)        | `lib/basic_auth.rb`: Basic authentication         |
+| [LCTYSP-3026](LCTYSP-3026_vector-pair.feature)       | `lib/embedding/vector_pair.rb`: the vector pair   |
+| [LCTYSP-3027](LCTYSP-3027_embedding-server.feature)  | `lib/embedding/llama_server.rb`: embedding server |
+| [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)  | `lib/embedding.rb`: indexing, serving, queries    |
 
 Every module of `lib/` has a feature. What `Chatty.run` itself does (binding the address, mounting the servlets,
 handling signals) is left to the UI tests, which start the real server.

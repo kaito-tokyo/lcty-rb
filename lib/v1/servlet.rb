@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# /v1/: the JSON API and the vector binaries (LCTYSP-0006). Mounted at /v1 by lcty.rb.
+# /v1/: the JSON API and the vector pair of semantic search (LCTYSP-0006, LCTYSP-0019). Mounted at /v1 by lcty.rb.
 
 require 'webrick'
 require 'json'
@@ -11,13 +11,11 @@ require 'socket'
 require 'securerandom'
 require 'digest'
 require_relative '../store'
-require_relative 'vector_db'
 require_relative '../embedding'
 
 module Chatty
   module V1
     MAX_BODY = 64 * 1024 * 1024
-    MAX_PUT_IDS = 16 # The rev list of PUT /v1/vectors is in the query, so keep the URL short (WEBrick allows up to 2083 bytes)
 
     # Defaults of the browser settings (GET /v1/defaults.json). The browser stores its own changes (LCTYSP-0010).
     # The API key matches llm-backend/run-llama-cpp.sh ("<hostname>-<user>"): a guard against connecting to the wrong server.
@@ -25,8 +23,7 @@ module Chatty
       {
         'base_url' => 'http://127.0.0.1:9931',
         'api_key' => "#{Socket.gethostname}-#{ENV['USER']}",
-        'model' => 'gemma-4-26b-a4b-it',
-        'embedding_model' => 'embeddinggemma-2'
+        'model' => 'gemma-4-26b-a4b-it'
       }
     end
 
@@ -54,41 +51,6 @@ module Chatty
         case [method, parts.join('/')]
         when ['GET', 'defaults.json']
           return json(res, 200, V1.defaults)
-        when ['GET', 'vectors/pending']
-          model = query_model(req.query)
-          limit = [[(req.query['limit'] || 16).to_i, 1].max, MAX_PUT_IDS].min
-          return json(res, 200, VECTORS.pending(model, limit))
-        when ['PUT', 'vectors']
-          # The body is a registration vector binary (768 dims). Revisions come in the query as ?rev=<id>:<rev>,… (LCTYSP-0008)
-          q = WEBrick::HTTPUtils.parse_query(req.query_string.to_s)
-          model = query_model(q)
-          revs = q['rev'].to_s.split(',').map { |p| p.split(':', 2) }.select { |a| a.size == 2 }.to_h
-          raise HttpError.new(400, "at most #{MAX_PUT_IDS} ids per request") if revs.size > MAX_PUT_IDS
-          raise HttpError.new(413, 'too large') if req.content_length > MAX_BODY
-          # Before reading the body, check its shape against magic, size and entry_count in the query (also checked per record)
-          size = Integer(q['size'].to_s, exception: false)
-          count = Integer(q['entry_count'].to_s, exception: false)
-          raise HttpError.new(400, 'magic must be lctyvLE0') unless q['magic'] == 'lctyvLE0'
-          raise HttpError.new(400, "size must be #{VectorDB::DIM * 4}") unless size == VectorDB::DIM * 4
-          raise HttpError.new(400, 'entry_count must be a positive integer') unless count && count > 0
-          unless req.content_length == count * (VectorRecords::HEAD + size)
-            raise HttpError.new(400, "body must be #{count} records of #{VectorRecords::HEAD + size} bytes")
-          end
-          return json(res, 200, VECTORS.put(model, revs, (req.body || '').b))
-        when ['GET', 'vectors.eg2_264.dat'], ['GET', 'vectors.eg2_264.idx']
-          # The distribution of the default embedding model (LCTYSP-0008), built in memory on every request and never
-          # stored. Both carry the same ETag, a digest of the pair, so the browser can tell a pair fetched across a
-          # change; 304 if unchanged
-          dat, idx = VECTORS.export(V1.defaults['embedding_model'])
-          etag = %("#{Digest::SHA256.hexdigest("#{dat.bytesize}:#{dat}#{idx}")[0, 32]}")
-          res['ETag'] = etag
-          if req['if-none-match'] == etag
-            res.status = 304
-            return
-          end
-          res['Content-Type'] = 'application/octet-stream'
-          res.body = parts[0] == 'vectors.eg2_264.dat' ? dat : idx
-          return
         when ['GET', 'tags']
           # Every tag file, with one ETag for the set (LCTYSP-0009)
           body, etag = TAG_FILES.all
@@ -164,17 +126,15 @@ module Chatty
 
       PAIR_FILE_RE = /\Avectors\.([0-9a-z]+_\d+)\.(json|dat|idx)\z/.freeze
 
-      # The vector pair of LCTYSP-0019 (lib/embedding.rb): GET vectors.<name>.json, and .dat and .idx with Range. A
-      # request for .dat or .idx without Range is left to the distribution of LCTYSP-0008, which the pages fetch until
-      # they move to the pair. Returns whether it answered.
+      # The vector pair of LCTYSP-0019 (lib/embedding.rb): GET vectors.<name>.json, and .dat and .idx by Range (whole
+      # without one). 503 before the pair is open. Returns whether it answered.
       def serve_pair(file, req, res)
         m = PAIR_FILE_RE.match(file)
         pair = Embedding.pair
         return false unless m
-        return json(res, 503, 'error' => 'the vector pair is not open') if pair.nil? && m[2] == 'json'
-        return false unless pair && m[1] == Embedding.name
+        return json(res, 503, 'error' => 'the vector pair is not open') if pair.nil?
+        return false unless m[1] == Embedding.name
         return serve_summary(pair, req, res) if m[2] == 'json'
-        return false unless req['range']
 
         serve_range(pair, m[2].to_sym, req, res)
       end
@@ -191,12 +151,18 @@ module Chatty
         true
       end
 
-      # bytes=<first>-<last> of .dat or .idx: 206, or 412 when If-Match names another generation, or 416
+      # bytes=<first>-<last> of .dat or .idx: 206, or 412 when If-Match names another generation, or 416. Without
+      # Range, the whole file (its records), 200
       def serve_range(pair, kind, req, res)
         etag = %("#{pair.rev}")
         res['ETag'] = etag
         if (im = req['if-match']) && im.strip != '*' && !im.split(/\s*,\s*/).include?(etag)
           return json(res, 412, 'error' => 'another generation of the pair')
+        end
+        unless req['range']
+          res['Content-Type'] = 'application/octet-stream'
+          res.body = pair.read(kind, 0, Float::INFINITY)[0].to_s
+          return true
         end
         r = /\Abytes=(\d+)-(\d+)\z/.match(req['range'].to_s.strip)
         first, last = r && [r[1].to_i, r[2].to_i]
@@ -221,13 +187,6 @@ module Chatty
       def reindex(id)
         messages, tags = Store.index_state(Store.existing_conv_path(id))
         INDEX.sync(id, messages, tags)
-      end
-
-      # WEBrick query values are ASCII-8BIT; passed to SQLite as is they compare as BLOBs. Convert to UTF-8
-      def query_model(q)
-        model = String.new(q['model'].to_s, encoding: Encoding::UTF_8)
-        raise HttpError.new(400, 'model is required') if model.empty? || !model.valid_encoding?
-        model
       end
 
       def parse_body(req)

@@ -10,9 +10,8 @@ Feature: LCTYSP-1009 The client of the HTTP API
 
   js/api/storage.js is how the pages talk to the server's HTTP API: one function per endpoint, each sending one
   request to the page's origin and resolving to the parsed JSON of the answer. A body is sent as JSON with the
-  Content-Type application/json, ids and names in a path are percent-encoded, and putVectors sends a registration
-  vector binary as application/octet-stream. An answer that is not OK becomes an Error "<status> <body>", the body
-  cut to 200 characters, with the status as its status. The tags are not here: js/api/lcty-t.js and its worker
+  Content-Type application/json, and ids and names in a path are percent-encoded. An answer that is not OK becomes an
+  Error "<status> <body>", the body cut to 200 characters, with the status as its status. The tags are not here: js/api/lcty-t.js and its worker
   (LCTYSP-1021) send their requests. The requests that change conversations (create, append, pop, delete) send nothing
   else: the browser's copies of the list hear of the change from the server, over /v1/rpc (LCTYSP-0014). toLine turns
   a message into a line to append: a reply also carries its content rendered by js/convert/reply.js, as the screen shows
@@ -65,8 +64,6 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | popMessages("c1", 2)                                                     | POST   | /v1/conversations/c1/pop                  | {"from":2}                                                    | application/json |
       | deleteConversation("c/1")                                                | DELETE | /v1/conversations/c%2F1                   | none                                                          | none             |
       | getDefaults()                                                            | GET    | /v1/defaults.json                         | none                                                          | none             |
-      | vectorsPending("eg/2")                                                   | GET    | /v1/vectors/pending?model=eg%2F2&limit=16 | none                                                          | none             |
-      | vectorsPending("eg", 4)                                                  | GET    | /v1/vectors/pending?model=eg&limit=4      | none                                                          | none             |
       | searchConversations({"q": "x", "tags": ["t"], "limit": 5})               | POST   | /v1/search                                | {"q":"x","tags":["t"],"limit":5}                              | application/json |
       | fetchSnippets(["r1", "r2"], "x")                                         | POST   | /v1/snippets                              | {"ids":["r1","r2"],"q":"x"}                                   | application/json |
 
@@ -74,13 +71,6 @@ Feature: LCTYSP-1009 The client of the HTTP API
     Given the server answers with the status 404 and the text "not found"
     When getConversation("nope") is called
     Then it rejects with the Error "404 not found" whose status is 404
-
-  Scenario: putVectors sends the vector binary with its query
-    Given the server answers {"accepted": 2, "stale": []}
-    When putVectors is called with the model "eg/2", the revs [["r1", 3], ["r2", 4]] and a body of 16 bytes for 2 records of 8 bytes
-    Then one request PUT /v1/vectors?model=eg%2F2&magic=lctyvLE0&size=8&entry_count=2&rev=r1:3,r2:4 is sent
-    And its Content-Type is application/octet-stream and its body is the 16 bytes
-    And it resolves to {"accepted": 2, "stale": []}
 
   Scenario Outline: An answer that is not OK becomes an Error with the status and the body
     Given the server answers with the status <status> and the text "<text>"
@@ -93,7 +83,6 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | getConversation("nope")      | 404    | not found      | 404 not found            |
       | createConversation({}, [])   | 409    | already exists | 409 already exists       |
       | popMessages("c1", 0)         | 409    | too far back   | 409 too far back         |
-      | putVectors("eg", [], {})     | 400    | bad magic      | 400 bad magic            |
 
   Scenario: A long error body is cut to 200 characters
     Given the server answers with the status 500 and a text of 300 characters

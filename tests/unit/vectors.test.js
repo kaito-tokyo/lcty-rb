@@ -5,203 +5,140 @@
 // LCTYSP-1011: the scenarios of docs/specs/LCTYSP-1011_vector-store.feature, written by hand. Each test has the title
 // of its Scenario (an Examples row is added in parentheses) and one step per line of it, so the two read side by side.
 //
-// encodeRecords and FULL_DIM of js/search/vectors.js are pure. The store (createVectorStore()) starts the real worker
-// /fuzzy_search.worker.js (LCTYSP-1013) as a Web Worker of Node.js 26 (node-preload.cjs). Its requests, and the request
-// of its script, are answered by routeFetch (node-unit.js), as routes do in the browser: the distribution files are
-// built by the test in the layout of LCTYSP-0008, and the script and /bdot264.wasm are the files of public/ unless the
-// test makes the script fail.
+// embedQuery of js/search/vectors.js is given a fake connection ({ call }). The store (createVectorStore()) starts the
+// real worker /fuzzy_search.worker.js (LCTYSP-1013) as a Web Worker of Node.js 26 (node-preload.cjs). Its requests, and
+// the request of its script, are answered by routeFetch (node-unit.js), as routes do in the browser: the vector pair
+// is built by the test in the layout of LCTYSP-0019 (record 0 the header, then rows of 256 Float32 LE and 32 zero
+// bytes, and 16 bytes of id per record), served as the server serves it (the JSON, and the files by Range with
+// If-Match of the generation), and the script and /bdot264.wasm are the files of public/ unless the test makes the
+// script fail.
 
 import { expect, publicUrl, routeFetch, scenario } from "./node-unit.js";
 
-const { createVectorStore, encodeRecords, FULL_DIM } = await import(
+const { createVectorStore, embedQuery } = await import(
 	publicUrl("js/search/vectors.js")
 );
 
-// the control block of registration: "lctyvLE0", 3072 as uint32 LE, a reserved 0 (LCTYSP-3006)
-const CONTROL = "6c637479764c4530" + "000c0000" + "00000000";
-const ID = "0190f3a1-7c2e-7abc-8def-0123456789ab";
+// ---- The query embedding ----
 
-/** A vector of n Float32 values that are all different and exact. */
-const vector = (n, seed = 0) =>
-	Array.from({ length: n }, (_, i) => (i - 300) / 8 + seed);
-
-/** Bytes of Float32 LE as hex. */
-const f32hex = (values) =>
-	Buffer.from(Float32Array.from(values).buffer).toString("hex");
-
-/** encodeRecords of items [{id, vec: values, view?}], as {hex, size, count} or {error}. */
-function encode(items) {
-	try {
-		const { body, size, count } = encodeRecords(
-			items.map(({ id, vec, view }) => ({
-				id,
-				vec: view
-					? Float32Array.from({ length: view.length }, (_, i) => i).subarray(
-							view.from,
-							view.from + 768,
-						)
-					: Float32Array.from(vec),
-			})),
-		);
-		const hex = Buffer.from(body.buffer, body.byteOffset, body.length).toString(
-			"hex",
-		);
-		return { isUint8Array: body instanceof Uint8Array, hex, size, count };
-	} catch (e) {
-		return { error: e.message };
-	}
+/** A fake connection whose call answers answer(method, params) and records its calls. */
+function connection(answer) {
+	const calls = [];
+	return {
+		calls,
+		call: async (method, params) => {
+			calls.push([method, params]);
+			return answer(method, params);
+		},
+	};
 }
 
-scenario(
-	"A record is the control block, the id and the vector",
-	async ({ step }) => {
-		const vec = vector(768);
-		await step("Given a UUIDv7 id and a vector of 768 Float32 values", () => {
-			expect(ID).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);
-		});
-		let result;
-		await step("When encodeRecords encodes them", () => {
-			result = encode([{ id: ID, vec }]);
-		});
-		await step(
-			"Then it returns a body of 3,104 bytes, the size 3072 and the count 1",
-			() => {
-				expect(result.isUint8Array).toBe(true);
-				expect(result.hex.length / 2).toBe(3104);
-				expect(result.size).toBe(3072);
-				expect(result.count).toBe(1);
-			},
-		);
-		await step(
-			"And the bytes 0 to 15 are 6c 63 74 79 76 4c 45 30 00 0c 00 00 00 00 00 00",
-			() => {
-				expect(result.hex.slice(0, 32)).toBe(
-					"6c637479764c4530000c000000000000",
-				);
-			},
-		);
-		await step("And the bytes 16 to 31 are the 16 bytes of the id", () => {
-			expect(result.hex.slice(32, 64)).toBe(ID.replace(/-/g, ""));
-		});
-		await step("And the rest is the vector as Float32 LE", () => {
-			expect(result.hex.slice(64)).toBe(f32hex(vec));
-		});
-	},
-);
+/** The base64 of bytes. */
+const base64 = (bytes) => Buffer.from(bytes).toString("base64");
 
-scenario("Records follow each other in the order given", async ({ step }) => {
-	const other = "0190f3a1-7c2e-7abc-8def-ba9876543210";
-	const items = [
-		{ id: ID, vec: vector(768, 1) },
-		{ id: other, vec: vector(768, 2) },
-		{ id: ID, vec: vector(768, 3) },
-	];
+function embed(rpc, text) {
+	return embedQuery(rpc, text).then(
+		(vector) => ({ vector }),
+		(e) => ({ rejected: e.message }),
+	);
+}
+
+scenario("A query is embedded by the server", async ({ step }) => {
+	let rpc;
 	await step(
-		"Given three items, the first and the third with the same id",
+		"Given a connection whose vectors.eg2_264.embed answers the base64 of 256 Float32 LE, 0.5 in the first and -0.25 in the last",
 		() => {
-			expect(items[0].id).toBe(items[2].id);
+			const v = new Float32Array(256);
+			v[0] = 0.5;
+			v[255] = -0.25;
+			rpc = connection(() => ({
+				vector: base64(new Uint8Array(v.buffer)),
+			}));
 		},
 	);
 	let result;
-	await step("When encodeRecords encodes them", () => {
-		result = encode(items);
+	await step('When embedQuery embeds "closures" over it', async () => {
+		result = await embed(rpc, "closures");
 	});
 	await step(
-		"Then it returns a body of 9,312 bytes, the size 3072 and the count 3",
+		'Then vectors.eg2_264.embed was called once with { text: "closures" }',
 		() => {
-			expect(result.hex.length / 2).toBe(9312);
-			expect(result.size).toBe(3072);
-			expect(result.count).toBe(3);
+			expect(rpc.calls).toEqual([
+				["vectors.eg2_264.embed", { text: "closures" }],
+			]);
 		},
 	);
 	await step(
-		"And each record of 3,104 bytes is the control block, the id and the vector of its item, in order",
+		"And it resolves with a Float32Array of 256, 0.5 in the first, -0.25 in the last and 0 in the others",
 		() => {
-			items.forEach(({ id, vec }, i) => {
-				expect(result.hex.slice(i * 6208, (i + 1) * 6208)).toBe(
-					CONTROL + id.replace(/-/g, "") + f32hex(vec),
-				);
-			});
+			const { vector } = result;
+			expect(vector).toBeInstanceOf(Float32Array);
+			expect(vector.length).toBe(256);
+			expect(vector[0]).toBe(0.5);
+			expect(vector[255]).toBe(-0.25);
+			expect(vector.slice(1, 255).every((x) => x === 0)).toBe(true);
 		},
 	);
 });
 
-scenario("No items encode to an empty body", async ({ step }) => {
-	let result;
-	await step("When encodeRecords encodes no items", () => {
-		result = encode([]);
-	});
-	await step(
-		"Then it returns a body of 0 bytes, the size 3072 and the count 0",
-		() => {
-			expect(result).toEqual({
-				isUint8Array: true,
-				hex: "",
-				size: 3072,
-				count: 0,
-			});
-		},
-	);
-});
-
-scenario(
-	"A vector that is a view of a larger array is encoded from its own values",
-	async ({ step }) => {
-		let item;
-		await step(
-			"Given an item whose vector is the 768 values from the 11th of a Float32Array of 1,000",
-			() => {
-				// the array holds 0, 1, …, 999; the view starts at the value 10
-				item = { id: ID, view: { length: 1000, from: 10 } };
-			},
-		);
-		let result;
-		await step("When encodeRecords encodes it", () => {
-			result = encode([item]);
-		});
-		await step(
-			"Then the bytes from 32 are those 768 values as Float32 LE",
-			() => {
-				expect(result.hex.length / 2).toBe(3104);
-				expect(result.hex.slice(64)).toBe(
-					f32hex(Array.from({ length: 768 }, (_, i) => i + 10)),
-				);
-			},
-		);
-	},
-);
-
-for (const dims of [256, 767, 769]) {
+for (const [bytes, floats] of [
+	[1020, 255],
+	[3072, 768],
+	[0, 0],
+]) {
 	scenario(
-		`A vector that does not have 768 dimensions is rejected (${dims})`,
+		`An answer that is not 256 floats rejects (${bytes})`,
 		async ({ step }) => {
-			let item;
-			await step(`Given an item whose vector has ${dims} values`, () => {
-				item = { id: ID, vec: vector(dims) };
-			});
+			let rpc;
+			await step(
+				`Given a connection whose vectors.eg2_264.embed answers the base64 of ${bytes} bytes`,
+				() => {
+					rpc = connection(() => ({ vector: base64(new Uint8Array(bytes)) }));
+				},
+			);
 			let result;
-			await step("When encodeRecords encodes it", () => {
-				result = encode([item]);
+			await step('When embedQuery embeds "closures" over it', async () => {
+				result = await embed(rpc, "closures");
 			});
-			await step(`Then it throws "wrong dimensions (${dims} ≠ 768)"`, () => {
-				expect(result).toEqual({ error: `wrong dimensions (${dims} ≠ 768)` });
-			});
+			await step(
+				`Then it rejects with "wrong query dimensions (${floats} ≠ 256)"`,
+				() => {
+					expect(result).toEqual({
+						rejected: `wrong query dimensions (${floats} ≠ 256)`,
+					});
+				},
+			);
 		},
 	);
 }
 
-scenario("FULL_DIM is the dimension of registration", async ({ step }) => {
-	await step("Then FULL_DIM is 768", () => {
-		expect(FULL_DIM).toBe(768);
+scenario("A failed call of the connection passes through", async ({ step }) => {
+	let rpc;
+	await step(
+		'Given a connection whose vectors.eg2_264.embed rejects with "semantic search is unavailable"',
+		() => {
+			rpc = connection(() => {
+				throw new Error("semantic search is unavailable");
+			});
+		},
+	);
+	let result;
+	await step('When embedQuery embeds "closures" over it', async () => {
+		result = await embed(rpc, "closures");
+	});
+	await step('Then it rejects with "semantic search is unavailable"', () => {
+		expect(result).toEqual({ rejected: "semantic search is unavailable" });
 	});
 });
 
 // ---- The store ----
 
+const JSON_PATH = "/v1/vectors.eg2_264.json";
 const DAT = "/v1/vectors.eg2_264.dat";
 const IDX = "/v1/vectors.eg2_264.idx";
 const WORKER = "/fuzzy_search.worker.js";
-const REC = 1056; // a row of the distribution files
+const REC = 1056; // a row of .dat
+const ID = 16; // an id of .idx
 
 /** The UUIDv7 of a short name ("a" → 019a0000-0000-7000-8000-000000000061). */
 function uuid(name) {
@@ -213,17 +150,19 @@ const nameOf = (id) =>
 	Buffer.from(id.slice(24).replace(/^(00)+/, ""), "hex").toString();
 const named = (results) => results.map(([id, score]) => [nameOf(id), score]);
 
-/** The pair of distribution files of rows [name, first values]. */
+/** The files of a pair of rows [name, first values]: record 0 the header (NaNs, an id of zeros), then the rows. */
 function files(rows) {
-	const f = new Float32Array((rows.length * REC) / 4);
+	const f = new Float32Array(((rows.length + 1) * REC) / 4);
+	f.fill(Number.NaN, 0, 256);
 	rows.forEach(([, values], i) => {
-		f.set([values].flat(), (i * REC) / 4);
+		f.set([values].flat(), ((i + 1) * REC) / 4);
 	});
 	return {
 		dat: Buffer.from(f.buffer),
-		idx: Buffer.concat(
-			rows.map(([n]) => Buffer.from(uuid(n).replace(/-/g, ""), "hex")),
-		),
+		idx: Buffer.concat([
+			Buffer.alloc(ID),
+			...rows.map(([n]) => Buffer.from(uuid(n).replace(/-/g, ""), "hex")),
+		]),
 	};
 }
 
@@ -241,8 +180,8 @@ const ROWS_AB = [
 	["b", 0.5],
 ];
 
-/** A 768-dimension query: 1 in its first dimension, or the values given at their indices. */
-function query(values = { 0: 1 }, length = 768) {
+/** A 256-dimension query: 1 in its first dimension, or the values given at their indices. */
+function query(values = { 0: 1 }, length = 256) {
 	return Array.from({ length }, (_, i) => values[i] ?? 0);
 }
 
@@ -250,49 +189,73 @@ function query(values = { 0: 1 }, length = 768) {
 const answer = (status, body) => () => new Response(body, { status });
 
 /**
- * The files answered by the test. server.files is the pair, server.etag the ETag of both (or null), server.fail an
- * answer per file that replaces it, server.worker the answer of /fuzzy_search.worker.js (undefined: the real file);
- * server.requests counts the requests. server.store is the store the Scenario makes.
+ * The pair answered by the test. server.pair is {rev, rows}, server.fail an answer per file that replaces it,
+ * server.short makes .dat answer one byte short, server.worker the answer of /fuzzy_search.worker.js (undefined: the
+ * real file); server.requests counts the requests and server.ranges keeps the Range of each file request. server.store
+ * is the store the Scenario makes.
  */
 async function background(step, t) {
 	const server = {
-		files: { dat: Buffer.alloc(0), idx: Buffer.alloc(0) },
-		etag: null,
+		pair: { rev: 1763000000000, rows: [] },
 		fail: {},
+		short: false,
 		worker: () => undefined,
-		requests: { dat: 0, idx: 0, worker: 0 },
+		requests: { json: 0, dat: 0, idx: 0, worker: 0 },
+		ranges: { dat: [], idx: [] },
 		store: null,
 		asked: [],
 	};
-	await step(
-		"Given /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test",
-		() => {
-			routeFetch(t, (request) => {
-				const path = new URL(request.url).pathname;
-				const key = { [DAT]: "dat", [IDX]: "idx" }[path];
-				if (key) {
-					server.requests[key]++;
-					if (server.fail[key]) return server.fail[key](request);
-					return new Response(server.files[key], {
-						headers: {
-							"Content-Type": "application/octet-stream",
-							...(server.etag ? { ETag: server.etag } : {}),
-						},
-					});
-				}
-				if (path === WORKER) {
-					server.requests.worker++;
-					return server.worker(request);
-				}
-			});
-		},
-	);
+	await step("Given the vector pair is answered by the test", () => {
+		routeFetch(t, (request) => {
+			const path = new URL(request.url).pathname;
+			if (path === JSON_PATH) {
+				server.requests.json++;
+				return Response.json(summary(server));
+			}
+			const key = { [DAT]: "dat", [IDX]: "idx" }[path];
+			if (key) return serveRange(server, key, request);
+			if (path === WORKER) {
+				server.requests.worker++;
+				return server.worker(request);
+			}
+		});
+	});
 	return server;
 }
 
-function refresh(server) {
+/** The pair's JSON */
+function summary(server) {
+	return {
+		rev: server.pair.rev,
+		count: server.pair.rows.length + 1,
+		invalid: [],
+	};
+}
+
+/** A file of the pair as the server serves it: 206 for bytes=first-last, 412 for another generation */
+function serveRange(server, key, request) {
+	server.requests[key]++;
+	const range = request.headers.get("range");
+	server.ranges[key].push(range);
+	if (server.fail[key]) return server.fail[key](request);
+	if (request.headers.get("if-match") !== `"${server.pair.rev}"`)
+		return new Response("", { status: 412 });
+	const body = files(server.pair.rows)[key];
+	const [, first, last] = /^bytes=(\d+)-(\d+)$/.exec(range).map(Number);
+	let bytes = body.subarray(first, last + 1);
+	if (key === "dat" && server.short) bytes = bytes.subarray(0, -1);
+	return new Response(bytes, {
+		status: 206,
+		headers: {
+			"Content-Type": "application/octet-stream",
+			"Content-Range": `bytes ${first}-${last}/${body.length}`,
+		},
+	});
+}
+
+function refresh(server, s) {
 	const store = server.store;
-	return store.refresh().then(
+	return store.refresh(s).then(
 		() => ({ resolved: true, size: store.size }),
 		(e) => ({ rejected: e.message, size: store.size }),
 	);
@@ -314,10 +277,9 @@ function search(server, q, k, { allow, accept } = {}) {
 	);
 }
 
-async function givenTheFilesHold(step, server, rows, text, etag = null) {
-	await step(`Given the files hold ${text}`, () => {
-		server.files = files(rows);
-		server.etag = etag;
+async function givenThePairHolds(step, server, rows, text) {
+	await step(`Given the pair holds ${text}`, () => {
+		server.pair = { rev: server.pair.rev, rows };
 	});
 }
 
@@ -345,6 +307,14 @@ async function whenRefresh(step, server) {
 async function thenResolvesWithSize(step, result, n) {
 	await step(`Then it resolves and the size is ${n}`, () => {
 		expect(result).toEqual({ resolved: true, size: n });
+	});
+}
+
+async function thenEachFileFromRecord1(step, server) {
+	await step("And each file was requested once, from its record 1", () => {
+		const n = server.pair.rows.length + 1;
+		expect(server.ranges.dat).toEqual([`bytes=${REC}-${n * REC - 1}`]);
+		expect(server.ranges.idx).toEqual([`bytes=${ID}-${n * ID - 1}`]);
 	});
 }
 
@@ -398,10 +368,10 @@ scenario("A new store is empty and starts no worker", async ({ step, t }) => {
 });
 
 scenario(
-	"A refresh loads the distribution files in the worker",
+	"A refresh loads the vector pair in the worker",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(
+		await givenThePairHolds(
 			step,
 			server,
 			[
@@ -417,16 +387,37 @@ scenario(
 		await step("And /fuzzy_search.worker.js was requested once", () => {
 			expect(server.requests.worker).toBe(1);
 		});
-		await step("And each file was requested once", () => {
-			expect(server.requests.dat).toBe(1);
-			expect(server.requests.idx).toBe(1);
+		await step("And the JSON was requested once", () => {
+			expect(server.requests.json).toBe(1);
 		});
+		await thenEachFileFromRecord1(step, server);
+	},
+);
+
+scenario(
+	"A refresh with a summary does not fetch the JSON",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenAStore(step, server);
+		let result;
+		await step(
+			"When refresh() is called with the summary of the pair",
+			async () => {
+				result = await refresh(server, summary(server));
+			},
+		);
+		await thenResolvesWithSize(step, result, 2);
+		await step("And the JSON was not requested", () => {
+			expect(server.requests.json).toBe(0);
+		});
+		await thenEachFileFromRecord1(step, server);
 	},
 );
 
 scenario("Concurrent refreshes share one load", async ({ step, t }) => {
 	const server = await background(step, t);
-	await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+	await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
 	await givenAStore(step, server);
 	let result;
 	await step("When refresh() is called twice at once", async () => {
@@ -437,29 +428,19 @@ scenario("Concurrent refreshes share one load", async ({ step, t }) => {
 	await step("Then both resolve and the size is 2", () => {
 		expect(result).toEqual({ size: 2 });
 	});
-	await step("And each file was requested once", () => {
-		expect(server.requests.dat).toBe(1);
-		expect(server.requests.idx).toBe(1);
-	});
+	await thenEachFileFromRecord1(step, server);
 });
 
 scenario(
-	"A refresh after the files changed loads the new rows in the same worker",
+	"A refresh after a new generation loads the new rows in the same worker",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(
-			step,
-			server,
-			ROWS_AB,
-			'the rows of "a" and "b", with the ETag "v1"',
-			'"v1"',
-		);
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
 		await givenRefreshed(step, server);
 		await step(
-			'And the files now hold the row of "c", with the ETag "v2"',
+			'And the pair is now a new generation holding the row of "c"',
 			() => {
-				server.files = files([["c", 0.75]]);
-				server.etag = '"v2"';
+				server.pair = { rev: server.pair.rev + 1, rows: [["c", 0.75]] };
 			},
 		);
 		const result = await whenRefresh(step, server);
@@ -472,12 +453,10 @@ scenario(
 );
 
 scenario(
-	"Refreshing empty files leaves the store empty",
+	"Refreshing a pair with no rows leaves the store empty",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await step("Given the files are empty", () => {
-			server.files = { dat: Buffer.alloc(0), idx: Buffer.alloc(0) };
-		});
+		await givenThePairHolds(step, server, [], "no rows");
 		await givenAStore(step, server);
 		const result = await whenRefresh(step, server);
 		await thenResolvesWithSize(step, result, 0);
@@ -489,7 +468,7 @@ scenario(
 	"A search answers the k best ids by their best row, with their scores",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
+		await givenThePairHolds(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
 		await givenRefreshed(step, server);
 		const result = await whenSearch(step, server, 3);
 		await thenAnswers(
@@ -505,54 +484,32 @@ scenario(
 	},
 );
 
-scenario(
-	"The query is cut to its first 256 dimensions and renormalized",
-	async ({ step, t }) => {
-		const server = await background(step, t);
-		await givenTheFilesHold(
-			step,
-			server,
-			[
-				["x", [1, 0, 0]],
-				["y", [0, 1, 0]],
-				["z", [0, 0, 1]],
-			],
-			'the rows of "x", "y" and "z", 1 in their first, second and third dimension',
-		);
-		await givenRefreshed(step, server);
-		const result = await whenSearch(
-			step,
-			server,
-			3,
-			"with k 3 for a query of 3 and 4 in its first two dimensions, 100 in the 257th and -50 in the 768th",
-			query({ 0: 3, 1: 4, 256: 100, 767: -50 }),
-		);
-		await step('Then it answers "y" 0.8, "x" 0.6 and "z" 0', () => {
-			const answered = named(result.results);
-			expect(answered.map(([n]) => n)).toEqual(["y", "x", "z"]);
-			expect(answered[0][1]).toBeCloseTo(0.8, 6);
-			expect(answered[1][1]).toBeCloseTo(0.6, 6);
-			expect(answered[2][1]).toBe(0);
-		});
-	},
-);
-
-scenario("A query of zeros scores every row 0", async ({ step, t }) => {
+scenario("The query is given to the worker as it is", async ({ step, t }) => {
 	const server = await background(step, t);
-	await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+	await givenThePairHolds(
+		step,
+		server,
+		[
+			["x", [1, 0, 0]],
+			["y", [0, 1, 0]],
+			["z", [0, 0, 1]],
+		],
+		'the rows of "x", "y" and "z", 1 in their first, second and third dimension',
+	);
 	await givenRefreshed(step, server);
 	const result = await whenSearch(
 		step,
 		server,
 		3,
-		"with k 3 for a query of 768 zeros",
-		query({}),
+		"with k 3 for a query of 0.6 and 0.8 in its first two dimensions",
+		query({ 0: 0.6, 1: 0.8 }),
 	);
-	await step('Then it answers "a" and "b", both with the score 0', () => {
-		expect(named(result.results).sort()).toEqual([
-			["a", 0],
-			["b", 0],
-		]);
+	await step('Then it answers "y" 0.8, "x" 0.6 and "z" 0', () => {
+		const answered = named(result.results);
+		expect(answered.map(([n]) => n)).toEqual(["y", "x", "z"]);
+		expect(answered[0][1]).toBeCloseTo(0.8, 6);
+		expect(answered[1][1]).toBeCloseTo(0.6, 6);
+		expect(answered[2][1]).toBe(0);
 	});
 });
 
@@ -565,7 +522,7 @@ scenario(
 			`n${String((i * 7) % 60).padStart(2, "0")}`,
 			((i * 7) % 60) / 64,
 		]);
-		await givenTheFilesHold(
+		await givenThePairHolds(
 			step,
 			server,
 			rows,
@@ -586,7 +543,7 @@ scenario(
 
 scenario("allow is the only ids the worker may answer", async ({ step, t }) => {
 	const server = await background(step, t);
-	await givenTheFilesHold(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
+	await givenThePairHolds(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
 	await givenRefreshed(step, server);
 	const result = await whenSearch(
 		step,
@@ -611,7 +568,7 @@ scenario(
 	"accept drops ids on the main thread before k are taken",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
+		await givenThePairHolds(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
 		await givenRefreshed(step, server);
 		const result = await whenSearch(
 			step,
@@ -635,7 +592,7 @@ scenario(
 
 scenario("accept is given only the 2k best ids", async ({ step, t }) => {
 	const server = await background(step, t);
-	await givenTheFilesHold(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
+	await givenThePairHolds(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
 	await givenRefreshed(step, server);
 	const result = await whenSearch(
 		step,
@@ -655,7 +612,7 @@ scenario(
 	"A query shorter than 256 dimensions is rejected by the worker",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
 		await givenRefreshed(step, server);
 		const result = await whenSearch(
 			step,
@@ -685,9 +642,9 @@ for (const { change, error, apply } of [
 	},
 	{
 		change: "the rows are one byte short",
-		error: "broken vectors (2111 bytes of rows for 2 ids)",
+		error: "broken vectors (2111 bytes for 2112)",
 		apply: (server) => {
-			server.files.dat = server.files.dat.subarray(0, 2 * REC - 1);
+			server.short = true;
 		},
 	},
 ]) {
@@ -695,16 +652,10 @@ for (const { change, error, apply } of [
 		`A failed refresh rejects and keeps what was loaded (${change})`,
 		async ({ step, t }) => {
 			const server = await background(step, t);
-			await givenTheFilesHold(
-				step,
-				server,
-				ROWS_AB,
-				'the rows of "a" and "b", with the ETag "v1"',
-				'"v1"',
-			);
+			await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
 			await givenRefreshed(step, server);
-			await step(`And with the ETag "v2", ${change}`, () => {
-				server.etag = '"v2"';
+			await step(`And the pair is now a new generation, and ${change}`, () => {
+				server.pair = { ...server.pair, rev: server.pair.rev + 1 };
 				apply(server);
 			});
 			const result = await whenRefresh(step, server);
@@ -723,7 +674,7 @@ scenario(
 	"A worker that cannot be loaded rejects the refresh",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
 		await step(
 			"And /fuzzy_search.worker.js answers with the status 404",
 			() => {
@@ -746,7 +697,7 @@ scenario(
 	"A store whose worker failed starts a new worker at the next call",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
 		await step(
 			"And /fuzzy_search.worker.js answers with the status 404 once, then is served",
 			() => {

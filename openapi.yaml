@@ -188,26 +188,15 @@ paths:
     post:
       tags: [API]
       summary: Snippets of messages
-  /v1/vectors/pending:
-    get:
-      tags: [API]
-      summary: The messages that have no vector yet
-  /v1/vectors:
-    put:
-      tags: [API]
-      summary: Store vectors
   /v1/vectors.eg2_264.dat:
     get:
       tags: [API]
       summary: >-
-        With Range, bytes of the rows of the vector pair (LCTYSP-0019; 206, 412 when If-Match is not the generation);
-        without it, the vector binary of the default embedding model (LCTYSP-0008)
+        The rows of the vector pair (LCTYSP-0019), by Range (206; 412 when If-Match is not the generation), or whole
   /v1/vectors.eg2_264.idx:
     get:
       tags: [API]
-      summary: >-
-        With Range, bytes of the ids of the vector pair (LCTYSP-0019); without it, the index of the vector binary
-        (LCTYSP-0008)
+      summary: The ids of the vector pair (LCTYSP-0019), by Range or whole
   /v1/vectors.eg2_264.json:
     get:
       tags: [API]

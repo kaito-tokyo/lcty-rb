@@ -8,7 +8,6 @@ import { getTags } from "../api/lcty-t.js";
 import { appendLines, getConversation } from "../api/storage.js";
 import { tabRpc } from "../api/tab-rpc.js";
 import {
-	appIndexer,
 	convUrl,
 	loadSettings,
 	newConvId,
@@ -53,12 +52,8 @@ export function initNewPage() {
 		sending: false,
 	};
 
-	const panel = initSidebar(sidebar, {
-		getSettings: () => state.settings,
-		onTagsSaved: tagsSaved,
-	});
+	const panel = initSidebar(sidebar, { onTagsSaved: tagsSaved });
 	tabRpc(); // the sidebar follows the lists over it (LCTYSP-0014)
-	const indexer = appIndexer(() => state.settings);
 
 	// ---- Tags and the system prompt draft (LCTYSP-0009) ----
 
@@ -284,6 +279,5 @@ export function initNewPage() {
 			sidebar.search.dispatchEvent(new Event("input"));
 		}
 		panel.refresh();
-		indexer.kick();
 	})();
 }

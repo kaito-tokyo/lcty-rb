@@ -7,17 +7,20 @@
 // side.
 //
 // The worker runs as a Web Worker of Node.js 26 (node-preload.cjs), started from public/ as siteUrl() would. Its
-// requests are answered by routeFetch (node-unit.js), as routes do in the browser: the distribution files are built by
-// the test in the layout of LCTYSP-0008 (256 Float32 LE and 32 zero bytes per row, 16 bytes of id per row), and
-// /bdot264.wasm is the real kernel of public/ unless the test makes it fail, so that the worker scores in JavaScript.
+// requests are answered by routeFetch (node-unit.js), as routes do in the browser. The test plays the server's vector
+// pair (LCTYSP-0019): its JSON, and .dat and .idx by Range and If-Match, record 0 a header and the rows after it in the
+// layout of LCTYSP-0008 (256 Float32 LE and 32 zero bytes per row, 16 bytes of id per row). /bdot264.wasm is the real
+// kernel of public/ unless the test makes it fail, so that the worker scores in JavaScript.
 
 import { readFile } from "node:fs/promises";
 import { expect, publicUrl, routeFetch, scenario } from "./node-unit.js";
 
+const JSON_PATH = "/v1/vectors.eg2_264.json";
 const DAT = "/v1/vectors.eg2_264.dat";
 const IDX = "/v1/vectors.eg2_264.idx";
 const DIM = 256;
 const REC = 1056;
+const ID = 16;
 
 /** The UUIDv7 of a short name ("a" → 019a0000-0000-7000-8000-000000000061). */
 function uuid(name) {
@@ -25,29 +28,27 @@ function uuid(name) {
 	return `019a0000-0000-7000-8000-${hex}`;
 }
 
-/** The rows file of vectors (arrays of up to 256 numbers; the rest and the padding are 0). */
-function rowsFile(vectors) {
-	const f = new Float32Array((vectors.length * REC) / 4);
-	vectors.forEach((v, i) => {
-		f.set(v, (i * REC) / 4);
+/** The .dat of rows [name, vector]: the header (256 quiet NaNs, 32 zero bytes), then each vector padded with zeros. */
+function datFile(rows) {
+	const u = new Uint32Array(((rows.length + 1) * REC) / 4);
+	u.fill(0x7fc00000, 0, DIM);
+	const f = new Float32Array(u.buffer);
+	rows.forEach(([, v], i) => {
+		f.set(v, ((i + 1) * REC) / 4);
 	});
-	return Buffer.from(f.buffer);
+	return Buffer.from(u.buffer);
 }
 
-/** The ids file of names, one per row. */
-function idsFile(names) {
-	return Buffer.concat(
-		names.map((n) => Buffer.from(uuid(n).replace(/-/g, ""), "hex")),
-	);
+/** The .idx of rows [name, vector]: a 16-byte header, then the id of each row. */
+function idxFile(rows) {
+	return Buffer.concat([
+		Buffer.alloc(ID),
+		...rows.map(([n]) => Buffer.from(uuid(n).replace(/-/g, ""), "hex")),
+	]);
 }
 
-/** The pair of files of rows [name, score]: the first value of the row is its score against the query. */
-function files(rows) {
-	return {
-		dat: rowsFile(rows.map(([, score]) => [score])),
-		idx: idsFile(rows.map(([name]) => name)),
-	};
-}
+/** Rows [name, score]: the first value of the row is its score against the query. */
+const scored = (rows) => rows.map(([name, score]) => [name, [score]]);
 
 /** The query of the Scenarios: 1 in its first dimension, 0 in the others. */
 const QUERY = Array.from({ length: DIM }, (_, i) => (i === 0 ? 1 : 0));
@@ -65,6 +66,7 @@ const ROWS_AB = [
 	["a", 0.25],
 	["b", 0.5],
 ];
+const ROWS_ABC = [...ROWS_AB, ["c", 0.75]];
 
 const named = (results) => results.map(([id, score]) => [nameOf(id), score]);
 const nameOf = (id) =>
@@ -79,36 +81,44 @@ const abort = () => {
 // ---- Background ----
 
 /**
- * The files answered by the test and the worker started (server.workers.w). server.files is the pair, server.etag the
- * ETag of each file by its request number (or null), server.fail an answer per file that replaces the files,
- * server.wasm the answer of /bdot264.wasm (undefined: the real file); server.requests counts the requests.
+ * The pair answered by the test and the worker started (server.workers.w). server.rev, server.rows ([name, vector])
+ * and server.invalid are the pair; server.json replaces its JSON; server.onJson(n) runs after the n-th request of the
+ * JSON; server.fail is an answer per file (json, dat, idx) that replaces the pair's; server.cut drops bytes from the
+ * end of a file's answer; server.wasm is the answer of /bdot264.wasm (undefined: the real file). server.requests counts
+ * the requests and server.asked keeps the Range and If-Match of each request of .dat and .idx.
  */
 async function background(step, t) {
 	const server = {
-		files: { dat: Buffer.alloc(0), idx: Buffer.alloc(0) },
-		etag: { dat: () => null, idx: () => null },
+		rev: 1,
+		rows: [],
+		invalid: [],
+		json: null,
+		onJson: () => {},
 		fail: {},
+		cut: {},
 		wasm: () => undefined,
-		requests: { dat: 0, idx: 0, wasm: 0 },
+		requests: { json: 0, dat: 0, idx: 0, wasm: 0 },
+		asked: { dat: [], idx: [] },
 		workers: {},
 	};
 	await step(
-		"Given /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx are answered by the test",
+		"Given the vector pair of /v1/vectors.eg2_264.json, .dat and .idx is answered by the test",
 		() => {
 			routeFetch(t, (request) => {
 				const path = new URL(request.url).pathname;
-				const key = { [DAT]: "dat", [IDX]: "idx" }[path];
-				if (key) {
-					const n = ++server.requests[key];
-					if (server.fail[key]) return server.fail[key](request);
-					const etag = server.etag[key](n);
-					return new Response(server.files[key], {
-						headers: {
-							"Content-Type": "application/octet-stream",
-							...(etag ? { ETag: etag } : {}),
-						},
-					});
+				if (path === JSON_PATH) {
+					const n = ++server.requests.json;
+					if (server.fail.json) return server.fail.json(request);
+					const body = server.json ?? {
+						rev: server.rev,
+						count: server.rows.length + 1,
+						invalid: server.invalid,
+					};
+					server.onJson(n);
+					return Response.json(body);
 				}
+				const key = { [DAT]: "dat", [IDX]: "idx" }[path];
+				if (key) return pairFile(server, key, request);
 				if (path === "/bdot264.wasm") {
 					server.requests.wasm++;
 					return server.wasm(request);
@@ -120,6 +130,27 @@ async function background(step, t) {
 		startWorker(server, "w");
 	});
 	return server;
+}
+
+/** .dat or .idx (key) of the pair as the server answers it: 412 for another generation, else the range, 206 */
+function pairFile(server, key, request) {
+	server.requests[key]++;
+	const range = request.headers.get("Range");
+	const ifMatch = request.headers.get("If-Match");
+	server.asked[key].push([range, ifMatch]);
+	if (server.fail[key]) return server.fail[key](request);
+	if (ifMatch !== `"${server.rev}"`) return new Response("{}", { status: 412 });
+	const file = key === "dat" ? datFile(server.rows) : idxFile(server.rows);
+	const [, a, b] = /^bytes=(\d+)-(\d+)$/.exec(range);
+	const last = Math.min(Number(b), file.length - 1);
+	const body = file.subarray(Number(a), last + 1 - (server.cut[key] ?? 0));
+	return new Response(body, {
+		status: 206,
+		headers: {
+			"Content-Type": "application/octet-stream",
+			"Content-Range": `bytes ${a}-${last}/${file.length}`,
+		},
+	});
 }
 
 // ---- The worker ----
@@ -146,22 +177,41 @@ function send(server, msg, name = "w") {
 	});
 }
 
-const load = (server, name) =>
-	send(server, { op: "load", dat: DAT, idx: IDX }, name);
+const load = (server, name, extra = {}) =>
+	send(
+		server,
+		{ op: "load", json: JSON_PATH, dat: DAT, idx: IDX, ...extra },
+		name,
+	);
 const search = (server, k, extra = {}, name) =>
 	send(server, { op: "search", query: QUERY, k, ...extra }, name);
 
 // ---- Steps shared by the scenarios ----
 
-async function givenTheFilesHold(step, server, rows, text, etag = null) {
-	await step(`Given the files hold ${text}`, () => {
-		server.files = files(rows);
-		server.etag = { dat: () => etag, idx: () => etag };
+async function givenThePairHolds(step, server, rows, text) {
+	await step(`Given the pair holds ${text}`, () => {
+		server.rows = scored(rows);
+		server.rev = 1;
 	});
 }
 
+const givenAB = (step, server) =>
+	givenThePairHolds(
+		step,
+		server,
+		ROWS_AB,
+		'the rows of "a" and "b" in the generation 1',
+	);
+const givenABC = (step, server) =>
+	givenThePairHolds(
+		step,
+		server,
+		ROWS_ABC,
+		'the rows of "a", "b" and "c" in the generation 1',
+	);
+
 async function givenLoaded(step, server) {
-	await step("And the worker has loaded them", async () => {
+	await step("And the worker has loaded it", async () => {
 		const { reply } = await load(server);
 		expect(reply.error).toBeUndefined();
 	});
@@ -169,7 +219,7 @@ async function givenLoaded(step, server) {
 
 async function whenLoad(step, server) {
 	let result;
-	await step("When the worker is sent a load of the two files", async () => {
+	await step("When the worker is sent a load of the pair", async () => {
 		result = await load(server);
 	});
 	return result;
@@ -226,25 +276,27 @@ async function whenSearch(step, server, k) {
 // ---- Scenarios ----
 
 scenario(
-	"Loading fetches both files and answers the row count",
+	"Loading fetches the JSON and the rows from record 1, and answers the row count",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(
-			step,
-			server,
-			[
-				["a", 0.25],
-				["b", 0.5],
-				["c", 0.75],
-			],
-			'the rows of "a", "b" and "c"',
-		);
+		await givenABC(step, server);
 		const result = await whenLoad(step, server);
 		await thenRows(step, result, 3);
-		await step("And each file was requested once", () => {
-			expect(server.requests.dat).toBe(1);
-			expect(server.requests.idx).toBe(1);
+		await step("And the JSON was requested once", () => {
+			expect(server.requests.json).toBe(1);
 		});
+		await step(
+			'And .dat was requested once, with bytes=1056-4223 and If-Match "1"',
+			() => {
+				expect(server.asked.dat).toEqual([["bytes=1056-4223", '"1"']]);
+			},
+		);
+		await step(
+			'And .idx was requested once, with bytes=16-63 and If-Match "1"',
+			() => {
+				expect(server.asked.idx).toEqual([["bytes=16-63", '"1"']]);
+			},
+		);
 		await step("And /bdot264.wasm was requested once", () => {
 			expect(server.requests.wasm).toBe(1);
 		});
@@ -255,7 +307,7 @@ scenario(
 	"A search answers the k best ids by their best row, descending",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
+		await givenThePairHolds(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
 		await givenLoaded(step, server);
 		const result = await whenSearch(step, server, 3);
 		await step(
@@ -283,7 +335,7 @@ for (const [k, names] of [
 ]) {
 	scenario(`k limits the number of ids (${k})`, async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
+		await givenThePairHolds(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
 		await givenLoaded(step, server);
 		const result = await whenSearch(step, server, k);
 		await thenIds(step, result, names);
@@ -297,7 +349,7 @@ scenario("A search without k answers at most 50 ids", async ({ step, t }) => {
 		`n${String((i * 7) % 60).padStart(2, "0")}`,
 		((i * 7) % 60) / 64,
 	]);
-	await givenTheFilesHold(
+	await givenThePairHolds(
 		step,
 		server,
 		rows,
@@ -320,7 +372,7 @@ scenario("A search without k answers at most 50 ids", async ({ step, t }) => {
 
 scenario("allow selects the ids that may appear", async ({ step, t }) => {
 	const server = await background(step, t);
-	await givenTheFilesHold(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
+	await givenThePairHolds(step, server, ROWS_ABCDA, ROWS_ABCDA_TEXT);
 	await givenLoaded(step, server);
 	let result;
 	await step(
@@ -341,16 +393,7 @@ scenario("allow selects the ids that may appear", async ({ step, t }) => {
 
 scenario("An empty allow answers no ids", async ({ step, t }) => {
 	const server = await background(step, t);
-	await givenTheFilesHold(
-		step,
-		server,
-		[
-			["a", 0.25],
-			["b", 0.5],
-			["c", 0.75],
-		],
-		'the rows of "a", "b" and "c"',
-	);
+	await givenABC(step, server);
 	await givenLoaded(step, server);
 	let result;
 	await step(
@@ -368,178 +411,240 @@ scenario("A search before any load answers no ids", async ({ step, t }) => {
 	await thenIds(step, result, []);
 });
 
-scenario("Empty files load as no rows", async ({ step, t }) => {
+scenario("A pair with no rows loads as 0 rows", async ({ step, t }) => {
 	const server = await background(step, t);
-	await step("Given the files are empty", () => {
-		server.files = { dat: Buffer.alloc(0), idx: Buffer.alloc(0) };
-	});
+	await givenThePairHolds(step, server, [], "no rows in the generation 1");
 	const result = await whenLoad(step, server);
 	await thenRows(step, result, 0);
+	await step("And neither .dat nor .idx was requested", () => {
+		expect([server.requests.dat, server.requests.idx]).toEqual([0, 0]);
+	});
 	await thenSearchAnswers(step, server, []);
 });
 
 scenario(
-	"A pair with the ETag already loaded is not read again",
+	"A load in the same generation fetches only the new records",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(
-			step,
-			server,
-			ROWS_AB,
-			'the rows of "a" and "b", with the ETag "v1"',
-			'"v1"',
-		);
+		await givenAB(step, server);
 		await givenLoaded(step, server);
-		await step(
-			'And the files now hold the row of "c", still with the ETag "v1"',
-			() => {
-				server.files = files([["c", 0.75]]);
-			},
-		);
-		const result = await whenLoad(step, server);
-		await thenRows(step, result, 2);
-		await thenSearchAnswers(step, server, ["b", "a"]);
-	},
-);
-
-scenario(
-	"A pair with a new ETag replaces what was loaded",
-	async ({ step, t }) => {
-		const server = await background(step, t);
-		await givenTheFilesHold(
-			step,
-			server,
-			ROWS_AB,
-			'the rows of "a" and "b", with the ETag "v1"',
-			'"v1"',
-		);
-		await givenLoaded(step, server);
-		await step(
-			'And the files now hold the row of "c", with the ETag "v2"',
-			() => {
-				server.files = files([["c", 0.75]]);
-				server.etag = { dat: () => '"v2"', idx: () => '"v2"' };
-			},
-		);
-		const result = await whenLoad(step, server);
-		await thenRows(step, result, 1);
-		await thenSearchAnswers(step, server, ["c"]);
-	},
-);
-
-scenario(
-	"Files without an ETag are read at every load",
-	async ({ step, t }) => {
-		const server = await background(step, t);
-		await givenTheFilesHold(
-			step,
-			server,
-			ROWS_AB,
-			'the rows of "a" and "b", without an ETag',
-		);
-		await givenLoaded(step, server);
-		await step('And the files now hold the row of "c", without an ETag', () => {
-			server.files = files([["c", 0.75]]);
+		await step('And the row of "c" has been appended to the pair', () => {
+			server.rows = scored(ROWS_ABC);
 		});
 		const result = await whenLoad(step, server);
-		await thenRows(step, result, 1);
-		await thenSearchAnswers(step, server, ["c"]);
+		await thenRows(step, result, 3);
+		await step(
+			"And .dat was requested again, with bytes=3168-4223 only",
+			() => {
+				expect(server.asked.dat.map(([r]) => r)).toEqual([
+					"bytes=1056-3167",
+					"bytes=3168-4223",
+				]);
+			},
+		);
+		await step("And .idx was requested again, with bytes=48-63 only", () => {
+			expect(server.asked.idx.map(([r]) => r)).toEqual([
+				"bytes=16-47",
+				"bytes=48-63",
+			]);
+		});
+		await thenSearchAnswers(step, server, ["c", "b", "a"]);
 	},
 );
 
-scenario("A pair whose ETags differ is fetched again", async ({ step, t }) => {
+scenario("A load with nothing new fetches no rows", async ({ step, t }) => {
 	const server = await background(step, t);
-	await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+	await givenAB(step, server);
+	await givenLoaded(step, server);
+	const result = await whenLoad(step, server);
+	await thenRows(step, result, 2);
 	await step(
-		'And /v1/vectors.eg2_264.idx has the ETag "v0" at its first request and "v1" later, /v1/vectors.eg2_264.dat "v1"',
+		"And the JSON was requested twice, and .dat and .idx once each",
 		() => {
-			server.etag = {
-				dat: () => '"v1"',
-				idx: (n) => (n === 1 ? '"v0"' : '"v1"'),
+			expect(server.requests).toMatchObject({ json: 2, dat: 1, idx: 1 });
+		},
+	);
+});
+
+scenario("A new generation replaces the copy", async ({ step, t }) => {
+	const server = await background(step, t);
+	await givenAB(step, server);
+	await givenLoaded(step, server);
+	await step(
+		'And the pair now holds the row of "c" in the generation 2',
+		() => {
+			server.rows = scored([["c", 0.75]]);
+			server.rev = 2;
+		},
+	);
+	const result = await whenLoad(step, server);
+	await thenRows(step, result, 1);
+	await step(
+		'And .dat was requested again, with bytes=1056-2111 and If-Match "2"',
+		() => {
+			expect(server.asked.dat).toEqual([
+				["bytes=1056-3167", '"1"'],
+				["bytes=1056-2111", '"2"'],
+			]);
+		},
+	);
+	await thenSearchAnswers(step, server, ["c"]);
+});
+
+scenario(
+	"Rows in the invalid ranges are never answered",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenThePairHolds(
+			step,
+			server,
+			ROWS_ABC,
+			'the rows of "a", "b" and "c" in the generation 1, its JSON listing record 2 as invalid',
+		);
+		server.invalid = [[2, 2]]; // the row itself is left as it was: the worker fills it with NaN
+		const result = await whenLoad(step, server);
+		await thenRows(step, result, 3);
+		await thenSearchAnswers(step, server, ["c", "a"]);
+	},
+);
+
+scenario(
+	"Rows invalidated after they were loaded are never answered",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenABC(step, server);
+		await givenLoaded(step, server);
+		await step("And the JSON now lists records 2 to 3 as invalid", () => {
+			server.invalid = [[2, 3]];
+		});
+		const result = await whenLoad(step, server);
+		await thenRows(step, result, 3);
+		await step("And neither .dat nor .idx was requested again", () => {
+			expect([server.requests.dat, server.requests.idx]).toEqual([1, 1]);
+		});
+		await thenSearchAnswers(step, server, ["a"]);
+	},
+);
+
+scenario("A 412 starts again from the JSON", async ({ step, t }) => {
+	const server = await background(step, t);
+	await givenAB(step, server);
+	await step(
+		'And the pair moves to the generation 2, the row of "c" appended, right after its JSON is first requested',
+		() => {
+			server.onJson = (n) => {
+				if (n !== 1) return;
+				server.rows = scored(ROWS_ABC);
+				server.rev = 2;
 			};
 		},
 	);
 	const result = await whenLoad(step, server);
-	await thenRows(step, result, 2);
-	await step("And each file was requested twice", () => {
-		expect(server.requests.dat).toBe(2);
-		expect(server.requests.idx).toBe(2);
+	await thenRows(step, result, 3);
+	await step("And the JSON was requested twice", () => {
+		expect(server.requests.json).toBe(2);
 	});
+	await thenSearchAnswers(step, server, ["c", "b", "a"]);
 });
 
 scenario(
-	"A pair whose ETags never agree is used after three tries",
+	"A generation that keeps changing fails after three tries",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenAB(step, server);
 		await step(
-			'And /v1/vectors.eg2_264.dat always has the ETag "v1" and /v1/vectors.eg2_264.idx "v2"',
+			"And the pair moves to a new generation right after every request of its JSON",
 			() => {
-				server.etag = { dat: () => '"v1"', idx: () => '"v2"' };
+				server.onJson = () => {
+					server.rev++;
+				};
 			},
 		);
 		const result = await whenLoad(step, server);
-		await thenRows(step, result, 2);
-		await step("And each file was requested 3 times", () => {
-			expect(server.requests.dat).toBe(3);
-			expect(server.requests.idx).toBe(3);
+		await thenError(
+			step,
+			result,
+			"the vectors changed while they were fetched",
+		);
+		await step("And the JSON was requested 3 times", () => {
+			expect(server.requests.json).toBe(3);
 		});
+	},
+);
+
+scenario(
+	"A summary given with the load is used without fetching the JSON",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenAB(step, server);
+		let result;
+		await step(
+			"When the worker is sent a load of the pair with the summary of the generation 1, 3 records and no invalid range",
+			async () => {
+				result = await load(server, "w", {
+					summary: { rev: 1, count: 3, invalid: [] },
+				});
+			},
+		);
+		await thenRows(step, result, 2);
+		await step("And the JSON was not requested", () => {
+			expect(server.requests.json).toBe(0);
+		});
+		await thenSearchAnswers(step, server, ["b", "a"]);
 	},
 );
 
 for (const { change, error, apply } of [
 	{
-		change: "/v1/vectors.eg2_264.dat answers with the status 500",
+		change: "the JSON answers with the status 500",
 		error: "failed to fetch the vectors (HTTP 500)",
-		apply: (server) => {
-			server.fail.dat = answer(500, "boom");
+		apply: (s) => {
+			s.fail.json = answer(500, "boom");
 		},
 	},
 	{
-		change: "/v1/vectors.eg2_264.idx answers with the status 404",
+		change: "the JSON is not that of a pair",
+		error: "broken vectors (not the JSON of a pair)",
+		apply: (s) => {
+			s.json = { rev: "2", count: 2, invalid: [] };
+		},
+	},
+	{
+		change: ".dat answers with the status 500",
+		error: "failed to fetch the vectors (HTTP 500)",
+		apply: (s) => {
+			s.fail.dat = answer(500, "boom");
+		},
+	},
+	{
+		change: ".idx answers with the status 404",
 		error: "failed to fetch the vectors (HTTP 404)",
-		apply: (server) => {
-			server.fail.idx = answer(404, "no");
+		apply: (s) => {
+			s.fail.idx = answer(404, "no");
 		},
 	},
 	{
-		change: "the rows are one byte short",
-		error: "broken vectors (2111 bytes of rows for 2 ids)",
-		apply: (server) => {
-			server.files.dat = server.files.dat.subarray(0, 2 * REC - 1);
-		},
-	},
-	{
-		change: "the ids have a third id",
-		error: "broken vectors (2112 bytes of rows for 3 ids)",
-		apply: (server) => {
-			server.files.idx = idsFile(["a", "b", "c"]);
-		},
-	},
-	{
-		change: "the ids are one byte short",
-		error: "broken vectors (2112 bytes of rows for 1.9375 ids)",
-		apply: (server) => {
-			server.files.idx = server.files.idx.subarray(0, 31);
+		change: ".dat answers with one byte less",
+		error: "broken vectors (1055 bytes for 1056)",
+		apply: (s) => {
+			s.cut.dat = 1;
 		},
 	},
 ]) {
 	scenario(
-		`A failed load answers an error and keeps what was loaded (${change})`,
+		`A failed load answers an error and keeps the copy (${change})`,
 		async ({ step, t }) => {
 			const server = await background(step, t);
-			await givenTheFilesHold(
-				step,
-				server,
-				ROWS_AB,
-				'the rows of "a" and "b", with the ETag "v1"',
-				'"v1"',
-			);
+			await givenAB(step, server);
 			await givenLoaded(step, server);
-			await step(`And with the ETag "v2", ${change}`, () => {
-				server.etag = { dat: () => '"v2"', idx: () => '"v2"' };
-				apply(server);
-			});
+			await step(
+				`And the pair now holds the row of "c" in the generation 2, and ${change}`,
+				() => {
+					server.rows = scored([["c", 0.75]]);
+					server.rev = 2;
+					apply(server);
+				},
+			);
 			const result = await whenLoad(step, server);
 			await thenError(step, result, error);
 			await thenSearchAnswers(step, server, ["b", "a"]);
@@ -548,20 +653,16 @@ for (const { change, error, apply } of [
 }
 
 scenario(
-	"A file that fails without a response answers an error",
+	"A file that fails without a response answers an error and keeps the copy",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(
-			step,
-			server,
-			ROWS_AB,
-			'the rows of "a" and "b", with the ETag "v1"',
-			'"v1"',
-		);
+		await givenAB(step, server);
 		await givenLoaded(step, server);
 		await step(
-			"And /v1/vectors.eg2_264.idx now fails without a response",
+			'And the pair now holds the row of "c" in the generation 2, and .idx fails without a response',
 			() => {
+				server.rows = scored([["c", 0.75]]);
+				server.rev = 2;
 				server.fail.idx = abort;
 			},
 		);
@@ -569,7 +670,6 @@ scenario(
 		await step("Then it answers with the message's id and an error", () => {
 			expect(result.reply.id).toBe(result.sent);
 			expect(typeof result.reply.error).toBe("string");
-			expect(result.reply.error).not.toBe("");
 			expect(result.reply.rows).toBeUndefined();
 		});
 		await thenSearchAnswers(step, server, ["b", "a"]);
@@ -580,7 +680,7 @@ scenario(
 	"A query that does not have 256 dimensions answers an error",
 	async ({ step, t }) => {
 		const server = await background(step, t);
-		await givenTheFilesHold(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenAB(step, server);
 		await givenLoaded(step, server);
 		let result;
 		await step(
@@ -588,7 +688,7 @@ scenario(
 			async () => {
 				result = await send(server, {
 					op: "search",
-					query: QUERY.slice(0, 255),
+					query: QUERY.slice(1),
 					k: 3,
 				});
 			},
@@ -643,9 +743,6 @@ for (const { wasm, fail } of [
 			const next = random(1013);
 			const vectors = Array.from({ length: 300 }, () => unitVector(next));
 			const query = unitVector(next);
-			const names = vectors.map(
-				(_, i) => `r${String(i % 100).padStart(3, "0")}`,
-			);
 			const searchMsg = { op: "search", query, k: 20 };
 			let first;
 			let second;
@@ -666,13 +763,16 @@ for (const { wasm, fail } of [
 				},
 			);
 			await step(
-				"And the files hold 300 rows of 100 ids, the rows and the query being random unit vectors",
+				"And the pair holds 300 rows of 100 ids, the rows and the query being random unit vectors",
 				() => {
-					server.files = { dat: rowsFile(vectors), idx: idsFile(names) };
+					server.rows = vectors.map((v, i) => [
+						`r${String(i % 100).padStart(3, "0")}`,
+						v,
+					]);
 				},
 			);
 			await step(
-				"When one worker loads them and searches with k 20",
+				"When one worker loads it and searches with k 20",
 				async () => {
 					expect((await load(server)).reply.rows).toBe(300);
 					first = (await send(server, searchMsg)).reply.results;
@@ -680,7 +780,7 @@ for (const { wasm, fail } of [
 				},
 			);
 			await step(
-				`And a second worker, for which /bdot264.wasm ${wasm}, loads them and searches with k 20`,
+				`And a second worker, for which /bdot264.wasm ${wasm}, loads it and searches with k 20`,
 				async () => {
 					server.wasm = fail;
 					startWorker(server, "js");

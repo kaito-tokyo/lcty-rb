@@ -33,7 +33,6 @@ const NODE_TESTED = [
 	"js/llm/responses.js",
 	"js/llm/client.js",
 	"js/llm/history.js",
-	"js/search/embed.js",
 	"js/convert/reply.js",
 	"js/convert/tail.js",
 	"js/i18n.js",

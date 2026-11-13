@@ -4,18 +4,17 @@
 
 // LCTYSP-1004: the scenarios of docs/specs/LCTYSP-1004_common.feature that need no browser, written by hand. Each test
 // has the title of its Scenario (an Examples row is added in parentheses) and one step per line of it, so the two read
-// side by side. The Scenarios that need the page (query(), showToast() and the toasts of loadSettings() and of the
-// indexer) are in common.spec.js.
+// side by side. The Scenarios that need the page (query(), showToast() and the toasts of loadSettings()) are in
+// common.spec.js.
 //
 // js/common.js runs in Node.js (node-unit.js). The time zone is process.env.TZ, which Node.js reads again when it is
 // set, and the time is fixed with the Date of the test's mock timers; both are put back when the test ends. The settings
 // are stored in Node.js's own localStorage, empty at the start of every Scenario (node-unit.js), and every request the
-// module makes (GET /v1/defaults.json, GET /v1/vectors/pending) is answered by the test (routeFetch).
+// module makes (GET /v1/defaults.json) is answered by the test (routeFetch).
 
 import { expect, publicUrl, routeFetch, scenario } from "./node-unit.js";
 
 const {
-	appIndexer,
 	backendOf,
 	convUrl,
 	loadSettings,
@@ -426,7 +425,7 @@ scenario(
 	"loadSettings() makes the backend of the pages from the defaults and the stored changes",
 	async ({ step, t }) => {
 		await step(
-			'Given GET /v1/defaults.json returns { base_url: "http://d", api_key: "k", model: "m", embedding_model: "e" }',
+			'Given GET /v1/defaults.json returns { base_url: "http://d", api_key: "k", model: "m" }',
 			() => {
 				routeFetch(t, (request) =>
 					new URL(request.url).pathname === "/v1/defaults.json"
@@ -434,7 +433,6 @@ scenario(
 								base_url: "http://d",
 								api_key: "k",
 								model: "m",
-								embedding_model: "e",
 							})
 						: undefined,
 				);
@@ -462,105 +460,11 @@ scenario(
 							api: "responses",
 							api_key: "k",
 							model: "other",
-							embedding_model: "e",
 							extra: {},
 						},
 					],
 					default_backend: "local",
 				});
-			},
-		);
-	},
-);
-
-// ---- appIndexer() ----
-
-/** The settings of the pages with one backend whose embedding model is model. */
-function settingsWith(model) {
-	return {
-		backends: [
-			{
-				id: "local",
-				label: "llama-server",
-				base_url: "http://127.0.0.1:9",
-				api: "responses",
-				api_key: "",
-				model: "chat",
-				embedding_model: model,
-				extra: {},
-			},
-		],
-		default_backend: "local",
-	};
-}
-
-/** GET /v1/vectors/pending answered with no rounds for the rest of the test t; returns the paths and queries asked. */
-function routePending(t) {
-	const urls = [];
-	routeFetch(t, (request) => {
-		const url = new URL(request.url);
-		if (url.pathname !== "/v1/vectors/pending") return undefined;
-		urls.push(`${url.pathname}${url.search}`);
-		return Response.json([]);
-	});
-	return urls;
-}
-
-scenario("The indexer does nothing without settings", async ({ step, t }) => {
-	let urls;
-	await step("Given GET /v1/vectors/pending is answered by the test", () => {
-		urls = routePending(t);
-	});
-	await step(
-		"When the indexer of appIndexer() with no settings is kicked",
-		() => appIndexer(() => null).kick(),
-	);
-	await step("Then no request is sent to /v1/vectors/pending", () => {
-		expect(urls).toEqual([]);
-	});
-});
-
-scenario(
-	"The indexer does nothing without an embedding model",
-	async ({ step, t }) => {
-		let urls;
-		await step("Given GET /v1/vectors/pending is answered by the test", () => {
-			urls = routePending(t);
-		});
-		await step(
-			'When the indexer of appIndexer() with settings whose embedding model is "" is kicked',
-			() => appIndexer(() => settingsWith("")).kick(),
-		);
-		await step("Then no request is sent to /v1/vectors/pending", () => {
-			expect(urls).toEqual([]);
-		});
-	},
-);
-
-scenario(
-	"The indexer reads the settings at every kick",
-	async ({ step, t }) => {
-		let urls;
-		let settings = null;
-		let indexer;
-		await step("Given GET /v1/vectors/pending returns no rounds", () => {
-			urls = routePending(t);
-		});
-		await step("And the indexer of appIndexer() has no settings", () => {
-			indexer = appIndexer(() => settings);
-		});
-		await step(
-			'When it is kicked, then given settings whose embedding model is "embed" and kicked again',
-			async () => {
-				await indexer.kick();
-				settings = settingsWith("embed");
-				await indexer.kick();
-			},
-		);
-		await step(
-			"Then GET /v1/vectors/pending?model=embed&limit=16 is sent once",
-			() => {
-				expect(urls).toEqual(["/v1/vectors/pending?model=embed&limit=16"]);
 			},
 		);
 	},

@@ -17,7 +17,6 @@ require_relative 'uuid'
 require_relative 'tag_store'
 require_relative 'tag_files'
 require_relative 'search_index'
-require_relative 'v1/vector_db'
 require_relative 'c_store'
 
 module Chatty
@@ -264,8 +263,22 @@ module Chatty
         'messages' => entries.count { |o| o['type'] == 'message' },
         'tags' => current_tags(entries),
         # Ids of the rounds this conversation owns (user message ids; maps semantic search hits to conversations. LCTYSP-0008)
-        'message_ids' => entries.select { |o| o['type'] == 'message' && o['role'] == 'user' && !o['inherited'] }.map { |o| o['id'] }
+        'message_ids' => entries.select { |o| o['type'] == 'message' && o['role'] == 'user' && !o['inherited'] }.map { |o| o['id'] },
+        # Each own user and model message with its round, [[message id, round id], …]: maps a hit of semantic search,
+        # which is a message (LCTYSP-0019), to its round and its conversation
+        'message_rounds' => message_rounds(entries)
       }
+    end
+
+    # [[message id, round id], …] of the own user and assistant messages; a reply's round is the user message before it
+    def message_rounds(entries)
+      round = nil
+      entries.each_with_object([]) do |o, out|
+        next unless o['type'] == 'message'
+        round = o['inherited'] ? nil : o['id'] if o['role'] == 'user' # a reply to an inherited one has no own round
+        next if o['inherited'] || o['id'].nil?
+        out << [o['id'], round] if round && %w[user assistant].include?(o['role'])
+      end
     end
 
     # Conversation files. Skip names that are not valid conversation ids (copies like "… copy.html")
@@ -306,23 +319,19 @@ module Chatty
 
   end
 
-  # At startup: bring the files of the layout before to this one (tags.sqlite renamed to lcty_t.sqlite, the vectors of
-  # the old _index.sqlite carried over to lcty_fuzzy_search.sqlite), discard _index.sqlite, open the stores (TAG_FILES,
-  # TAGS, C_STORE, INDEX, VECTORS), fill the index from the files, garbage-collect vectors and delete the cache files of the
-  # former layout (LCTYSP-0015).
+  # At startup: bring the files of the layout before to this one (tags.sqlite renamed to lcty_t.sqlite), discard
+  # _index.sqlite, open the stores (TAG_FILES, TAGS, C_STORE, INDEX) and fill the index from the files (LCTYSP-0015). The
+  # vectors of semantic search are the vector pair of lib/embedding.rb, which lcty.rb opens next (LCTYSP-0019).
   def self.open_data
     FileUtils.mkdir_p(CONV_DIR)
     TagStore.rename_former(FORMER_TAGS_DB_PATH, TAGS_DB_PATH)
-    V1::VectorDB.carry_over(INDEX_PATH, DATA_DIR)
     SearchIndex.discard(INDEX_PATH)
     const_set(:TAG_FILES, TagFiles.new(TAG_DIR, TAG_LOCK_PATH))
     const_set(:TAGS, TagStore.new(TAGS_DB_PATH))
     const_set(:C_STORE, CStore.new(C_DB_PATH))
     const_set(:INDEX, SearchIndex.new(INDEX_PATH))
-    const_set(:VECTORS, V1::VectorDB.new(INDEX, DATA_DIR))
     Store.migrate_heads
     convs = Store.conversation_paths.map { |p| [File.basename(p, '.html'), Store.index_state(p)] }.to_h
     INDEX.full_sync(convs)
-    VECTORS.gc_all
   end
 end

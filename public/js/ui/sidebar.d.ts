@@ -25,7 +25,6 @@ import type { SearchPanel } from "../search/search-panel.js";
  * instead, whose connection is opened again after the cache closed it.
  *
  * @param sidebar the <lcty-sidebar>
- * @param o.getSettings the current settings, for the search panel
  * @param o.onSelect called when a conversation is chosen; return true when it was handled (otherwise the item's link
  *   is followed)
  * @param o.onTagsSaved called with the new tag definitions after the tags dialog saved them
@@ -34,7 +33,6 @@ import type { SearchPanel } from "../search/search-panel.js";
 export function initSidebar(
 	sidebar: LctySidebarElement,
 	o: {
-		getSettings: () => object | null | undefined;
 		onSelect?: (detail: {
 			id: string;
 			chunkId: string | null;

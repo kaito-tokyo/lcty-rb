@@ -2,48 +2,21 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Vector binary (exchange format lctyvLE0) and the client of the semantic search worker (LCTYSP-0008).
+// The client of the semantic search worker and the query embedding of /v1/rpc (LCTYSP-0008, LCTYSP-0019).
 
 import { siteUrl } from "../site.js";
-import { uuidToBytes } from "../uuid.js";
 
-const MAGIC = [0x6c, 0x63, 0x74, 0x79, 0x76, 0x4c, 0x45, 0x30]; // "lctyvLE0"
-const HEAD = 32;
-export const FULL_DIM = 768; // Dimensions for registration (PUT)
-const DIM = 256; // Dimensions of the distributed vectors
+// The vector pair of the server's default embedding model
+export const PAIR = "eg2_264";
+const DIM = 256;
 
-function control(size) {
-	const b = new Uint8Array(16);
-	b.set(MAGIC, 0);
-	new DataView(b.buffer).setUint32(8, size, true);
-	return b;
-}
-
-/** [{id, vec: Float32Array}] → { body: registration vector binary (PUT body), size, count }. */
-export function encodeRecords(items) {
-	const size = FULL_DIM * 4;
-	const rec = HEAD + size;
-	const out = new Uint8Array(items.length * rec);
-	const ctl = control(size);
-	items.forEach(({ id, vec }, i) => {
-		if (vec.length !== FULL_DIM)
-			throw new Error(`wrong dimensions (${vec.length} ≠ ${FULL_DIM})`);
-		const off = i * rec;
-		out.set(ctl, off);
-		uuidToBytes(id, out, off + 16);
-		out.set(new Uint8Array(vec.buffer, vec.byteOffset, size), off + HEAD);
-	});
-	return { body: out, size, count: items.length };
-}
-
-/** 768-dim query vector → take the first 256 dims and L2-renormalize (Matryoshka representation) */
-function truncate(vec) {
-	const q = Float32Array.from(vec.subarray(0, DIM));
-	let n = 0;
-	for (let i = 0; i < DIM; i++) n += q[i] * q[i];
-	n = Math.sqrt(n) || 1;
-	for (let i = 0; i < DIM; i++) q[i] /= n;
-	return q;
+/** The query vector of text, embedded by the server: 256 Float32, L2-normalized. */
+export async function embedQuery(rpc, text) {
+	const { vector } = await rpc.call(`vectors.${PAIR}.embed`, { text });
+	const bytes = Uint8Array.from(atob(vector), (c) => c.charCodeAt(0));
+	if (bytes.length !== DIM * 4)
+		throw new Error(`wrong query dimensions (${bytes.length / 4} ≠ ${DIM})`);
+	return new Float32Array(bytes.buffer);
 }
 
 /** Semantic search in a worker that scores the query against every row (LCTYSP-0005, LCTYSP-0008). */
@@ -93,13 +66,15 @@ export function createVectorStore() {
 			return state.rows;
 		},
 
-		/** Refetch if the files changed (concurrent calls share one fetch) */
-		async refresh() {
-			const at = (name) => siteUrl(`v1/${name}`).href;
+		/** Bring the worker's copy up to date (concurrent calls share one load) */
+		async refresh(summary) {
+			const at = (ext) => siteUrl(`v1/vectors.${PAIR}.${ext}`).href;
 			state.loading ||= call({
 				op: "load",
-				dat: at("vectors.eg2_264.dat"),
-				idx: at("vectors.eg2_264.idx"),
+				json: at("json"),
+				dat: at("dat"),
+				idx: at("idx"),
+				summary,
 			})
 				.then((r) => {
 					state.rows = r.rows;
@@ -110,12 +85,12 @@ export function createVectorStore() {
 			return state.loading;
 		},
 
-		/** The k best ids for a 768-dim query vector, as [[id, score], …] descending. */
+		/** The k best ids for a 256-dim query vector, as [[id, score], …] descending. */
 		async search(q, k = 50, { allow = null, accept = null } = {}) {
 			if (!state.rows) return [];
 			const { results } = await call({
 				op: "search",
-				query: truncate(q),
+				query: q,
 				k: accept ? 2 * k : k,
 				allow,
 			});

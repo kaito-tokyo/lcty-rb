@@ -2,26 +2,30 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// fuzzy_search.worker.js: semantic search off the main thread (LCTYSP-0008). A classic worker with no imports, started
-// by js/search/vectors.js as new Worker(siteUrl("fuzzy_search.worker.js")), at the root of the site. It is not a /c/
-// file: it works on the server's vector data, which a conversation file opened on its own does not need (LCTYSP-0005).
-// bdot264.wasm is found next to this file (self.location), the distribution files at the URLs the page gives.
+// fuzzy_search.worker.js: semantic search off the main thread (LCTYSP-0008, LCTYSP-0019). A classic worker with no
+// imports, started by js/search/vectors.js as new Worker(siteUrl("fuzzy_search.worker.js")), at the root of the site. It
+// is not a /c/ file: it works on the server's vector data, which a conversation file opened on its own does not need
+// (LCTYSP-0005). bdot264.wasm is found next to this file (self.location), the vector pair at the URLs the page gives.
 //
-// It fetches the distribution files itself (vectors.eg2_264.dat, the rows, and vectors.eg2_264.idx, the 16-byte id of each row, at the
-// URLs the page gives), keeps them, and scores a query against every row with bdot264.wasm. Rows and query
-// are L2-normalized, so a dot product is the cosine similarity. When the wasm cannot be used (the engine rejects it, or the 256 MiB memory cannot be made), the same scores are computed in
+// It keeps a copy of the server's vector pair in memory and brings it up to date from the pair's JSON (LCTYSP-0019):
+// another generation (rev) replaces the copy, the same one fetches only the records past the copy's end, with Range
+// and If-Match of the generation, and the rows of the JSON's invalid ranges are filled with NaN. Record 0, the header,
+// is never fetched. A 412 (the generation changed between the JSON and the rows) starts again from the JSON. Rows and
+// query are L2-normalized, so a dot product is the cosine similarity; a NaN row scores NaN, which is never taken. When
+// the wasm cannot be used (the engine rejects it, or the 256 MiB memory cannot be made), the same scores are computed in
 // JavaScript over the same layout.
 //
-//   { id, op: "load", dat, idx } (URLs)            → { id, rows }
+//   { id, op: "load", json, dat, idx, summary? } (URLs; summary: the JSON's content, when the page has it already)
+//     → { id, rows }
 //   { id, op: "search", query: Float32Array(256), k, allow }
 //     → { id, results: [[msgId, score], …] } (the k best ids by their best row, descending; allow: the ids that may
 //       appear, or null for all)
-//   on failure                                     → { id, error: message }
+//   on failure                                     → { id, error: message } (the copy is kept as it was)
 //
 // Memory layout of bdot264 (bdot264.wat): query at 0 (f32 × 256 + 32 B of padding), scores at 0x10000 (one
 // f32 per row), rows at 0x110000 (f32 × 256 + 32 B of padding that must be zero, 1056 B each, at most 250,000).
-// vectors.eg2_264.dat is exactly those rows (the server writes the zero padding), so it is copied as it is to 0x110000;
-// vectors.eg2_264.idx has the 16-byte id of each row, in the same order.
+// The records of .dat are exactly those rows (the server writes the zero padding), so they are copied as they are;
+// row i of the copy is record i + 1 of the pair, and its id is record i + 1 of .idx.
 
 const DIM = 256;
 const REC = 1056; // bytes per row: 256 × f32 + 32 B of zero padding
@@ -31,17 +35,21 @@ const SCORES = 0x10000;
 const ROWS = 0x110000;
 const MAX_ROWS = 250000;
 const PAGES = 4096; // 256 MiB, as bdot264 imports it
+const QNAN = 0x7fc00000;
 
 const state = {
 	kernel: null,
 	buffer: null,
-	etag: null,
+	rev: null, // the generation of the copy
 	rows: 0,
-	rowId: null, // Int32Array: row → index of its id in ids
+	rowId: new Int32Array(1024), // row → index of its id in ids
 	ids: [], // the distinct ids, in order of first appearance
-	index: null, // Map: id → its index in ids
+	index: new Map(), // id → its index in ids
 	best: null, // Float32Array: the best score of each id (reused by every search)
 };
+
+/** The generation changed between the JSON and a fetch of the rows (412): start again from the JSON. */
+class Stale extends Error {}
 
 /** bdot264 with its memory, or { bdot264: null } when it cannot be used (then JavaScript scores the rows). */
 async function kernel() {
@@ -73,72 +81,126 @@ function uuid(b, off) {
 	return s;
 }
 
-/** The pair (dat, idx) as bytes with its ETag, or null when it is the one already loaded. Both files carry the same ETag
- * (the pair's version): a pair fetched across a rewrite on the server is fetched again. */
-async function fetchPair(dat, idx) {
-	for (let attempt = 0; ; attempt++) {
-		const [d, i] = await Promise.all([fetch(dat), fetch(idx)]);
-		for (const r of [d, i])
-			if (!r.ok && r.status !== 0)
-				throw new Error(`failed to fetch the vectors (HTTP ${r.status})`);
-		const etag = d.headers.get("ETag");
-		if (etag !== i.headers.get("ETag") && attempt < 2) continue;
-		if (etag && etag === state.etag) return null;
-		const [rows, idBytes] = await Promise.all([
-			d.arrayBuffer().then((b) => new Uint8Array(b)),
-			i.arrayBuffer().then((b) => new Uint8Array(b)),
-		]);
-		return { etag, rows, idBytes };
-	}
+/** The pair's JSON: { rev, count, invalid } */
+async function summaryOf(url) {
+	const r = await fetch(url, { cache: "no-cache" }); // revalidated by its ETag
+	if (!r.ok) throw new Error(`failed to fetch the vectors (HTTP ${r.status})`);
+	const s = await r.json();
+	if (
+		!Number.isSafeInteger(s?.rev) ||
+		!Number.isSafeInteger(s.count) ||
+		s.count < 1 ||
+		!Array.isArray(s.invalid)
+	)
+		throw new Error("broken vectors (not the JSON of a pair)");
+	return s;
 }
 
-/** Fetch the distribution files (unchanged when the ETag is the same) and put them in place. Returns the row count. */
-async function load(dat, idx) {
-	const pair = await fetchPair(dat, idx);
-	if (!pair) return state.rows;
-	const { etag, rows, idBytes } = pair;
-	const n = rows.length / REC;
-	if (!Number.isInteger(n) || idBytes.length !== n * ID)
+/** The bytes first to last of url, in the generation rev (Stale on 412) */
+async function range(url, rev, first, last) {
+	const r = await fetch(url, {
+		headers: { Range: `bytes=${first}-${last}`, "If-Match": `"${rev}"` },
+		cache: "no-store",
+	});
+	if (r.status === 412) throw new Stale();
+	if (r.status !== 206)
+		throw new Error(`failed to fetch the vectors (HTTP ${r.status})`);
+	const bytes = new Uint8Array(await r.arrayBuffer());
+	if (bytes.length !== last - first + 1)
 		throw new Error(
-			`broken vectors (${rows.length} bytes of rows for ${idBytes.length / ID} ids)`,
+			`broken vectors (${bytes.length} bytes for ${last - first + 1})`,
 		);
+	return bytes;
+}
+
+/** A buffer for n rows: the kernel's memory, or an ArrayBuffer grown by doubling (the rows it holds kept) */
+function room(n, memory) {
+	if (memory) return memory.buffer;
+	const need = ROWS + n * REC;
+	if (state.buffer && state.buffer.byteLength >= need) return state.buffer;
+	const grown = new ArrayBuffer(
+		Math.max(need, (state.buffer?.byteLength ?? ROWS) * 2),
+	);
+	if (state.buffer)
+		new Uint8Array(grown).set(
+			new Uint8Array(state.buffer, 0, ROWS + state.rows * REC),
+		);
+	return grown;
+}
+
+/** Bring the copy up to the summary s; Stale when the generation changed meanwhile */
+async function sync(urls, { rev, count, invalid }) {
+	const n = count - 1; // rows, the header left out
 	if (n > MAX_ROWS)
 		throw new Error(`too many vectors (${n}; the limit is ${MAX_ROWS})`);
-	const rowId = new Int32Array(n);
-	const ids = [];
-	const index = new Map();
-	for (let i = 0; i < n; i++) {
-		const id = uuid(idBytes, i * ID);
-		let j = index.get(id);
-		if (j === undefined) {
-			j = ids.length;
-			ids.push(id);
-			index.set(id, j);
-		}
-		rowId[i] = j;
+	const from = state.rev === rev && state.rows <= n ? state.rows : 0;
+	let rows = null;
+	let idBytes = null;
+	if (n > from) {
+		[rows, idBytes] = await Promise.all([
+			range(urls.dat, rev, (from + 1) * REC, count * REC - 1),
+			range(urls.idx, rev, (from + 1) * ID, count * ID - 1),
+		]);
 	}
 	const { memory } = await kernel();
-	const buffer = memory ? memory.buffer : new ArrayBuffer(ROWS + n * REC);
-	new Uint8Array(buffer).set(rows, ROWS); // the rows are the kernel's layout, padding included
-	const best = new Float32Array(ids.length);
-	Object.assign(state, {
-		buffer,
-		etag,
-		rows: n,
-		rowId,
-		ids,
-		index,
-		best,
-	});
+	// Nothing below waits: the copy changes in one step, never half
+	const buffer = room(n, memory);
+	if (from === 0) {
+		state.ids = [];
+		state.index = new Map();
+	}
+	if (state.rowId.length < n) {
+		const grown = new Int32Array(Math.max(n, state.rowId.length * 2));
+		grown.set(state.rowId.subarray(0, from));
+		state.rowId = grown;
+	}
+	if (rows) {
+		new Uint8Array(buffer).set(rows, ROWS + from * REC); // the kernel's layout, padding included
+		for (let i = from; i < n; i++) {
+			const id = uuid(idBytes, (i - from) * ID);
+			let j = state.index.get(id);
+			if (j === undefined) {
+				j = state.ids.length;
+				state.ids.push(id);
+				state.index.set(id, j);
+			}
+			state.rowId[i] = j;
+		}
+	}
+	// The invalid rows: written as integers, NaN in every float, the padding left zero
+	const u32 = new Uint32Array(buffer);
+	for (const [a, b] of invalid) {
+		for (let r = Math.max(a, 1); r <= Math.min(b, n); r++) {
+			const base = (ROWS + (r - 1) * REC) / 4;
+			u32.fill(QNAN, base, base + DIM);
+		}
+	}
+	if (!state.best || state.best.length < state.ids.length)
+		state.best = new Float32Array(Math.max(state.ids.length, 64));
+	Object.assign(state, { buffer, rev, rows: n });
 	return n;
+}
+
+/** Bring the copy up to date (from summary, or else from the JSON); returns the row count. */
+async function load({ json, dat, idx, summary }) {
+	for (let attempt = 0; attempt < 3; attempt++) {
+		const s = attempt === 0 && summary ? summary : await summaryOf(json);
+		try {
+			return await sync({ dat, idx }, s);
+		} catch (e) {
+			if (!(e instanceof Stale)) throw e;
+		}
+	}
+	throw new Error("the vectors changed while they were fetched");
 }
 
 /** Scores every row against query (256 dims, L2-normalized); returns the k best ids by their best row. */
 function search(query, k, allow) {
-	const { rows, rowId, ids, index, best, buffer } = state;
+	const { rows, rowId, ids, index, buffer } = state;
 	if (!rows) return [];
 	if (query.length !== DIM)
 		throw new Error(`wrong query dimensions (${query.length} ≠ ${DIM})`);
+	const best = state.best.subarray(0, ids.length);
 	const f = new Float32Array(buffer);
 	f.set(query, QUERY / 4);
 	if (state.kernel.bdot264) {
@@ -152,7 +214,7 @@ function search(query, k, allow) {
 		}
 	}
 	const scores = new Float32Array(buffer, SCORES, rows);
-	// The best row of each id. An id that may not appear stays at -Infinity
+	// The best row of each id. An id that may not appear stays at -Infinity; so does one whose rows are all NaN
 	best.fill(Number.NEGATIVE_INFINITY);
 	if (allow) {
 		const ok = new Uint8Array(ids.length);
@@ -218,8 +280,7 @@ function top(values, k) {
 self.onmessage = async ({ data }) => {
 	const { id, op } = data;
 	try {
-		if (op === "load")
-			self.postMessage({ id, rows: await load(data.dat, data.idx) });
+		if (op === "load") self.postMessage({ id, rows: await load(data) });
 		else if (op === "search")
 			self.postMessage({
 				id,

@@ -14,8 +14,7 @@
 #
 # Everything here the server makes again from the files alone, so the file has no schema version and is never
 # migrated: at every start it is discarded (SearchIndex.discard) and made anew, and the full sync fills it
-# (LCTYSP-0015). The vectors, which only the browser makes, are lcty_fuzzy_search.sqlite (lib/v1/vector_db.rb),
-# attached to this connection.
+# (LCTYSP-0015). The vectors of semantic search are not here: they are the vector pair (lib/embedding.rb, LCTYSP-0019).
 
 require 'sqlite3'
 require 'digest'
@@ -29,7 +28,7 @@ module Chatty
       [path, "#{path}-wal", "#{path}-shm"].each { |f| File.delete(f) if File.exist?(f) }
     end
 
-    # The connection and its mutex are shared with the vector DB (V1::VectorDB), which joins vectors with chunks.
+    # The connection and its mutex, for the tests that look into the index
     attr_reader :db, :mutex
 
     def initialize(path)
@@ -212,7 +211,7 @@ module Chatty
       @db.execute('DELETE FROM c_recordcount WHERE cid = ?', [conv_id])
     end
 
-    # Delete a round (vectors stay; the vector DB's garbage collection removes them at startup)
+    # Delete a round
     def delete_round(msg_id)
       @db.execute('SELECT rowid FROM chunks WHERE msg_id = ?', [msg_id]).each { |(r)| @db.execute('DELETE FROM chunks_fts WHERE rowid = ?', [r]) }
       @db.execute('DELETE FROM chunks WHERE msg_id = ?', [msg_id])

@@ -6,7 +6,7 @@
 
 import { getTags } from "../api/lcty-t.js";
 import { tabRpc } from "../api/tab-rpc.js";
-import { loadSettings, showToast } from "../common.js";
+import { showToast } from "../common.js";
 import { tr } from "../i18n.js";
 import { tagFileOfPath } from "../tag-names.js";
 import { renderTagsEditor } from "../tags.js";
@@ -17,13 +17,12 @@ export function initTagFilePage() {
 	const frame = document.querySelector("lcty-t");
 	if (!frame) return;
 	const file = tagFileOfPath(location.pathname);
-	const state = { settings: null, editor: null };
+	const state = { editor: null };
 	const heading = document.createElement("h2");
 	heading.textContent = tr("tags", "Tags");
 	const body = document.createElement("div");
 
 	const panel = initSidebar(frame.sidebar, {
-		getSettings: () => state.settings,
 		// The tags dialog saved: show this tag as it is now (it may have been renamed or deleted there)
 		onTagsSaved: () => load(),
 	});
@@ -63,7 +62,6 @@ export function initTagFilePage() {
 	});
 
 	(async () => {
-		state.settings = await loadSettings();
 		// The page edits the set, so it reads it after initSidebar's sync_full (LCTYSP-0009)
 		await load();
 		panel.refresh();

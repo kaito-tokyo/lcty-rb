@@ -6,9 +6,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0008: Vector binary and semantic search
 
-- Status: Accepted
+- Status: Superseded by [LCTYSP-0019](LCTYSP-0019_server-embedding.md), except for the kernel `bdot264`, its row
+  layout and the worker's search ([Search in the browser](#search-in-the-browser)), which stay. Registration, the
+  vector binary `lctyvLE0`, the vector DB in SQLite and the distribution files described here are gone: the server
+  embeds every message and serves the vector pair.
 - Related: [LCTYSP-0006](LCTYSP-0006_http-api.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)
-- Implementation: `lib/v1/vector_records.rb` (vector binary), `lib/v1/vector_db.rb` (vector DB), `public/js/search/vectors.js`, `public/fuzzy_search.worker.js` (search worker), `public/bdot264.wat` (kernel; built to `public/bdot264.wasm`), `public/js/search/embed.js`
+- Implementation (what stays): `public/fuzzy_search.worker.js` (search worker), `public/bdot264.wat` (kernel; built to
+  `public/bdot264.wasm`), `public/js/search/vectors.js`
 
 ## Summary
 
