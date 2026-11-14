@@ -7,22 +7,31 @@
 // the browsers against the Ruby server, which runs on its own port with a fresh, empty data directory. llama-server is
 // replaced by a fake inside the browser (tests/ui/fixtures.js), so neither the real data nor the models are touched.
 
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-// The server: by default the tests start one on macOS's /usr/bin/ruby. LCTY_TEST_SERVER_URL points them at a server
-// that is already running instead, with an empty data directory of its own (in CI, the container of .devcontainer/ruby-2.6.10/compose.yml).
+// The servers: by default the tests start one per browser on macOS's /usr/bin/ruby, on LCTY_TEST_PORT (Chromium; the
+// unit tests use it too) and the two ports after it (WebKit, Firefox), each with a data directory of its own.
+// LCTY_TEST_SERVER_URL points every test at one server that is already running instead, with an empty data directory
+// of its own (in CI, the container of .devcontainer/ruby-2.6.10/compose.yml).
 const external = process.env.LCTY_TEST_SERVER_URL;
 const PORT = Number(process.env.LCTY_TEST_PORT || 45290);
+const BROWSERS = [
+	{ name: "chromium", device: devices["Desktop Chrome"] },
+	{ name: "webkit", device: devices["Desktop Safari"] },
+	{ name: "firefox", device: devices["Desktop Firefox"] },
+];
+const urlOf = (i) => external || `http://127.0.0.1:${PORT + i}`;
 // The config is loaded again by every worker: the directory is made once and passed down in the environment
 if (!external)
 	process.env.LCTY_TEST_DATA_DIR ??= mkdtempSync(join(tmpdir(), "lcty-ui-"));
 
-// The unit tests answer every request they make themselves (LCTYSP-1000), so they run in parallel. The UI tests share
-// one server and one data directory (the sidebar lists every conversation the tests make), so they run one at a time:
-// one worker per browser, and the browsers one after another: Chromium, WebKit, then Firefox.
+// The unit tests answer every request they make themselves (LCTYSP-1000), so they run in parallel. The UI tests of a
+// browser share its server and data directory (the sidebar lists every conversation the tests make), so they run one
+// at a time: one worker per browser. With a server per browser the browsers run side by side; sharing one external
+// server, they run one after another: Chromium, WebKit, then Firefox.
 const unit = {
 	testDir: "tests/unit",
 	testMatch: "*.spec.js",
@@ -37,41 +46,40 @@ export default defineConfig({
 	retries: process.env.CI ? 1 : 0,
 	reporter: process.env.CI ? "github" : "list",
 	use: {
-		baseURL: external || `http://127.0.0.1:${PORT}`,
+		baseURL: urlOf(0),
 		locale: "ja-JP",
 		trace: "retain-on-failure",
 	},
 	projects: [
-		{ name: "unit-chromium", ...unit, use: { ...devices["Desktop Chrome"] } },
-		{ name: "unit-webkit", ...unit, use: { ...devices["Desktop Safari"] } },
-		{ name: "unit-firefox", ...unit, use: { ...devices["Desktop Firefox"] } },
-		{ name: "ui-chromium", ...ui, use: { ...devices["Desktop Chrome"] } },
-		{
-			name: "ui-webkit",
+		...BROWSERS.map(({ name, device }) => ({
+			name: `unit-${name}`,
+			...unit,
+			use: { ...device },
+		})),
+		...BROWSERS.map(({ name, device }, i) => ({
+			name: `ui-${name}`,
 			...ui,
-			use: { ...devices["Desktop Safari"] },
-			dependencies: ["ui-chromium"],
-		},
-		{
-			name: "ui-firefox",
-			...ui,
-			use: { ...devices["Desktop Firefox"] },
-			dependencies: ["ui-webkit"],
-		},
+			use: { ...device, baseURL: urlOf(i) },
+			dependencies: external && i > 0 ? [`ui-${BROWSERS[i - 1].name}`] : [],
+		})),
 	],
 	webServer: external
 		? undefined
-		: {
-				// No embedding server (LCTYSP-0019): the tests never start a model
-				command: "/usr/bin/ruby lcty.rb --no-embedding",
-				url: `http://127.0.0.1:${PORT}/`,
-				reuseExistingServer: false,
-				env: {
-					PORT: String(PORT),
-					LCTY_BIND_IP: "127.0.0.1",
-					LCTY_DATA_DIR: process.env.LCTY_TEST_DATA_DIR,
-				},
-				stdout: "ignore",
-				stderr: "pipe",
-			},
+		: BROWSERS.map(({ name }, i) => {
+				const dataDir = join(process.env.LCTY_TEST_DATA_DIR, name);
+				mkdirSync(dataDir, { recursive: true });
+				return {
+					// No embedding server (LCTYSP-0019): the tests never start a model
+					command: "/usr/bin/ruby lcty.rb --no-embedding",
+					url: `${urlOf(i)}/`,
+					reuseExistingServer: false,
+					env: {
+						PORT: String(PORT + i),
+						LCTY_BIND_IP: "127.0.0.1",
+						LCTY_DATA_DIR: dataDir,
+					},
+					stdout: "ignore",
+					stderr: "pipe",
+				};
+			}),
 });
