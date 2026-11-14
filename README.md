@@ -160,7 +160,8 @@ they use a new, empty data directory in the temporary folder, removed afterwards
 ruby tests/backend/run.rb
 ```
 
-`npm run test:backend` does the same. For the frontend tests:
+`npm run test:backend` does the same. Each test file runs in a process of its own, as many at a time as there are
+CPUs (`LCTY_TEST_JOBS` to change it). For the frontend tests:
 
 ```bash
 npm install
