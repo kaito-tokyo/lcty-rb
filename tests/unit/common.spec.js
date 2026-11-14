@@ -17,13 +17,16 @@ import { givenAPage } from "./unit-page.js";
 const NOW = "2026-11-04T01:23:05.678Z";
 
 /**
- * fn(module, arg) in the page, where module is js/common.js and arg crosses as JSON. Like any function given to
- * page.evaluate, fn is sent as its source, so it must not use anything from this file.
+ * fn(module, arg) in the page, where module is js/common.js and arg crosses as Playwright serializes it. Like any
+ * function given to evaluate, fn is sent as its source, so it must not use anything from this file.
  */
-function common(page, fn, arg) {
-	return page.evaluate(
-		`(async () => (${fn})(await import("/js/common.js"), ${JSON.stringify(arg ?? null)}))()`,
-	);
+async function common(page, fn, arg) {
+	const module = await page.evaluateHandle(() => import("/js/common.js"));
+	try {
+		return await module.evaluate(fn, arg ?? null);
+	} finally {
+		await module.dispose();
+	}
 }
 
 /** A fake clock that is paused (an installed clock otherwise runs on with the real time): only runFor moves it. */
