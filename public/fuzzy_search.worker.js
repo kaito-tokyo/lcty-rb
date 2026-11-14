@@ -10,7 +10,9 @@
 //
 // It keeps a copy of the server's vector pair in memory and brings it up to date from the pair's JSON (LCTYSP-0019):
 // another generation (rev) replaces the copy, the same one fetches only the records past the copy's end, with Range
-// and If-Match of the generation, and the rows of the JSON's invalid ranges are filled with NaN. Record 0, the header,
+// and If-Match of the generation, and the rows of the JSON's invalid ranges are filled with NaN. A summary of the same
+// generation with fewer records than the copy is an older one (records are only added within a generation, and rows only
+// become invalid), so it changes nothing: a notification may arrive after a JSON fetched later. Record 0, the header,
 // is never fetched. A 412 (the generation changed between the JSON and the rows) starts again from the JSON. Rows and
 // query are L2-normalized, so a dot product is the cosine similarity; a NaN row scores NaN, which is never taken. When
 // the wasm cannot be used (the engine rejects it, or the 256 MiB memory cannot be made), the same scores are computed in
@@ -146,7 +148,9 @@ async function sync({ rev, count, invalid }) {
 	const n = count - 1; // rows, the header left out
 	if (n > MAX_ROWS)
 		throw new Error(`too many vectors (${n}; the limit is ${MAX_ROWS})`);
-	const from = state.rev === rev && state.rows <= n ? state.rows : 0;
+	// An older summary of this generation: the copy has all it says already
+	if (state.rev === rev && n < state.rows) return state.rows;
+	const from = state.rev === rev ? state.rows : 0;
 	let rows = null;
 	let idBytes = null;
 	if (n > from) {

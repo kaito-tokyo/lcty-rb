@@ -16,7 +16,8 @@ Feature: LCTYSP-1013 The semantic search worker
   as the JSON is), and then, with Range and
   If-Match of the generation rev, the records of .dat (256 Float32 and 32 zero bytes each, 1,056 bytes) and of .idx (16
   bytes each) that the copy lacks, never record 0, the header. Another generation replaces the copy; the same one
-  fetches only the records past its end. The rows of the invalid ranges are filled with NaN, so they never score. A 412
+  fetches only the records past its end, and one with fewer records than the copy is an older summary, which changes
+  nothing (records are only added within a generation). The rows of the invalid ranges are filled with NaN, so they never score. A 412
   starts again from the JSON, three times at most. { op: "search", query, k, allow } scores the 256-dimension query
   against every row with the kernel /bdot264.wasm, or in JavaScript when the kernel cannot be used, and answers
   { results }: the k best ids (50 when k is not given) by their best row, descending, as [id, score] pairs; allow,

@@ -8,15 +8,16 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Draft, implemented. The server: `lib/embedding.rb` and `lib/embedding/`
   ([LCTYSP-3026](LCTYSP-3026_vector-pair.feature), [LCTYSP-3027](LCTYSP-3027_embedding-server.feature),
-  [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)). The browser: `public/fuzzy_search.worker.js` keeps a copy of
-  the pair ([LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)), `public/js/search/vectors.js` embeds queries over
+  [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)). The browser: `public/fuzzy_search.worker.js` keeps a copy of the
+  pair ([LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)), `public/js/search/vectors.js` embeds queries over
   `/v1/rpc` ([LCTYSP-1011](LCTYSP-1011_vector-store.feature)), and the search panel maps a message to its round with
   `message_rounds` of `GET /v1/conversations` ([LCTYSP-1019](LCTYSP-1019_search-panel.feature)). The registration of
-  [LCTYSP-0008](LCTYSP-0008_vector-binary.md), its SQLite DB, `embed.js` and the setting `embedding_model` are gone.
-  The query's vector comes back as bytes in base64 ([Open questions](#open-questions), 3). Not done: the pages do not
-  receive `vectors.eg2_264.changed` (the worker's copy is brought up to date from the JSON at every search), only
-  `lcty-msg` files are embedded (a file of LCTYSP-0003 has no semantic search until `tools/convert.rb` converts it), and
-  open question 2 is not measured.
+  [LCTYSP-0008](LCTYSP-0008_vector-binary.md), its SQLite DB, `embed.js` and the setting `embedding_model` are gone. The
+  query's vector comes back as bytes in base64 ([Open questions](#open-questions), 3). The search panel receives
+  `vectors.eg2_264.changed` over the tab's connection and brings the worker's copy up to date from it; a search fetches
+  the JSON only when the copy is not followed so (no copy yet, another connection, or a failed load,
+  [LCTYSP-1011](LCTYSP-1011_vector-store.feature)). Not done: only `lcty-msg` files are embedded (a file of LCTYSP-0003
+  has no semantic search until `tools/convert.rb` converts it), and open question 2 is not measured.
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0002](LCTYSP-0002_llm-backend.md),
   [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md),
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md),

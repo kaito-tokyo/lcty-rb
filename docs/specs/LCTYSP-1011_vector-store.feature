@@ -12,14 +12,18 @@ Feature: LCTYSP-1011 The vector store and the query embedding
   connection given and decodes the answer's vector, the base64 of 256 Float32 LE, into a Float32Array of 256. An
   answer of another length rejects; a rejection of the call passes through.
 
-  createVectorStore() makes the client of the semantic search worker /fuzzy_search.worker.js (LCTYSP-1013, started
-  from siteUrl() of js/site.js), which starts on first use. refresh(summary) brings the worker's copy of the vector
-  pair up to date: from summary when it is given, else from /v1/vectors.eg2_264.json, fetching the records of
-  /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx it lacks by Range (concurrent calls share one load), and sets
-  size, the row count. search(q, k = 50, { allow, accept }) gives the 256-dimension query to the worker as it is and
-  answers the k best ids as [id, score] pairs, descending; allow is the only ids the worker may answer, accept a check
-  on the main thread (the worker is then asked for 2k). A store with no rows answers no ids without asking the worker.
-  When the worker fails (its error event), the calls waiting for it reject and the next call starts a new worker.
+  createVectorStore() makes the client of the semantic search worker /fuzzy_search.worker.js (LCTYSP-1013, started from
+  siteUrl() of js/site.js), which starts on first use. refresh() brings the worker's copy of the vector pair up to date
+  from /v1/vectors.eg2_264.json, fetching the records of /v1/vectors.eg2_264.dat and /v1/vectors.eg2_264.idx it lacks by
+  Range (concurrent calls share one load), and sets size, the row count. changed(summary) is the notification
+  vectors.eg2_264.changed: it brings a copy the worker has up to date from summary, without the JSON, and does nothing
+  before the first load. The loads run one at a time. createVectorStore({ actor }) is given the actorId of the tab's
+  connection (null without one): after a refresh made with an actorId, the notifications of that connection keep the
+  copy up to date, so refresh() fetches nothing while the actorId is the same and no notification has failed. search(q,
+  k = 50, { allow, accept }) gives the 256-dimension query to the worker as it is and answers the k best ids as [id,
+  score] pairs, descending; allow is the only ids the worker may answer, accept a check on the main thread (the worker
+  is then asked for 2k). A store with no rows answers no ids without asking the worker. When the worker fails (its error
+  event), the calls waiting for it reject and the next call starts a new worker.
 
   In the Scenarios a row's score is its first value: the queries are 1 in their first dimension unless said otherwise.
   The pair served has its header as record 0 and the rows from record 1, as the server writes it.
@@ -64,14 +68,71 @@ Feature: LCTYSP-1011 The vector store and the query embedding
     And the JSON was requested once
     And each file was requested once, from its record 1
 
-  Scenario: A refresh with a summary does not fetch the JSON
+  Scenario: A notification brings a loaded copy up to date without the JSON
+    Given the vector pair is answered by the test
+    Given the pair holds the rows of "a" and "b"
+    And a store that has been refreshed
+    And the row of "c" is now appended to the pair
+    When changed() is given the summary of the pair
+    Then the size is 3
+    And the JSON was requested once
+    And each file was requested again, from its record 3
+    And a search with k 3 answers "c", "b" and "a"
+
+  Scenario: A notification before the first load does nothing
     Given the vector pair is answered by the test
     Given the pair holds the rows of "a" and "b"
     And a store made by createVectorStore()
-    When refresh() is called with the summary of the pair
+    When changed() is given the summary of the pair
+    Then the size is 0
+    And /fuzzy_search.worker.js was not requested
+
+  Scenario: An older summary of the same generation changes nothing
+    Given the vector pair is answered by the test
+    Given the pair holds the rows of "a" and "b"
+    And a store that has been refreshed
+    And the row of "c" is now appended to the pair
+    And the store has been refreshed again
+    When changed() is given the summary of the pair as it was with the rows of "a" and "b"
+    Then the size is 3
+    And each file was requested twice
+    And a search with k 3 answers "c", "b" and "a"
+
+  Scenario: A refresh fetches nothing while the connection's notifications keep the copy
+    Given the vector pair is answered by the test
+    Given the pair holds the rows of "a" and "b"
+    And a store whose connection's actorId is "actor-1", refreshed
+    When refresh() is called
     Then it resolves and the size is 2
-    And the JSON was not requested
-    And each file was requested once, from its record 1
+    And the JSON was requested once
+
+  Scenario Outline: A refresh fetches the JSON when the connection changed
+    Given the vector pair is answered by the test
+    Given the pair holds the rows of "a" and "b"
+    And a store whose connection's actorId is "actor-1", refreshed
+    And the row of "c" is now appended to the pair
+    And the connection's actorId is now <actor>
+    When refresh() is called
+    Then it resolves and the size is 3
+    And the JSON was requested twice
+
+    Examples:
+      | actor     |
+      | "actor-2" |
+      | null      |
+
+  Scenario: A failed notification makes the next refresh fetch the JSON
+    Given the vector pair is answered by the test
+    Given the pair holds the rows of "a" and "b"
+    And a store whose connection's actorId is "actor-1", refreshed
+    And the row of "c" is now appended to the pair
+    And /v1/vectors.eg2_264.dat answers with the status 500
+    When changed() is given the summary of the pair
+    Then the size is 2
+    When /v1/vectors.eg2_264.dat is served again
+    And refresh() is called
+    Then it resolves and the size is 3
+    And the JSON was requested twice
 
   Scenario: Concurrent refreshes share one load
     Given the vector pair is answered by the test

@@ -20,13 +20,18 @@ export async function embedQuery(rpc, text) {
 }
 
 /** Semantic search in a worker that scores the query against every row (LCTYSP-0005, LCTYSP-0008). */
-export function createVectorStore() {
+export function createVectorStore({ actor = () => null } = {}) {
+	// loaded: the worker has a copy; following: the actorId whose notifications keep the copy up to date
 	const state = {
 		worker: null,
 		seq: 0,
 		pending: new Map(),
 		rows: 0,
-		loading: null,
+		loaded: false,
+		following: null,
+		running: null,
+		queued: null,
+		tail: Promise.resolve(),
 	};
 
 	function start() {
@@ -44,6 +49,8 @@ export function createVectorStore() {
 			if (state.worker === w) {
 				state.worker = null;
 				state.rows = 0;
+				state.loaded = false;
+				state.following = null;
 			}
 			for (const p of state.pending.values())
 				p.reject(new Error(e.message || "the vector search worker failed"));
@@ -61,21 +68,61 @@ export function createVectorStore() {
 		});
 	}
 
+	// Queue a load after the others (one at a time); one still waiting takes a later summary, or the JSON
+	function enqueue(summary, by) {
+		const q = state.queued;
+		if (q) {
+			if (!summary) Object.assign(q, { summary: null, by });
+			else if (q.summary) q.summary = summary;
+			return q.done;
+		}
+		const job = { summary, by };
+		state.queued = job;
+		job.done = state.tail
+			.then(() => {
+				state.queued = null;
+				state.running = job;
+				return call({ op: "load", summary: job.summary });
+			})
+			.then(
+				(r) => {
+					state.rows = r.rows;
+					state.loaded = true;
+					if (!job.summary) state.following = job.by;
+				},
+				(e) => {
+					state.following = null;
+					throw e;
+				},
+			)
+			.finally(() => {
+				if (state.running === job) state.running = null;
+			});
+		state.tail = job.done.catch(() => {});
+		return job.done;
+	}
+
 	return {
 		get size() {
 			return state.rows;
 		},
 
-		/** Bring the worker's copy up to date (concurrent calls share one load) */
-		async refresh(summary) {
-			state.loading ||= call({ op: "load", summary })
-				.then((r) => {
-					state.rows = r.rows;
-				})
-				.finally(() => {
-					state.loading = null;
-				});
-			return state.loading;
+		/** Bring the worker's copy up to date from the JSON, unless notifications keep it so already */
+		async refresh() {
+			const by = actor() || null;
+			if (by && state.following === by) return state.tail;
+			if (state.running && !state.running.summary && !state.queued)
+				return state.running.done;
+			return enqueue(null, by);
+		},
+
+		/** vectors.eg2_264.changed: apply its summary to a copy the worker has (none: the next refresh loads it) */
+		changed(summary) {
+			if (!state.loaded && !state.running && !state.queued)
+				return Promise.resolve();
+			return enqueue(summary, null).catch((e) =>
+				console.warn("the vectors could not be brought up to date", e),
+			);
 		},
 
 		/** The k best ids for a 256-dim query vector, as [[id, score], …] descending. */

@@ -7,18 +7,18 @@
 
 Feature: LCTYSP-1019 The search panel of the sidebar
 
-  createSearchPanel({list, box, status, rpc}) gives the sidebar's <lcty-conv-list>, search box and status their
-  behaviour on every page. With an empty box the list is the browser's copies of the list of conversations
-  (LCTYSP-0014): their meta and number of elements (api/meta-db.js, lcty_c) and their tags (api/lcty-t.js,
-  t_has_many_c of lcty_t, in the order of the tag files, undefined tags after), newest first, read again whenever this
-  tab has stored a change of them. tag:name terms filter by tag; other text is searched by keywords on the server
-  (POST /v1/search) and semantically: the server embeds the query (vectors.eg2_264.embed over the tab's /v1/rpc
-  connection, rpc()) and the search worker scores it against its copy of the server's vector pair. A semantic hit is a
-  user or model message; GET /v1/conversations says the round of each (message_rounds), and each round counts once,
-  with its best message. The two are merged with RRF, keeping the best round of each conversation. Rounds without a
-  snippet get one from POST /v1/snippets. The panel's refresh() reads the list from the copies again, setQuery(q)
-  searches at once, and current marks the conversation of the page. The tab's /v1/rpc connection is a stand-in here:
-  the copies are filled through the modules' own functions.
+  createSearchPanel({list, box, status, rpc, onNotify}) gives the sidebar's <lcty-conv-list>, search box and status
+  their behaviour on every page. With an empty box the list is the browser's copies of the list of conversations
+  (LCTYSP-0014): their meta and number of elements (api/meta-db.js, lcty_c) and their tags (api/lcty-t.js, t_has_many_c
+  of lcty_t, in the order of the tag files, undefined tags after), newest first, read again whenever this tab has stored
+  a change of them. tag:name terms filter by tag; other text is searched by keywords on the server (POST /v1/search) and
+  semantically: the server embeds the query (vectors.eg2_264.embed over the tab's /v1/rpc connection, rpc()) and the
+  search worker scores it against its copy of the server's vector pair, which the notification vectors.eg2_264.changed
+  of that connection (onNotify) keeps up to date. A semantic hit is a user or model message; GET /v1/conversations says
+  the round of each (message_rounds), and each round counts once, with its best message. The two are merged with RRF,
+  keeping the best round of each conversation. Rounds without a snippet get one from POST /v1/snippets. The panel's
+  refresh() reads the list from the copies again, setQuery(q) searches at once, and current marks the conversation of
+  the page. The tab's /v1/rpc connection is a stand-in here: the copies are filled through the modules' own functions.
 
   Background:
     Given a page on the server's origin
@@ -169,6 +169,19 @@ Feature: LCTYSP-1019 The search panel of the sidebar
     Then GET /v1/conversations was fetched once
     When the tab's connection reads c.list and c.recordcount.list again at the version "b007.2"
     Then the search runs again and GET /v1/conversations is fetched again
+
+  Scenario: A notification of the vector pair brings the copy up to date without the JSON
+    Given the lists have been read into the copies and refresh() has shown them
+    And the tab's connection has the actorId "actor-1"
+    And GET /v1/conversations gives "a" the round "r-a", "b" the round "r-b" and "c" the round "r-c"
+    And the vector pair holds "r-a" and "r-b", which the query scores 0.802 and 0.535
+    And POST /v1/search returns no rounds
+    And setQuery has searched "hello"
+    And the vector pair now holds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267
+    When the tab's connection notifies vectors.eg2_264.changed with the summary of the pair
+    And setQuery searches "world"
+    Then the list shows "a", "b" and "c"
+    And GET /v1/vectors.eg2_264.json was fetched once
 
   Scenario Outline: Without semantic search the keyword results are shown with a notice
     Given the lists have been read into the copies and refresh() has shown them
