@@ -13,6 +13,7 @@
 // changes.
 
 import type { RpcClient } from "../api/rpc.js";
+import type { PairSummary } from "./vectors.js";
 
 /** The search panel's handle. */
 export interface SearchPanel {
@@ -27,7 +28,9 @@ export interface SearchPanel {
 /**
  * Wire the sidebar's search box to its conversation list.
  * list: the <lcty-conv-list> element; box: the search box; status: the status display; rpc: the tab's connection to
- * /v1/rpc, over which the query is embedded (tabRpc by default; the tests give their own).
+ * /v1/rpc, over which the query is embedded (tabRpc by default; the tests give their own); onNotify: how the panel
+ * receives the notification vectors.eg2_264.changed of that connection, which keeps the copy of the vector pair up to
+ * date (onTabNotify by default, so the panel is made before the tab's connection opens).
  * A query is split on whitespace: `tag:<name>` terms filter by tag (tag:C# and tag:c~23 are one tag, as conversations
  * refer to tags by the file-name part, LCTYSP-0009) and the rest is the search text.
  */
@@ -35,7 +38,8 @@ export function createSearchPanel(o: {
 	list: HTMLElement;
 	box: HTMLInputElement;
 	status: HTMLElement;
-	rpc?: () => Pick<RpcClient, "call">;
+	rpc?: () => Pick<RpcClient, "call" | "actorId">;
+	onNotify?: (method: string, fn: (params: PairSummary) => void) => void;
 }): SearchPanel;
 
 // Internals:

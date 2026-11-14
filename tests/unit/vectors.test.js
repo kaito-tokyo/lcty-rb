@@ -253,9 +253,9 @@ function serveRange(server, key, request) {
 	});
 }
 
-function refresh(server, s) {
+function refresh(server) {
 	const store = server.store;
-	return store.refresh(s).then(
+	return store.refresh().then(
 		() => ({ resolved: true, size: store.size }),
 		(e) => ({ rejected: e.message, size: store.size }),
 	);
@@ -394,24 +394,170 @@ scenario(
 	},
 );
 
+// ---- The notifications ----
+
+async function givenCAppended(step, server) {
+	await step('And the row of "c" is now appended to the pair', () => {
+		server.pair = {
+			rev: server.pair.rev,
+			rows: [...server.pair.rows, ["c", 0.75]],
+		};
+	});
+}
+
+async function whenChanged(step, server, s = summary(server), text = "") {
+	await step(`When changed() is given the summary of the pair${text}`, () =>
+		server.store.changed(s),
+	);
+}
+
+async function thenSizeIs(step, server, n) {
+	await step(`Then the size is ${n}`, () => {
+		expect(server.store.size).toBe(n);
+	});
+}
+
+async function thenJsonRequested(step, server, n, text) {
+	await step(`And the JSON was requested ${text}`, () => {
+		expect(server.requests.json).toBe(n);
+	});
+}
+
+/** A store whose actor() answers server.actor, refreshed */
+async function givenFollowing(step, server) {
+	await step(
+		'And a store whose connection\'s actorId is "actor-1", refreshed',
+		async () => {
+			server.actor = "actor-1";
+			server.store = createVectorStore({ actor: () => server.actor });
+			expect((await refresh(server)).resolved).toBe(true);
+		},
+	);
+}
+
+const ABC = ["c", "b", "a"];
+
 scenario(
-	"A refresh with a summary does not fetch the JSON",
+	"A notification brings a loaded copy up to date without the JSON",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenRefreshed(step, server);
+		await givenCAppended(step, server);
+		await whenChanged(step, server);
+		await thenSizeIs(step, server, 3);
+		await thenJsonRequested(step, server, 1, "once");
+		await step("And each file was requested again, from its record 3", () => {
+			expect(server.ranges.dat.at(-1)).toBe(`bytes=${3 * REC}-${4 * REC - 1}`);
+			expect(server.ranges.idx.at(-1)).toBe(`bytes=${3 * ID}-${4 * ID - 1}`);
+			expect(server.ranges.dat.length).toBe(2);
+		});
+		await thenSearchAnswers(step, server, ABC, '"c", "b" and "a"');
+	},
+);
+
+scenario(
+	"A notification before the first load does nothing",
 	async ({ step, t }) => {
 		const server = await background(step, t);
 		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
 		await givenAStore(step, server);
-		let result;
+		await whenChanged(step, server);
+		await thenSizeIs(step, server, 0);
+		await step("And /fuzzy_search.worker.js was not requested", () => {
+			expect(server.requests.worker).toBe(0);
+		});
+	},
+);
+
+scenario(
+	"An older summary of the same generation changes nothing",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenRefreshed(step, server);
+		const older = summary(server);
+		await givenCAppended(step, server);
+		await step("And the store has been refreshed again", async () => {
+			expect(await refresh(server)).toEqual({ resolved: true, size: 3 });
+		});
+		await whenChanged(
+			step,
+			server,
+			older,
+			' as it was with the rows of "a" and "b"',
+		);
+		await thenSizeIs(step, server, 3);
+		await step("And each file was requested twice", () => {
+			expect(server.requests.dat).toBe(2);
+			expect(server.requests.idx).toBe(2);
+		});
+		await thenSearchAnswers(step, server, ABC, '"c", "b" and "a"');
+	},
+);
+
+scenario(
+	"A refresh fetches nothing while the connection's notifications keep the copy",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenFollowing(step, server);
+		const result = await whenRefresh(step, server);
+		await thenResolvesWithSize(step, result, 2);
+		await thenJsonRequested(step, server, 1, "once");
+	},
+);
+
+for (const [text, actor] of [
+	['"actor-2"', "actor-2"],
+	["null", null],
+]) {
+	scenario(
+		`A refresh fetches the JSON when the connection changed (${text})`,
+		async ({ step, t }) => {
+			const server = await background(step, t);
+			await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
+			await givenFollowing(step, server);
+			await givenCAppended(step, server);
+			await step(`And the connection's actorId is now ${text}`, () => {
+				server.actor = actor;
+			});
+			const result = await whenRefresh(step, server);
+			await step("Then it resolves and the size is 3", () => {
+				expect(result).toEqual({ resolved: true, size: 3 });
+			});
+			await thenJsonRequested(step, server, 2, "twice");
+		},
+	);
+}
+
+scenario(
+	"A failed notification makes the next refresh fetch the JSON",
+	async ({ step, t }) => {
+		const server = await background(step, t);
+		await givenThePairHolds(step, server, ROWS_AB, 'the rows of "a" and "b"');
+		await givenFollowing(step, server);
+		await givenCAppended(step, server);
 		await step(
-			"When refresh() is called with the summary of the pair",
-			async () => {
-				result = await refresh(server, summary(server));
+			"And /v1/vectors.eg2_264.dat answers with the status 500",
+			() => {
+				server.fail.dat = answer(500, "");
 			},
 		);
-		await thenResolvesWithSize(step, result, 2);
-		await step("And the JSON was not requested", () => {
-			expect(server.requests.json).toBe(0);
+		t.mock.method(console, "warn", () => {});
+		await whenChanged(step, server);
+		await thenSizeIs(step, server, 2);
+		await step("When /v1/vectors.eg2_264.dat is served again", () => {
+			delete server.fail.dat;
 		});
-		await thenEachFileFromRecord1(step, server);
+		let result;
+		await step("And refresh() is called", async () => {
+			result = await refresh(server);
+		});
+		await step("Then it resolves and the size is 3", () => {
+			expect(result).toEqual({ resolved: true, size: 3 });
+		});
+		await thenJsonRequested(step, server, 2, "twice");
 	},
 );
 

@@ -39,10 +39,19 @@ export interface VectorStore {
 	/** The number of rows loaded in the worker (0 before the first refresh or after the worker failed). */
 	readonly size: number;
 	/**
-	 * Bring the worker's copy up to date with the server's pair: from summary (the parameters of
-	 * vectors.eg2_264.changed) when it is given, else from GET /v1/vectors.eg2_264.json. Concurrent calls share one load.
+	 * Bring the worker's copy up to date with the server's pair from GET /v1/vectors.eg2_264.json. Concurrent calls share
+	 * one load. While the notifications of the connection the copy was last loaded on keep it up to date (actor()
+	 * answers the same actorId, and no notification failed to load), it fetches nothing and waits only for the loads
+	 * already queued.
 	 */
-	refresh(summary?: PairSummary): Promise<void>;
+	refresh(): Promise<void>;
+	/**
+	 * The notification vectors.eg2_264.changed, whose parameters are the pair's JSON: bring a copy the worker has up to
+	 * date from it, without fetching the JSON, after the loads already queued (so one that arrives during the first load
+	 * is not lost). Before any load has been asked for it does nothing (the next refresh loads the pair).
+	 * Resolves when it is loaded; a failure is logged, never rejected, and makes the next refresh fetch the JSON.
+	 */
+	changed(summary: PairSummary): Promise<void>;
 	/**
 	 * q: 256-dim query vector (embedQuery). Returns the k best ids (by their best row) as [[id, score], …], descending;
 	 * [] while no rows are loaded.
@@ -65,9 +74,21 @@ export interface VectorStore {
  * starts on first use. The worker finds the pair from its own URL at the root of the site (LCTYSP-0005): the page
  * sends it no URL, so nothing the page is given can make the worker fetch from elsewhere.
  */
-export function createVectorStore(): VectorStore;
+export function createVectorStore(opts?: {
+	/** The actorId of the tab's connection to /v1/rpc, whose notifications the store is given (null without one). */
+	actor?: () => string | null | undefined;
+}): VectorStore;
 
 // Internals:
 // start(), w.onerror: when the worker failed (its script could not be loaded, or it threw), it is ended and dropped
 // with what it had loaded, so the next call starts a new one instead of posting to a dead worker that never answers.
-// The calls waiting for it reject (a refresh in progress clears its shared state.loading when it rejects).
+// The calls waiting for it reject, and the store no longer has a copy (loaded and following are cleared).
+//
+// enqueue(): the loads of the worker run one at a time, chained on state.tail, because two loads at once could leave
+// the copy at the older one's end. A load that has not started yet (state.queued) takes what comes after it: a later
+// summary replaces its summary, and a refresh turns it into a load from the JSON, which is fetched when it starts and so
+// is at least as new as any summary before it. A refresh while a load from the JSON is running shares it.
+// state.following is the actorId a load from the JSON was made with: the notifications of that connection follow the
+// copy from then on. A new connection may have missed some, and a failed load leaves the copy behind, so either makes
+// the next refresh fetch the JSON again. A notification may arrive after a JSON fetched later than it was sent; the
+// worker ignores such an older summary of the same generation.

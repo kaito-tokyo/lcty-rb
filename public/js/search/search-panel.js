@@ -15,11 +15,11 @@ import {
 	listConversations,
 	searchConversations,
 } from "../api/storage.js";
-import { tabRpc } from "../api/tab-rpc.js";
+import { onTabNotify, tabRpc } from "../api/tab-rpc.js";
 import { showToast } from "../common.js";
 import { tr } from "../i18n.js";
 import { tagPart, tagRef } from "../tag-names.js";
-import { createVectorStore, embedQuery } from "./vectors.js";
+import { createVectorStore, embedQuery, PAIR } from "./vectors.js";
 
 const RRF_K = 60;
 
@@ -42,8 +42,16 @@ function byOrder(tags, order) {
 }
 
 /** Wire the sidebar's search box to its conversation list. */
-export function createSearchPanel({ list, box, status, rpc = tabRpc }) {
-	const vectors = createVectorStore(); // One per page: each page creates one search panel
+export function createSearchPanel({
+	list,
+	box,
+	status,
+	rpc = tabRpc,
+	onNotify = onTabNotify,
+}) {
+	// One per page (each page creates one search panel), kept up to date by the notifications of the pair
+	const vectors = createVectorStore({ actor: () => rpc().actorId });
+	onNotify(`vectors.${PAIR}.changed`, (summary) => vectors.changed(summary));
 	// all: the list; stale: the copy is out of date; rounds: {convOf, roundOf, idsOf}, on demand
 	const state = {
 		all: [],

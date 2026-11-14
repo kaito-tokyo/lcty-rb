@@ -229,6 +229,12 @@ function createPanel(page) {
 			box: document.getElementById("box"),
 			status: document.getElementById("status"),
 			rpc: () => window.rpc,
+			// The tab's notifications: window.notify(method, params) passes one to the panel
+			onNotify: (method, fn) => {
+				window.notified ??= {};
+				window.notified[method] = fn;
+				window.notify ??= (m, params) => window.notified[m]?.(params);
+			},
 		});
 	});
 }
@@ -910,6 +916,49 @@ test("The rounds of the conversations are fetched once until the list changes", 
 		await expect
 			.poll(() => server.searches.map((s) => s.q))
 			.toEqual(["hello", "world", "world"]);
+	});
+});
+
+test("A notification of the vector pair brings the copy up to date without the JSON", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheLoadedPanel(page);
+	await test.step('And the tab\'s connection has the actorId "actor-1"', () =>
+		page.evaluate(() => {
+			window.rpc.actorId = "actor-1";
+		}));
+	await givenTheRounds(server);
+	let json = 0;
+	await test.step('And the vector pair holds "r-a" and "r-b", which the query scores 0.802 and 0.535', () => {
+		server.pair = pairOf([R["r-a"], R["r-b"]]);
+		server.pairJson = (route) => {
+			json++;
+			return route.fulfill({ json: server.pair.json });
+		};
+	});
+	await test.step("And POST /v1/search returns no rounds", () =>
+		searchReturns(server, []));
+	await test.step('And setQuery has searched "hello"', () =>
+		setQuery(page, "hello"));
+	await test.step('And the vector pair now holds "r-a", "r-b" and "r-c", which the query scores 0.802, 0.535 and 0.267', () => {
+		server.pair = pairOf([R["r-a"], R["r-b"], R["r-c"]]);
+	});
+	await test.step("When the tab's connection notifies vectors.eg2_264.changed with the summary of the pair", () =>
+		page.evaluate(
+			(summary) => window.notify("vectors.eg2_264.changed", summary),
+			server.pair.json,
+		));
+	await test.step('And setQuery searches "world"', () =>
+		setQuery(page, "world"));
+	await thenTheListShows(
+		page,
+		["a", "b", "c"],
+		'Then the list shows "a", "b" and "c"',
+	);
+	await test.step("And GET /v1/vectors.eg2_264.json was fetched once", () => {
+		expect(json).toBe(1);
 	});
 });
 
