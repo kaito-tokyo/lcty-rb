@@ -98,7 +98,7 @@ end
 - **Ruby.** Ruby 2.6, as macOS's `/usr/bin/ruby`, with Minitest, which it bundles. The tests use the same libraries as
   the server (the standard library, nokogiri, sqlite3, webrick) and nothing else.
 - **Data.** `helper.rb` points `LCTY_DATA_DIR` at a new, empty folder in the temporary folder before `lib/config.rb` is
-  loaded, whatever it was, and removes it afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). Every test of a run shares it:
+  loaded, whatever it was, and removes it afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). Every test of a process shares it:
   `Lcty.open_data` opens it as the server does, once, and each test makes conversations, tags and words with ids of its
   own. Tests of a module that takes a path (the search index, the tag store, the vector DB, the servlets) give it a
   folder of their own instead.
@@ -106,6 +106,9 @@ end
 - **HTTP.** The servlet tests start a WEBrick server on `127.0.0.1` on a free port, mount the servlets as `Chatty.run`
   does, and request it over HTTP. No other server is needed.
 - **Order.** Minitest runs the tests in a random order; they must pass in any order.
+- **Parallel.** `run.rb` runs each `*_test.rb` in a Ruby process of its own, so each file has a data directory of its
+  own, as many files at a time as there are CPUs (`LCTY_TEST_JOBS` to change it), the largest first. A file must
+  therefore pass on its own (`ruby tests/backend/<file>`), and never depend on another file.
 
 ## Running the tests
 
@@ -114,7 +117,9 @@ ruby tests/backend/run.rb
 ```
 
 `npm run test:backend` does the same. Minitest's options follow, for example `-n "/same millisecond/"` to run the tests
-whose names match, or `--seed 1234` to repeat an order.
+whose names match, or `--seed 1234` to repeat an order; they go to every file. `run.rb` prints one line per file, and
+the whole output of a file that fails; with options, the whole output of every file that ran a test. One file runs
+on its own with `ruby tests/backend/<file>`.
 
 ## CI
 
