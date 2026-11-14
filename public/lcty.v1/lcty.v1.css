@@ -291,6 +291,96 @@ lcty-c::part(lcty-sidebar__list) {
 	flex: 1;
 	padding: 0 6px 10px;
 }
+/* the tag menu, a popover of the tag button (lcty.v1.cjs, filled by js/ui/tag-menu.js): each tag searches, its Edit
+   opens the tag's page; below, the tags dialog and the reorder page */
+lcty-sidebar::part(lcty-sidebar__tag-menu),
+lcty-c::part(lcty-sidebar__tag-menu) {
+	box-sizing: border-box;
+	width: calc(var(--sidebar-width) - 20px);
+	max-height: 60vh;
+	overflow-y: auto;
+	color: var(--fg);
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-control);
+	padding: 6px;
+	box-shadow: var(--shadow-float);
+}
+/* just below the tag button, its implicit anchor (popovertarget); without anchor positioning it stays centered */
+@supports (position-area: bottom) {
+	lcty-sidebar::part(lcty-sidebar__tag-menu),
+	lcty-c::part(lcty-sidebar__tag-menu) {
+		inset: auto;
+		margin: 4px 0 0;
+		position-area: bottom span-right;
+		position-try-fallbacks: flip-block;
+	}
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-list),
+lcty-c::part(lcty-sidebar__tag-menu-list) {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-item),
+lcty-c::part(lcty-sidebar__tag-menu-item) {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	border-radius: var(--radius-control);
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-item):hover,
+lcty-c::part(lcty-sidebar__tag-menu-item):hover {
+	background: var(--bg-side);
+}
+/* the tag's name fills the row: a bare button, left-aligned */
+lcty-sidebar::part(lcty-sidebar__tag-menu-search),
+lcty-c::part(lcty-sidebar__tag-menu-search) {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: left;
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: 5px 8px;
+	cursor: pointer;
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-edit),
+lcty-c::part(lcty-sidebar__tag-menu-edit) {
+	flex: none;
+	color: var(--fg-dim);
+	font-size: 0.9em;
+	padding: 5px 8px;
+	text-decoration: none;
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-edit):hover,
+lcty-c::part(lcty-sidebar__tag-menu-edit):hover {
+	color: var(--accent);
+	text-decoration: underline;
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-empty),
+lcty-c::part(lcty-sidebar__tag-menu-empty) {
+	color: var(--fg-dim);
+	margin: 0;
+	padding: 5px 8px;
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-foot),
+lcty-c::part(lcty-sidebar__tag-menu-foot) {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--border);
+}
+lcty-sidebar::part(lcty-sidebar__tag-menu-foot-button),
+lcty-c::part(lcty-sidebar__tag-menu-foot-button) {
+	text-decoration: none;
+}
 /* <lcty-conv-list> (in the sidebar's Shadow DOM, its parts exported to both hosts) */
 lcty-sidebar::part(lcty-conv-list__empty),
 lcty-c::part(lcty-conv-list__empty) {

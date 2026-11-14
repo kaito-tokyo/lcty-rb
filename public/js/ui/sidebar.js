@@ -18,6 +18,7 @@ import { createSearchPanel } from "../search/search-panel.js";
 import { tagRef } from "../tag-names.js";
 import { initTagsDialog } from "../tags.js";
 import { initSettingsDialog } from "./settings-dialog.js";
+import { addTagTerm, initTagMenu } from "./tag-menu.js";
 
 /** Attach the sidebar's features to sidebar and return its search panel. */
 export function initSidebar(sidebar, { onSelect, onTagsSaved }) {
@@ -56,21 +57,38 @@ export function initSidebar(sidebar, { onSelect, onTagsSaved }) {
 			refresh.disabled = false;
 		}
 	});
-	initTagsDialog(sidebar.tagsButton, {
+	// The tag menu puts a tag in the search box, keeping what is there, or links to its file's page
+	const menu = initTagMenu(sidebar.tagMenu, {
+		onSearch: (name) => {
+			panel.setQuery(addTagTerm(sidebar.search.value, name));
+			sidebar.search.focus();
+		},
+	});
+	const showTags = (defs) => {
+		showTagNames(sidebar.list, defs);
+		menu.show(defs);
+	};
+	panel.openTagsDialog = initTagsDialog(menu.editButton, {
 		toast: showToast,
 		onSaved: (defs) => {
-			showTagNames(sidebar.list, defs);
+			showTags(defs);
 			onTagsSaved?.(defs);
 		},
 	});
-	getTags()
-		.then(({ tags }) => showTagNames(sidebar.list, tags))
-		.catch(() => {}); // the chips keep their references
+	const readTags = () =>
+		getTags()
+			.then(({ tags }) => showTags(tags))
+			.catch(() => {}); // the chips keep their references
+	readTags();
+	// Opening the menu reads the browser's copy again: another tab may have changed the tags
+	sidebar.tagMenu.addEventListener("beforetoggle", (e) => {
+		if (e.newState === "open") readTags();
+	});
 	// The tag definitions are synced whenever the page is shown, also from the back/forward cache (LCTYSP-0009)
 	const forceSync = () => {
 		forceSyncTags()
 			.then(getTags)
-			.then(({ tags }) => showTagNames(sidebar.list, tags))
+			.then(({ tags }) => showTags(tags))
 			.catch((e) => console.warn("the tags could not be synced", e));
 	};
 	forceSync();

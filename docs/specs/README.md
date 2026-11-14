@@ -65,6 +65,7 @@ for the backend ones).
 | [LCTYSP-1025](LCTYSP-1025_gfm-parser.feature)                 | Parsing GitHub Flavored Markdown              | `tests/unit/gfm-parser.test.js`                              |
 | [LCTYSP-1026](LCTYSP-1026_committed-converter.feature)        | Writing GFM as the HTML of lcty-rb            | `tests/unit/gfm-committed.test.js`                           |
 | [LCTYSP-1027](LCTYSP-1027_tail-converter.feature)             | Showing the tail of a reply                   | `tests/unit/gfm-tail.test.js`, `tests/unit/gfm-tail.spec.js` |
+| [LCTYSP-1028](LCTYSP-1028_tag-menu.feature)                   | The tag menu's search term                    | `tests/unit/tag-menu.test.js`                                |
 | [LCTYSP-2001](LCTYSP-2001_new-conversation-page.feature)      | The new conversation page /c/                 | `tests/ui/new-conversation.spec.js`                          |
 | [LCTYSP-2002](LCTYSP-2002_conversation-page.feature)          | The conversation page                         | `tests/ui/conversation.spec.js`                              |
 | [LCTYSP-2003](LCTYSP-2003_sidebar.feature)                    | The sidebar                                   | `tests/ui/sidebar.spec.js`                                   |

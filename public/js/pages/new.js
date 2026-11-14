@@ -57,13 +57,13 @@ export function initNewPage() {
 
 	// ---- Tags and the system prompt draft (LCTYSP-0009) ----
 
-	// The ⚙︎ at the end of the tag list opens the same tags dialog as the sidebar's tag button (js/tags.js)
+	// The ⚙︎ at the end of the tag list opens the same tags dialog as the sidebar's tag menu (js/tags.js)
 	const tagsButton = document.createElement("button");
 	tagsButton.type = "button";
 	tagsButton.title = tr("editTags", "Edit tags");
 	tagsButton.setAttribute("aria-label", tr("editTags", "Edit tags"));
 	tagsButton.textContent = "⚙︎";
-	tagsButton.addEventListener("click", () => sidebar.tagsButton.click());
+	tagsButton.addEventListener("click", () => panel.openTagsDialog());
 
 	function renderTags() {
 		const picker = form.tags;

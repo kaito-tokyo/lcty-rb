@@ -2138,14 +2138,14 @@ function chips(page) {
 
 // ---- <lcty-sidebar> ----
 
-test("The sidebar holds its links, the search box and the list", async ({
+test("The sidebar holds its links, the search box, the list and the tag menu", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
 	await givenBody(page, "<lcty-sidebar></lcty-sidebar>");
 	let s;
-	await test.step("Then its Shadow DOM is its field nav, the search box and its field list (part lcty-sidebar__list)", async () => {
+	await test.step("Then its Shadow DOM is its field nav, the search box, its field list (part lcty-sidebar__list) and its field tagMenu", async () => {
 		s = await page.evaluate(() => {
 			const el = document.querySelector("lcty-sidebar");
 			const kids = [...el.shadowRoot.children];
@@ -2155,7 +2155,16 @@ test("The sidebar holds its links, the search box and the list", async ({
 					kids[0] === el.nav,
 					kids[1] === el.searchBox,
 					kids[2] === el.list,
+					kids[3] === el.tagMenu,
 					kids.length,
+				],
+				menu: [
+					el.tagMenu.localName,
+					el.tagMenu.getAttribute("popover"),
+					el.tagMenu.id,
+					el.tagMenu.getAttribute("part"),
+					el.tagMenu.childNodes.length,
+					el.tagsButton.getAttribute("popovertarget"),
 				],
 				listPart: el.list.getAttribute("part"),
 				navPart: el.nav.getAttribute("part"),
@@ -2199,15 +2208,15 @@ test("The sidebar holds its links, the search box and the list", async ({
 				},
 			};
 		});
-		expect(s.roots).toEqual([true, true, true, 3]);
+		expect(s.roots).toEqual([true, true, true, true, 4]);
 		expect(s.listPart).toBe("lcty-sidebar__list");
 		expect(s.navPart).toBe("lcty-sidebar__nav");
 	});
-	await test.step('And the nav holds the link "+ New chat" to "../c/" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Edit tags", "Reload the list" and "Settings"', () => {
+	await test.step('And the nav holds the link "+ New chat" to "../c/" opening in a new window, and the buttons "Tags", "↻" and "⚙︎" titled "Tags: search or edit", "Reload the list" and "Settings"', () => {
 		expect(s.fields).toEqual([true, true, true, true]);
 		expect(s.link).toEqual(["+ New chat", "../c/", "_blank", "noopener"]);
 		expect(s.buttons).toEqual([
-			["Tags", "Edit tags", "Edit tags", "button"],
+			["Tags", "Tags: search or edit", "Tags: search or edit", "button"],
 			["↻", "Reload the list", "Reload the list", "button"],
 			["⚙︎", "Settings", "Settings", "button"],
 		]);
@@ -2232,6 +2241,16 @@ test("The sidebar holds its links, the search box and the list", async ({
 				"lcty-sidebar__search-status",
 			],
 		});
+	});
+	await test.step('And the tag menu is an empty popover "auto" with the id "tag-menu" and the part "lcty-sidebar__tag-menu", the target of the tag button', () => {
+		expect(s.menu).toEqual([
+			"div",
+			"auto",
+			"tag-menu",
+			"lcty-sidebar__tag-menu",
+			0,
+			"tag-menu",
+		]);
 	});
 });
 

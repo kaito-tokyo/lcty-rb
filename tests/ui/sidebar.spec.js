@@ -5,8 +5,8 @@
 // LCTYSP-2003: the scenarios of docs/specs/LCTYSP-2003_sidebar.feature, written by hand. Each test has the title of its
 // Scenario and one test.step per line of it, so the two read side by side.
 //
-// The sidebar shared by every page: the conversation list, search, the settings dialog and the tags dialog
-// (LCTYSP-0005, LCTYSP-0007, LCTYSP-0009, LCTYSP-0010).
+// The sidebar shared by every page: the conversation list, search, the settings dialog, the tag menu and the tags
+// dialog (LCTYSP-0005, LCTYSP-0007, LCTYSP-0009, LCTYSP-0010).
 
 import {
 	createConversation,
@@ -243,13 +243,29 @@ test("The settings dialog shows the browser settings and saves changes", async (
 	});
 });
 
-test("The tag button next to 新しい会話 opens the tags dialog, and a saved tag shows up in the picker", async ({
+const tagButton = (page) => page.locator('[part~="lcty-sidebar__tags"]');
+const tagMenu = (page) => page.locator('[part~="lcty-sidebar__tag-menu"]');
+const searchBox = (page) => page.locator('[part~="lcty-sidebar__search"]');
+/** The names the tag menu lists, in order. */
+const menuNames = (page) =>
+	page.locator('[part~="lcty-sidebar__tag-menu-search"]');
+
+/** Open the tag menu and choose the tag named name in it. */
+async function chooseTag(page, name) {
+	await tagButton(page).click();
+	await tagMenu(page)
+		.locator('[part~="lcty-sidebar__tag-menu-search"]', { hasText: name })
+		.click();
+}
+
+test("The tag button next to 新しい会話 opens the tag menu, which lists the tags with links to their pages", async ({
 	page,
 	request,
 }) => {
-	const dialog = page.locator("dialog#tags-dialog");
-	const name = uniqueWord("tag");
-	await test.step("Given there are no tags", () => putTags(request, []));
+	const [a, b] = [uniqueWord("a"), uniqueWord("b")];
+	const edits = page.locator('[part~="lcty-sidebar__tag-menu-edit"]');
+	await test.step("Given the tags A and B, in that order", () =>
+		putTags(request, [{ name: a }, { name: b }]));
 	await test.step("And the new conversation page /c/ is opened", () =>
 		openNewPage(page));
 	await test.step(`Then the sidebar's nav holds the new conversation button and then the tag button, which reads "タグ"`, async () => {
@@ -259,9 +275,101 @@ test("The tag button next to 新しい会話 opens the tags dialog, and a saved 
 		await expect(nav.nth(1)).toHaveText("タグ");
 	});
 	await test.step("When the tag button is clicked", async () => {
-		await page.locator('[part~="lcty-sidebar__tags"]').click();
+		await tagButton(page).click();
 	});
-	await test.step("Then the tags dialog is shown", async () => {
+	await test.step("Then the tag menu is shown", async () => {
+		await expect(tagMenu(page)).toBeVisible();
+	});
+	await test.step(`And it lists A and B, in that order, each with the link "編集" to its file's page, /t/00010-A.html and /t/00020-B.html`, async () => {
+		await expect(menuNames(page)).toHaveText([a, b]);
+		await expect(edits).toHaveText(["編集", "編集"]);
+		const paths = await edits.evaluateAll((links) =>
+			links.map((l) => new URL(l.href).pathname),
+		);
+		expect(paths).toEqual([`/t/00010-${a}.html`, `/t/00020-${b}.html`]);
+	});
+	await test.step(`When "編集" of B is clicked`, async () => {
+		await edits.nth(1).click();
+	});
+	await test.step("Then the browser is on /t/00020-B.html", async () => {
+		await expect(page).toHaveURL(new RegExp(`/t/00020-${b}\\.html$`));
+	});
+});
+
+test("Choosing tags in the tag menu puts them in the search box and narrows the list", async ({
+	page,
+	request,
+}) => {
+	const [a, b] = [uniqueWord("a"), uniqueWord("b")];
+	let both;
+	let one;
+	await test.step("Given the tags A and B, in that order", () =>
+		putTags(request, [{ name: a }, { name: b }]));
+	await test.step("And a conversation tagged A and B, and another tagged A alone", async () => {
+		both = await createConversation(request, {
+			title: uniqueWord("both"),
+			tags: [a, b],
+		});
+		one = await createConversation(request, {
+			title: uniqueWord("one"),
+			tags: [a],
+		});
+	});
+	await test.step("And the new conversation page /c/ is opened", () =>
+		openNewPage(page));
+	await test.step("When the tag button is clicked and A is chosen in the tag menu", () =>
+		chooseTag(page, a));
+	await test.step("Then the tag menu is hidden", async () => {
+		await expect(tagMenu(page)).toBeHidden();
+	});
+	await test.step(`And the search box holds "tag:A" and has the focus`, async () => {
+		await expect(searchBox(page)).toHaveValue(`tag:${a}`);
+		await expect(searchBox(page)).toBeFocused();
+	});
+	await test.step("And both conversations are listed", async () => {
+		await expect(item(page, both.id)).toBeVisible();
+		await expect(item(page, one.id)).toBeVisible();
+	});
+	await test.step("When the tag button is clicked and B is chosen in the tag menu", () =>
+		chooseTag(page, b));
+	await test.step(`Then the search box holds "tag:A tag:B"`, async () => {
+		await expect(searchBox(page)).toHaveValue(`tag:${a} tag:${b}`);
+	});
+	await test.step("And the conversation tagged A and B is listed, and the other is not", async () => {
+		await expect(item(page, both.id)).toBeVisible();
+		await expect(item(page, one.id)).toHaveCount(0);
+	});
+	await test.step("When the tag button is clicked and A is chosen in the tag menu again", () =>
+		chooseTag(page, a));
+	await test.step(`Then the search box still holds "tag:A tag:B"`, async () => {
+		await expect(searchBox(page)).toHaveValue(`tag:${a} tag:${b}`);
+	});
+});
+
+test("タグを編集 in the tag menu opens the tags dialog, and a saved tag shows up in the picker and the menu", async ({
+	page,
+	request,
+}) => {
+	const dialog = page.locator("dialog#tags-dialog");
+	const name = uniqueWord("tag");
+	await test.step("Given there are no tags", () => putTags(request, []));
+	await test.step("And the new conversation page /c/ is opened", () =>
+		openNewPage(page));
+	await test.step("When the tag button is clicked", async () => {
+		await tagButton(page).click();
+	});
+	await test.step(`Then the tag menu shows "（タグはまだありません）"`, async () => {
+		await expect(
+			tagMenu(page).locator('[part~="lcty-sidebar__tag-menu-empty"]'),
+		).toHaveText("（タグはまだありません）");
+	});
+	await test.step(`When "タグを編集" is clicked in the tag menu`, async () => {
+		await tagMenu(page).getByRole("button", { name: "タグを編集" }).click();
+	});
+	await test.step("Then the tag menu is hidden", async () => {
+		await expect(tagMenu(page)).toBeHidden();
+	});
+	await test.step("And the tags dialog is shown", async () => {
 		await expect(dialog).toBeVisible();
 	});
 	await test.step('When a new tag with a unique name is added with "＋ 新しいタグ" and saved with "保存"', async () => {
@@ -280,14 +388,22 @@ test("The tag button next to 新しい会話 opens the tags dialog, and a saved 
 	await test.step("Then the tags dialog is hidden", async () => {
 		await expect(dialog).toBeHidden();
 	});
+	await test.step("When the tag button is clicked", async () => {
+		await tagButton(page).click();
+	});
+	await test.step("Then the tag menu lists the tag", async () => {
+		await expect(menuNames(page)).toHaveText([name]);
+	});
 });
 
-test("The tag button opens the tags dialog on a conversation page too", async ({
+test("The tag menu works on a conversation page too", async ({
 	page,
 	request,
 }) => {
+	const a = uniqueWord("a");
 	let conv;
-	await test.step("Given a conversation with two messages", async () => {
+	await test.step("Given the tag A", () => putTags(request, [{ name: a }]));
+	await test.step("And a conversation with two messages", async () => {
 		conv = await createConversation(request, {
 			title: uniqueWord("tags"),
 			messages: [
@@ -298,8 +414,14 @@ test("The tag button opens the tags dialog on a conversation page too", async ({
 	});
 	await test.step("And its page is opened", () =>
 		openConversation(page, conv.id));
-	await test.step("When the tag button is clicked", async () => {
-		await page.locator('[part~="lcty-sidebar__tags"]').click();
+	await test.step("When the tag button is clicked and A is chosen in the tag menu", () =>
+		chooseTag(page, a));
+	await test.step(`Then the search box holds "tag:A"`, async () => {
+		await expect(searchBox(page)).toHaveValue(`tag:${a}`);
+	});
+	await test.step(`When the tag button is clicked and "タグを編集" is clicked in the tag menu`, async () => {
+		await tagButton(page).click();
+		await tagMenu(page).getByRole("button", { name: "タグを編集" }).click();
 	});
 	await test.step("Then the tags dialog is shown", async () => {
 		await expect(page.locator("dialog#tags-dialog")).toBeVisible();
