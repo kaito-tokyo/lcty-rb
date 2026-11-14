@@ -37,6 +37,15 @@ module Lcty
       alias_method :gets, :read
     end
 
+    # data XORed with the 4-byte key (masking and unmasking are the same), four bytes at a time: a byte at a time
+    # takes about 0.1 s a megabyte on Ruby 2.6
+    def self.mask(data, key)
+      n = data.bytesize
+      k = key.unpack1('N')
+      words = (data.b + "\0" * (-n % 4)).unpack('N*')
+      words.map! { |w| w ^ k }.pack('N*').byteslice(0, n)
+    end
+
     # Whether req asks to open a WebSocket
     def self.upgrade?(req)
       req.request_method == 'GET' && req['upgrade'].to_s.casecmp?('websocket') &&
@@ -140,12 +149,10 @@ module Lcty
         opcode = b0 & 0x0F
         raise ProtocolError, 'control frame too large' if opcode >= 0x8 && len > 125
         raise ProtocolError, 'frame too large' if len > MAX_MESSAGE
-        mask = @sock.read(4).bytes
+        key = @sock.read(4)
         payload = len.zero? ? String.new(encoding: Encoding::BINARY) : @sock.read(len)
         return [nil, nil, nil] if payload.nil? || payload.bytesize < len
-        bytes = payload.bytes
-        bytes.each_index { |i| bytes[i] ^= mask[i & 3] }
-        [b0 & 0x80 != 0, opcode, bytes.pack('C*')]
+        [b0 & 0x80 != 0, opcode, WebSocket.mask(payload, key)]
       end
 
       def send_frame(opcode, payload)

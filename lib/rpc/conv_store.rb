@@ -200,7 +200,14 @@ module Lcty
       def record_count(f, cid = nil)
         f.rewind
         n = 0
-        f.each_line { n += 1 }
+        last = nil
+        # The newlines of each megabyte, and the last line when it has none, as each_line counts them without
+        # making a string of every line
+        while (chunk = f.read(1 << 20))
+          n += chunk.count("\n")
+          last = chunk
+        end
+        n += 1 if last && !last.end_with?("\n")
         n -= HEAD_LINES
         Rpc.index.put_record_count(cid, n) if cid
         n
@@ -294,14 +301,17 @@ module Lcty
         size = f.size
         return nil if size.zero?
         pos = size - 1 # the final newline
-        buf = String.new(encoding: Encoding::BINARY)
         start = nil
+        first = true
+        # Each chunk is searched on its own: the chunks after it hold no newline
         while pos.positive?
           n = [pos, 65_536].min
           pos -= n
           f.seek(pos)
-          buf = f.read(n) + buf
-          if (i = buf.rindex("\n", buf.bytesize - 2))
+          chunk = f.read(n)
+          i = first ? chunk.rindex("\n", chunk.bytesize - 2) : chunk.rindex("\n")
+          first = false
+          if i
             start = pos + i + 1
             break
           end

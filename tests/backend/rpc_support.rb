@@ -90,15 +90,13 @@ module RpcSupport
 
     def send_text(text)
       data = text.b
-      mask = SecureRandom.random_bytes(4).bytes
+      key = SecureRandom.random_bytes(4)
       head = [0x81].pack('C')
       head << if data.bytesize < 126 then [0x80 | data.bytesize].pack('C')
               elsif data.bytesize <= 0xFFFF then [0x80 | 126, data.bytesize].pack('Cn')
               else [0x80 | 127, data.bytesize].pack('CQ>')
               end
-      bytes = data.bytes
-      bytes.each_index { |i| bytes[i] ^= mask[i & 3] }
-      @write.synchronize { @sock.write(head + mask.pack('C*') + bytes.pack('C*')) }
+      @write.synchronize { @sock.write(head + key + Lcty::WebSocket.mask(data, key)) }
     end
 
     # Send a request and wait for its response (the notifications that come meanwhile are kept in log)
