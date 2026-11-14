@@ -12,15 +12,24 @@ on:
     branches: [main]
   workflow_call:
 
+# One job per browser, each with a server of its own, so the browsers run side by side. test-ui, the check the main
+# ruleset requires, passes when all of them have.
 jobs:
-  test-ui:
+  test-ui-browser:
+    name: test-ui (${{ matrix.browser }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
 
     permissions:
       contents: read
 
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit, firefox]
+
     env:
+      BROWSER: ${{ matrix.browser }}
       COMPOSE_FILE: .devcontainer/ruby-2.6.10/compose.yml
 
     steps:
@@ -38,7 +47,7 @@ jobs:
         run: npm ci
 
       - name: Install browsers
-        run: npx playwright install --with-deps chromium webkit firefox
+        run: npx playwright install --with-deps "$BROWSER"
 
       - name: Wait for the server
         run: |
@@ -51,7 +60,8 @@ jobs:
         env:
           LCTY_TEST_SERVER_URL: http://127.0.0.1:45290
           PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/playwright.json
-        run: npx playwright test --reporter=github,json
+        # --no-deps: ui-webkit and ui-firefox would otherwise bring along the ui-* projects they follow
+        run: npx playwright test --project="unit-$BROWSER" --project="ui-$BROWSER" --no-deps --reporter=github,json
 
       - name: Check the Scenarios tested in the browser
         run: npm run check:scenarios -- --browser test-results/playwright.json
@@ -60,8 +70,24 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7.0.0
         with:
-          name: playwright-test-results
+          name: playwright-test-results-${{ matrix.browser }}
           path: test-results/
 
       - name: Stop the server
         cancel: server
+
+  test-ui:
+    needs: test-ui-browser
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    permissions: {}
+
+    steps:
+      - name: Check that every browser passed
+        env:
+          RESULT: ${{ needs.test-ui-browser.result }}
+        run: |
+          echo "test-ui-browser: $RESULT"
+          [[ "$RESULT" == success ]]

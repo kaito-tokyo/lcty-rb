@@ -196,7 +196,8 @@ CI runs on Linux. The unit tests in Node.js run on their own, without the server
 from its `devcontainer.json` with the Dev Container CLI (`.github/workflows/backend.yml`; the commands are in LCTYSP-3000). For
 the frontend tests, `.devcontainer/ruby-2.6.10/compose.yml` runs the server on its own in the image of that dev container
 (`ruby:2.6.10` with the libraries of the `Gemfile`, the versions macOS's `/usr/bin/ruby` has; on a Mac the server needs
-neither the `Gemfile` nor Bundler), and the tests are pointed at it with `LCTY_TEST_SERVER_URL`. To do the same by
+neither the `Gemfile` nor Bundler), and the tests are pointed at it with `LCTY_TEST_SERVER_URL`; each browser has a job
+of its own there, with a server of its own. To do the same by
 hand (`--build` rebuilds the image when the `Gemfile` has changed):
 
 ```bash

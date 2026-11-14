@@ -85,6 +85,8 @@ test("The new conversation page shows the sidebar and the creation card", async 
   directory: the sidebar lists every conversation the tests have made. Each browser has a server of its own (ports
   45290, 45291 and 45292 for Chromium, WebKit and Firefox, each with its own data directory), so the browsers run side
   by side. Sharing the one server of `LCTY_TEST_SERVER_URL`, they run one after another: Chromium, WebKit, then Firefox.
+  CI runs a job per browser, each with a server of its own (`npx playwright test --project=unit-<browser>
+  --project=ui-<browser> --no-deps`), and the job `test-ui` passes when all of them have.
 - Tag definitions are global, so a feature whose Scenarios make tags removes them after each test.
 - `LCTY_TEST_SERVER_URL` points the tests at a server that is already running instead (in CI, the container of
   `.devcontainer/ruby-2.6.10/compose.yml`), and `LCTY_TEST_KEEP_DATA=1` keeps the data directory to look at.
