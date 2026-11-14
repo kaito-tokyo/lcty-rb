@@ -175,15 +175,15 @@ test:node` uses) and Playwright's JSON reporter.
   ./tests/unit/node-preload.cjs --test` (`npm run test:node`; Node.js 24 has no Web Workers). Each test file runs in a
   process of its own, its tests one after another; a test that replaces a global (`fetch`) puts it back when it ends.
 - **Browsers.** Chromium, WebKit and Firefox, as for the UI tests; every browser test runs in all three.
-- **Server.** The browser tests share the server the UI tests start (`playwright.config.js`): port 45290 by default
-  (`LCTY_TEST_PORT` to change it), with an empty data directory in the temporary folder. Unit tests use it only to
-  serve `public/`.
+- **Server.** The browser unit tests share the server the Chromium UI tests start (`playwright.config.js`): port 45290
+  by default (`LCTY_TEST_PORT` to change it), with an empty data directory in the temporary folder. Unit tests use it
+  only to serve `public/`.
 - **State.** Every browser test gets a new browser context, so `localStorage` and IndexedDB start empty. In Node.js,
   `scenario()` empties `localStorage` before every Scenario.
 - **Parallel.** Because a unit test answers every request it makes and keeps its state in its own context, the browser
   unit tests run in parallel, every test on its own (`fullyParallel`, projects `unit-chromium`, `unit-webkit` and
-  `unit-firefox`, which run only the `*.spec.js`). The UI tests share the server's data directory, so they run one at a
-  time (`ui-chromium`, then `ui-webkit`, then `ui-firefox`). A unit test must therefore never depend on another test or
+  `unit-firefox`, which run only the `*.spec.js`). The UI tests of a browser share its server's data directory, so they
+  run one at a time (LCTYSP-2000). A unit test must therefore never depend on another test or
   on the server's data.
 
 ## Running the tests

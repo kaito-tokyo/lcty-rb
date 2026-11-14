@@ -178,12 +178,14 @@ npm test
 tests in Node.js need neither the server nor the browsers and take about a second: `npm run test:node` runs only them
 (it also writes `test-results-node/scenarios.json`, which
 `npm run check:scenarios -- --node test-results-node/scenarios.json` compares with the features). The browser tests
-start their own server (port 45290, `LCTY_TEST_PORT` to change it) with an empty data directory in the temporary folder, removed afterwards
+start their own servers (from port 45290, `LCTY_TEST_PORT` to change it) with empty data directories in the temporary folder, removed afterwards
 (`LCTY_TEST_KEEP_DATA=1` keeps it). `llama-server` is not used: the browser's requests to it are answered by a fake in
 `tests/ui/fixtures.js`, so your conversations and models are never touched. Run one browser with
 `npm test -- --project='*-chromium'`, or watch the browser tests with `npm test -- --ui`. The unit tests run in
-parallel; the UI tests share the server's data directory, so they run one at a time, and the browsers one after
-another: Chromium, WebKit, then Firefox.
+parallel. The UI tests of a browser share its server's data directory, so they run one at a time; each browser has a
+server of its own (ports 45290, 45291 and 45292 for Chromium, WebKit and Firefox), so the browsers run side by side.
+With `LCTY_TEST_SERVER_URL` the browsers share that one server, so they run one after another: Chromium, WebKit, then
+Firefox.
 
 `npm run check:biome` lints and checks the formatting (JavaScript, JSON and Markdown) with the Biome version pinned in
 `package.json`, as CI does; `npx biome check --write` fixes the formatting. A bare `npx biome` without `npm install`
