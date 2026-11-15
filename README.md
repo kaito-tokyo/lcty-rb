@@ -86,7 +86,8 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
   - What the server guards against (LCTYSP-0016): it answers only the hosts it is reached by, takes writes only from
     its own pages, and sends every response with a Content Security Policy and the other protective headers. What
     needs HTTPS is the reverse proxy's: `Strict-Transport-Security` (for example `max-age=63072000; includeSubDomains`)
-    and TLS itself.
+    and TLS itself. With nginx, an `add_header` in a `location` block drops those of the `server` block, so give the
+    header in the block that proxies lcty-rb.
   - Semantic search (LCTYSP-0019): lcty.rb starts a `llama-server` of its own for the embedding model, on a UNIX
     socket, and embeds every message (of conversations in the `lcty-msg` format, below) in the background.
     - `--llama-server=PATH`: the `llama-server` to start (default `llama-server`, from `PATH`).
