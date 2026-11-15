@@ -5,7 +5,7 @@
 // New conversation page (/): creates the conversation file and moves to it (LCTYSP-0004, LCTYSP-0005, LCTYSP-0013).
 
 import { getTags } from "../api/lcty-t.js";
-import { appendLines, getConversation } from "../api/storage.js";
+import { getConversation } from "../api/storage.js";
 import { tabRpc } from "../api/tab-rpc.js";
 import {
 	convUrl,
@@ -214,7 +214,7 @@ export function initNewPage() {
 			sessionStorage.setItem(`lcty.run.${id}`, cmd.id);
 		} catch {}
 		if (state.tags.length)
-			await appendLines(id, [{ type: "tags", tags: state.tags, at }]);
+			await rpc.call("c.update.tags", { cid: id, tags: state.tags });
 	}
 
 	async function send(text) {

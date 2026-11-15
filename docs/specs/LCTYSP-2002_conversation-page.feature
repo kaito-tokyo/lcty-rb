@@ -55,6 +55,13 @@ Feature: LCTYSP-2002 The conversation page
     Then the page's title is "手で付けたタイトル"
     And the server has saved the title "手で付けたタイトル"
 
+  Scenario: Choosing a tag in the header and removing it saves the tags
+    Given a tag, and a conversation of two finished turns is open
+    When the tag is chosen in the tag picker in the header
+    Then the header shows the tag's chip and the server has saved the tag for the conversation
+    When the chip's remove button is clicked
+    Then the header shows no chip and the server has saved no tags for the conversation
+
   # ---- Rendering a reply (LCTYSP-0005) ----
 
   Scenario: Markdown is rendered and raw HTML or script URLs never reach the DOM

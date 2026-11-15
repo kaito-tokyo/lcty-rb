@@ -4,11 +4,7 @@
 
 import { getTags } from "../js/api/lcty-t.js";
 import { RpcError } from "../js/api/rpc.js";
-import {
-	appendLines,
-	deleteConversation,
-	getConversation,
-} from "../js/api/storage.js";
+import { getConversation } from "../js/api/storage.js";
 import {
 	onTabNotify,
 	onTabOpen,
@@ -350,12 +346,13 @@ function renderTags() {
 		state.busy || (state.tagDefsLoaded && !state.conv.tags.some(knownTag));
 }
 
-// The tags are kept in lcty_t.sqlite, not in the file (LCTYSP-0009): the HTTP API's tags line, for either format
+// The tags are kept in lcty_t.sqlite, not in the file (LCTYSP-0009): c.update.tags, for either format
 function setConvTags(tags) {
 	const conv = state.conv;
 	conv.tags = sortTags(state.tagDefs, tags);
 	renderTags();
-	appendLines(cid, [{ type: "tags", tags: conv.tags, at: nowIso() }])
+	rpc
+		.call("c.update.tags", { cid, tags: conv.tags })
 		.then(() => panel.refresh())
 		.catch((e) =>
 			showToast(
@@ -750,7 +747,7 @@ log.deleteButton.addEventListener("click", async () => {
 	state.abort?.abort();
 	try {
 		await state.writes;
-		await deleteConversation(cid);
+		await rpc.call("c.delete", { cid });
 		location.href = "./";
 	} catch (e) {
 		showToast(

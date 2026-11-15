@@ -211,6 +211,17 @@ module RpcSupport
     cid
   end
 
+  # A conversation file of LCTYSP-0003 in c/, created with tags, holding one user message; returns its cid
+  def former_conversation(tags: [])
+    cid = new_cid
+    FileUtils.mkdir_p(Rpc::ConvStore::DIR)
+    File.write(Rpc::ConvStore.path(cid), Chatty::ConvHtml.document(
+      [{ 'type' => 'meta', 'id' => cid, 'created_at' => '2026-11-09T12:00:00+09:00', 'tags' => tags, 'instructions' => 'sys' },
+       { 'type' => 'message', 'id' => Chatty::Uuid.v7, 'role' => 'user', 'at' => '2026-11-09T12:00:00+09:00', 'content' => 'q' }]
+    ))
+    cid
+  end
+
   def sys_attrs(text = 'x')
     { 'data-role' => 'system', 'id' => "sys-#{Chatty::Uuid.v7}", 'data-content' => text }
   end

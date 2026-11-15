@@ -23,6 +23,7 @@ require 'yaml'
 require_relative 'websocket'
 require_relative 'conv_store'
 require_relative '../embedding'
+require_relative '../tag_store'
 
 module Lcty
   module Rpc
@@ -358,6 +359,29 @@ module Lcty
           [Rpc.meta_record(p['cid'])]
         end
         { 'version' => version, 'title' => title }
+      end,
+
+      # Replace the tags of a conversation of either format: {cid, tags}. Announced as t.batch.updated with the actor
+      # that made it (LCTYSP-0014). Allowed while an lcty-cmd holds the conversation: the tags are not in the file.
+      'c.update.tags' => lambda do |p, peer|
+        version = HUB.commit(peer, Chatty::TagStore::BATCH) { ConvStore.update_tags(p['cid'], p['tags']) }
+        { 'version' => version }
+      end,
+
+      # Delete a conversation of either format: {cid}. Announced as c.batch.updated (it leaves c_meta and
+      # c_recordcount), then, apart, as t.batch.updated for its tags. A conversation already gone is no error.
+      'c.delete' => lambda do |p, peer|
+        cid = p['cid']
+        gone = nil
+        version = HUB.commit(peer) do
+          gone = ConvStore.delete(cid)
+          next [] unless gone
+          %w[c_meta c_recordcount].map { |s| { 'store' => s, 'op' => 'delete', 'row' => { 'cid' => cid } } }
+        end
+        # Its rows of the vector pair are filled with NaN (LCTYSP-0019)
+        Chatty::Embedding.messages_removed(gone) if gone
+        version = HUB.commit(peer, Chatty::TagStore::BATCH) { Rpc.tags&.replace_conversation_tags(cid, []) || [] }
+        { 'version' => version }
       end
     }.freeze
 
