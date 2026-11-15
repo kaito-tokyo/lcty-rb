@@ -19,19 +19,19 @@ require_relative 'password'
 
 module Chatty
   class BasicAuth
-    REALM = 'lcty-rb'
     # How many accepted users and passwords are remembered; past it they are forgotten and checked again
     REMEMBERED = 256
 
     attr_reader :realm
 
-    # users {user => PHC string}; logger gets a line for every refused user (never the password); fail_delay is the
-    # seconds a refusal waits
-    def initialize(users, logger:, fail_delay: 1.0)
+    # users {user => PHC string}; realm the base URL of the site, which names no software and keeps the servers under
+    # paths of their own apart (LCTYSP-0016); logger gets a line for every refused user (never the password);
+    # fail_delay is the seconds a refusal waits
+    def initialize(users, logger:, realm: '/', fail_delay: 1.0)
       @users = users
       @logger = logger
       @fail_delay = fail_delay
-      @realm = REALM
+      @realm = realm
       @key = OpenSSL::Random.random_bytes(32)
       @accepted = {}
       @lock = Mutex.new # the remembered ones

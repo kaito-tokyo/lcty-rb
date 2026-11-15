@@ -13,7 +13,7 @@ require 'stringio'
 class BasicAuthTest < Lcty::Scenarios
   Password = Chatty::Password
   PW = 'correct horse battery'
-  CHALLENGE = 'Basic realm="lcty-rb", charset="UTF-8"'
+  CHALLENGE = 'Basic realm="/", charset="UTF-8"'
 
   # A request with the header Authorization (none when nil), as WEBrick's request answers req['authorization']
   Request = Struct.new(:authorization) do

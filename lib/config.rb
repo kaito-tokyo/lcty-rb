@@ -207,6 +207,10 @@ module Chatty
     file = parse_options(file_args(SETTINGS_PATH), SETTINGS_PATH)
     command_line = parse_options(argv, 'the command line')
     s = SETTING_DEFAULTS.merge(file).merge(env_settings).merge(command_line)
+    # The base URL is the realm of Basic authentication too (LCTYSP-0016), which is quoted as it is
+    if s[:base_url].to_s.match?(/["\\[:cntrl:]]/)
+      raise SettingsError, "the base URL must not hold \", \\ or a control character: #{s[:base_url].inspect}"
+    end
     @settings = s.merge(bind_ips: s[:bind_ips].uniq.freeze).freeze # an address given twice is listened on once
     argv
   end

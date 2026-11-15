@@ -40,6 +40,7 @@ require_relative 'lib/servlets'
 require_relative 'lib/rpc/servlet'
 require_relative 'lib/embedding'
 require_relative 'lib/request_guard'
+require_relative 'lib/secure_server'
 
 module Lcty
   # The path the site is served under (Chatty.base_url: --base-url or LCTY_BASE_URL), starting and ending with "/"
@@ -134,7 +135,8 @@ module Lcty
         MimeTypes: Servlets::MIME_TYPES,
         Logger: Log.new,
         AccessLog: [],
-        DoNotReverseLookup: true
+        DoNotReverseLookup: true,
+        LctyBase: base_url # the headers of the user's data (lib/secure_server.rb)
       }
       # Every connection is closed once its response is sent (Connection: close): WEBrick serves 100 connections at a
       # time and waits up to 30 seconds for the next request on an idle one, while a browser may keep one it no longer
@@ -148,7 +150,7 @@ module Lcty
         guard.check(req, res)
         auth&.authenticate(req, res)
       end
-      server = WEBrick::HTTPServer.new(config)
+      server = Chatty::SecureServer.new(config) # every response with the protective headers (LCTYSP-0016)
       begin
         ips.each do |ip|
           server.listen(ip, port)
@@ -179,7 +181,7 @@ module Lcty
     return nil if users.empty?
 
     require_relative 'lib/basic_auth'
-    Chatty::BasicAuth.new(users, logger: logger, fail_delay: fail_delay)
+    Chatty::BasicAuth.new(users, logger: logger, realm: base_url, fail_delay: fail_delay)
   end
 
   # Stop server: it accepts nothing more, then every /v1/rpc connection is closed (Rpc::HUB.close_all), since WEBrick

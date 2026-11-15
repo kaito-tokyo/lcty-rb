@@ -150,8 +150,8 @@ browser.
     `127.0.0.1`. Every address is listened on at the same port; without a port asked for, the first one free on all of
     them is taken, and an address that is not one of this machine stops the server. An address given twice is
     listened on once.
-  - `--base-url=PATH`: the path the site is served under ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)). Default
-    `/`.
+  - `--base-url=PATH`: the path the site is served under ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)), and the
+    realm of Basic authentication; one with `"`, `\` or a control character is refused. Default `/`.
   - `--allowed-origin=ORIGIN`: an origin whose pages may use `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md))
     and write to the server, once per origin; its host is also one the server answers for
     ([LCTYSP-0016](LCTYSP-0016_hardening.md)). Default: `http://<address>:<port>` of every address listened on, and
@@ -227,7 +227,9 @@ browser.
 - **Every request is checked before any servlet sees it** (WEBrick's `RequestCallback`), the WebSocket of `/v1/rpc`
   included: the browser sends the credentials it was given for the page on the handshake too, and so do the workers'
   requests ([LCTYSP-3025](LCTYSP-3025_basic-auth.feature)). A request without valid credentials is answered `401`
-  with `WWW-Authenticate: Basic realm="lcty-rb", charset="UTF-8"` (the browser sends the password in UTF-8,
+  with `WWW-Authenticate: Basic realm="<base URL>", charset="UTF-8"` (`realm="/"` by default: the realm names no
+  software, and servers under paths of their own behind one proxy are protection spaces of their own,
+  [LCTYSP-0016](LCTYSP-0016_hardening.md); the browser sends the password in UTF-8,
   RFC 7617).
 - **A hash takes about 0.2 s to check** and the browser sends the credentials with every request, so a user and
   password that were accepted are remembered, as an HMAC with a key made at startup (not the password, nor a hash that

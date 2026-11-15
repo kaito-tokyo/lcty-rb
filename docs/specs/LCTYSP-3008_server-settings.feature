@@ -82,6 +82,17 @@ Feature: LCTYSP-3008 Server settings
     When lib/config.rb is loaded
     Then loading fails with the SettingsError "LCTY_BIND_IP: not an IP address to listen on: "localhost""
 
+  Scenario Outline: A base URL with a quote, a backslash or a control character stops the server
+    Given LCTY_BASE_URL is <base>
+    When lib/config.rb is loaded
+    Then loading fails with a SettingsError that the base URL must not hold ", \ or a control character
+
+    Examples:
+      | base         |
+      | "/a\"b/"     |
+      | "/a\\b/"     |
+      | "/a<TAB>b/"  |
+
   Scenario: An IPv6 address is written in brackets in URLs
     When Chatty.url_host is given "::1" and "127.0.0.1"
     Then it returns "[::1]" and "127.0.0.1"

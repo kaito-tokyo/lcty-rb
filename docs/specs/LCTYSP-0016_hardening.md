@@ -7,8 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 # LCTYSP-0016: Hardening
 
 - Status: Draft, in part implemented. Step 1 is `lib/request_guard.rb`
-  ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)); step 3 is done for every write of the pages (the tags of a conversation, deleting one, the tag definitions and
-  memory). Not done: step 2 (the headers), the rest of step 3 and step 4.
+  ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)) and step 2 `lib/secure_server.rb`
+  ([LCTYSP-3030](LCTYSP-3030_secure-server.feature)); step 3 is done for every write of the pages (the tags of a
+  conversation, deleting one, the tag definitions and memory), and of step 4 the UI tests fail on any report of the
+  policy. Not done: the rest of step 3 and of step 4.
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md#security) (security), [LCTYSP-0006](LCTYSP-0006_http-api.md)
   (the HTTP API), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#authentication) (Basic authentication and the
   allowed origins), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (`/v1/rpc`)
@@ -126,6 +128,13 @@ checked against OWASP's HTTP Security Response Headers Cheat Sheet
 ([below](#owasp-http-security-response-headers-cheat-sheet)) and changed only where lcty-rb needs it; each change says
 why.
 
+How it is done: `lib/secure_server.rb`. `Lcty.listen` makes a `Chatty::SecureServer`, a `WEBrick::HTTPServer` whose
+responses add the headers below as they are sent (`setup_header`), when their type and status are final, so every
+response gets them: those of the servlets, WEBrick's errors and the refusals of step 1. A WebSocket's handshake is
+written by `lib/rpc/websocket.rb` itself and gets none. The policy was checked with the UI tests in Chromium, WebKit and
+Firefox on 2026-11-15: no page reports a violation, `'self'` covers the WebSocket of `/v1/rpc` in all three, and
+`Cross-Origin-Embedder-Policy: require-corp` breaks neither the workers nor the requests to llama-server (with CORS).
+
 On every response:
 
 - `Content-Security-Policy`, for a page: everything closed, then opened for what the pages load, as the Content
@@ -145,8 +154,15 @@ On every response:
   - `'self'` and nothing else: no nonce, no hash, no Subresource Integrity, no `'strict-dynamic'`. The Cheat Sheet
     calls a strict policy current practice ([below](#owasp-content-security-policy-cheat-sheet)); for lcty-rb
     `'self'` alone is the stricter one, and pinning the site's own scripts would guard nothing.
-- `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` for a response that is not a page (the JSON of
-  `/v1/`, an error), as OWASP advises for an API: a response opened as a document runs nothing.
+- `Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self';
+  frame-ancestors 'none'` for a script (`text/javascript`). A worker runs under the policy of its own script, not of
+  the page that started it, and `fuzzy_search.worker.js` fetches the vector pair and compiles `bdot264.wasm`, which
+  needs `'wasm-unsafe-eval'` (checked on 2026-11-15 in Chromium, WebKit and Firefox: without it the compile is refused
+  and the worker scores in JavaScript). The policy matters only for a script that is a worker's or a document's; a
+  script a page loads runs under the page's. A violation in a worker is not reported to the page, so the UI tests'
+  check (step 4) does not see it; the unit tests of semantic search found this one.
+- `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` for any other response (the JSON of `/v1/`,
+  the style sheets, an error), as OWASP advises for an API: a response opened as a document runs nothing.
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`, for browsers that do not know `frame-ancestors` (the CSP Cheat Sheet calls it obsolete
   where `frame-ancestors` is known; it costs nothing where it is)

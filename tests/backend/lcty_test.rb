@@ -220,9 +220,9 @@ class LctyTest < Lcty::Scenarios
     step(ALICE) { auth = alice_auth }
     step('And a server listening with it, the site mounted') { port = auth_server(auth) }
     step('When /c/ is requested without credentials') { status, challenge = get_with(port, '/c/') }
-    step(%(Then it is answered 401 with the challenge 'Basic realm="lcty-rb", charset="UTF-8"')) do
+    step(%(Then it is answered 401 with the challenge 'Basic realm="/", charset="UTF-8"', the base URL its realm)) do
       assert_equal '401', status
-      assert_equal 'Basic realm="lcty-rb", charset="UTF-8"', challenge
+      assert_equal 'Basic realm="/", charset="UTF-8"', challenge
     end
     step('When /c/ is requested with the Basic credentials of "alice" and "correct horse battery"') do
       status, = get_with(port, '/c/', basic('alice', 'correct horse battery'))

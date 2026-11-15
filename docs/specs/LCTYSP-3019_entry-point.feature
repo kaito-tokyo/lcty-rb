@@ -62,7 +62,7 @@ Feature: LCTYSP-3019 The entry point
     Given Lcty.basic_auth with the user "alice" and the password "correct horse battery"
     And a server listening with it, the site mounted
     When /c/ is requested without credentials
-    Then it is answered 401 with the challenge 'Basic realm="lcty-rb", charset="UTF-8"'
+    Then it is answered 401 with the challenge 'Basic realm="/", charset="UTF-8"', the base URL its realm
     When /c/ is requested with the Basic credentials of "alice" and "correct horse battery"
     Then it is answered 200
     When /c/ is requested with the Basic credentials of "alice" and "wrong horse battery"
