@@ -281,6 +281,51 @@ Feature: LCTYSP-3020 The RPC protocol
     And their records put a and b, then delete a, and the second has the larger version
     And the other page gets no t.batch.updated
 
+  Scenario: c.update.tags replaces the tags as one t.batch.updated with the actor
+    Given a conversation whose tags are set to "a" and "b" with c.update.tags, and a page receiving t.batch.updated
+    When c.update.tags sets them to "b" and "c"
+    Then the result has only the version, which is that of the page's t.batch.updated
+    And its records delete a, then put c, with the actorId of the request
+    And t.c.list holds b and c for the conversation in that order
+
+  Scenario: c.update.tags brings the search index up to date
+    Given a conversation with a user message and a model message
+    When c.update.tags sets its tags to "fish"
+    Then the search index has it among the conversations tagged "fish"
+    When c.update.tags sets its tags to none
+    Then the search index no longer has it among the conversations tagged "fish"
+
+  Scenario: c.update.tags changes the tags of a conversation of LCTYSP-0003
+    Given a conversation file of LCTYSP-0003 in c/ created with the tag "x" and a user message
+    When c.update.tags sets its tags to "y"
+    Then t.c.list holds y for it and the search index has it among the conversations tagged "y" only
+    When c.update.tags sets its tags to none
+    Then the search index has it among the conversations tagged "x" again, and the file has not changed
+
+  Scenario Outline: c.update.tags refuses a bad request
+    Given a conversation
+    When c.update.tags is called with <params>
+    Then the error is <code>
+
+    Examples:
+      | what                    | params                                  | code |
+      | a tag given twice       | tags "a" and "a"                        | 3    |
+      | tags that are no array  | tags that are the string "a"            | 3    |
+      | a tag with a space      | the tag "a b"                           | 3    |
+      | an unknown conversation | the cid of no conversation and tags "a" | 4    |
+
+  Scenario: c.delete deletes a conversation and announces it with the actor
+    Given a conversation tagged "a" with a round and what was measured of its reply, and a page receiving c.batch.updated and t.batch.updated
+    When c.delete is called for it
+    Then its file is gone, the search index neither finds its round nor has its count, and nothing measured is kept
+    And the page gets a c.batch.updated deleting its c_meta and c_recordcount, then a t.batch.updated deleting a
+    And both have the actorId of the request, and the result has the version of the second
+
+  Scenario: c.delete deletes a conversation of LCTYSP-0003, and one already gone is no error
+    Given a conversation file of LCTYSP-0003 in c/ with a user message
+    When c.delete is called for it twice
+    Then its file is gone and neither has an error
+
   Scenario: c.update.title fits the title into the slot and sends a c_meta record
     Given a conversation with a title slot of 32 bytes, and a page receiving c.batch.updated
     When its title is changed to a longer one

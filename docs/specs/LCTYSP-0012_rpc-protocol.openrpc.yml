@@ -474,6 +474,54 @@ methods:
       - $ref: "#/components/errors/Invalid"
       - $ref: "#/components/errors/NotFound"
 
+  - name: c.update.tags
+    x-receiver: server
+    summary: Replace the tags of a conversation
+    description: >-
+      For a conversation of either format. The tags are kept in t_has_many_c of lcty_t.sqlite, not in the file
+      (LCTYSP-0009), in the order given, and the search index is brought up to date with them. The change is announced
+      as one t.batch.updated with the actor that made it. A conversation of LCTYSP-0003 given no tags has again the
+      tags it was created with (data-setup-tags). Allowed while an lcty-cmd holds the conversation.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+      - name: tags
+        required: true
+        description: Unique tag references (the file-name parts of tag files), in the order they are shown
+        schema:
+          type: array
+          items:
+            type: string
+    result:
+      name: written
+      schema:
+        $ref: "#/components/schemas/Change"
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NotFound"
+
+  - name: c.delete
+    x-receiver: server
+    summary: Delete a conversation
+    description: >-
+      For a conversation of either format: its file, its rounds and count in the search index, what was measured of
+      its replies, and its tags. Announced as one c.batch.updated deleting its c_meta and c_recordcount rows, then one
+      t.batch.updated deleting its tags, both with the actor that made it; the result has the version of the second. Its
+      rows of the vector pair are filled with NaN (LCTYSP-0019). A conversation already gone is no error.
+    paramStructure: by-name
+    params:
+      - name: cid
+        required: true
+        schema:
+          $ref: "#/components/schemas/Cid"
+    result:
+      name: deleted
+      schema:
+        $ref: "#/components/schemas/Change"
+
   - name: c.cmd.held
     x-receiver: server
     summary: Whether some connected page holds the lcty-cmd
@@ -626,8 +674,9 @@ methods:
     x-receiver: page
     summary: A change of the tags of conversations, as the records of t_has_many_c
     description: >-
-      The notification of every change of t_has_many_c (LCTYSP-0014), made today through the HTTP API (POST
-      /v1/conversations/:id/lines with a tags line, and deleting a conversation): one change, one version, one
+      The notification of every change of t_has_many_c (LCTYSP-0014), made through c.update.tags and c.delete, or through
+      the HTTP API (POST /v1/conversations/:id/lines with a tags line, and deleting a conversation): one change, one
+      version, one
       t.batch.updated, sent to every connection that receives it. Its records delete the rows that went and put the rows
       that came, in that order; a change that changes no row is sent to nobody.
     paramStructure: by-name
@@ -638,7 +687,7 @@ methods:
           $ref: "#/components/schemas/Version"
       - name: actorId
         required: true
-        description: Always null today (no tag is written over /v1/rpc yet)
+        description: The actor that made the change (its connection's actorId), or null for a change through the HTTP API
         schema:
           oneOf:
             - $ref: "#/components/schemas/ActorId"

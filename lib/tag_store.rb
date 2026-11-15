@@ -63,8 +63,13 @@ module Chatty
     # t.batch.updated (Chatty.commit, LCTYSP-0014) whose records are a delete for each row that went, then a put for each
     # row that came (none when nothing changed)
     def set_conversation_tags(conv_id, tags, at = nil)
-      at ||= Time.now.iso8601
-      Chatty.commit(BATCH) { write_conversation_tags(conv_id, tags, at) }
+      Chatty.commit(BATCH) { replace_conversation_tags(conv_id, tags, at) }
+    end
+
+    # Replace the tags of conv_id as above without announcing it; returns the records of the change, for a caller that
+    # announces it itself (c.update.tags and c.delete of /v1/rpc, with the actor that made it)
+    def replace_conversation_tags(conv_id, tags, at = nil)
+      write_conversation_tags(conv_id, tags, at || Time.now.iso8601)
     end
 
     # Remove every row of conv_id (the conversation was deleted), announced as above

@@ -200,6 +200,34 @@ test("Editing the title in the header saves it", async ({ page, request }) => {
 	});
 });
 
+test("Choosing a tag in the header and removing it saves the tags", async ({
+	page,
+	request,
+}) => {
+	const part = uniqueWord("hdr");
+	const saved = async (id) =>
+		(await (await request.get(`/v1/conversations/${id}`)).json()).tags;
+	const conv =
+		await test.step("Given a tag, and a conversation of two finished turns is open", async () => {
+			await putTags(request, [{ file: `00010-${part}.html`, name: part }]);
+			return openTwoTurns(page, request);
+		});
+	await test.step("When the tag is chosen in the tag picker in the header", async () => {
+		await page.locator('[part~="lcty-c__tag-picker"]').selectOption(part);
+	});
+	await test.step("Then the header shows the tag's chip and the server has saved the tag for the conversation", async () => {
+		await expect(page.locator('[part~="lcty-c__tag-name"]')).toHaveText(part);
+		await expect.poll(() => saved(conv.id)).toEqual([part]);
+	});
+	await test.step("When the chip's remove button is clicked", async () => {
+		await page.locator('[part~="lcty-c__tag-remove"]').click();
+	});
+	await test.step("Then the header shows no chip and the server has saved no tags for the conversation", async () => {
+		await expect(page.locator('[part~="lcty-c__tag-name"]')).toHaveCount(0);
+		await expect.poll(() => saved(conv.id)).toEqual([]);
+	});
+});
+
 // ---- Rendering a reply (LCTYSP-0005) ----
 
 test("Markdown is rendered and raw HTML or script URLs never reach the DOM", async ({

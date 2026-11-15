@@ -168,6 +168,43 @@ module Lcty
         count
       end
 
+      # Replace the tags of a conversation of either format with tags (unique tag references, in order) in
+      # lcty_t.sqlite, and bring the search index up to date with them, while the file is locked. Returns the records of
+      # t_has_many_c. A file of LCTYSP-0003 given no tags has again the tags it was created with (data-setup-tags), as
+      # through the HTTP API.
+      def update_tags(cid, tags)
+        unless tags.is_a?(Array) && tags.all? { |t| Chatty.tag_ref?(t) } && tags.uniq.size == tags.size
+          raise Error.new(INVALID, 'tags must be an array of unique tag references')
+        end
+        raise Error.new(INVALID, 'no tag store') unless Rpc.tags
+        locked(cid) do |f|
+          records = Rpc.tags.replace_conversation_tags(cid, tags)
+          entries = Chatty::ConvHtml.decode(f.read.force_encoding(Encoding::UTF_8), "#{cid}.html").map(&:first)
+          current = tags.empty? ? Array(Chatty::ConvHtml.current_meta(entries)['tags']) : tags
+          Rpc.index.sync(cid, entries.select { |o| o['type'] == 'message' }, current)
+          records
+        end
+      end
+
+      # Delete a conversation of either format: its file, its rounds and count in the search index and what was measured
+      # of its replies. Returns the UUIDs of its user and model messages (for the vector pair), or nil when there was no
+      # such file.
+      def delete(cid)
+        gone = nil
+        begin
+          locked(cid) do |f|
+            gone = Chatty::Embedding.message_ids_of(f.path)
+            File.unlink(f.path)
+          end
+        rescue Error => e
+          raise unless e.code == NOT_FOUND
+          return nil
+        end
+        Rpc.index.remove(cid)
+        Rpc.c_store&.delete_stats_of(cid)
+        gone
+      end
+
       # The current tags of a conversation of LCTYSP-0013: those of lcty_t.sqlite (its file holds none)
       def tags_of(cid)
         Rpc.tags&.conversation_tags(cid) || []

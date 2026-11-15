@@ -678,6 +678,130 @@ class RpcTest < Lcty::Scenarios
     step('And the other page gets no t.batch.updated') { assert_empty cp.notes('t.batch.updated') }
   end
 
+  scenario 'c.update.tags replaces the tags as one t.batch.updated with the actor' do
+    cid = tp = r = nil
+    step('Given a conversation whose tags are set to "a" and "b" with c.update.tags, and a page receiving t.batch.updated') do
+      cid = create
+      assert_nil rpc('c.update.tags', 'cid' => cid, 'tags' => %w[a b])['error']
+      tp = page
+      tp.initialize_session(%w[t.batch.updated])
+    end
+    step('When c.update.tags sets them to "b" and "c"') { r = rpc('c.update.tags', 'cid' => cid, 'tags' => %w[b c])['result'] }
+    note = nil
+    step("Then the result has only the version, which is that of the page's t.batch.updated") do
+      wait_until { tp.notes('t.batch.updated').any? }
+      note = tp.notes('t.batch.updated').last['params']
+      assert_equal %w[version], r.keys
+      assert_equal r['version'], note['version']
+    end
+    step('And its records delete a, then put c, with the actorId of the request') do
+      assert_equal [%w[delete a], %w[put c]], note['records'].map { |x| [x['op'], x['row']['tag']] }
+      assert(note['records'].all? { |x| x['store'] == 't_has_many_c' && x['row']['cid'] == cid })
+      assert_equal rpc_actor, note['actorId']
+    end
+    step('And t.c.list holds b and c for the conversation in that order') do
+      assert_equal %w[b c], rpc('t.c.list')['result']['items'].select { |i| i['cid'] == cid }.map { |i| i['tag'] }
+    end
+  end
+
+  scenario 'c.update.tags brings the search index up to date' do
+    cid = nil
+    step('Given a conversation with a user message and a model message') do
+      cid = create
+      u = user_attrs
+      append(cid, nil, u)
+      append(cid, u['id'], model_attrs)
+    end
+    step('When c.update.tags sets its tags to "fish"') { rpc('c.update.tags', 'cid' => cid, 'tags' => %w[fish]) }
+    step('Then the search index has it among the conversations tagged "fish"') do
+      assert_includes Rpc.index.convs_with_tags(%w[fish]), cid
+    end
+    step('When c.update.tags sets its tags to none') { rpc('c.update.tags', 'cid' => cid, 'tags' => []) }
+    step('Then the search index no longer has it among the conversations tagged "fish"') do
+      refute_includes Rpc.index.convs_with_tags(%w[fish]), cid
+    end
+  end
+
+  scenario 'c.update.tags changes the tags of a conversation of LCTYSP-0003' do
+    cid = before = nil
+    step('Given a conversation file of LCTYSP-0003 in c/ created with the tag "x" and a user message') do
+      cid = former_conversation(tags: %w[x])
+      before = File.read(Rpc::ConvStore.path(cid))
+    end
+    step('When c.update.tags sets its tags to "y"') { assert_nil rpc('c.update.tags', 'cid' => cid, 'tags' => %w[y])['error'] }
+    step('Then t.c.list holds y for it and the search index has it among the conversations tagged "y" only') do
+      assert_equal %w[y], rpc('t.c.list')['result']['items'].select { |i| i['cid'] == cid }.map { |i| i['tag'] }
+      assert_includes Rpc.index.convs_with_tags(%w[y]), cid
+      refute_includes Rpc.index.convs_with_tags(%w[x]), cid
+    end
+    step('When c.update.tags sets its tags to none') { assert_nil rpc('c.update.tags', 'cid' => cid, 'tags' => [])['error'] }
+    step('Then the search index has it among the conversations tagged "x" again, and the file has not changed') do
+      assert_includes Rpc.index.convs_with_tags(%w[x]), cid
+      assert_equal before, File.read(Rpc::ConvStore.path(cid))
+    end
+  end
+
+  {
+    'a tag given twice' => [->(cid) { { 'cid' => cid, 'tags' => %w[a a] } }, 3],
+    'tags that are no array' => [->(cid) { { 'cid' => cid, 'tags' => 'a' } }, 3],
+    'a tag with a space' => [->(cid) { { 'cid' => cid, 'tags' => ['a b'] } }, 3],
+    'an unknown conversation' => [->(_cid) { { 'cid' => new_cid, 'tags' => %w[a] } }, 4]
+  }.each do |what, (params, code)|
+    scenario "c.update.tags refuses a bad request (#{what})" do
+      cid = r = nil
+      step('Given a conversation') { cid = create }
+      step('When c.update.tags is called with the params of the example') do
+        r = rpc('c.update.tags', instance_exec(cid, &params))
+      end
+      step("Then the error is #{code}") { assert_equal code, r['error']['code'] }
+    end
+  end
+
+  scenario 'c.delete deletes a conversation and announces it with the actor' do
+    cid = pg = r = nil
+    step('Given a conversation tagged "a" with a round and what was measured of its reply, and a page receiving c.batch.updated and t.batch.updated') do
+      cid = create
+      u = user_attrs('q')
+      m = model_attrs('narwhal')
+      append(cid, nil, u)
+      append(cid, u['id'], m)
+      rpc('c.stats.put', 'cid' => cid, 'id' => m['id'], 'timings' => { 'prompt_n' => 3 })
+      rpc('c.update.tags', 'cid' => cid, 'tags' => %w[a])
+      pg = page
+      pg.initialize_session(%w[c.batch.updated t.batch.updated])
+    end
+    step('When c.delete is called for it') { r = rpc('c.delete', 'cid' => cid)['result'] }
+    step('Then its file is gone, the search index neither finds its round nor has its count, and nothing measured is kept') do
+      refute File.exist?(Rpc::ConvStore.path(cid))
+      refute_includes Rpc.index.keyword_search('narwhal').map { |h| h['conv_id'] }, cid
+      assert_nil Rpc.index.record_count(cid)
+      assert_empty Rpc.c_store.stats_of(cid)
+    end
+    notes = nil
+    step('And the page gets a c.batch.updated deleting its c_meta and c_recordcount, then a t.batch.updated deleting a') do
+      wait_until { pg.notes('t.batch.updated').any? }
+      notes = pg.notes.select { |n| n['params']['records'].any? { |x| x['row']['cid'] == cid } }
+      assert_equal %w[c.batch.updated t.batch.updated], notes.map { |n| n['method'] }
+      assert_equal [[%w[c_meta delete], %w[c_recordcount delete]], [%w[t_has_many_c delete]]],
+                   notes.map { |n| n['params']['records'].map { |x| x.values_at('store', 'op') } }
+      assert_equal 'a', notes[1]['params']['records'][0]['row']['tag']
+    end
+    step('And both have the actorId of the request, and the result has the version of the second') do
+      assert_equal [rpc_actor] * 2, notes.map { |n| n['params']['actorId'] }
+      assert_equal notes[1]['params']['version'], r['version']
+    end
+  end
+
+  scenario 'c.delete deletes a conversation of LCTYSP-0003, and one already gone is no error' do
+    cid = rs = nil
+    step('Given a conversation file of LCTYSP-0003 in c/ with a user message') { cid = former_conversation }
+    step('When c.delete is called for it twice') { rs = Array.new(2) { rpc('c.delete', 'cid' => cid) } }
+    step('Then its file is gone and neither has an error') do
+      refute File.exist?(Rpc::ConvStore.path(cid))
+      assert_equal [nil, nil], rs.map { |x| x['error'] }
+    end
+  end
+
   scenario 'c.update.title fits the title into the slot and sends a c_meta record' do
     cid = pg = r = nil
     long = 'a much longer title that cannot fit'

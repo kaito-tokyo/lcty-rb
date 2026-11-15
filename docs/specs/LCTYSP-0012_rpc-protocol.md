@@ -9,9 +9,9 @@ SPDX-License-Identifier: Apache-2.0
 - Status: Draft, in use. The conversation page and the new conversation page write conversations over it
   (`lcty.v1.async.mjs`, `js/pages/new.js`), every page with the sidebar follows the lists over the tab's connection
   (`js/api/tab-rpc.js`, [LCTYSP-0014](LCTYSP-0014_browser-sync.md)), and the search panel embeds queries and follows
-  the vector pair over it ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)). Not done: the tags of a conversation
-  and its deletion (`js/api/storage.js`), and the tag definitions (`lcty.v1.t.worker.cjs`), are still written through
-  the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
+  the vector pair over it ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)). The pages change a conversation's tags
+  (`c.update.tags`) and delete it (`c.delete`) over it too. Not done: the tag definitions (`lcty.v1.t.worker.cjs`) are
+  still written through the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
 - Related: [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file this protocol writes),
   [LCTYSP-0006](LCTYSP-0006_http-api.md) (the HTTP API it is to replace for changes),
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the browser's copies it keeps up to date)
@@ -165,13 +165,14 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   (`data-content`, Markdown for a model message), as it does for its own. The DOM of a page then holds no HTML that
   another page made, whatever the allowlist lets through. A page that is opened still reads the file, presentation
   and all.
-  - `c_meta` / `delete` and `c_recordcount` / `delete`: `{cid}`, a conversation deleted (today only through the HTTP
-    API, so the `actorId` is `null`).
+  - `c_meta` / `delete` and `c_recordcount` / `delete`: `{cid}`, a conversation deleted (`c.delete`, or the HTTP
+    API with the `actorId` `null`).
 
   A kind of update is a store, not a method, so a new one adds a record, not a notification.
 - **`t.batch.updated` announces every change of the tags of conversations** in the same way, for the resource `t/`:
   its records are `t_has_many_c` / `delete` and `put`, rows `{tag, cid}`, the rows that went and then those that came.
-  Tags are still written through the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)), so its `actorId` is `null`.
+  A page changes them with `c.update.tags` and `c.delete`; a change through the HTTP API
+  ([LCTYSP-0006](LCTYSP-0006_http-api.md)) has the `actorId` `null`.
 - **The title** is changed with `c.update.title`, which the server fits into the slot and answers as written. The slot
   is in the middle of the file, so no id guards it: the last title written wins, which is enough for a value that is
   only shown. It is allowed while an `lcty-cmd` holds the conversation, and sends a `c_meta` record.
@@ -217,8 +218,8 @@ reads it again. `c.recordcount.list` does the same for the counts of elements: e
 (`{cid, count}`, ordered by `cid`) with its version, so a page fills `c_recordcount` from it and follows the
 `c_recordcount` records; a conversation the cache has no count for is not among them, and its count is unknown.
 `t.c.list` does the same for the tags of conversations: every row of `t_has_many_c` (`{tag, cid}`) with its version,
-followed by the records of `t.batch.updated`, the notification of every change of them (today made through the HTTP
-API, so its `actorId` is `null`). The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
+followed by the records of `t.batch.updated`, the notification of every change of them (`c.update.tags`, `c.delete`,
+or the HTTP API with the `actorId` `null`). The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
 /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the version they were read at, read before
 the data so that the data is at least that new. The page then listens from that version; a notification it already holds
@@ -235,6 +236,7 @@ is recognised by its ids and ignored.
 - **Checking more than the last id.** `c.subscribe` compares only the last element. Whether a hash of the page's whole
   content (the skeleton of the integrity check) is needed is undecided, as is the check for pages other than a
   conversation.
-- **The methods of tags, settings and vectors**, the timings and usage kept in a database, and the `GET` reads above.
+- **The methods of the tag definitions** (`t/`, written today with `PUT /v1/tags` and `POST /v1/tags/:file/memory`)
+  and the `GET` reads above. Settings are the browser's own ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
 - **Many tabs.** Each tab keeps its own WebSocket; whether one connection is shared (a SharedWorker) is left until the
   number of connections matters.

@@ -21,4 +21,4 @@ export function initNewPage(): void;
 // create(): the conversation is created through /v1/rpc in the format of LCTYSP-0013 (LCTYSP-0012): c.create writes
 // the head, then the system prompt, the messages of a fork (with new ids: a fork shares none, LCTYSP-0013) and the
 // user message are appended one by one, and last the lcty-cmd send, which this tab's conversation page runs as its own
-// (sessionStorage lcty.run.<id>). The tags at creation go to lcty_t.sqlite (the HTTP API's tags line).
+// (sessionStorage lcty.run.<id>). The tags at creation go to lcty_t.sqlite (c.update.tags).
