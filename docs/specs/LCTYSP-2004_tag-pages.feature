@@ -10,7 +10,7 @@ Feature: LCTYSP-2004 The tag pages: /t/ and the tag files
   The reorder page /t/ lists the tags in the order of their files, lets the user move them and saves the new order,
   which renumbers the files (LCTYSP-0009). Each tag's name is a link to its file, /t/NNNNN-<part>.html, a page of its
   own that edits that tag alone. Both pages show the sidebar, like every page (LCTYSP-0005). The Scenarios make their
-  tags through PUT /v1/tags; A and B stand for names the test makes unique, and since tag definitions are global, the
+  tags through t.replace of /v1/rpc; A and B stand for names the test makes unique, and since tag definitions are global, the
   tags are removed after each Scenario.
 
   Scenario: The tags dialog links to /t/, where moving a tag and saving renumbers the files
@@ -29,12 +29,12 @@ Feature: LCTYSP-2004 The tag pages: /t/ and the tag files
 
   Scenario: The reorder page does not list an invalid tag and sends it back as it is
     Given the tags A and B, in that order
-    And GET /v1/tags also lists the invalid tag "00015-broken.html", and PUT /v1/tags is answered by the test
+    And t.list of the page's /v1/rpc also lists the invalid tag "00015-broken.html", and t.replace is answered by the test
     When the reorder page /t/ is opened
     Then it lists A and B in that order, without the invalid tag
     When the button "B を上へ" is pressed, then the button "保存"
     Then the toast says "タグを保存しました"
-    And one PUT was sent, with the files "00010-B.html", "00020-A.html" and "00015-broken.html", in that order
+    And one t.replace was sent, with the files "00010-B.html", "00020-A.html" and "00015-broken.html", in that order
     And the invalid tag is sent back as it was received
 
   Scenario: A tag's name on the reorder page opens its file, which edits the tag and moves to its new file on a rename

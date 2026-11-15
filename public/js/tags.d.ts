@@ -32,8 +32,8 @@ export function composeDraft(
 ): string;
 
 /**
- * Draws the editor for tag definitions (name, prompt, memory) into container: defs and etag are what GET /v1/tags
- * returned. The order is changed on the reorder page (/t/), not here. Calls onSaved(new definitions, {file}) after
+ * Draws the editor for tag definitions (name, prompt, memory) into container: defs and etag are what getTags of
+ * api/lcty-t.js returned. The order is changed on the reorder page (/t/), not here. Calls onSaved(new definitions, {file}) after
  * saving; toast shows a message. Returns { isDirty }: whether there are unsaved edits.
  *
  * With file (the page of a tag file, LCTYSP-0009), only the tag in that file is shown and there is no "+ New tag"; the
@@ -41,9 +41,9 @@ export function composeDraft(
  * (a new name gives a new file), or null when it was deleted.
  *
  * Saving checks every name (tagNameError) and that the names are unique as parts, and fails with a message when a new
- * tag would need a number past five digits. A save that fails with 412 (the tags were changed in another tab
- * meanwhile) takes the new state, and the user redoes the edit on it; when that state cannot be loaded, the edits are
- * kept and saving again gets 412 until the tags can be loaded.
+ * tag would need a number past five digits. A save refused as changed (TAGS_CHANGED: the tags were changed in
+ * another tab meanwhile) takes the new state, and the user redoes the edit on it; when that state cannot be loaded, the
+ * edits are kept and saving again is refused until the tags can be loaded.
  */
 export function renderTagsEditor(
 	container: Element,
@@ -66,7 +66,7 @@ export function renderTagsEditor(
  *
  * Closing with unsaved edits asks first (the close button, Esc and a click on the backdrop). Opening reads the saved
  * definitions again from the browser's copy (another tab of this browser may have changed them meanwhile; a change
- * made elsewhere makes the save fail with 412, which loads the new set); when they cannot be loaded, toast shows why
+ * made elsewhere makes the save refused as changed, which loads the new set); when they cannot be loaded, toast shows why
  * and the dialog stays closed.
  */
 export function initTagsDialog(

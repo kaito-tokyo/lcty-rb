@@ -4,7 +4,12 @@
 
 // The tag reorder page, /t/: moves the tags and saves them renumbered (LCTYSP-0005, LCTYSP-0009).
 
-import { getTags, putTags } from "../api/lcty-t.js";
+import {
+	forceSyncTags,
+	getTags,
+	putTags,
+	TAGS_CHANGED,
+} from "../api/lcty-t.js";
 import { tabRpc } from "../api/tab-rpc.js";
 import { showToast } from "../common.js";
 import { localize, tr } from "../i18n.js";
@@ -111,7 +116,7 @@ export function initTagOrderPage() {
 		try {
 			state.etag = await putTags(tags, state.etag);
 		} catch (e) {
-			if (e.status === 412) {
+			if (e.code === TAGS_CHANGED) {
 				await load();
 				status.textContent = tr(
 					"tagsChangedElsewhere",
@@ -141,7 +146,8 @@ export function initTagOrderPage() {
 	});
 
 	(async () => {
-		// The page edits the set, so it reads it after initSidebar's sync_full (LCTYSP-0009)
+		// The page edits the set, so it starts from the server's (LCTYSP-0009)
+		await forceSyncTags().catch(() => {});
 		await load();
 		panel.refresh();
 	})();

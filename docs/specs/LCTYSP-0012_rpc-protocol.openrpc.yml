@@ -522,6 +522,104 @@ methods:
       schema:
         $ref: "#/components/schemas/Change"
 
+  - name: t.list
+    x-receiver: server
+    summary: Every tag definition, with the ETag of the set
+    description: >-
+      What a page reads to fill t_full and t_set of lcty_t (LCTYSP-0014), and again after reconnecting and whenever it
+      is shown from the back/forward cache: every tag file of t/ in file-name order, parsed into JSON (LCTYSP-0009), and
+      the ETag of the set, which changes also when a file is edited outside the server. The version is taken together
+      with them, so the page follows the records of t.batch.updated from it.
+    params: []
+    result:
+      name: tags
+      schema:
+        type: object
+        required: [version, etag, items]
+        properties:
+          version:
+            $ref: "#/components/schemas/Version"
+          etag:
+            $ref: "#/components/schemas/TagSetEtag"
+          items:
+            type: array
+            items:
+              $ref: "#/components/schemas/Tag"
+
+  - name: t.replace
+    x-receiver: server
+    summary: Replace every tag file
+    description: >-
+      The tag editor and the reorder page send the complete set (LCTYSP-0009), with the etag of the set they edited: a
+      set that has changed since is refused (Changed). A tag sent with invalid true is a tag file without <lcty-t>, kept
+      as it is. The change is announced as one t.batch.updated with the actor that made it: a t_full delete for each
+      file that went, a put for each that came or changed, then the t_set put of the new etag.
+    paramStructure: by-name
+    params:
+      - name: tags
+        required: true
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+      - name: etag
+        required: true
+        schema:
+          $ref: "#/components/schemas/TagSetEtag"
+    result:
+      name: written
+      schema:
+        allOf:
+          - $ref: "#/components/schemas/Change"
+          - type: object
+            required: [etag]
+            properties:
+              etag:
+                $ref: "#/components/schemas/TagSetEtag"
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/Changed"
+
+  - name: t.memory.add
+    x-receiver: server
+    summary: Add a memory item to a tag file
+    description: >-
+      The item gets a UUIDv7 id and the time it was added; the text is trimmed. Announced as one t.batch.updated with
+      the actor that made it: the t_full put of the tag, then the t_set put of the new etag.
+    paramStructure: by-name
+    params:
+      - name: file
+        required: true
+        description: The tag file, NNNNN-<file-name part>.html
+        schema:
+          type: string
+      - name: text
+        required: true
+        schema:
+          type: string
+      - name: source
+        description: Where the item came from; only its conv_id and msg_id strings are kept
+        schema:
+          type: object
+          properties:
+            conv_id:
+              type: string
+            msg_id:
+              type: string
+    result:
+      name: added
+      schema:
+        allOf:
+          - $ref: "#/components/schemas/Change"
+          - type: object
+            required: [item]
+            properties:
+              item:
+                $ref: "#/components/schemas/MemoryItem"
+    errors:
+      - $ref: "#/components/errors/Invalid"
+      - $ref: "#/components/errors/NoTag"
+
   - name: c.cmd.held
     x-receiver: server
     summary: Whether some connected page holds the lcty-cmd
@@ -672,13 +770,16 @@ methods:
 
   - name: t.batch.updated
     x-receiver: page
-    summary: A change of the tags of conversations, as the records of t_has_many_c
+    summary: A change of t/, as the records of t_has_many_c or of t_full and t_set
     description: >-
-      The notification of every change of t_has_many_c (LCTYSP-0014), made through c.update.tags and c.delete, or through
-      the HTTP API (POST /v1/conversations/:id/lines with a tags line, and deleting a conversation): one change, one
-      version, one
-      t.batch.updated, sent to every connection that receives it. Its records delete the rows that went and put the rows
-      that came, in that order; a change that changes no row is sent to nobody.
+      The notification of every change of t/ (LCTYSP-0014): of the tags of conversations (t_has_many_c), made through
+      c.update.tags and c.delete, or through the HTTP API (POST /v1/conversations/:id/lines with a tags line, and
+      deleting a conversation); and of the tag definitions (t_full and t_set), made through t.replace and t.memory.add.
+      One change, one version, one t.batch.updated, sent to every connection that receives it. The records of
+      t_has_many_c delete the rows that went and put the rows that came, in that order; those of t_full delete the files
+      that went and put the tags that came or changed, then t_set puts the new etag. A change that changes no row of
+      t_has_many_c is sent to nobody. A tag file edited outside the server is not announced: a page sees it at its next
+      t.list.
     paramStructure: by-name
     params:
       - name: version
@@ -836,16 +937,99 @@ components:
         cid:
           $ref: "#/components/schemas/Cid"
     TagRecord:
-      description: One change to t_has_many_c, a row put or deleted
+      description: >-
+        One change to a copy of t/ (LCTYSP-0014): a row of t_has_many_c put or deleted, a tag of t_full put or deleted
+        (by its file), or the etag of t_set put
+      oneOf:
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: t_has_many_c
+            op:
+              enum: [put, delete]
+            row:
+              $ref: "#/components/schemas/TagHasC"
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: t_full
+            op:
+              const: put
+            row:
+              $ref: "#/components/schemas/Tag"
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: t_full
+            op:
+              const: delete
+            row:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+        - type: object
+          required: [store, op, row]
+          properties:
+            store:
+              const: t_set
+            op:
+              const: put
+            row:
+              type: object
+              required: [etag]
+              properties:
+                etag:
+                  $ref: "#/components/schemas/TagSetEtag"
+    Tag:
+      description: A tag file as JSON (LCTYSP-0009), a row of t_full
       type: object
-      required: [store, op, row]
+      required: [file, name, ops, prompt, memory]
       properties:
-        store:
-          const: t_has_many_c
-        op:
-          enum: [put, delete]
-        row:
-          $ref: "#/components/schemas/TagHasC"
+        file:
+          description: NNNNN-<file-name part>.html
+          type: string
+        name:
+          description: The display name
+          type: string
+        ops:
+          type: array
+          items:
+            type: object
+            required: [type, content]
+            properties:
+              type:
+                type: string
+              content:
+                type: string
+        prompt:
+          type: string
+        memory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryItem"
+        invalid:
+          description: A tag file without <lcty-t>, listed with empty ops, prompt and memory and named after its file name
+          const: true
+    MemoryItem:
+      type: object
+      required: [id, text]
+      properties:
+        id:
+          type: string
+        text:
+          type: string
+        at:
+          type: string
+        source:
+          type: object
+    TagSetEtag:
+      description: The ETag of the set of tag files, a quoted SHA-256 of their names and contents
+      type: string
     Capabilities:
       type: object
       required: [receives]
@@ -932,6 +1116,12 @@ components:
         properties:
           cid:
             type: string
+    Changed:
+      code: 8
+      message: the tags have changed
+    NoTag:
+      code: 9
+      message: no such tag file
     Unavailable:
       code: 7
       message: semantic search is unavailable (no embedding server, or it is not ready)

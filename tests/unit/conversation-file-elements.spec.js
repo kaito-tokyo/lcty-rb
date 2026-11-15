@@ -2312,7 +2312,7 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given "t_full" of the database "lcty_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"', () =>
+	await test.step('Given the copy "t_full" of the database "lcty_t", filled at "b1.1", holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"', () =>
 		page.evaluate(
 			() =>
 				new Promise((resolve, reject) => {
@@ -2324,7 +2324,11 @@ test("The sidebar names its list's tags from the browser's copy of the tags", as
 						rows.put({ file: "00020-ruby.html", name: "Ruby" });
 						db.createObjectStore("t_set").put({ etag: "e1" }, "set");
 						db.createObjectStore("t_has_many_c", { keyPath: ["tag", "cid"] });
-						db.createObjectStore("sync", { keyPath: "store" });
+						db.createObjectStore("sync", { keyPath: "store" }).put({
+							store: "t_full",
+							boot: "b1",
+							seq: 1,
+						});
 					};
 					req.onsuccess = () => {
 						req.result.close();

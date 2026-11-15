@@ -208,8 +208,8 @@ A conversation file opened directly (`file://`) gets no header and is not affect
 
 With step 1 the HTTP API is closed to other sites; this step leaves one way to write, checked once. In order:
 
-1. The tags of a conversation and deleting a conversation.
-2. The tag definitions (now with an ETag and `If-Match`) and adding a memory item.
+1. The tags of a conversation and deleting a conversation (done: `c.update.tags` and `c.delete`).
+2. The tag definitions and adding a memory item (done: `t.replace` and `t.memory.add`; the HTTP endpoints are gone).
 3. The vectors of semantic search, which are binary.
 4. The writes of the HTTP API are removed: it serves reads only. Writing the conversations of LCTYSP-0003 (`POST
    /v1/conversations`, its lines and `pop`), which no page uses any more, goes with them; the tests that create such

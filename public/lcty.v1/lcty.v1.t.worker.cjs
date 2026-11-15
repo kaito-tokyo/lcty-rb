@@ -12,38 +12,8 @@ const DB_VERSION = 3; // raised when what is stored changes
 const TAGS = "t_full";
 const SET = "t_set";
 const SET_KEY = "set";
-const HAS_MANY = "t_has_many_c"; // which conversations each tag has, followed over /v1/rpc (LCTYSP-0014)
+const HAS_MANY = "t_has_many_c"; // which conversations each tag has
 const SYNC = "sync";
-
-/** The URL of the API (v1/) that a message names as its endpoint, checked (lcty.v1.c.worker.d.cts). */
-/*export*/ function endpointOf(endpoint) {
-	if (typeof endpoint !== "string")
-		throw new Error("the message has no endpoint");
-	const url = new URL(endpoint);
-	if (url.origin !== location.origin)
-		throw new Error(`the endpoint is not on this origin: ${endpoint}`);
-	if (!url.pathname.endsWith("/"))
-		throw new Error(`the endpoint does not end with /: ${endpoint}`);
-	return url;
-}
-
-/** The error of a failed request: the message is "<status> <body>", and status is the HTTP status (as api/storage.js). */
-/*export*/ function httpError(status, body) {
-	const e = new Error(`${status} ${body.slice(0, 200)}`);
-	e.status = status;
-	return e;
-}
-
-/*export*/ async function send(v1, method, path, body, headers = {}) {
-	const init = { method, headers: { ...headers } };
-	if (body !== undefined) {
-		init.headers["Content-Type"] = "application/json";
-		init.body = JSON.stringify(body);
-	}
-	const r = await fetch(new URL(path, v1), init);
-	if (!r.ok) throw httpError(r.status, await r.text());
-	return r;
-}
 
 function openDb() {
 	return new Promise((resolve, reject) => {
@@ -65,110 +35,13 @@ function openDb() {
 	});
 }
 
-/** Run fn(tags, set) in one transaction over both stores; resolves to what fn returned, with every request in it
- * replaced by its result, when the transaction completes. */
-/*export*/ async function withStores(mode, fn) {
-	const db = await openDb();
-	try {
-		const tx = db.transaction([TAGS, SET], mode);
-		const reqs = fn(tx.objectStore(TAGS), tx.objectStore(SET));
-		await new Promise((resolve, reject) => {
-			tx.oncomplete = () => resolve();
-			tx.onerror = () => reject(tx.error);
-			tx.onabort = () =>
-				reject(tx.error || new Error("the transaction was aborted"));
-		});
-		return (
-			reqs &&
-			Object.fromEntries(Object.entries(reqs).map(([k, r]) => [k, r.result]))
-		);
-	} finally {
-		db.close();
-	}
-}
-
-async function syncFull(v1) {
-	const r = await send(v1, "GET", "tags");
-	const json = await r.json();
-	if (!Array.isArray(json?.tags)) throw new Error("GET /v1/tags is invalid");
-	// A file system may list the names decomposed (HFS+); the server compares the files themselves. The name of an
-	// invalid tag (a file without <lcty-t>) comes from its file name, so it is normalized too
-	const tags = json.tags.map((t) => ({
-		...t,
-		file: t.file.normalize("NFC"),
-		...(t.invalid ? { name: t.name.normalize("NFC") } : {}),
-	}));
-	const etag = r.headers.get("ETag");
-	await withStores("readwrite", (rows, set) => {
-		rows.clear();
-		for (const t of tags) rows.put(t);
-		set.put({ etag }, SET_KEY);
-	});
-}
-
-const readCopy = () =>
-	withStores("readonly", (rows, set) => ({
-		tags: rows.getAll(),
-		set: set.get(SET_KEY),
-	}));
-
-/*export*/ async function get(v1) {
-	let copy = await readCopy();
-	if (!copy.set) {
-		await syncFull(v1);
-		copy = await readCopy();
-	}
-	return { tags: copy.tags, etag: copy.set.etag };
-}
-
-/** fn(), then a sync whatever happened; fn's result or error is what counts. */
-/*export*/ async function thenSync(v1, fn) {
-	try {
-		return await fn();
-	} finally {
-		await syncFull(v1).catch(() => {});
-	}
-}
-
-/*export*/ const put = (v1, { tags, etag }) =>
-	thenSync(v1, async () => {
-		const r = await send(
-			v1,
-			"PUT",
-			"tags",
-			{ tags },
-			{ "If-Match": etag ?? "" },
-		);
-		return r.headers.get("ETag");
-	});
-
-/*export*/ const addMemory = (v1, { file, body }) =>
-	thenSync(v1, async () => {
-		const r = await send(
-			v1,
-			"POST",
-			`tags/${encodeURIComponent(file)}/memory`,
-			body,
-		);
-		return r.json();
-	});
-
-// ---- t_has_many_c: a copy that follows the server under the version rule (LCTYSP-0014) ----
-
-/** A global version "<boot>.<seq>" as {boot, seq}, or an error. */
-/*export*/ function parseVersion(version) {
-	const m = /^([0-9a-f]+)\.([0-9]+)$/.exec(String(version));
-	if (!m) throw new Error(`not a version: ${version}`);
-	return { boot: m[1], seq: Number(m[2]) };
-}
-
-/** Run fn(tx) in one transaction over t_has_many_c and sync; resolves to what fn returned when it completes. */
-async function withHasMany(mode, fn) {
+/** Run fn(...stores) in one transaction over names; resolves to what fn returned when the transaction completes. */
+/*export*/ async function withStores(mode, names, fn) {
 	const db = await openDb();
 	try {
 		return await new Promise((resolve, reject) => {
-			const tx = db.transaction([HAS_MANY, SYNC], mode);
-			const out = fn(tx.objectStore(HAS_MANY), tx.objectStore(SYNC));
+			const tx = db.transaction(names, mode);
+			const out = fn(...names.map((n) => tx.objectStore(n)));
 			tx.oncomplete = () => resolve(out);
 			tx.onerror = () => reject(tx.error);
 			tx.onabort = () =>
@@ -179,46 +52,102 @@ async function withHasMany(mode, fn) {
 	}
 }
 
-/**
- * Replace t_has_many_c with what t.c.list answered: payload {store, version, rows}. Done unless the copy holds a newer
- * version of the same boot; answers {applied}.
- */
-/*export*/ function replace(_v1, { store, version, rows }) {
-	if (store !== HAS_MANY) throw new Error(`no such store: ${store}`);
+/** A global version "<boot>.<seq>" as {boot, seq}, or an error. */
+/*export*/ function parseVersion(version) {
+	const m = /^([0-9a-f]+)\.([0-9]+)$/.exec(String(version));
+	if (!m) throw new Error(`not a version: ${version}`);
+	return { boot: m[1], seq: Number(m[2]) };
+}
+
+/** A tag as the server lists it, its file name (and an invalid tag's name, from its file name) NFC-normalized. */
+/*export*/ function tagRow(t) {
+	return {
+		...t,
+		file: t.file.normalize("NFC"),
+		...(t.invalid ? { name: t.name.normalize("NFC") } : {}),
+	};
+}
+
+// The stores of each copy, the first holding its rows; t_set belongs to the copy t_full
+const COPIES = { [TAGS]: [TAGS, SET], [HAS_MANY]: [HAS_MANY] };
+
+/** Replace the copy store with what t.list or t.c.list answered, unless it holds a newer version of the same boot. */
+/*export*/ function replace({ store, version, rows, etag }) {
+	if (!Object.hasOwn(COPIES, store)) throw new Error(`no such store: ${store}`);
 	const v = parseVersion(version);
 	if (!Array.isArray(rows)) throw new Error("rows must be an array");
-	return withHasMany("readwrite", (os, sync) => {
+	return withStores("readwrite", [...COPIES[store], SYNC], (...os) => {
+		const sync = os.at(-1);
 		const out = { applied: false };
-		sync.get(HAS_MANY).onsuccess = ({ target: { result: held } }) => {
+		sync.get(store).onsuccess = ({ target: { result: held } }) => {
 			if (held && held.boot === v.boot && held.seq > v.seq) return;
-			os.clear();
-			for (const { tag, cid } of rows) os.put({ tag, cid });
-			sync.put({ store: HAS_MANY, ...v });
+			os[0].clear();
+			if (store === TAGS) {
+				for (const t of rows) os[0].put(tagRow(t));
+				os[1].put({ etag: etag ?? null }, SET_KEY);
+			} else for (const { tag, cid } of rows) os[0].put({ tag, cid });
+			sync.put({ store, ...v });
 			out.applied = true;
 		};
 		return out;
 	});
 }
 
+// Write one record of t.batch.updated into the stores of its copy
+function write(os, { store, op, row }) {
+	if (store === HAS_MANY) {
+		if (op === "put") os[0].put({ tag: row.tag, cid: row.cid });
+		else if (op === "delete") os[0].delete([row.tag, row.cid]);
+	} else if (store === SET) {
+		if (op === "put") os[1].put({ etag: row.etag ?? null }, SET_KEY);
+	} else if (op === "put") os[0].put(tagRow(row));
+	else if (op === "delete") os[0].delete(row.file.normalize("NFC"));
+}
+
 /**
- * Apply the records of one t.batch.updated: payload {version, records}, only onto a copy of the same boot holding an
- * older version. Answers {applied}, the stores that applied them.
+ * Apply the records of one t.batch.updated, each copy only when it holds an older version of the same boot. Answers
+ * {applied}, the copies that applied them.
  */
-/*export*/ function apply(_v1, { version, records }) {
+/*export*/ async function apply({ version, records }) {
 	const v = parseVersion(version);
 	if (!Array.isArray(records)) throw new Error("records must be an array");
-	const mine = records.filter((r) => r?.store === HAS_MANY);
-	if (mine.length === 0) return { applied: [] };
-	return withHasMany("readwrite", (os, sync) => {
-		const out = { applied: [] };
-		sync.get(HAS_MANY).onsuccess = ({ target: { result: held } }) => {
-			if (!held || held.boot !== v.boot || held.seq >= v.seq) return;
-			for (const { op, row } of mine) {
-				if (op === "put") os.put({ tag: row.tag, cid: row.cid });
-				else if (op === "delete") os.delete([row.tag, row.cid]);
-			}
-			sync.put({ store: HAS_MANY, ...v });
-			out.applied.push(HAS_MANY);
+	const copyOf = (s) => (s === SET ? TAGS : s);
+	const applied = [];
+	for (const store of Object.keys(COPIES)) {
+		const mine = records.filter((r) => r && copyOf(r.store) === store);
+		if (mine.length === 0) continue;
+		const done = await withStores(
+			"readwrite",
+			[...COPIES[store], SYNC],
+			(...os) => {
+				const out = { done: false };
+				const sync = os.at(-1);
+				sync.get(store).onsuccess = ({ target: { result: held } }) => {
+					if (!held || held.boot !== v.boot || held.seq >= v.seq) return;
+					for (const r of mine) write(os, r);
+					sync.put({ store, ...v });
+					out.done = true;
+				};
+				return out;
+			},
+		);
+		if (done.done) applied.push(store);
+	}
+	return { applied };
+}
+
+/** t_full and t_set: the tags in file-name order and the ETag; stale true when the copy has never been filled. */
+/*export*/ function get() {
+	return withStores("readonly", [TAGS, SET, SYNC], (tags, set, sync) => {
+		const out = { tags: [], etag: null, stale: true };
+		tags.getAll().onsuccess = (e) => {
+			out.tags = e.target.result;
+		};
+		set.get(SET_KEY).onsuccess = (e) => {
+			out.etag = e.target.result?.etag ?? null;
+		};
+		sync.get(TAGS).onsuccess = (e) => {
+			out.stale = !e.target.result;
 		};
 		return out;
 	});
@@ -226,7 +155,7 @@ async function withHasMany(mode, fn) {
 
 /** Every row of t_has_many_c, ordered by tag then cid; stale true when it has never been filled. */
 /*export*/ function getHasMany() {
-	return withHasMany("readonly", (os, sync) => {
+	return withStores("readonly", [HAS_MANY, SYNC], (os, sync) => {
 		const out = { rows: [], stale: true };
 		os.getAll().onsuccess = (e) => {
 			out.rows = e.target.result;
@@ -239,37 +168,23 @@ async function withHasMany(mode, fn) {
 }
 
 /*non-worker-ignore-begin*/
-const OPS = {
-	sync_full: syncFull,
-	get,
-	put,
-	addMemory,
-	replace,
-	apply,
-	get_has_many: getHasMany,
-};
+const OPS = { get, replace, apply, get_has_many: getHasMany };
 
-var onmessage = async ({
-	data: { id, op, endpoint, payload },
-	target: port,
-}) => {
+var onmessage = async ({ data: { id, op, payload }, target: port }) => {
 	try {
-		const v1 = endpointOf(endpoint);
 		if (!Object.hasOwn(OPS, op)) {
 			port.postMessage({ id, errorType: "unknownOperation" });
 			return;
 		}
-		port.postMessage({ id, result: await OPS[op](v1, payload) });
+		port.postMessage({ id, result: await OPS[op](payload) });
 	} catch (error) {
-		const status = error?.status ?? null;
 		try {
-			port.postMessage({ id, errorType: "error", error, status });
+			port.postMessage({ id, errorType: "error", error });
 		} catch {
 			port.postMessage({
 				id,
 				errorType: "errorMessage",
 				errorMessage: error?.errorMessage ?? String(error),
-				status,
 			});
 		}
 	}

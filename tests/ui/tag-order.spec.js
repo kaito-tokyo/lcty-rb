@@ -94,7 +94,7 @@ test("The reorder page does not list an invalid tag and sends it back as it is",
 }) => {
 	const [a, b] = [uniqueWord("a"), uniqueWord("b")];
 	// A tag file without <lcty-t> cannot be put in the server's data directory from here (it may be another
-	// machine's), so the answers of GET /v1/tags list one more, and the PUT is answered by the test
+	// machine's), so the answers of t.list list one more, and t.replace is answered by the test
 	const invalid = {
 		file: "00015-broken.html",
 		name: "broken",
@@ -106,18 +106,38 @@ test("The reorder page does not list an invalid tag and sends it back as it is",
 	const puts = [];
 	await test.step("Given the tags A and B, in that order", () =>
 		putTags(request, [{ name: a }, { name: b }]));
-	await test.step('And GET /v1/tags also lists the invalid tag "00015-broken.html", and PUT /v1/tags is answered by the test', () =>
-		context.route("**/v1/tags", async (route) => {
-			if (route.request().method() === "PUT") {
-				puts.push(route.request().postDataJSON());
-				return route.fulfill({ json: {}, headers: { ETag: '"put"' } });
-			}
-			const res = await route.fetch();
-			const json = await res.json();
-			json.tags = [...json.tags, invalid].sort((x, y) =>
-				x.file < y.file ? -1 : 1,
-			);
-			return route.fulfill({ response: res, json });
+	await test.step('And t.list of the page\'s /v1/rpc also lists the invalid tag "00015-broken.html", and t.replace is answered by the test', () =>
+		context.routeWebSocket("**/v1/rpc", (ws) => {
+			const server = ws.connectToServer();
+			const lists = new Set(); // the ids of the page's t.list requests
+			ws.onMessage((text) => {
+				const m = JSON.parse(text);
+				if (m.method === "t.replace") {
+					puts.push(m.params);
+					const version = "0.0";
+					ws.send(
+						JSON.stringify({
+							jsonrpc: "2.0",
+							id: m.id,
+							result: { version, etag: '"put"' },
+						}),
+					);
+					return;
+				}
+				if (m.method === "t.list") lists.add(m.id);
+				server.send(text);
+			});
+			server.onMessage((text) => {
+				const m = JSON.parse(text);
+				if (lists.delete(m.id) && m.result) {
+					m.result.items = [...m.result.items, invalid].sort((x, y) =>
+						x.file < y.file ? -1 : 1,
+					);
+					ws.send(JSON.stringify(m));
+					return;
+				}
+				ws.send(text);
+			});
 		}));
 	await test.step("When the reorder page /t/ is opened", () =>
 		page.goto("/t/"));
@@ -131,7 +151,7 @@ test("The reorder page does not list an invalid tag and sends it back as it is",
 	await test.step('Then the toast says "タグを保存しました"', async () => {
 		await expect(page.locator("#toast")).toHaveText("タグを保存しました");
 	});
-	await test.step('And one PUT was sent, with the files "00010-B.html", "00020-A.html" and "00015-broken.html", in that order', () => {
+	await test.step('And one t.replace was sent, with the files "00010-B.html", "00020-A.html" and "00015-broken.html", in that order', () => {
 		expect(puts.map((p) => p.tags.map((t) => t.file))).toEqual([
 			[`00010-${b}.html`, `00020-${a}.html`, "00015-broken.html"],
 		]);

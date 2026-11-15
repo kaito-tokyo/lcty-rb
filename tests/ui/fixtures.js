@@ -282,27 +282,23 @@ export async function waitForSaved(request, id, n) {
 }
 
 /**
- * Replace every tag file (PUT /v1/tags with the current ETag, LCTYSP-0009). A tag without a file gets
+ * Replace every tag file (t.replace of /v1/rpc with the current ETag, LCTYSP-0009). A tag without a file gets
  * NNNNN-<name>.html in the order given (00010, 00020, …), so its name must already be a file-name part (lowercase).
  */
-export async function putTags(request, tags) {
-	const etag = (await request.get("/v1/tags")).headers().etag;
+export async function putTags(_request, tags) {
 	const files = tags.map((t, i) => ({
 		file: `${String((i + 1) * 10).padStart(5, "0")}-${t.name}.html`,
 		...t,
 	}));
-	const res = await request.put("/v1/tags", {
-		data: { tags: files },
-		headers: { "If-Match": etag },
+	await withRpc(async (call) => {
+		const { etag } = await call("t.list");
+		await call("t.replace", { tags: files, etag });
 	});
-	expect(res.ok(), await res.text()).toBeTruthy();
 }
 
-/** The tag files as GET /v1/tags returns them. */
-export async function getTags(request) {
-	const res = await request.get("/v1/tags");
-	expect(res.ok(), await res.text()).toBeTruthy();
-	return (await res.json()).tags;
+/** The tag files as t.list of /v1/rpc returns them. */
+export async function getTags(_request) {
+	return withRpc(async (call) => (await call("t.list")).items);
 }
 
 // ---- Pages ----

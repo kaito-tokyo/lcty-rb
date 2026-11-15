@@ -480,7 +480,7 @@ class LctyTest < Lcty::Scenarios
     ['/t/', '200', html],
     ['/', '200', html],
     ['/js/site.js', '200', js],
-    ['/v1/tags', '200', '"application/json; charset=utf-8"']
+    ['/v1/defaults.json', '200', '"application/json; charset=utf-8"']
   ].each do |path, status, type|
     scenario "Every path of the site is mounted (#{path})" do
       res = nil

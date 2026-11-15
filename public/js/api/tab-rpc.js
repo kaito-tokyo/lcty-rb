@@ -82,8 +82,8 @@ export function followCopies({ lists, run, onChange }) {
 			};
 			try {
 				for (const [method, store] of lists) {
-					const { version, items } = await rpc.call(method);
-					write(run("replace", { store, version, rows: items }));
+					const { version, items, ...rest } = await rpc.call(method);
+					write(run("replace", { ...rest, store, version, rows: items }));
 				}
 			} finally {
 				reading -= 1;

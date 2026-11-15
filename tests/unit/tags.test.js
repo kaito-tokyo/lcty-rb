@@ -9,11 +9,12 @@
 // composeDraft and proposeMemory of js/tags.js need no DOM: they run in Node.js (node-unit.js). The editor and the
 // dialogs (renderTagsEditor, initTagsDialog, openMemoryDialog) stay in the browser, in tests/unit/tags.spec.js. The
 // names, file names and references of js/tag-names.js are LCTYSP-1020 (tests/unit/tag-names.test.js).
-// Importing js/tags.js needs nothing absent in Node.js (its imports api/storage.js, api/meta-db.js and convert/reply.js
-// only touch Worker, IndexedDB and localStorage when called). tr() needs the global LctyT and
-// document.documentElement.lang, made by useLctyT() (the stand-in of node-unit.js). GET and PUT /v1/tags,
-// POST /v1/tags/:file/memory and the fake llama-server at http://llm.test are answered by routeFetch(), which also
-// records what was sent.
+// Importing js/tags.js needs nothing absent in Node.js (its import api/lcty-t.js only starts its Worker and the tab's
+// WebSocket to /v1/rpc, api/tab-rpc.js, when called). tr() needs the global LctyT and document.documentElement.lang,
+// made by useLctyT() (the stand-in of node-unit.js). composeDraft and proposeMemory are given the definitions, so no
+// Scenario here reaches /v1/rpc and no WebSocket is opened (its fake is in tests/unit/tags.spec.js); the fake
+// llama-server at http://llm.test is answered by routeFetch(), which also records what was sent, and any other request
+// with 404.
 
 import {
 	expect,
@@ -53,18 +54,11 @@ function replyWith(text, timings = { prompt_n: 3, predicted_n: 9 }) {
 
 async function background(step, t) {
 	const server = {
-		tags: { tags: [] },
-		puts: [],
-		memory: [],
 		llm: [],
-		get: () => Response.json(server.tags),
-		put: () => Response.json({ ok: true }),
-		addMemory: () =>
-			Response.json({ id: "m", text: "t", at: "now" }, { status: 201 }),
 		answerLlm: replyWith('{"proposals":[]}'),
 	};
 	await step(
-		"Given /v1/tags, /v1/tags/:file/memory and the llama-server at http://llm.test are answered by the test",
+		"Given /v1/rpc and the llama-server at http://llm.test are answered by the test",
 		() => {
 			routeFetch(t, async (req) => {
 				const url = new URL(req.url);
@@ -75,18 +69,6 @@ async function background(step, t) {
 						body: await req.json(),
 					});
 					return server.answerLlm(req);
-				}
-				if (url.pathname === "/v1/tags") {
-					if (req.method === "PUT") {
-						server.puts.push(await req.json());
-						return server.put(req);
-					}
-					return server.get(req);
-				}
-				const m = url.pathname.match(/^\/v1\/tags\/([^/]+)\/memory$/);
-				if (m) {
-					server.memory.push([decodeURIComponent(m[1]), await req.json()]);
-					return server.addMemory(req);
 				}
 				return new Response("not found", { status: 404 });
 			});

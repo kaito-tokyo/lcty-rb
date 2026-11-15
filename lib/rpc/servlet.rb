@@ -382,8 +382,54 @@ module Lcty
         Chatty::Embedding.messages_removed(gone) if gone
         version = HUB.commit(peer, Chatty::TagStore::BATCH) { Rpc.tags&.replace_conversation_tags(cid, []) || [] }
         { 'version' => version }
+      end,
+
+      # Every tag definition, the rows of t_full, with the ETag of the set and the version they belong to (LCTYSP-0014):
+      # read whenever a page is shown and after reconnecting. Read under the lock, as c.list, since a change of them is
+      # written under it.
+      't.list' => lambda do |_p, _peer|
+        (body, etag), version = HUB.read { Rpc.tag_files.all }
+        { 'version' => version, 'etag' => etag, 'items' => body['tags'] }
+      end,
+
+      # Replace every tag definition: {tags, etag}, etag the one of the set the page edited (CHANGED when the set is no
+      # longer that one). Announced as t.batch.updated with the t_full rows that went and came and the new t_set.
+      't.replace' => lambda do |p, peer|
+        raise Error.new(INVALID, 'etag must be a string') unless p['etag'].is_a?(String) && !p['etag'].empty?
+        etag = nil
+        version = HUB.commit(peer, Chatty::TagStore::BATCH) do
+          Rpc.tag_change { etag = Rpc.tag_files.replace_all({ 'tags' => p['tags'] }, p['etag']) }
+        end
+        { 'version' => version, 'etag' => etag }
+      end,
+
+      # Add a memory item to the tag in file: {file, text, source}. Announced as t.batch.updated with the tag's t_full
+      # row and the new t_set. The result has the item as written, {id, text, at, source?}.
+      't.memory.add' => lambda do |p, peer|
+        item = nil
+        version = HUB.commit(peer, Chatty::TagStore::BATCH) do
+          Rpc.tag_change { item = Rpc.tag_files.add_memory(p['file'], p['text'], p['source']) }
+        end
+        { 'version' => version, 'item' => item }
       end
     }.freeze
+
+    # Run a change of the tag definitions and return its records: a t_full delete ({file}) for each file that went, a
+    # put (the tag) for each that came or changed, then the t_set put ({etag}). The errors of TagFiles become RPC
+    # errors: a stale or missing etag CHANGED, no such file NO_TAG, the others INVALID.
+    def self.tag_change
+      before, = tag_files.all
+      yield
+      after, etag = tag_files.all
+      old = before['tags'].to_h { |t| [t['file'], t] }
+      new = after['tags'].to_h { |t| [t['file'], t] }
+      (old.keys - new.keys).map { |f| { 'store' => 't_full', 'op' => 'delete', 'row' => { 'file' => f } } } +
+        new.reject { |f, t| old[f] == t }.values.map { |t| { 'store' => 't_full', 'op' => 'put', 'row' => t } } +
+        [{ 'store' => 't_set', 'op' => 'put', 'row' => { 'etag' => etag } }]
+    rescue Chatty::HttpError => e
+      code = { 412 => CHANGED, 428 => CHANGED, 404 => NO_TAG }.fetch(e.status, INVALID)
+      raise Error.new(code, e.message)
+    end
 
     UNAVAILABLE = 7 # semantic search cannot be used now: no embedding server, or it is not ready
 

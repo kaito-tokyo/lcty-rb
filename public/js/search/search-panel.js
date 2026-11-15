@@ -5,8 +5,8 @@
 // Search box and conversation list of the sidebar, on every page (LCTYSP-0007, LCTYSP-0014, LCTYSP-0019).
 
 import {
-	getTags,
-	onTagsOfConversationsChange,
+	onTagsChange,
+	readTagDefs,
 	readTagsOfConversations,
 } from "../api/lcty-t.js";
 import { onMetaDbChange, readMetaDb } from "../api/meta-db.js";
@@ -23,10 +23,10 @@ import { createVectorStore, embedQuery, PAIR } from "./vectors.js";
 
 const RRF_K = 60;
 
-// The references of the defined tags in the order of their files (t_full), or [] when they cannot be read
+// The references of the defined tags in the order of their files, from the copy as it is (t_full), or [] without one
 async function tagOrder() {
 	try {
-		return (await getTags()).tags.map(tagRef);
+		return (await readTagDefs()).tags.map(tagRef);
 	} catch {
 		return [];
 	}
@@ -254,7 +254,7 @@ export function createSearchPanel({
 
 	// This tab stored a change of the copies
 	onMetaDbChange(load);
-	onTagsOfConversationsChange(load);
+	onTagsChange(load);
 
 	/** Reload the list from the copies (on opening a page, after saving or renaming). */
 	async function refresh() {
