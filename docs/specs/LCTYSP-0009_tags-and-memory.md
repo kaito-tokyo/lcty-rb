@@ -387,12 +387,12 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   `lcty.v1.c.worker.cjs` also carry the `endpoint` of the site's `v1/`; those of `lcty.v1.t.worker.cjs` no longer do,
   since it sends no request.
 
-  | `op`           | `payload`                              | What the worker does                                                       | `result`                |
-  | -------------- | -------------------------------------- | -------------------------------------------------------------------------- | ----------------------- |
-  | `get`          | none                                   | reads the rows of `t_full` (in file-name order) and the ETag               | `{tags, etag, stale}`   |
-  | `replace`      | `{store, version, rows, etag?}`        | replaces the copy `t_full` (with the ETag) or `t_has_many_c`, unless newer | `{applied}`             |
-  | `apply`        | `{version, records}`                   | writes the records of one `t.batch.updated` into each copy that is older   | `{applied: [copies]}`   |
-  | `get_has_many` | none                                   | reads the rows of `t_has_many_c`                                           | `{rows, stale}`         |
+  | `op`           | `payload`                       | What the worker does                                                       | `result`              |
+  | -------------- | ------------------------------- | -------------------------------------------------------------------------- | --------------------- |
+  | `get`          | none                            | reads the rows of `t_full` (in file-name order) and the ETag               | `{tags, etag, stale}` |
+  | `replace`      | `{store, version, rows, etag?}` | replaces the copy `t_full` (with the ETag) or `t_has_many_c`, unless newer | `{applied}`           |
+  | `apply`        | `{version, records}`            | writes the records of one `t.batch.updated` into each copy that is older   | `{applied: [copies]}` |
+  | `get_has_many` | none                            | reads the rows of `t_has_many_c`                                           | `{rows, stale}`       |
 - **The changes go over the tab's connection,** not through the worker: `js/api/lcty-t.js` sends `t.replace` with the
   ETag the caller read the tags with (the one `getTags` returned with the tags the user edited, not the copy's: the
   copy may have been brought to a newer set meanwhile, and sending its ETag would let the save overwrite a change the
