@@ -8,9 +8,8 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Draft, in part implemented. Step 1 is `lib/request_guard.rb`
   ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)) and step 2 `lib/secure_server.rb`
-  ([LCTYSP-3030](LCTYSP-3030_secure-server.feature)); step 3 is done for every write of the pages (the tags of a
-  conversation, deleting one, the tag definitions and memory), and of step 4 the UI tests fail on any report of the
-  policy. Not done: the rest of step 3 and of step 4.
+  ([LCTYSP-3030](LCTYSP-3030_secure-server.feature)); step 3 is done (every write goes through `/v1/rpc`, and the HTTP
+  API serves reads only), and of step 4 the UI tests fail on any report of the policy. Not done: the rest of step 4.
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md#security) (security), [LCTYSP-0006](LCTYSP-0006_http-api.md)
   (the HTTP API), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#authentication) (Basic authentication and the
   allowed origins), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (`/v1/rpc`)
@@ -102,8 +101,8 @@ In order. Each step is one pull request with its tests, and each leaves the serv
   tests), as `/v1/rpc` serves one without `Origin`. The Cheat Sheet would refuse it for a sensitive endpoint
   ("fail-safe"), but every browser sends `Origin` with these methods, so such a request is not one a page sent on the
   user's behalf; and step 3 leaves no write in the HTTP API.
-- **The type of a body:** a request with a JSON body (every `POST` and `PUT` of the HTTP API but `PUT /v1/vectors`,
-  whose body is binary) is refused with `415` unless its `Content-Type` is `application/json`. A page of another site
+- **The type of a body:** a request of the HTTP API with a body (a `POST`, which only the searches take, or a `PUT` or
+  `PATCH`, which the API answers `405`) is refused with `415` unless its `Content-Type` is `application/json`. A page of another site
   cannot send that type without a preflight, which is never granted.
 - **No CORS:** no response has an `Access-Control-*` header, and the `Origin` of a request is never copied into one.
   A preflight (`OPTIONS`) is answered `403` without any CORS header, as the OWASP Secure Headers Project advises for
@@ -234,10 +233,14 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
 
 1. The tags of a conversation and deleting a conversation (done: `c.update.tags` and `c.delete`).
 2. The tag definitions and adding a memory item (done: `t.replace` and `t.memory.add`; the HTTP endpoints are gone).
-3. The vectors of semantic search, which are binary.
-4. The writes of the HTTP API are removed: it serves reads only. Writing the conversations of LCTYSP-0003 (`POST
-   /v1/conversations`, its lines and `pop`), which no page uses any more, goes with them; the tests that create such
-   files need another way, since in CI the server runs in a container of its own.
+3. The vectors of semantic search, which are binary (done without a write: the server embeds every message itself,
+   and nothing outside it registers vectors, [LCTYSP-0019](LCTYSP-0019_server-embedding.md)).
+4. The writes of the HTTP API are removed: it serves reads only (done: `GET`, and `POST` for the searches; any other
+   method is 405). Writing the conversations of LCTYSP-0003 (`POST /v1/conversations`, its lines and `pop`), which no
+   page used any more, went with them, and with them the code of `Chatty::Store` that wrote that format and the
+   functions of `js/api/storage.js` that called it. The UI tests that need such a file find one in the data directory
+   they start with (`tests/ui/seed`, copied in by `playwright.config.js` and, in CI, by the container of
+   `.devcontainer/ruby-2.6.10/compose.yml`).
 
 ### 4. Keep it checked
 

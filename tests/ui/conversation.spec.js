@@ -11,9 +11,9 @@
 import {
 	composerInput,
 	createConversation,
-	createFormerConversation,
 	draft,
 	expect,
+	FORMER_CONVERSATION,
 	lock,
 	messageAction,
 	messages,
@@ -857,20 +857,10 @@ test("A change by another tab that does not follow the page makes it ask for a r
 
 test("A conversation of the format before lcty-msg is shown read-only", async ({
 	page,
-	request,
 }) => {
-	let conv;
-	await test.step("Given a conversation of two finished turns created through the HTTP API, in the format of LCTYSP-0003", async () => {
-		conv = await createFormerConversation(request, {
-			messages: [
-				["user", "古い質問"],
-				["assistant", "古い答え"],
-				["user", "古い質問2"],
-				["assistant", "古い答え2"],
-			],
-		});
-	});
-	await test.step("When it is opened", () => openConversation(page, conv.id));
+	await test.step("Given the conversation of two finished turns in the format of LCTYSP-0003 that the data directory starts with", () => {});
+	await test.step("When it is opened", () =>
+		openConversation(page, FORMER_CONVERSATION));
 	await test.step("Then the page shows its four messages", async () => {
 		await expect(page.locator("lcty-c > lcty-message")).toHaveCount(4);
 	});

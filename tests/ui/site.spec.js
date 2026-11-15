@@ -71,7 +71,7 @@ for (const [path, target] of [
 test("A conversation file is served as it is", async ({ request }) => {
 	let conv;
 	let got;
-	await test.step('Given a conversation titled "経路のテスト" made through the HTTP API', async () => {
+	await test.step('Given a conversation titled "経路のテスト" made through /v1/rpc', async () => {
 		conv = await createConversation(request, { title: "経路のテスト" });
 	});
 	await test.step("When /c/<id>.html is requested", async () => {

@@ -17,6 +17,7 @@ import {
 	putTags,
 	test,
 	uniqueWord,
+	withRpc,
 } from "./fixtures.js";
 
 // Tag definitions are global: leave none behind for the other tests
@@ -80,19 +81,13 @@ test("A change made elsewhere shows up in the list without a reload", async ({
 		await expect(link()).toContainText(title);
 		expect(loads).toEqual([]);
 	});
-	await test.step("When its tags are changed to a unique tag through the HTTP API", async () => {
-		const res = await request.post(`/v1/conversations/${conv.id}/lines`, {
-			data: [{ type: "tags", tags: [tag] }],
-		});
-		expect(res.ok()).toBe(true);
-	});
+	await test.step("When its tags are changed to a unique tag through /v1/rpc", () =>
+		withRpc((call) => call("c.update.tags", { cid: conv.id, tags: [tag] })));
 	await test.step("Then its item shows the tag", async () => {
 		await expect(link().locator(".tag-name")).toHaveText([tag]);
 	});
-	await test.step("When it is deleted through the HTTP API", async () => {
-		const res = await request.delete(`/v1/conversations/${conv.id}`);
-		expect(res.ok()).toBe(true);
-	});
+	await test.step("When it is deleted through /v1/rpc", () =>
+		withRpc((call) => call("c.delete", { cid: conv.id })));
 	await test.step("Then it is no longer listed", async () => {
 		await expect(link()).toHaveCount(0);
 		expect(loads).toEqual([]);

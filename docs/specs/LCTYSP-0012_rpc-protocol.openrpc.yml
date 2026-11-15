@@ -755,7 +755,7 @@ methods:
           $ref: "#/components/schemas/Version"
       - name: actorId
         required: true
-        description: The actor that made the change (its connection's actorId), or null for a change through the HTTP API
+        description: The actor that made the change (its connection's actorId), or null for a change the server makes itself
         schema:
           oneOf:
             - $ref: "#/components/schemas/ActorId"
@@ -773,8 +773,8 @@ methods:
     summary: A change of t/, as the records of t_has_many_c or of t_full and t_set
     description: >-
       The notification of every change of t/ (LCTYSP-0014): of the tags of conversations (t_has_many_c), made through
-      c.update.tags and c.delete, or through the HTTP API (POST /v1/conversations/:id/lines with a tags line, and
-      deleting a conversation); and of the tag definitions (t_full and t_set), made through t.replace and t.memory.add.
+      c.update.tags and c.delete; and of the tag definitions (t_full and t_set), made through t.replace and
+      t.memory.add.
       One change, one version, one t.batch.updated, sent to every connection that receives it. The records of
       t_has_many_c delete the rows that went and put the rows that came, in that order; those of t_full delete the files
       that went and put the tags that came or changed, then t_set puts the new etag. A change that changes no row of
@@ -788,7 +788,7 @@ methods:
           $ref: "#/components/schemas/Version"
       - name: actorId
         required: true
-        description: The actor that made the change (its connection's actorId), or null for a change through the HTTP API
+        description: The actor that made the change (its connection's actorId), or null for a change the server makes itself
         schema:
           oneOf:
             - $ref: "#/components/schemas/ActorId"
@@ -856,7 +856,7 @@ components:
             row:
               $ref: "#/components/schemas/RecordCount"
         - type: object
-          description: A conversation deleted (through the HTTP API) leaves c_meta and c_recordcount
+          description: A conversation deleted (c.delete) leaves c_meta and c_recordcount
           required: [store, op, row]
           properties:
             store:

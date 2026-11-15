@@ -71,8 +71,8 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
   - Every change of the rows is announced to the pages as one `t.batch.updated`, and `t.c.list` of `/v1/rpc` reads
     them all ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
 - The page sends a change with `c.update.tags` of `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), which the
-  server stores in `lcty_t.sqlite`; the search index (`conv_tags`) follows it. A `tags` line of the HTTP API (`POST
-  /v1/conversations/:id/lines`) still does the same.
+  server stores in `lcty_t.sqlite`; the search index (`conv_tags`) follows it. It is the only way to change them: the
+  `tags` line of the HTTP API (`POST /v1/conversations/:id/lines`) is gone ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
 - **For now the header shows the tags at creation** (`data-setup-tags`), also after a change; the current tags live in
   `lcty_t.sqlite`, and the sidebar and search use them ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 - Not adopted: appending an `lcty-tags` line to the file on each change. Tags are a hint for search and memory, not

@@ -23,10 +23,6 @@ module Chatty
   module Store
     module_function
 
-    APPENDABLE = %w[message title tags].freeze # tags lines go to lcty_t.sqlite, not to the file (LCTYSP-0009)
-    # A new conversation may also end with a command tag (send: generate a reply at once. LCTYSP-0004)
-    CREATABLE = %w[message title cmd].freeze # the tags at creation are meta.tags
-
     # Write to a temporary file, then rename (atomic replace). Used whenever a conversation file is written whole.
     # Files whose head is not the current one (the format before 2026-11-07, a head edited by hand, or a header, lines 1
     # and 2, that has changed since) are rewritten with the current one at startup (LCTYSP-0003). What they hold is kept as read; so is their modification time, which
@@ -83,15 +79,6 @@ module Chatty
       raise HttpError.new(500, e.message)
     end
 
-    # Conversations are HTML fragments of Custom Elements (LCTYSP-0003). Line objects are written as elements.
-    def encode_lines(lines)
-      ConvHtml.encode(lines)
-    rescue ConvHtml::InvalidCharError => e
-      raise HttpError.new(400, e.message)
-    rescue ConvHtml::FormatError => e
-      raise HttpError.new(500, e.message)
-    end
-
     # [[line object, element], …]. A broken last element is dropped.
     def parse_lines(data, label = '')
       ConvHtml.decode(data, label)
@@ -102,51 +89,6 @@ module Chatty
         f.flock(File::LOCK_EX)
         yield f
       end
-    end
-
-    # A file in the format of LCTYSP-0013 (converted by tools/convert.rb) is written only through /v1/rpc: the
-    # messages of this API would add elements of LCTYSP-0003 to it, and a rewrite would lose the elements it cannot
-    # write. 409, the file left as it is; the title slot is still overwritten in place.
-    def lcty_msg_error
-      HttpError.new(409, 'the conversation is in the lcty-msg format (LCTYSP-0013); it is written only through /v1/rpc')
-    end
-
-    def refuse_lcty_msg!(f)
-      f.rewind
-      text = f.read
-      f.rewind
-      raise lcty_msg_error if ConvHtml.lcty_msg?(text)
-    end
-
-    # Give message lines without an id a UUIDv7 id (so the index stays sane even if a client forgets. LCTYSP-0003).
-    def ensure_ids!(lines)
-      lines.each { |l| l['id'] ||= Uuid.v7 if l['type'] == 'message' }
-    end
-
-    def messages_of(path)
-      parse_lines(File.read(path, mode: 'r:UTF-8')).map(&:first).select { |o| o['type'] == 'message' }
-    end
-
-    def validate_lines!(lines, allowed)
-      raise HttpError.new(400, 'lines must be an array of objects') unless lines.is_a?(Array) && lines.all? { |l| l.is_a?(Hash) }
-      bad = lines.find { |l| !allowed.include?(l['type']) }
-      raise HttpError.new(400, "line type not allowed: #{bad['type'].inspect}") if bad
-      lines.each { |l| validate_tag_list!(l['tags']) if l['type'] == 'tags' }
-      bad = lines.find { |l| l.key?('content_html') && !l['content_html'].is_a?(String) }
-      raise HttpError.new(400, 'content_html must be a string') if bad
-      # Reject characters that cannot be written before writing any line (so nothing fails halfway)
-      lines.each_with_index { |l, i| ConvHtml.check_chars!(l, "lines[#{i}]") }
-      bad = lines.find { |l| l['type'] == 'message' && l.key?('id') && !Uuid.valid?(l['id']) }
-      raise HttpError.new(400, "message id must be a UUIDv7: #{bad['id'].inspect}") if bad
-      bad = lines.find { |l| l['type'] == 'cmd' && !ConvHtml::CMD_OP_RE.match?(l['op'].to_s) }
-      raise HttpError.new(400, "invalid command: #{bad['op'].inspect}") if bad
-    rescue ConvHtml::InvalidCharError => e
-      raise HttpError.new(400, e.message)
-    end
-
-    def validate_tag_list!(tags)
-      ok = tags.is_a?(Array) && tags.all? { |t| Chatty.tag_ref?(t) } && tags.uniq.size == tags.size
-      raise HttpError.new(400, 'tags must be an array of unique tag references') unless ok
     end
 
     # Current tags: lcty_t.sqlite when they were changed after creation, else the tags at creation (data-setup-tags.
@@ -160,95 +102,6 @@ module Chatty
     def index_state(path)
       entries = parse_lines(File.read(path, mode: 'r:UTF-8')).map(&:first)
       [entries.select { |o| o['type'] == 'message' }, current_tags(entries)]
-    end
-
-    def create(body)
-      raise HttpError.new(400, 'body must be an object') unless body.is_a?(Hash)
-      meta = body['meta']
-      raise HttpError.new(400, 'meta must be an object') unless meta.is_a?(Hash)
-      meta = meta.merge('tags' => meta['tags'] || []) # Copies, so the caller's objects are left as they were
-      validate_tag_list!(meta['tags'])
-      lines = body['lines'] || []
-      validate_lines!(lines, CREATABLE)
-      lines = lines.map(&:dup)
-      path = conv_path(meta['id'])
-      raise HttpError.new(409, 'already exists') if File.exist?(path)
-      ensure_ids!(lines)
-      meta = meta.slice('id', 'created_at', 'tags', 'instructions') # the tags at creation are data-setup-tags
-      write_atomic(path, document([meta.merge('type' => 'meta')] + lines))
-      meta['id']
-    end
-
-    def append(id, lines)
-      validate_lines!(lines, APPENDABLE)
-      existing_conv_path(id) # 400 / 404 for a bad or unknown id, also when there is nothing to append
-      return if lines.empty?
-      ensure_ids!(lines)
-      titles, lines = lines.partition { |l| l['type'] == 'title' }
-      tags, lines = lines.partition { |l| l['type'] == 'tags' }
-      set_title(id, titles.last) unless titles.empty?
-      unless tags.empty?
-        existing_conv_path(id) # 404 for an unknown conversation
-        TAGS.set_conversation_tags(id, tags.last['tags'], tags.last['at'])
-      end
-      return if lines.empty?
-      with_lock(existing_conv_path(id)) do |f|
-        refuse_lcty_msg!(f)
-        size = f.size
-        if size > 0
-          f.seek(size - 1)
-          last = f.read(1)
-        end
-        f.seek(0, IO::SEEK_END)
-        f.write((last && last != "\n" ? "\n" : '') + encode_lines(lines))
-        f.flush
-        f.fsync
-      end
-    end
-
-    # The title is the <title> on line 3, in the slot whose length its id carries (LCTYSP-0003). The slot is overwritten
-    # in place; when the file has no valid slot (an older head, or a broken one) the whole file is rewritten instead.
-    def set_title(id, title_line)
-      path = existing_conv_path(id)
-      with_lock(path) do |f|
-        f.binmode
-        head = Array.new(ConvHtml::HEAD_LINES - 1) { f.gets }
-        range = head.all? && ConvHtml.slot_range(head[2])
-        slot = range && ConvHtml.title_slot(title_line['title'], range[1])
-        if slot && !ConvHtml.legacy?(head[0])
-          f.seek(head[0].bytesize + head[1].bytesize + range[0])
-          f.write(slot.b)
-          f.flush
-          f.fsync
-          next
-        end
-        f.rewind
-        text = f.read.force_encoding(Encoding::UTF_8)
-        raise lcty_msg_error if ConvHtml.lcty_msg?(text)
-        entries = parse_lines(text, id).map(&:first)
-        write_atomic(path, document(entries.reject { |o| o['type'] == 'title' } + [title_line]))
-      end
-    end
-
-    # Delete from the n-th message (0-based, counting message lines only).
-    # One call may go back at most one turn: reject n before the last user message (LCTYSP-0004).
-    def pop(id, from)
-      raise HttpError.new(400, 'from must be an integer') unless from.is_a?(Integer) && from >= 0
-      path = existing_conv_path(id)
-      with_lock(path) do |f|
-        refuse_lcty_msg!(f)
-        entries = parse_lines(f.read, id).map(&:first)
-        messages = entries.each_index.select { |i| entries[i]['type'] == 'message' }
-        return if from >= messages.size
-        last_user = messages.rindex { |i| entries[i]['role'] == 'user' }
-        if last_user.nil? || from < last_user
-          raise HttpError.new(409, 'can only pop the last turn (from must be >= index of the last user message)')
-        end
-        cut = messages[from]
-        # Keep the title after the cut
-        keep = entries[0...cut] + entries[cut..-1].select { |o| o['type'] == 'title' }
-        write_atomic(path, document(keep))
-      end
     end
 
     def summarize(path)

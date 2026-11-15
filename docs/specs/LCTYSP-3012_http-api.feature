@@ -8,11 +8,15 @@
 
 Feature: LCTYSP-3012 HTTP API
 
-  Chatty::V1::Servlet, mounted at /v1, answers the JSON API on the same origin as the pages: the defaults of the
-  browser settings, conversations (create, read, append, pop, delete and the lists), keyword search and snippets, and
-  the vector pair of semantic search (its JSON, and its files by Range: LCTYSP-3028). The tag files are read and
-  written over /v1/rpc only (LCTYSP-3020). Bodies are JSON unless stated otherwise, and every error is {"error": "…"}
-  with an HTTP status. Paths and query values are read as UTF-8, and request bodies are limited to 64 MiB.
+  Chatty::V1::Servlet, mounted at /v1, answers the JSON API on the same origin as the pages, which serves reads only:
+  the defaults of the browser settings, conversations (one and the list), keyword search and snippets, and the vector
+  pair of semantic search (its JSON, and its files by Range: LCTYSP-3028). Every write goes through /v1/rpc
+  (LCTYSP-0012), the tag files included (LCTYSP-3020); the API answers GET and POST only, and POST only for the
+  searches. Bodies are JSON unless stated otherwise, and every error is {"error": "…"} with an HTTP status. Paths and
+  query values are read as UTF-8, and request bodies are limited to 64 MiB.
+
+  In the steps a conversation is a file of LCTYSP-0003 that the test writes to c/ and adds to the search index, as the
+  server does at startup.
 
   Scenario: The defaults of the browser settings
     When GET /v1/defaults.json is requested
@@ -20,10 +24,10 @@ Feature: LCTYSP-3012 HTTP API
     And it has the base_url "http://127.0.0.1:9931" and the model "gemma-4-26b-a4b-it", and no embedding_model
     And its api_key is the host name and the user joined by "-"
 
-  Scenario: A new conversation is created and listed
-    When POST /v1/conversations creates a conversation with the title "Hello", the tag "t", an inherited user message, a user message and an assistant message
-    Then the status is 201 and the body is {"ok": true}
-    And GET /v1/conversations lists it with the title "Hello", 3 messages and the tags ["t"]
+  Scenario: A conversation is listed with its title, messages and tags
+    Given a conversation with the title "Hello", the tag "t", an inherited user message, a user message and an assistant message
+    When GET /v1/conversations is requested
+    Then it lists the conversation with the title "Hello", 3 messages and the tags ["t"]
     And its message_ids are only the id of its own user message
 
   Scenario: A conversation is read as its meta, title, tags and messages
@@ -32,38 +36,16 @@ Feature: LCTYSP-3012 HTTP API
     Then the body has its meta, the title "Greeting", its tags and its 2 messages
     And the messages have neither type nor content_html
 
-  Scenario Outline: A conversation that cannot be created is rejected with 400
-    When POST /v1/conversations sends <body>
-    Then the status is 400 with the error <error>
-
-    Examples:
-      | body                                  | error                                        |
-      | an array                              | "body must be an object"                     |
-      | no meta                               | "meta must be an object"                     |
-      | a meta without an id                  | "invalid id"                                 |
-      | an id with a space                    | "invalid id"                                 |
-      | tags that are not unique              | "tags must be an array of unique tag references" |
-      | a tag reference with a slash          | "tags must be an array of unique tag references" |
-      | a tags line                           | "line type not allowed: \"tags\""            |
-      | a message id that is not a UUIDv7     | "message id must be a UUIDv7: \"abc\""       |
-      | a command that is not a command name  | "invalid command: \"Send!\""                 |
-
-  Scenario: Creating a conversation whose id exists is a conflict
-    Given a conversation
-    When POST /v1/conversations creates another one with the same id
-    Then the status is 409 with the error "already exists"
-    And the conversation file is unchanged
-
   Scenario: A body that is not JSON is rejected
-    When POST /v1/conversations sends "{not json"
+    When POST /v1/search sends "{not json"
     Then the status is 400 with an error that starts with "invalid JSON: "
 
   Scenario: A body that is not UTF-8 is rejected
-    When POST /v1/conversations sends the bytes of a JSON string with the byte 0xff in it
+    When POST /v1/search sends the bytes of a JSON string with the byte 0xff in it
     Then the status is 400 with the error "invalid UTF-8"
 
   Scenario: A body over 64 MiB is rejected before it is read
-    When a POST to /v1/conversations says its Content-Length is 64 MiB and one byte, and sends no body
+    When a POST to /v1/search says its Content-Length is 64 MiB and one byte, and sends no body
     Then the status is 413 with the error "too large"
 
   Scenario Outline: An unknown or invalid conversation id
@@ -71,82 +53,22 @@ Feature: LCTYSP-3012 HTTP API
     Then the status is <status> with the error <error>
 
     Examples:
-      | request                                          | status | error       |
-      | GET /v1/conversations/<unknown id>               | 404    | "not found" |
+      | request                                          | status | error        |
+      | GET /v1/conversations/<unknown id>               | 404    | "not found"  |
       | GET /v1/conversations/a.b                        | 400    | "invalid id" |
-      | POST /v1/conversations/<unknown id>/lines        | 404    | "not found" |
-      | POST /v1/conversations/<unknown id>/pop          | 404    | "not found" |
-      | DELETE /v1/conversations/a.b                     | 400    | "invalid id" |
 
-  Scenario: Appending lines adds messages and sets the title and the tags
-    Given a conversation with a user and an assistant message and the tag "a"
-    When POST /v1/conversations/<id>/lines appends a user message, a title line "Renamed" and a tags line ["b"]
-    Then the status is 200 and the body is {"ok": true}
-    And the conversation has 3 messages, the title "Renamed" and the tags ["b"]
-    And the conversation file has the title "Renamed" but not the tag "b"
-
-  Scenario Outline: Lines that cannot be appended are rejected with 400
-    Given a conversation with a user and an assistant message and the tag "a"
-    When POST /v1/conversations/<id>/lines sends <lines>
-    Then the status is 400 with the error <error>
+  Scenario Outline: The writes of conversations are gone
+    Given a conversation with a user and an assistant message
+    When <request> is requested
+    Then the status is <status>
     And the conversation file is unchanged
 
     Examples:
-      | lines                                                        | error                                         |
-      | an object                                                    | "lines must be an array of objects"           |
-      | a meta line                                                  | "line type not allowed: \"meta\""             |
-      | a valid message and a message whose id is not a UUIDv7       | "message id must be a UUIDv7: \"nope\""       |
-      | an assistant message whose content_html is a number          | "content_html must be a string"               |
-      | a tags line with a tag reference with a space                | "tags must be an array of unique tag references" |
-
-  Scenario: Popping the last turn deletes the messages from there
-    Given a conversation with the messages user, assistant, user, assistant
-    When POST /v1/conversations/<id>/pop sends {"from": 2}
-    Then the status is 200 and the body is {"ok": true}
-    And the conversation has its first 2 messages left
-
-  Scenario: Popping before the last user message is a conflict
-    Given a conversation with the messages user, assistant, user, assistant
-    When POST /v1/conversations/<id>/pop sends {"from": 1}
-    Then the status is 409 with the error "can only pop the last turn (from must be >= index of the last user message)"
-    And the conversation still has 4 messages
-
-  Scenario: Popping from past the last message changes nothing
-    Given a conversation with the messages user, assistant, user, assistant
-    When POST /v1/conversations/<id>/pop sends {"from": 10}
-    Then the status is 200 and the body is {"ok": true}
-    And the conversation still has 4 messages
-
-  Scenario Outline: A pop that is not understood is rejected with 400
-    Given a conversation with the messages user, assistant, user, assistant
-    When POST /v1/conversations/<id>/pop sends <body>
-    Then the status is 400 with the error <error>
-
-    Examples:
-      | body           | error                     |
-      | an array       | "body must be an object"  |
-      | {"from": "2"}  | "from must be an integer" |
-      | {"from": -1}   | "from must be an integer" |
-
-  Scenario: Deleting a conversation removes it with its tags and its index entries
-    Given a conversation with a round with a unique word whose tags were changed to ["gone"]
-    And what was measured of a reply of it is recorded in lcty_c.sqlite
-    When DELETE /v1/conversations/<id> is requested
-    Then the status is 200 and the body is {"ok": true}
-    And GET /v1/conversations/<id> answers 404
-    And it is not in /v1/conversations
-    And a search for its word no longer finds its round
-    And its current tags are forgotten
-    And the search index keeps no tag for it
-    And lcty_c.sqlite keeps nothing measured of its replies
-    And deleting it again still answers 200
-
-  Scenario: Deleting a conversation is announced to the pages
-    Given a conversation whose tags were changed to ["gone"], and the changes announced through Chatty.commit recorded
-    When DELETE /v1/conversations/<id> is requested
-    Then a c.batch.updated deletes it from c_meta and c_recordcount
-    And a t.batch.updated deletes its row of t_has_many_c
-    And deleting it again announces no record
+      | request                              | status |
+      | POST /v1/conversations               | 404    |
+      | POST /v1/conversations/<id>/lines    | 404    |
+      | POST /v1/conversations/<id>/pop      | 404    |
+      | DELETE /v1/conversations/<id>        | 405    |
 
   Scenario: GET /v1/meta-all.json is no longer served
     Given a conversation
@@ -198,16 +120,23 @@ Feature: LCTYSP-3012 HTTP API
       | request                         |
       | GET /v1/nope                    |
       | GET /v1/vectors/pending         |
+      | GET /v1/tags                    |
+      | POST /v1/tags/00010-a.html/memory |
+      | GET /v1/tags/a/memory           |
+      | GET /v1/conversations/a/lines   |
+
+  Scenario Outline: A method other than GET and POST is not allowed
+    When <request> is requested
+    Then the status is 405
+
+    Examples:
+      | request                         |
       | PUT /v1/vectors                 |
       | DELETE /v1/defaults.json        |
       | PATCH /v1/conversations         |
-      | GET /v1/tags                    |
       | PUT /v1/tags                    |
-      | POST /v1/tags/00010-a.html/memory |
-      | GET /v1/tags/a/memory           |
       | PATCH /v1/tags/a/memory/b       |
       | DELETE /v1/tags/a/memory/b      |
-      | GET /v1/conversations/a/lines   |
 
   Scenario: A path that is not UTF-8 is rejected
     When GET /v1/conversations/%FF is requested

@@ -5,8 +5,8 @@
 # Starts the server on its own in the image of this dev container (Dockerfile: macOS's Ruby with the libraries of the
 # Gemfile), without opening the dev container; devcontainer.json does not use this file. The UI tests use it outside
 # macOS (CI runs on Linux). Not for running lcty-rb for real: the repository (two folders up) is mounted read-only and
-# the data directory is a tmpfs, so every start begins with no data. --build rebuilds the image when the Gemfile has
-# changed.
+# the data directory is a tmpfs, so every start begins with only the data of tests/ui/seed. --build rebuilds the image
+# when the Gemfile has changed.
 #
 #   docker compose -f .devcontainer/ruby-2.6.10/compose.yml up --build --detach --wait
 #   LCTY_TEST_SERVER_URL=http://127.0.0.1:45290 npm run test:ui
@@ -33,7 +33,9 @@ services:
       # Listening on 0.0.0.0 would allow only http://0.0.0.0:45290 to use /v1/rpc; the tests open the port published
       # above (an environment variable takes one origin)
       LCTY_ALLOWED_ORIGIN: http://127.0.0.1:45290
-    command: ruby lcty.rb
+    # The data directory starts as a copy of tests/ui/seed, as playwright.config.js makes it for the servers it starts
+    command:
+      ["sh", "-c", "cp -R tests/ui/seed/. /tmp/lcty-data/ && exec ruby lcty.rb"]
     # Healthy once the server answers
     healthcheck:
       test: ["CMD", "curl", "-sf", "-o", "/dev/null", "http://127.0.0.1:45290/"]

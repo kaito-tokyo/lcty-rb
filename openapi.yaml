@@ -21,7 +21,7 @@ tags:
   - name: Lcty.v1
     description: /lcty.v1/, the explicit list Lcty::LCTY_V1_FILES; every other name is 404
   - name: API
-    description: /v1/, the HTTP API (Chatty::V1::Servlet)
+    description: /v1/, the HTTP API (Chatty::V1::Servlet), which serves reads only, and /v1/rpc, where every write goes
   - name: App
     description: The rest of public/ (Lcty::Servlets::PublicDirectoryServlet)
 
@@ -147,30 +147,10 @@ paths:
     get:
       tags: [API]
       summary: Every conversation, newest first
-    post:
-      tags: [API]
-      summary: Create a conversation
   /v1/conversations/{cid}:
     get:
       tags: [API]
       summary: A conversation as JSON
-      parameters:
-        - $ref: "#/components/parameters/cid"
-    delete:
-      tags: [API]
-      summary: Delete a conversation
-      parameters:
-        - $ref: "#/components/parameters/cid"
-  /v1/conversations/{cid}/lines:
-    post:
-      tags: [API]
-      summary: Append lines
-      parameters:
-        - $ref: "#/components/parameters/cid"
-  /v1/conversations/{cid}/pop:
-    post:
-      tags: [API]
-      summary: Delete the messages from an index
       parameters:
         - $ref: "#/components/parameters/cid"
   /v1/search:

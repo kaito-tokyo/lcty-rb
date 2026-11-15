@@ -11,7 +11,7 @@ Feature: LCTYSP-2003 The sidebar
   Every page has the sidebar: the button for a new conversation and the tag button next to it, which opens the tag
   menu (each tag to search by or to edit on its page, and the tags dialog), a search box, the list of the saved
   conversations with links to their pages, and a button for the settings dialog. The Scenarios make the conversations
-  and tags they need through the HTTP API, with unique words in their titles, since every test shares one server and
+  and tags they need through /v1/rpc, with unique words in their titles, since every test shares one server and
   the list shows every conversation the tests have made; A and B stand for tag names the test makes unique. The
   browser settings point at the fake llama-server.
 
@@ -27,9 +27,9 @@ Feature: LCTYSP-2003 The sidebar
     Given the new conversation page /c/ is open
     When a conversation with a unique title is created through /v1/rpc
     Then it is listed, without a reload
-    When its tags are changed to a unique tag through the HTTP API
+    When its tags are changed to a unique tag through /v1/rpc
     Then its item shows the tag
-    When it is deleted through the HTTP API
+    When it is deleted through /v1/rpc
     Then it is no longer listed
 
   # sync_full of LCTYSP-0009: the tags are synced when the page is shown, without waiting for idle time or a save

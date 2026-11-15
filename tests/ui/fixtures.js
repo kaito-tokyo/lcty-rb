@@ -8,8 +8,8 @@
 //   the settings at LLM_URL and answer its requests inside the browser context (POST /v1/responses as SSE). Replies are
 //   queued per test with llm.reply(…); with none queued it answers DEFAULT_REPLY. Embedding is the server's
 //   (LCTYSP-0019), which the UI tests start without it (--no-embedding).
-// - Helpers that create conversations through the HTTP API (LCTYSP-0006) and that wait until a page's module has
-//   attached its features.
+// - Helpers that create conversations and tags through /v1/rpc (LCTYSP-0012), read them through the HTTP API
+//   (LCTYSP-0006), and wait until a page's module has attached its features.
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { test as base, expect } from "@playwright/test";
@@ -132,7 +132,7 @@ export const test = base.extend({
 	],
 });
 
-// ---- Data through the HTTP API (LCTYSP-0006) ----
+// ---- Data through /v1/rpc (LCTYSP-0012), read through the HTTP API (LCTYSP-0006) ----
 
 /** A UUIDv7 (message ids must be one, LCTYSP-0003). */
 export function uuidv7() {
@@ -197,10 +197,10 @@ const escapeText = (s) =>
 /**
  * Create a conversation through /v1/rpc, in the format of LCTYSP-0013 as the new conversation page does: c.create,
  * the system prompt, then the messages ([["user", "…"], ["assistant", "…"], …]; a reply's article is its text as one
- * paragraph). The tags go to lcty_t.sqlite through the HTTP API. Returns { id, messages } (messages with their ids).
+ * paragraph), and the tags with c.update.tags. Returns { id, messages } (messages with their ids).
  */
 export async function createConversation(
-	request,
+	_request,
 	{ title = "テスト会話", messages = [], instructions = "", tags = [] } = {},
 ) {
 	const id = `t-${randomBytes(6).toString("hex")}`;
@@ -248,46 +248,17 @@ export async function createConversation(
 					: `<article><p>${escapeText(m.content)}</p></article>`,
 			);
 		}
+		if (tags.length) await call("c.update.tags", { cid: id, tags });
 	});
-	if (tags.length) {
-		const res = await request.post(
-			`/v1/conversations/${encodeURIComponent(id)}/lines`,
-			{ data: [{ type: "tags", tags, at }] },
-		);
-		expect(res.ok(), await res.text()).toBeTruthy();
-	}
 	return { id, messages: msgs };
 }
 
 /**
- * Create a conversation in the format of LCTYSP-0003 through the HTTP API (as before tools/convert.rb), which the pages
- * show read-only. Arguments and result as createConversation.
+ * The conversation in the format of LCTYSP-0003 that every data directory of the tests starts with
+ * (tests/ui/seed/c/t-former-0003.html, playwright.config.js), which the pages show read-only: two finished turns. No API
+ * writes that format any more.
  */
-export async function createFormerConversation(
-	request,
-	{ title = "テスト会話", messages = [], instructions = "", tags = [] } = {},
-) {
-	const id = `t-${randomBytes(6).toString("hex")}`;
-	const at = new Date().toISOString();
-	const msgs = messages.map(([role, content]) => ({
-		id: uuidv7(),
-		role,
-		content,
-		at,
-		...(role === "assistant" ? { status: "completed" } : {}),
-	}));
-	const res = await request.post("/v1/conversations", {
-		data: {
-			meta: { id, created_at: at, instructions, tags },
-			lines: [
-				{ type: "title", title, at },
-				...msgs.map((m) => ({ type: "message", ...m })),
-			],
-		},
-	});
-	expect(res.ok(), await res.text()).toBeTruthy();
-	return { id, messages: msgs };
-}
+export const FORMER_CONVERSATION = "t-former-0003";
 
 /** The messages the server has saved for a conversation (GET /v1/conversations/:id). */
 export async function savedMessages(request, id) {

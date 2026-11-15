@@ -37,7 +37,7 @@ changed.
 | ---------------------------------------------------- | ------------------------------------------------- |
 | [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)           | `lib/uuid.rb`: message ids as UUIDv7              |
 | [LCTYSP-3002](LCTYSP-3002_conversation-html.feature) | `lib/conv_html.rb`: the conversation file format  |
-| [LCTYSP-3003](LCTYSP-3003_store.feature)             | `lib/store.rb`: conversations and their tags      |
+| [LCTYSP-3003](LCTYSP-3003_store.feature)             | `lib/store.rb`: reading conversations of 0003     |
 | [LCTYSP-3004](LCTYSP-3004_search-index.feature)      | `lib/search_index.rb`: the keyword search index   |
 | [LCTYSP-3005](LCTYSP-3005_tag-store.feature)         | `lib/tag_store.rb`: `tags.sqlite`                 |
 | [LCTYSP-3008](LCTYSP-3008_server-settings.feature)   | `lib/config.rb`: the server's settings            |

@@ -11,9 +11,10 @@ SPDX-License-Identifier: Apache-2.0
   (`js/api/tab-rpc.js`, [LCTYSP-0014](LCTYSP-0014_browser-sync.md)), and the search panel embeds queries and follows
   the vector pair over it ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)). The pages change a conversation's tags
   (`c.update.tags`), delete it (`c.delete`), and read and write the tag definitions (`t.list`, `t.replace`,
-  `t.memory.add`) over it too: no page writes through the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)) any more.
+  `t.memory.add`) over it too: it is the only way to write, and the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md))
+  serves reads only.
 - Related: [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file this protocol writes),
-  [LCTYSP-0006](LCTYSP-0006_http-api.md) (the HTTP API it is to replace for changes),
+  [LCTYSP-0006](LCTYSP-0006_http-api.md) (the HTTP API, which it replaced for changes),
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the browser's copies it keeps up to date)
 - Methods: [LCTYSP-0012_rpc-protocol.openrpc.yml](LCTYSP-0012_rpc-protocol.openrpc.yml) (OpenRPC, the source of the
   method list)
@@ -32,8 +33,7 @@ The prototype writes conversations in the format of [LCTYSP-0013](LCTYSP-0013_co
 `c/` of the data directory, with every other conversation. A file of
 [LCTYSP-0003](LCTYSP-0003_conversation-file.md) there, not converted yet (`tools/convert.rb`), is read but never
 written, except its title slot. Every write that appends or removes a `user` or `model` message also brings the
-search index up to date ([LCTYSP-0007](LCTYSP-0007_search.md)), as the HTTP API does for the files it writes; the
-other elements change no round of the index.
+search index up to date ([LCTYSP-0007](LCTYSP-0007_search.md)); the other elements change no round of the index.
 
 ## Transports
 
@@ -165,14 +165,13 @@ The [OpenRPC document](LCTYSP-0012_rpc-protocol.openrpc.yml) lists them; this se
   (`data-content`, Markdown for a model message), as it does for its own. The DOM of a page then holds no HTML that
   another page made, whatever the allowlist lets through. A page that is opened still reads the file, presentation
   and all.
-  - `c_meta` / `delete` and `c_recordcount` / `delete`: `{cid}`, a conversation deleted (`c.delete`, or the HTTP
-    API with the `actorId` `null`).
+  - `c_meta` / `delete` and `c_recordcount` / `delete`: `{cid}`, a conversation deleted (`c.delete`).
 
   A kind of update is a store, not a method, so a new one adds a record, not a notification.
 - **`t.batch.updated` announces every change of the tags of conversations** in the same way, for the resource `t/`:
   its records are `t_has_many_c` / `delete` and `put`, rows `{tag, cid}`, the rows that went and then those that came.
-  A page changes them with `c.update.tags` and `c.delete`; a change through the HTTP API
-  ([LCTYSP-0006](LCTYSP-0006_http-api.md)) has the `actorId` `null`.
+  A page changes them with `c.update.tags` and `c.delete`; a change the server makes itself (`Chatty.commit`) has the
+  `actorId` `null`.
 - **The title** is changed with `c.update.title`, which the server fits into the slot and answers as written. The slot
   is in the middle of the file, so no id guards it: the last title written wins, which is enough for a value that is
   only shown. It is allowed while an `lcty-cmd` holds the conversation, and sends a `c_meta` record.
@@ -218,8 +217,8 @@ reads it again. `c.recordcount.list` does the same for the counts of elements: e
 (`{cid, count}`, ordered by `cid`) with its version, so a page fills `c_recordcount` from it and follows the
 `c_recordcount` records; a conversation the cache has no count for is not among them, and its count is unknown.
 `t.c.list` does the same for the tags of conversations: every row of `t_has_many_c` (`{tag, cid}`) with its version,
-followed by the records of `t.batch.updated`, the notification of every change of them (`c.update.tags`, `c.delete`,
-or the HTTP API with the `actorId` `null`). `t.list` does the same for the tag definitions: every tag file of `t/`
+followed by the records of `t.batch.updated`, the notification of every change of them (`c.update.tags`,
+`c.delete`). `t.list` does the same for the tag definitions: every tag file of `t/`
 (the rows of `t_full`) and the ETag of the set (`t_set`) with its version, followed by the `t_full` and `t_set` records
 of `t.batch.updated` (`t.replace`, `t.memory.add`). The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
 /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,

@@ -66,11 +66,10 @@ the version they were last brought to, so that an older answer never overwrites 
     `row` `{cid, id}`.
   - `c_stats`, what was measured of a reply (`c.stats.put`): `op` `put` with `row` `{cid, id, timings, usage,
     client}`. No database of the browser keeps it; the page shows it.
-  - `c_meta` and `c_recordcount`, `op` `delete`: `row` is `{cid}` (deleting a conversation with `c.delete`, or
-    through the HTTP API with the `actorId` `null`).
+  - `c_meta` and `c_recordcount`, `op` `delete`: `row` is `{cid}` (deleting a conversation with `c.delete`).
 - **`t.batch.updated` does the same for `t/`:** its records are those of `t_has_many_c` of `lcty_t`, `op` `delete`
   and then `put` with `row` `{tag, cid}`, the rows of a conversation's tags that went and those that came. A page
-  changes them with `c.update.tags` and `c.delete`; through the HTTP API the `actorId` is `null`. A page that shows
+  changes them with `c.update.tags` and `c.delete`; a change the server makes itself has the `actorId` `null`. A page that shows
   the sidebar declares it beside `c.batch.updated`.
 - **Each connection gets the records it follows:** `c_html` and `c_stats` records go only to the connections that follow their
   conversation (`c.subscribe`), the others to every connection that receives `c.batch.updated`. The server leaves out

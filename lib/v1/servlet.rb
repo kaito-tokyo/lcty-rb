@@ -28,7 +28,7 @@ module Chatty
     end
 
     class Servlet < WEBrick::HTTPServlet::AbstractServlet
-      %w[GET POST PUT PATCH DELETE].each do |m|
+      %w[GET POST].each do |m|
         define_method("do_#{m}") { |req, res| dispatch(req, res) }
       end
 
@@ -70,39 +70,8 @@ module Chatty
         case [method, parts[0], parts.size, parts[2]]
         when ['GET', 'conversations', 1, nil]
           json(res, 200, Store.list_conversations)
-        when ['POST', 'conversations', 1, nil]
-          id = Store.create(parse_body(req))
-          reindex(id)
-          json(res, 201, 'ok' => true)
         when ['GET', 'conversations', 2, nil]
           json(res, 200, Store.conversation(parts[1]))
-        when ['POST', 'conversations', 3, 'lines']
-          Store.append(parts[1], parse_body(req))
-          reindex(parts[1])
-          json(res, 200, 'ok' => true)
-        when ['POST', 'conversations', 3, 'pop']
-          body = parse_body(req)
-          raise HttpError.new(400, 'body must be an object') unless body.is_a?(Hash)
-          Store.pop(parts[1], body['from'])
-          reindex(parts[1])
-          json(res, 200, 'ok' => true)
-        when ['DELETE', 'conversations', 2, nil]
-          # Announced to the pages as c.batch.updated (the conversation leaves c_meta and c_recordcount) and, apart, as
-          # t.batch.updated for its tags (LCTYSP-0014)
-          id = parts[1]
-          path = Store.conv_path(id)
-          gone = []
-          Chatty.commit('c.batch.updated') do
-            next [] unless File.exist?(path)
-            gone = Embedding.message_ids_of(path)
-            File.unlink(path)
-            %w[c_meta c_recordcount].map { |s| { 'store' => s, 'op' => 'delete', 'row' => { 'cid' => id } } }
-          end
-          Embedding.messages_removed(gone) # their rows of the vector pair are filled with NaN (LCTYSP-0019)
-          INDEX.remove(id)
-          TAGS.delete_conversation_tags(id)
-          C_STORE.delete_stats_of(id) # what was measured of its replies (lcty_c.sqlite)
-          json(res, 200, 'ok' => true)
         else
           raise HttpError.new(404, 'no such endpoint')
         end
@@ -166,11 +135,6 @@ module Chatty
         res.status = status
         res['Content-Type'] = 'application/json; charset=utf-8'
         res.body = body
-      end
-
-      def reindex(id)
-        messages, tags = Store.index_state(Store.existing_conv_path(id))
-        INDEX.sync(id, messages, tags)
       end
 
       def parse_body(req)
