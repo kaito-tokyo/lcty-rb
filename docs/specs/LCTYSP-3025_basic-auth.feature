@@ -9,7 +9,8 @@ Feature: LCTYSP-3025 Basic authentication
 
   Chatty::BasicAuth#authenticate checks a request against the users of --basic-auth, each with a hash of
   lib/password.rb (LCTYSP-3024). It returns when the Authorization header is Basic with the user and password of one
-  of them, and otherwise sets WWW-Authenticate to 'Basic realm="lcty-rb", charset="UTF-8"' and raises
+  of them, and otherwise sets WWW-Authenticate to Basic with its realm (the base URL of the site, "/" unless given:
+  it names no software, LCTYSP-0016) and the charset UTF-8, and raises
   WEBrick::HTTPStatus::Unauthorized, which WEBrick answers as 401. Credentials that name a user are logged when they are
   refused, the user only, and answered after the delay given (a second by default); a request without them is not.
   A user and password that were accepted are remembered (an HMAC with a key of the process), so the hash is checked
@@ -19,7 +20,7 @@ Feature: LCTYSP-3025 Basic authentication
     Given Chatty::BasicAuth with the user "alice" and the password "correct horse battery"
     When a request without an Authorization header is authenticated
     Then it raises WEBrick::HTTPStatus::Unauthorized
-    And WWW-Authenticate is 'Basic realm="lcty-rb", charset="UTF-8"'
+    And WWW-Authenticate is 'Basic realm="/", charset="UTF-8"'
     And nothing is logged
 
   Scenario: The user and password of a user get in

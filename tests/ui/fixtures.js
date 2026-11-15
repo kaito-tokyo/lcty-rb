@@ -108,6 +108,28 @@ export const test = base.extend({
 		},
 		{ auto: true },
 	],
+	// Every report of the Content Security Policy in a page fails the test (LCTYSP-0016, step 4)
+	cspViolations: [
+		async ({ context }, use) => {
+			const violations = [];
+			await context.exposeBinding("__lctyCspViolation", ({ page }, v) =>
+				violations.push({ url: page.url(), ...v }),
+			);
+			await context.addInitScript(() => {
+				document.addEventListener("securitypolicyviolation", (e) =>
+					window.__lctyCspViolation({
+						directive: e.effectiveDirective,
+						blocked: e.blockedURI,
+						source: e.sourceFile,
+						line: e.lineNumber,
+					}),
+				);
+			});
+			await use(violations);
+			expect(violations, "reports of the Content Security Policy").toEqual([]);
+		},
+		{ auto: true },
+	],
 });
 
 // ---- Data through the HTTP API (LCTYSP-0006) ----

@@ -92,6 +92,7 @@ for the backend ones).
 | [LCTYSP-3027](LCTYSP-3027_embedding-server.feature)           | Embedding server                              | `tests/backend/llama_server_test.rb`                         |
 | [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)           | Embedding on the server                       | `tests/backend/server_embedding_test.rb`                     |
 | [LCTYSP-3029](LCTYSP-3029_request-guard.feature)              | The checks of every request                   | `tests/backend/request_guard_test.rb`                        |
+| [LCTYSP-3030](LCTYSP-3030_secure-server.feature)              | The protective headers of every response      | `tests/backend/secure_server_test.rb`                        |
 ### Withdrawn features
 
 These numbers were used by features that were removed with what they tested. They are not reused; the features are in

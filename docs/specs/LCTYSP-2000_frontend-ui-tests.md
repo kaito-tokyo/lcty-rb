@@ -20,7 +20,9 @@ document, the guide to the range; LCTYSP-2001 and on are the features. Each Scen
 a real browser (Chromium, WebKit and Firefox, with Playwright) against the real server: `ruby lcty.rb` started with a
 new, empty data directory of its own. Only `llama-server` is not real: the browser talks to it directly, so the tests
 answer its requests inside the browser (`llm` in `tests/ui/fixtures.js`), and neither the real data nor the models are
-touched.
+touched. Every test also fails on any report of the Content Security Policy in a page (`cspViolations` in
+`tests/ui/fixtures.js`, [LCTYSP-0016](LCTYSP-0016_hardening.md)), so a policy that breaks a page is found before it
+ships.
 
 ## What belongs here
 

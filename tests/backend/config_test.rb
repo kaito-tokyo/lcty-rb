@@ -162,6 +162,18 @@ class ConfigTest < Lcty::Scenarios
     end
   end
 
+  { '"/a\\"b/"' => '/a"b/', '"/a\\\\b/"' => '/a\\b/', '"/a<TAB>b/"' => "/a\tb/" }.each do |label, base|
+    scenario "A base URL with a quote, a backslash or a control character stops the server (#{label})" do
+      c = nil
+      step("Given LCTY_BASE_URL is #{label}") { @env = { 'LCTY_BASE_URL' => base } }
+      step('When lib/config.rb is loaded') { c = load_config }
+      step('Then loading fails with a SettingsError that the base URL must not hold ", \\ or a control character') do
+        refute c[:status].success?
+        assert_includes c[:err], 'the base URL must not hold ", \\ or a control character'
+      end
+    end
+  end
+
   scenario 'An IPv6 address is written in brackets in URLs' do
     r = nil
     step('When Chatty.url_host is given "::1" and "127.0.0.1"') { r = ['::1', '127.0.0.1'].map { |ip| Chatty.url_host(ip) } }
