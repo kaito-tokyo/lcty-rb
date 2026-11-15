@@ -91,6 +91,7 @@ for the backend ones).
 | [LCTYSP-3026](LCTYSP-3026_vector-pair.feature)                | Vector pair                                   | `tests/backend/vector_pair_test.rb`                          |
 | [LCTYSP-3027](LCTYSP-3027_embedding-server.feature)           | Embedding server                              | `tests/backend/llama_server_test.rb`                         |
 | [LCTYSP-3028](LCTYSP-3028_server-embedding.feature)           | Embedding on the server                       | `tests/backend/server_embedding_test.rb`                     |
+| [LCTYSP-3029](LCTYSP-3029_request-guard.feature)              | The checks of every request                   | `tests/backend/request_guard_test.rb`                        |
 ### Withdrawn features
 
 These numbers were used by features that were removed with what they tested. They are not reused; the features are in
