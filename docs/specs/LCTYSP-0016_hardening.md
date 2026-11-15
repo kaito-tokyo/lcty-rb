@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0016: Hardening
 
-- Status: Draft, implemented. Step 1 is `lib/request_guard.rb` ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)) and
+- Status: Accepted. Step 1 is `lib/request_guard.rb` ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)) and
   step 2 `lib/secure_server.rb` ([LCTYSP-3030](LCTYSP-3030_secure-server.feature)); step 3 is done (every write goes
   through `/v1/rpc`, and the HTTP API serves reads only), and so is step 4 (the UI tests fail on any report of the
   policy, and the OWASP sources were compared again on 2026-11-15).
