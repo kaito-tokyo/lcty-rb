@@ -189,6 +189,7 @@ module Lcty
     Rpc.index = Chatty::INDEX # c_recordcount of /v1/rpc lives in _index.sqlite with every other cache
     Rpc.tags = Chatty::TAGS # the tags the index records with the rounds /v1/rpc writes
     Rpc.c_store = Chatty::C_STORE # c.stats.put and c.stats.list
+    Rpc.tag_files = Chatty::TAG_FILES # t.list, t.replace and t.memory.add
     # Changes through the HTTP API (the tags of a conversation, deleting one) are announced over /v1/rpc too
     Chatty.committer = ->(method, &block) { Rpc::HUB.commit(nil, method, &block) }
     Rpc::ConvStore.fill_record_counts

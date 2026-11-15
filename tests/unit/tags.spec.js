@@ -8,10 +8,13 @@
 //
 // The editor and the dialogs of js/tags.js (renderTagsEditor, initTagsDialog, openMemoryDialog) build DOM elements and
 // open <dialog>s: they run in a real browser on the test server's origin, on the empty unit page. composeDraft and
-// proposeMemory run in Node.js, in tests/unit/tags.test.js. GET and PUT /v1/tags, POST /v1/tags/:file/memory and the
-// fake llama-server at http://llm.test are answered by routes the test sets (server.*), which also record what was
-// sent (the body of each PUT and its If-Match), so the server's data does not matter. What the module calls back
-// (onSaved, toast, onDone) is pushed to window.seen.
+// proposeMemory run in Node.js, in tests/unit/tags.test.js. The page's /v1/rpc connection (api/tab-rpc.js, through
+// api/lcty-t.js) is answered by a fake of the server set with context.routeWebSocket (server.*): it keeps a set of tags
+// with its ETag and version, answers initialize, t.list, t.c.list, t.replace and t.memory.add, records the params of
+// each change, and announces a change with t.batch.updated before its response, as the server does. The page follows
+// it as the sidebar does (the notification applied, the lists read whenever the connection opens), so the browser's
+// copy of the tags is the real one in IndexedDB, and the server's data does not matter. The fake llama-server at
+// http://llm.test is answered by a route. What the module calls back (onSaved, toast, onDone) is pushed to window.seen.
 
 import { expect, test } from "@playwright/test";
 import { openUnitPage } from "./unit-page.js";
@@ -45,45 +48,115 @@ function replyWith(text, timings = { prompt_n: 3, predicted_n: 9 }) {
 
 // ---- Background ----
 
+/** The code of a generic failure the test makes a call fail with (JSON-RPC's internal error). */
+const INTERNAL_ERROR = -32603;
+
+/** The fake's answer to one call of the page: a result, or an RpcError thrown as {code, message}. */
+function answerCall(server, method, params) {
+	if (method === "t.replace") server.replaces.push(params);
+	if (method === "t.memory.add") server.memory.push(params);
+	const fail = server.fail[method];
+	if (fail) throw fail;
+	switch (method) {
+		case "initialize":
+			server.receives = params?.capabilities?.receives ?? [];
+			return {
+				protocol: "lcty-rpc-prototype",
+				version: server.version(),
+				actorId: "actor",
+				capabilities: { receives: ["t.list", "t.c.list", "t.replace"] },
+			};
+		case "t.list":
+			return {
+				version: server.version(),
+				etag: server.etag,
+				items: structuredClone(server.tags),
+			};
+		case "t.c.list":
+			return { version: server.version(), items: [] };
+		case "t.replace": {
+			if (params.etag !== server.etag)
+				throw { code: 8, message: "the tags have changed" };
+			const next = server.next ?? {
+				tags: params.tags,
+				etag: `e${server.seq + 1}0`,
+			};
+			server.next = null;
+			const files = new Set(next.tags.map((t) => t.file));
+			const version = server.change([
+				...server.tags
+					.filter((t) => !files.has(t.file))
+					.map((t) => ({
+						store: "t_full",
+						op: "delete",
+						row: { file: t.file },
+					})),
+				...next.tags.map((row) => ({ store: "t_full", op: "put", row })),
+				{ store: "t_set", op: "put", row: { etag: next.etag } },
+			]);
+			server.tags = structuredClone(next.tags);
+			server.etag = next.etag;
+			return { version, etag: next.etag };
+		}
+		case "t.memory.add": {
+			const item = {
+				id: `m${server.memory.length}`,
+				text: params.text,
+				at: "2026-11-15T00:00:00+09:00",
+				source: params.source,
+			};
+			const tag = server.tags.find((t) => t.file === params.file);
+			if (tag) tag.memory = [...(tag.memory ?? []), item];
+			const records = tag ? [{ store: "t_full", op: "put", row: tag }] : [];
+			return { version: server.change(records), item };
+		}
+		default:
+			throw { code: -32601, message: `no such method: ${method}` };
+	}
+}
+
 /**
  * The Background, then the Scenario's first line "Given a page on the server's origin" (the routes are set on the
  * context, so they are in place before the page opens).
  */
 async function background(page, context) {
 	const server = {
-		tags: { tags: [] },
+		tags: [],
 		etag: "e0",
-		puts: [],
-		ifMatch: [],
-		memory: [],
+		seq: 0,
+		version: () => `b1.${server.seq}`,
+		receives: [],
+		next: null, // what the next t.replace stores, {tags, etag}, instead of what it is sent
+		fail: {}, // by method, the error {code, message} its calls answer
+		replaces: [], // the params of every t.replace
+		refused: [], // the codes of the errors t.replace answered
+		memory: [], // the params of every t.memory.add
 		llm: [],
-		get: (route) =>
-			route.fulfill({ json: server.tags, headers: { ETag: server.etag } }),
-		put: (route) =>
-			route.fulfill({ json: { ok: true }, headers: { ETag: "e9" } }),
-		addMemory: (route) =>
-			route.fulfill({ status: 201, json: { id: "m", text: "t", at: "now" } }),
 		answerLlm: replyWith('{"proposals":[]}'),
 	};
-	await test.step("Given /v1/tags, /v1/tags/:file/memory and the llama-server at http://llm.test are answered by the test", async () => {
-		await context.route("**/v1/tags", async (route) => {
-			const req = route.request();
-			if (req.method() === "PUT") {
-				// both recorded at once, as a test waits for the PUT and then reads its If-Match
-				const ifMatch = await req.headerValue("if-match");
-				server.puts.push(req.postDataJSON());
-				server.ifMatch.push(ifMatch);
-				return server.put(route);
-			}
-			return server.get(route);
-		});
-		await context.route("**/v1/tags/*/memory", (route) => {
-			const req = route.request();
-			const file = decodeURIComponent(
-				new URL(req.url()).pathname.split("/")[3],
-			);
-			server.memory.push([file, req.postDataJSON()]);
-			return server.addMemory(route);
+	await test.step("Given /v1/rpc and the llama-server at http://llm.test are answered by the test", async () => {
+		await context.routeWebSocket("**/v1/rpc", (ws) => {
+			const send = (msg) => ws.send(JSON.stringify({ jsonrpc: "2.0", ...msg }));
+			// A change: the next version, announced with its records to a page that declared t.batch.updated
+			server.change = (records) => {
+				server.seq += 1;
+				const version = server.version();
+				if (server.receives.includes("t.batch.updated"))
+					send({
+						method: "t.batch.updated",
+						params: { version, actorId: "actor", records },
+					});
+				return version;
+			};
+			ws.onMessage((text) => {
+				const { id, method, params } = JSON.parse(text);
+				try {
+					send({ id, result: answerCall(server, method, params) });
+				} catch (error) {
+					if (method === "t.replace") server.refused.push(error.code);
+					send({ id, error });
+				}
+			});
 		});
 		await context.route(`${LLM_URL}/**`, (route) => {
 			const req = route.request();
@@ -102,6 +175,15 @@ async function background(page, context) {
 		await page.evaluate(async () => {
 			window.T = await import("/js/tags.js");
 			window.seen = [];
+			// As the sidebar does, before anything opens the tab's connection
+			const { applyTagBatch, readTagsFrom } = await import("/js/api/lcty-t.js");
+			const { onTabNotify, onTabOpen } = await import("/js/api/tab-rpc.js");
+			onTabNotify("t.batch.updated", applyTagBatch);
+			onTabOpen((rpc) =>
+				readTagsFrom(rpc).catch((e) =>
+					console.warn("the tags could not be read", e),
+				),
+			);
 		});
 	});
 	return server;
@@ -164,13 +246,19 @@ function renderEditor(page, defs, etag, file) {
 	);
 }
 
+/** The editor of defs read with etag, which are the server's set too. */
 async function givenTheEditor(
+	server,
 	page,
 	defs = [RUBY, GO],
 	line = 'Given the editor of the definitions "ruby" and "go"',
 	etag = "e0",
 ) {
-	await test.step(line, () => renderEditor(page, defs, etag));
+	await test.step(line, () => {
+		server.tags = structuredClone(defs);
+		server.etag = etag;
+		return renderEditor(page, defs, etag);
+	});
 }
 
 /** What the editor shows: one entry per tag section. */
@@ -222,9 +310,9 @@ async function fillName(page, i, name) {
 const promptInput = (page, i) =>
 	section(page, i).locator("label.field textarea");
 const button = (page, name) => page.getByRole("button", { name, exact: true });
-/** The bodies of the PUTs as [file, name] of each tag. */
+/** The tags sent to t.replace as [file, name] of each tag. */
 const putFiles = (server) =>
-	server.puts.map((b) => b.tags.map((t) => [t.file, t.name]));
+	server.replaces.map((b) => b.tags.map((t) => [t.file, t.name]));
 
 async function thenIsDirty(page, value, line = `And isDirty() is ${value}`) {
 	await test.step(line, async () => {
@@ -243,10 +331,10 @@ async function clickSave(page, server, { until } = {}) {
 			"#editor .tags-form > p.hint:not(:first-child)",
 		).textContent,
 	}));
-	const puts = server.puts.length;
+	const puts = server.replaces.length;
 	await button(page, "Save").click();
 	if (until === "put") {
-		await expect.poll(() => server.puts.length).toBe(puts + 1);
+		await expect.poll(() => server.replaces.length).toBe(puts + 1);
 		return;
 	}
 	await page.waitForFunction(
@@ -264,7 +352,7 @@ test("The editor shows every definition with its memory", async ({
 	page,
 	context,
 }) => {
-	await background(page, context);
+	const server = await background(page, context);
 	const [ruby, go, big] = defsOf(
 		RUBY,
 		{ name: "go" },
@@ -274,6 +362,7 @@ test("The editor shows every definition with its memory", async ({
 		},
 	);
 	await givenTheEditor(
+		server,
 		page,
 		[ruby, go, big],
 		'Given the definitions "ruby" with a prompt and two memory items, "go" with none and "big" with six memory items',
@@ -315,8 +404,8 @@ test("The order is changed on the reorder page, not in the editor", async ({
 	page,
 	context,
 }) => {
-	await background(page, context);
-	await givenTheEditor(page);
+	const server = await background(page, context);
+	await givenTheEditor(server, page);
 	await test.step('Then the head of each tag has its name and only the button "Delete"', async () => {
 		expect((await editorState(page)).map((s) => s.head)).toEqual([
 			["input ruby", "Delete"],
@@ -342,6 +431,7 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheEditor(
+		server,
 		page,
 		[{ ...RUBY, memory: [{ text: "fact" }, { text: "  " }] }, GO],
 		'Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go", read with the ETag "e1"',
@@ -372,9 +462,8 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 			},
 		],
 	};
-	await test.step('And GET /v1/tags will return the definitions with timestamps and the ETag "e2"', () => {
-		server.tags = stored;
-		server.etag = "e2";
+	await test.step('And t.replace will store the definitions with timestamps and answer the ETag "e2"', () => {
+		server.next = { tags: stored.tags, etag: "e2" };
 	});
 	await test.step('When the prompt of "ruby" is changed to "New prompt", a new tag "rust" is added and Save is clicked', async () => {
 		await promptInput(page, 0).fill("New prompt");
@@ -382,12 +471,13 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 		await nameInput(page, 2).fill("rust");
 		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent with If-Match "e1"', () => {
-		expect(server.ifMatch).toEqual(["e1"]);
+	await test.step('Then t.replace is sent with the etag "e1"', () => {
+		expect(server.replaces.map((p) => p.etag)).toEqual(["e1"]);
 	});
 	await test.step('And it is sent "00010-ruby.html" with the new prompt and only the memory item "fact", "00020-go.html" and "00030-rust.html" without memory', () => {
-		expect(server.puts).toEqual([
+		expect(server.replaces).toEqual([
 			{
+				etag: "e1",
 				tags: [
 					{
 						file: "00010-ruby.html",
@@ -414,7 +504,7 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 			},
 		]);
 	});
-	await test.step("And onSaved is called with the definitions GET /v1/tags returned", async () => {
+	await test.step("And onSaved is called with the definitions as t.replace stored them", async () => {
 		expect((await seen(page)).filter(([k]) => k === "saved")).toEqual([
 			["saved", stored.tags],
 		]);
@@ -430,14 +520,14 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 		await promptInput(page, 1).fill("Changed");
 		await clickSave(page, server);
 	});
-	await test.step('Then the second PUT /v1/tags is sent with If-Match "e2"', () => {
-		expect(server.ifMatch).toEqual(["e1", "e2"]);
+	await test.step('Then the second t.replace is sent with the etag "e2"', () => {
+		expect(server.replaces.map((p) => p.etag)).toEqual(["e1", "e2"]);
 	});
 });
 
 test("Saving gives each tag its file name", async ({ page, context }) => {
 	const server = await background(page, context);
-	await givenTheEditor(page);
+	await givenTheEditor(server, page);
 	await test.step('When the name of "go" is changed to "Golang", the new tags "C#" and "Café" typed decomposed are added and Save is clicked', async () => {
 		await nameInput(page, 1).fill("Golang");
 		await button(page, "+ New tag").click();
@@ -446,7 +536,7 @@ test("Saving gives each tag its file name", async ({ page, context }) => {
 		await nameInput(page, 3).fill("Café");
 		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent "00010-ruby.html" named "ruby", "00020-golang.html" named "Golang", "00030-c~23.html" named "C#" and "00040-café.html" named "Café", composed', () => {
+	await test.step('Then t.replace is sent "00010-ruby.html" named "ruby", "00020-golang.html" named "Golang", "00030-c~23.html" named "C#" and "00040-café.html" named "Café", composed', () => {
 		expect(putFiles(server)).toEqual([
 			[
 				["00010-ruby.html", "ruby"],
@@ -464,6 +554,7 @@ test("A new tag is numbered after the largest number", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheEditor(
+		server,
 		page,
 		[RUBY, { ...GO, file: "00050-go.html" }],
 		'Given the editor of the tag files "00010-ruby.html" named "ruby" and "00050-go.html" named "go"',
@@ -473,8 +564,8 @@ test("A new tag is numbered after the largest number", async ({
 		await nameInput(page, 2).fill("rust");
 		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent the files "00010-ruby.html", "00050-go.html" and "00060-rust.html"', () => {
-		expect(server.puts.map((b) => b.tags.map((t) => t.file))).toEqual([
+	await test.step('Then t.replace is sent the files "00010-ruby.html", "00050-go.html" and "00060-rust.html"', () => {
+		expect(server.replaces.map((b) => b.tags.map((t) => t.file))).toEqual([
 			["00010-ruby.html", "00050-go.html", "00060-rust.html"],
 		]);
 	});
@@ -488,7 +579,7 @@ test("A tag name that breaks the rules is not saved, and the status says the rul
 	context,
 }) => {
 	const server = await background(page, context);
-	await givenTheEditor(page);
+	await givenTheEditor(server, page);
 	await test.step('When the name of "go" is changed to "a b" and Save is clicked', async () => {
 		await nameInput(page, 1).fill("a b");
 		await clickSave(page, server);
@@ -496,8 +587,8 @@ test("A tag name that breaks the rules is not saved, and the status says the rul
 	await test.step("Then the status says 'The tag name \"a b\" cannot be used (1 to 40 characters, no spaces, control characters or : ; / \" ' ` ~ \\ |)'", async () => {
 		expect(await status(page)).toBe(BAD_NAME("a b"));
 	});
-	await test.step("And nothing is sent to PUT /v1/tags", () => {
-		expect(server.puts).toEqual([]);
+	await test.step("And no t.replace is sent", () => {
+		expect(server.replaces).toEqual([]);
 	});
 	await thenIsDirty(page, true);
 });
@@ -537,7 +628,7 @@ for (const { caseName, name, shown } of [
 		context,
 	}) => {
 		const server = await background(page, context);
-		await givenTheEditor(page);
+		await givenTheEditor(server, page);
 		await test.step(`When the name of "go" is changed to ${shown} and Save is clicked`, async () => {
 			await fillName(page, 1, name);
 			await clickSave(page, server);
@@ -545,8 +636,8 @@ for (const { caseName, name, shown } of [
 		await test.step(`Then the status says that the tag name ${shown} cannot be used`, async () => {
 			expect(await status(page)).toBe(BAD_NAME(name));
 		});
-		await test.step("And nothing is sent to PUT /v1/tags", () => {
-			expect(server.puts).toEqual([]);
+		await test.step("And no t.replace is sent", () => {
+			expect(server.replaces).toEqual([]);
 		});
 		await thenIsDirty(page, true);
 	});
@@ -562,7 +653,7 @@ for (const { caseName, name } of [
 		context,
 	}) => {
 		const server = await background(page, context);
-		await givenTheEditor(page);
+		await givenTheEditor(server, page);
 		await test.step(`When the name of "go" is changed to "${name}" and Save is clicked`, async () => {
 			await fillName(page, 1, name);
 			await clickSave(page, server);
@@ -570,13 +661,13 @@ for (const { caseName, name } of [
 		await test.step('Then the status says "Tag names must be unique"', async () => {
 			expect(await status(page)).toBe("Tag names must be unique");
 		});
-		await test.step("And nothing is sent to PUT /v1/tags", () => {
-			expect(server.puts).toEqual([]);
+		await test.step("And no t.replace is sent", () => {
+			expect(server.replaces).toEqual([]);
 		});
 	});
 }
 
-/** The invalid tag of the feature: a file without <lcty-t>, as GET /v1/tags lists it. */
+/** The invalid tag of the feature: a file without <lcty-t>, as t.list lists it. */
 const BROKEN = {
 	file: "00020-broken.html",
 	name: "broken",
@@ -592,6 +683,7 @@ test("An invalid tag is shown without fields and sent back as it is", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheEditor(
+		server,
 		page,
 		[RUBY, BROKEN],
 		'Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
@@ -614,9 +706,9 @@ test("An invalid tag is shown without fields and sent back as it is", async ({
 		await promptInput(page, 0).fill("New prompt");
 		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent "00010-ruby.html" with the new prompt and "00020-broken.html" as it was, with invalid true', () => {
-		expect(server.puts).toHaveLength(1);
-		const [ruby, broken] = server.puts[0].tags;
+	await test.step('Then t.replace is sent "00010-ruby.html" with the new prompt and "00020-broken.html" as it was, with invalid true', () => {
+		expect(server.replaces).toHaveLength(1);
+		const [ruby, broken] = server.replaces[0].tags;
 		expect(ruby).toMatchObject({
 			file: "00010-ruby.html",
 			prompt: "New prompt",
@@ -631,6 +723,7 @@ test("A new tag with the file-name part of an invalid tag is not saved", async (
 }) => {
 	const server = await background(page, context);
 	await givenTheEditor(
+		server,
 		page,
 		[RUBY, BROKEN],
 		'Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
@@ -643,24 +736,27 @@ test("A new tag with the file-name part of an invalid tag is not saved", async (
 	await test.step('Then the status says "Tag names must be unique"', async () => {
 		expect(await status(page)).toBe("Tag names must be unique");
 	});
-	await test.step("And nothing is sent to PUT /v1/tags", () => {
-		expect(server.puts).toEqual([]);
+	await test.step("And no t.replace is sent", () => {
+		expect(server.replaces).toEqual([]);
 	});
 });
 
 // ---- renderTagsEditor with a file (the page of a tag file) ----
 
-async function givenTheEditorOfGo(page, defs = [RUBY, GO]) {
-	await test.step(`Given the editor of the definitions ${defs.map((d) => `"${d.name}"`).join(" and ")} for the file "00020-go.html"`, () =>
-		renderEditor(page, defs, "e0", "00020-go.html"));
+async function givenTheEditorOfGo(server, page, defs = [RUBY, GO]) {
+	await test.step(`Given the editor of the definitions ${defs.map((d) => `"${d.name}"`).join(" and ")} for the file "00020-go.html"`, () => {
+		server.tags = structuredClone(defs);
+		server.etag = "e0";
+		return renderEditor(page, defs, "e0", "00020-go.html");
+	});
 }
 
 test("With a file, the editor shows only that tag and no + New tag", async ({
 	page,
 	context,
 }) => {
-	await background(page, context);
-	await givenTheEditorOfGo(page);
+	const server = await background(page, context);
+	await givenTheEditorOfGo(server, page);
 	await test.step('Then it shows one section, "go", with its prompt', async () => {
 		expect((await editorState(page)).map((s) => [s.name, s.prompt])).toEqual([
 			["go", "Go prompt"],
@@ -676,14 +772,14 @@ test("Saving with a file sends the whole set and gives onSaved the tag's new fil
 	context,
 }) => {
 	const server = await background(page, context);
-	await givenTheEditorOfGo(page);
+	await givenTheEditorOfGo(server, page);
 	await test.step('When the name is changed to "Golang" and Save is clicked', async () => {
 		await nameInput(page, 0).fill("Golang");
 		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent "00010-ruby.html" as it was and "00020-golang.html" named "Golang"', () => {
-		expect(server.puts).toHaveLength(1);
-		const [ruby, go] = server.puts[0].tags;
+	await test.step('Then t.replace is sent "00010-ruby.html" as it was and "00020-golang.html" named "Golang"', () => {
+		expect(server.replaces).toHaveLength(1);
+		const [ruby, go] = server.replaces[0].tags;
 		expect(ruby).toEqual(RUBY);
 		expect([go.file, go.name]).toEqual(["00020-golang.html", "Golang"]);
 	});
@@ -698,7 +794,7 @@ test("Deleting the tag of the file saves at once and gives onSaved no file", asy
 	context,
 }) => {
 	const server = await background(page, context);
-	await givenTheEditorOfGo(page);
+	await givenTheEditorOfGo(server, page);
 	await test.step("When Delete is clicked and the question is accepted", async () => {
 		answerNextQuestion(page, true, []);
 		await section(page, 0)
@@ -707,7 +803,7 @@ test("Deleting the tag of the file saves at once and gives onSaved no file", asy
 			.click();
 		await expect.poll(() => seen(page)).toContainEqual(["toast", "Tags saved"]);
 	});
-	await test.step('Then PUT /v1/tags is sent only "00010-ruby.html"', () => {
+	await test.step('Then t.replace is sent only "00010-ruby.html"', () => {
 		expect(putFiles(server)).toEqual([[["00010-ruby.html", "ruby"]]]);
 	});
 	await test.step("And onSaved is given the file null", async () => {
@@ -720,8 +816,8 @@ test("A file that is not in the set shows that the tag is gone", async ({
 	page,
 	context,
 }) => {
-	await background(page, context);
-	await givenTheEditorOfGo(page, [RUBY]);
+	const server = await background(page, context);
+	await givenTheEditorOfGo(server, page, [RUBY]);
 	await test.step('Then no section is shown and the list says "This tag is not in the tags any more: it was renamed or deleted."', async () => {
 		expect(await editorState(page)).toEqual([]);
 		expect(await page.locator("#editor .tags-edit").textContent()).toBe(
@@ -735,13 +831,13 @@ test("A name is trimmed and may have 40 code points", async ({
 	context,
 }) => {
 	const server = await background(page, context);
-	await givenTheEditor(page);
+	await givenTheEditor(server, page);
 	await test.step('When the name of "go" is changed to " 40 times "𝒳" " and Save is clicked', async () => {
 		await nameInput(page, 1).fill(` ${"𝒳".repeat(40)} `);
 		await clickSave(page, server);
 	});
-	await test.step('Then PUT /v1/tags is sent the tags "ruby" and 40 times "𝒳"', () => {
-		expect(server.puts.map((b) => b.tags.map((t) => t.name))).toEqual([
+	await test.step('Then t.replace is sent the tags "ruby" and 40 times "𝒳"', () => {
+		expect(server.replaces.map((b) => b.tags.map((t) => t.name))).toEqual([
 			["ruby", "𝒳".repeat(40)],
 		]);
 	});
@@ -753,24 +849,25 @@ test("A save made stale elsewhere loads the tags again", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheEditor(
+		server,
 		page,
 		[RUBY, GO],
 		'Given the editor of the definitions "ruby" and "go", read with the ETag "e1"',
 		"e1",
 	);
-	await test.step("And PUT /v1/tags answers with the status 412", () => {
-		server.put = (route) =>
-			route.fulfill({ status: 412, body: "the tags have changed" });
-	});
-	await test.step('And GET /v1/tags will return the definitions "ruby", "go" and "rust" with the ETag "e2"', () => {
-		server.tags = { tags: defsOf(RUBY, GO, { name: "rust" }) };
+	await test.step('And the definitions "ruby", "go" and "rust" were saved elsewhere with the ETag "e2"', () => {
+		server.tags = defsOf(RUBY, GO, { name: "rust" });
 		server.etag = "e2";
 	});
 	await test.step('When the name of "go" is changed to "golang" and Save is clicked', async () => {
 		await nameInput(page, 1).fill("golang");
 		await clickSave(page, server);
 	});
-	await test.step('Then the status says "The tags were changed elsewhere, so they were loaded again. Make the edit again."', async () => {
+	await test.step('Then t.replace is sent with the etag "e1" and refused as changed', () => {
+		expect(server.replaces.map((p) => p.etag)).toEqual(["e1"]);
+		expect(server.refused).toEqual([8]);
+	});
+	await test.step('And the status says "The tags were changed elsewhere, so they were loaded again. Make the edit again."', async () => {
 		expect(await status(page)).toBe(
 			"The tags were changed elsewhere, so they were loaded again. Make the edit again.",
 		);
@@ -786,23 +883,23 @@ test("A save made stale elsewhere loads the tags again", async ({
 		await promptInput(page, 2).fill("Rust prompt");
 		await clickSave(page, server, { until: "put" });
 	});
-	await test.step('Then the second PUT /v1/tags is sent with If-Match "e2"', () => {
-		expect(server.ifMatch).toEqual(["e1", "e2"]);
+	await test.step('Then the second t.replace is sent with the etag "e2"', () => {
+		expect(server.replaces.map((p) => p.etag)).toEqual(["e1", "e2"]);
 	});
 });
 
 test("A failed save keeps the edits", async ({ page, context }) => {
 	const server = await background(page, context);
-	await givenTheEditor(page);
-	await test.step('And PUT /v1/tags answers with the status 500 and "boom"', () => {
-		server.put = (route) => route.fulfill({ status: 500, body: "boom" });
+	await givenTheEditor(server, page);
+	await test.step('And t.replace fails with the RPC error "boom"', () => {
+		server.fail["t.replace"] = { code: INTERNAL_ERROR, message: "boom" };
 	});
 	await test.step('When the prompt of "ruby" is changed and Save is clicked', async () => {
 		await promptInput(page, 0).fill("Changed");
 		await clickSave(page, server);
 	});
-	await test.step('Then the status says "Could not save: 500 boom"', async () => {
-		expect(await status(page)).toBe("Could not save: 500 boom");
+	await test.step('Then the status says "Could not save: boom"', async () => {
+		expect(await status(page)).toBe("Could not save: boom");
 	});
 	await test.step("And onSaved is not called and isDirty() is true", async () => {
 		expect(await seen(page)).toEqual([]);
@@ -816,16 +913,17 @@ test("A failed save keeps the blank memory items", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheEditor(
+		server,
 		page,
 		[{ ...RUBY, memory: [{ text: "fact" }, { text: "  " }] }, GO],
 		'Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go"',
 	);
-	await test.step('And PUT /v1/tags answers with the status 500 and "boom"', () => {
-		server.put = (route) => route.fulfill({ status: 500, body: "boom" });
+	await test.step('And t.replace fails with the RPC error "boom"', () => {
+		server.fail["t.replace"] = { code: INTERNAL_ERROR, message: "boom" };
 	});
 	await test.step("When Save is clicked", () => clickSave(page, server));
-	await test.step('Then PUT /v1/tags was sent "00010-ruby.html" with only the memory item "fact"', () => {
-		expect(server.puts.map((b) => b.tags[0])).toEqual([
+	await test.step('Then t.replace was sent "00010-ruby.html" with only the memory item "fact"', () => {
+		expect(server.replaces.map((b) => b.tags[0])).toEqual([
 			{
 				file: "00010-ruby.html",
 				name: "ruby",
@@ -835,8 +933,8 @@ test("A failed save keeps the blank memory items", async ({
 			},
 		]);
 	});
-	await test.step('And the status says "Could not save: 500 boom"', async () => {
-		expect(await status(page)).toBe("Could not save: 500 boom");
+	await test.step('And the status says "Could not save: boom"', async () => {
+		expect(await status(page)).toBe("Could not save: boom");
 	});
 	await thenIsDirty(page, false);
 	await test.step('When "+ New tag" is clicked', async () => {
@@ -849,8 +947,8 @@ test("A failed save keeps the blank memory items", async ({
 });
 
 test("Deleting a tag asks first", async ({ page, context }) => {
-	await background(page, context);
-	await givenTheEditor(page);
+	const server = await background(page, context);
+	await givenTheEditor(server, page);
 	const questions = [];
 	const deleteRuby = () =>
 		section(page, 0)
@@ -879,8 +977,9 @@ test("Deleting a tag asks first", async ({ page, context }) => {
 });
 
 test("Deleting a memory item removes it at once", async ({ page, context }) => {
-	await background(page, context);
+	const server = await background(page, context);
 	await givenTheEditor(
+		server,
 		page,
 		[RUBY],
 		'Given the editor of the definitions "ruby" with a prompt and two memory items',
@@ -901,8 +1000,8 @@ test("Discarding the changes asks first and goes back to the saved state", async
 	page,
 	context,
 }) => {
-	await background(page, context);
-	await givenTheEditor(page);
+	const server = await background(page, context);
+	await givenTheEditor(server, page);
 	await test.step('And the name of "go" is changed to "golang"', async () => {
 		await nameInput(page, 1).fill("golang");
 	});
@@ -946,8 +1045,8 @@ async function givenTheTagsDialog(page) {
 }
 
 async function givenGetTagsReturns(server) {
-	await test.step('And GET /v1/tags returns the definitions "ruby" and "go"', () => {
-		server.tags = { tags: [RUBY, GO] };
+	await test.step('And t.list answers the definitions "ruby" and "go"', () => {
+		server.tags = [RUBY, GO];
 	});
 }
 
@@ -975,8 +1074,8 @@ test("The tags dialog opens on the saved definitions", async ({
 }) => {
 	const server = await background(page, context);
 	await givenTheTagsDialog(page);
-	await test.step('And GET /v1/tags returns the definitions "ruby" and "go" with the ETag "e1"', () => {
-		server.tags = { tags: [RUBY, GO] };
+	await test.step('And t.list answers the definitions "ruby" and "go" with the ETag "e1"', () => {
+		server.tags = [RUBY, GO];
 		server.etag = "e1";
 	});
 	await clickOpenTags(page, "When the button is clicked");
@@ -984,10 +1083,10 @@ test("The tags dialog opens on the saved definitions", async ({
 		expect(await dialogOpen(page)).toBe(true);
 		expect(await names(page, "#tags-dialog")).toEqual(["ruby", "go"]);
 	});
-	await test.step('And Save in it sends PUT /v1/tags with If-Match "e1"', async () => {
+	await test.step('And Save in it sends t.replace with the etag "e1"', async () => {
 		await button(page, "Save").click();
 		await page.waitForFunction(() => window.seen.length > 0);
-		expect(server.ifMatch).toEqual(["e1"]);
+		expect(server.replaces.map((p) => p.etag)).toEqual(["e1"]);
 	});
 	await test.step("And the function it returned opens it as well after the dialog is closed", async () => {
 		await page.evaluate(() => document.getElementById("tags-dialog").close());
@@ -1003,13 +1102,13 @@ test("The tags dialog stays closed when the definitions cannot be loaded", async
 }) => {
 	const server = await background(page, context);
 	await givenTheTagsDialog(page);
-	await test.step('And GET /v1/tags answers with the status 500 and "boom"', () => {
-		server.get = (route) => route.fulfill({ status: 500, body: "boom" });
+	await test.step('And t.list fails with the RPC error "boom"', () => {
+		server.fail["t.list"] = { code: INTERNAL_ERROR, message: "boom" };
 	});
 	await clickOpenTags(page, "When the button is clicked");
-	await test.step('Then the toast says "Failed to load the tags: 500 boom"', async () => {
+	await test.step('Then the toast says "Failed to load the tags: boom"', async () => {
 		expect(await seen(page)).toEqual([
-			["toast", "Failed to load the tags: 500 boom"],
+			["toast", "Failed to load the tags: boom"],
 		]);
 	});
 	await test.step("And the dialog is closed", async () => {
@@ -1222,10 +1321,10 @@ test("The adopted proposals are added as edited", async ({ page, context }) => {
 		await proposal(page, 2).getByRole("checkbox").uncheck();
 		await clickAdd(page);
 	});
-	await test.step('Then POST /v1/tags/00010-ruby.html/memory is sent "A2" and then "B", each with the source', () => {
+	await test.step('Then t.memory.add is sent "A2" and then "B" for "00010-ruby.html", each with the source', () => {
 		expect(server.memory).toEqual([
-			["00010-ruby.html", { text: "A2", source: SOURCE }],
-			["00010-ruby.html", { text: "B", source: SOURCE }],
+			{ file: "00010-ruby.html", text: "A2", source: SOURCE },
+			{ file: "00010-ruby.html", text: "B", source: SOURCE },
 		]);
 	});
 	await test.step('And the dialog is closed, onDone is called and the toast says "Added 2 items to memory"', async () => {
@@ -1247,7 +1346,7 @@ test("Adding nothing adopted sends nothing", async ({ page, context }) => {
 		await proposal(page, 1).locator("textarea").fill("  ");
 		await clickAdd(page);
 	});
-	await test.step("Then nothing is sent to POST /v1/tags/:file/memory", () => {
+	await test.step("Then no t.memory.add is sent", () => {
 		expect(server.memory).toEqual([]);
 	});
 	await test.step('And the dialog is closed, onDone is called and the toast says "Nothing was added"', async () => {
@@ -1264,17 +1363,16 @@ test("A failed addition keeps the dialog open", async ({ page, context }) => {
 	await givenAMemoryDialog(page);
 	await test.step('And openMemoryDialog shows the proposal "A" for "Ruby"', () =>
 		openMemory(page, [proposalFor("Ruby", "A")]));
-	await test.step('And POST /v1/tags/00010-ruby.html/memory answers with the status 404 and "no such tag file"', () => {
-		server.addMemory = (route) =>
-			route.fulfill({ status: 404, body: "no such tag file" });
+	await test.step('And t.memory.add is refused with the code 9 and "no such tag file"', () => {
+		server.fail["t.memory.add"] = { code: 9, message: "no such tag file" };
 	});
 	await test.step("When Add the adopted items is clicked", () =>
 		clickAdd(page));
-	await test.step('Then the dialog says "Could not add: 404 no such tag file"', async () => {
+	await test.step('Then the dialog says "Could not add: no such tag file"', async () => {
 		expect((await memoryDialogState(page)).hints).toContain(
-			"Could not add: 404 no such tag file",
+			"Could not add: no such tag file",
 		);
-		expect(server.memory.map(([file]) => file)).toEqual(["00010-ruby.html"]);
+		expect(server.memory.map((p) => p.file)).toEqual(["00010-ruby.html"]);
 	});
 	await test.step("And the dialog is still open and onDone is not called", async () => {
 		expect((await memoryDialogState(page)).open).toBe(true);

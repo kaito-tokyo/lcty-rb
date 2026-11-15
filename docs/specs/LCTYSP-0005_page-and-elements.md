@@ -43,9 +43,10 @@ a module imported once the page has loaded attaches every feature without blocki
   moves out of the tag editor, which loses its ↑↓ buttons. A separate page at `/t/` (`public/t/index.html`, also
   `/t/index.html`; one directory below the root like every page, see [Routing](#routing)) has the sidebar like every
   page, lists the tags in their current (file-name) order with their display names, lets the user move them, and on
-  save renumbers them `00010`, `00020`, … and sends the whole set with `PUT /v1/tags`
-  ([LCTYSP-0006](LCTYSP-0006_http-api.md)). The contents of the tags are not changed. The tags dialog links to it
-  (`siteUrl("t/")`). On 412 it loads the tags again and asks the user to redo the move.
+  save renumbers them `00010`, `00020`, … and sends the whole set with `t.replace` of `/v1/rpc`
+  ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)). The contents of the tags are not changed. The tags dialog links to it
+  (`siteUrl("t/")`). When the save is refused because the set changed elsewhere, it loads the tags again and asks the
+  user to redo the move.
   - `/t/` mirrors `/c/`: the conversations are `data/c/` and `/c/`, the tags `data/t/` and `/t/`. `/t/lcty.v1.*`
     redirects to `/lcty.v1/` as `/c/lcty.v1.*` does, so a tag file loads them by name like a conversation file. The tag files are served
     under `/t/` too (below); their names start with five digits (`00010-ruby.html`) and cannot collide with
@@ -64,10 +65,10 @@ a module imported once the page has loaded attaches every feature without blocki
     parsed the view shows the tag with the editor's fields, read-only. The page's title is the tag's name. Opened
     directly (`file://`) the page stays so.
   - Once the page has loaded, `<lcty-t>` imports `tag-file.js` next to the page (the entry module `/t/tag-file.js`,
-    found from the page's URL since the script is served from `/lcty.v1/`). It reads the tags (the browser's copy, after the sidebar's
-    `sync_full`), finds the tag by the file name of the page and replaces the view with the tag editor for it
+    found from the page's URL since the script is served from `/lcty.v1/`). It reads the tags (over the tab's connection first, then the
+    browser's copy), finds the tag by the file name of the page and replaces the view with the tag editor for it
     (`renderTagsEditor` with `file`): the same fields and buttons as in the dialog, without "+ New tag". Saving sends
-    the whole set with `PUT /v1/tags`, the other tags unchanged. A new name is a new file, so after the save the page
+    the whole set with `t.replace`, the other tags unchanged. A new name is a new file, so after the save the page
     moves to its URL (`location.replace`); deleting the tag saves at once and moves to the reorder page `./`. A tag no
     longer in the set (renamed or deleted elsewhere) is shown as gone.
   - A file without `<lcty-t>` (an invalid tag) is served too, but nothing makes it a page.

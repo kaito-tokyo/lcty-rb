@@ -2,12 +2,15 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The tags in the browser, run by the tab's worker lcty.v1.t.worker.cjs (LCTYSP-0009, LCTYSP-0014, LCTYSP-0005).
+// The tags in the browser, kept by the tab's worker lcty.v1.t.worker.cjs and written over /v1/rpc (LCTYSP-0009, LCTYSP-0014).
 
 import { siteUrl } from "../site.js";
-import { followCopies } from "./tab-rpc.js";
+import { followCopies, tabRpc } from "./tab-rpc.js";
 
 const WORKER_PATH = "lcty.v1/lcty.v1.t.worker.cjs"; // relative to the root of the site (LCTYSP-0005)
+
+/** The code of the RPC error of a save made on a set of tags that has changed since it was read. */
+export const TAGS_CHANGED = 8;
 
 // The tab's last operation, last message id, worker, and operations not answered yet
 const state = { tail: null, lastId: 0, worker: null, pending: new Map() };
@@ -44,28 +47,21 @@ function runWorker(op, payload) {
 		state.lastId += 1;
 		const id = state.lastId;
 		state.pending.set(id, { op, resolve, reject });
-		workerOf().postMessage({
-			id,
-			op,
-			endpoint: siteUrl("v1/").href,
-			payload,
-		});
+		workerOf().postMessage({ id, op, payload });
 	});
 }
 
-// The Error of an answer {errorType, error?, errorMessage?, status}, with the HTTP status (or null) as status
+// The Error of an answer {errorType, error?, errorMessage?}
 function errorOf(data, op) {
-	const e =
-		data.errorType === "error" && data.error instanceof Error
-			? data.error
-			: new Error(
-					data.errorType === "unknownOperation"
-						? `unknown operation: ${op}`
-						: String(data.errorMessage ?? data.error),
-				);
-	e.status = data.status ?? null;
-	return e;
+	if (data.errorType === "error" && data.error instanceof Error)
+		return data.error;
+	return new Error(
+		data.errorType === "unknownOperation"
+			? `unknown operation: ${op}`
+			: String(data.errorMessage ?? data.error),
+	);
 }
+
 // Run the operation after the ones called before it, whether they succeeded or not
 function run(op, payload) {
 	const task = (state.tail ?? Promise.resolve())
@@ -75,31 +71,14 @@ function run(op, payload) {
 	return task;
 }
 
-/** The tags and their ETag from the browser's copy. */
-export function getTags() {
-	return run("get");
-}
-
-/** Replace all tag files with tags, if the set is still the one of etag. */
-export function putTags(tags, etag) {
-	return run("put", { tags, etag });
-}
-
-/** Add a memory item to the tag in file, then sync the copy. */
-export function addMemory(file, body) {
-	return run("addMemory", { file, body });
-}
-
-/** Replace the copy with GET /v1/tags now (sync_full): resolves when it has been stored, rejects with the error. */
-export function forceSyncTags() {
-	return run("sync_full");
-}
-
-// ---- The tags of conversations (t_has_many_c) ----
+// ---- The copies: the tag definitions (t_full, t_set) and the tags of conversations (t_has_many_c) ----
 
 const listeners = [];
-const hasMany = followCopies({
-	lists: [["t.c.list", "t_has_many_c"]],
+const copies = followCopies({
+	lists: [
+		["t.list", "t_full"],
+		["t.c.list", "t_has_many_c"],
+	],
 	run,
 	onChange: () => {
 		for (const fn of listeners) {
@@ -112,19 +91,59 @@ const hasMany = followCopies({
 	},
 });
 
-/** Call fn whenever this tab has stored a change of the tags of conversations. */
-export function onTagsOfConversationsChange(fn) {
+/** Call fn whenever this tab has stored a change of the tags (their definitions or the tags of conversations). */
+export function onTagsChange(fn) {
 	listeners.push(fn);
 }
 
-/** Read t.c.list over rpc and replace the copy; resolves when it is stored, rejects with the error. */
-export function readTagsOfConversationsFrom(rpc) {
-	return hasMany.readAll(rpc);
+/** Read t.list and t.c.list over rpc and replace the copies; resolves when they are stored, rejects with the error. */
+export function readTagsFrom(rpc) {
+	return copies.readAll(rpc);
 }
 
-/** Write the records of one t.batch.updated (after a list being read, if any); a failure is only logged. */
+/** Write the records of one t.batch.updated (after the lists being read, if any); a failure is only logged. */
 export function applyTagBatch(params) {
-	hasMany.onBatch(params);
+	copies.onBatch(params);
+}
+
+/** Read the copies again over the tab's connection now: resolves when they are stored, rejects with the error. */
+export function forceSyncTags() {
+	return readTagsFrom(tabRpc());
+}
+
+/** The copy of the tag definitions as it is, never read over the connection: {tags, etag, stale}. */
+export function readTagDefs() {
+	return run("get");
+}
+
+/** The tags and their ETag from the browser's copy, read over the tab's connection first when there is none. */
+export async function getTags() {
+	let copy = await run("get");
+	if (copy.stale) {
+		await forceSyncTags();
+		copy = await run("get");
+	}
+	return { tags: copy.tags, etag: copy.etag };
+}
+
+// A change over the tab's connection; when it fails the copies are read again, since the server's set may have changed
+async function change(method, params) {
+	try {
+		return await tabRpc().call(method, params);
+	} catch (e) {
+		await forceSyncTags().catch(() => {});
+		throw e;
+	}
+}
+
+/** Replace all tag files with tags, if the set is still the one of etag; resolves to the new ETag. */
+export async function putTags(tags, etag) {
+	return (await change("t.replace", { tags, etag })).etag;
+}
+
+/** Add a memory item ({text, source}) to the tag in file; resolves to the item as written. */
+export async function addMemory(file, { text, source }) {
+	return (await change("t.memory.add", { file, text, source })).item;
 }
 
 /** The tags of every conversation from the copy, by cid. */

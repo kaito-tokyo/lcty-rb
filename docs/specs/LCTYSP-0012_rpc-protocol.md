@@ -10,8 +10,8 @@ SPDX-License-Identifier: Apache-2.0
   (`lcty.v1.async.mjs`, `js/pages/new.js`), every page with the sidebar follows the lists over the tab's connection
   (`js/api/tab-rpc.js`, [LCTYSP-0014](LCTYSP-0014_browser-sync.md)), and the search panel embeds queries and follows
   the vector pair over it ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)). The pages change a conversation's tags
-  (`c.update.tags`) and delete it (`c.delete`) over it too. Not done: the tag definitions (`lcty.v1.t.worker.cjs`) are
-  still written through the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
+  (`c.update.tags`), delete it (`c.delete`), and read and write the tag definitions (`t.list`, `t.replace`,
+  `t.memory.add`) over it too: no page writes through the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)) any more.
 - Related: [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file this protocol writes),
   [LCTYSP-0006](LCTYSP-0006_http-api.md) (the HTTP API it is to replace for changes),
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the browser's copies it keeps up to date)
@@ -219,7 +219,9 @@ reads it again. `c.recordcount.list` does the same for the counts of elements: e
 `c_recordcount` records; a conversation the cache has no count for is not among them, and its count is unknown.
 `t.c.list` does the same for the tags of conversations: every row of `t_has_many_c` (`{tag, cid}`) with its version,
 followed by the records of `t.batch.updated`, the notification of every change of them (`c.update.tags`, `c.delete`,
-or the HTTP API with the `actorId` `null`). The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
+or the HTTP API with the `actorId` `null`). `t.list` does the same for the tag definitions: every tag file of `t/`
+(the rows of `t_full`) and the ETag of the set (`t_set`) with its version, followed by the `t_full` and `t_set` records
+of `t.batch.updated` (`t.replace`, `t.memory.add`). The same is also to be plain `GET`, so that a worker that keeps no WebSocket can read it (planned: `GET
 /v1/lcty_c_meta.json` and `GET /v1/lcty_t_full.json`, named after the database and the store of the browser's copy,
 [LCTYSP-0010](LCTYSP-0010_data-and-settings.md)). Both carry `Lcty-Version`: the version they were read at, read before
 the data so that the data is at least that new. The page then listens from that version; a notification it already holds
@@ -236,7 +238,6 @@ is recognised by its ids and ignored.
 - **Checking more than the last id.** `c.subscribe` compares only the last element. Whether a hash of the page's whole
   content (the skeleton of the integrity check) is needed is undecided, as is the check for pages other than a
   conversation.
-- **The methods of the tag definitions** (`t/`, written today with `PUT /v1/tags` and `POST /v1/tags/:file/memory`)
-  and the `GET` reads above. Settings are the browser's own ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
+- **The `GET` reads above.** Settings are the browser's own ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)).
 - **Many tabs.** Each tab keeps its own WebSocket; whether one connection is shared (a SharedWorker) is left until the
   number of connections matters.

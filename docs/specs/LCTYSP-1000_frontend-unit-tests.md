@@ -55,9 +55,9 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature) | `/lcty.v1/lcty.v1.cjs`: the elements of a conversation file |       0 |      83 |
 | [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)      | `js/ui/lcty-elements.js`: messages and the composer         |       0 |      39 |
 | [LCTYSP-1018](LCTYSP-1018_tags.feature)                       | `js/tags.js`: tags, drafts and memory                       |      15 |      45 |
-| [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel               |       0 |      22 |
+| [LCTYSP-1019](LCTYSP-1019_search-panel.feature)               | `js/search/search-panel.js`: the search panel               |       0 |      23 |
 | [LCTYSP-1020](LCTYSP-1020_tag-names.feature)                  | `js/tag-names.js`: tag names, file names and references     |      62 |       0 |
-| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `lcty.v1.t.worker.cjs` and `js/api/lcty-t.js`: the tags     |       0 |      43 |
+| [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)                     | `lcty.v1.t.worker.cjs` and `js/api/lcty-t.js`: the tags     |       0 |      54 |
 | [LCTYSP-1022](LCTYSP-1022_rpc-client.feature)                 | `js/api/rpc.js`: the client of `/v1/rpc`                    |       9 |       0 |
 | [LCTYSP-1023](LCTYSP-1023_lcty-msg-elements.feature)          | `js/ui/lcty-msg.js`: the elements the page builds           |       0 |       7 |
 | [LCTYSP-1024](LCTYSP-1024_tab-rpc.feature)                    | `js/api/tab-rpc.js`: the tab's connection                   |       5 |       0 |
@@ -134,7 +134,7 @@ scenario("A new id is a canonical UUIDv7", async ({ step }) => {
   and `routeFetch(t, handler)` answers every request of the test with `handler(request)`. In Node.js the root of the
   site that `siteUrl()` of `js/site.js` finds is `public/` itself ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)),
   so `routeFetch` gives the handler a URL under `public/` as the same path on the page's origin
-  (`http://127.0.0.1:45290/v1/tags`), the request a page would send. The handler also answers the requests of the
+  (`http://127.0.0.1:45290/v1/search`), the request a page would send. The handler also answers the requests of the
   workers and of their scripts (`node-preload.cjs`); a handler that answers `undefined` lets the site serve the file of
   `public/` (`route.continue()` in the browser), and one that throws fails the request without a response
   (`route.abort()`). The workers a test started are ended when it ends, as closing the page does.

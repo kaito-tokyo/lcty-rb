@@ -159,7 +159,7 @@ Feature: LCTYSP-3019 The entry point
       | /t/                           | 200    | "text/html; charset=utf-8"         |
       | /                             | 200    | "text/html; charset=utf-8"         |
       | /js/site.js                   | 200    | "text/javascript; charset=utf-8"   |
-      | /v1/tags                      | 200    | "application/json; charset=utf-8"  |
+      | /v1/defaults.json             | 200    | "application/json; charset=utf-8"  |
 
   Scenario Outline: The names of version 1 in /lcty.v1/ are the files they stand for
     Given Lcty.mount_all on a WEBrick server

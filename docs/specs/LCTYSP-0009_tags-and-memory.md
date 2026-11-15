@@ -98,7 +98,7 @@ UI → llm:      the current conversation (instructions + whole history) plus on
                response_format (JSON Schema) fixes the reply to {proposals: [{tag, text}]}
 llm → UI:      the proposals
 UI:            shows each proposal with accept / edit and accept / discard
-UI → storage:  POST /v1/tags/:name/memory for each accepted one
+UI → storage:  t.memory.add of /v1/rpc for each accepted one
 ```
 
 - **The temporary message is never saved** and does not enter the history.
@@ -171,7 +171,7 @@ unasked.
   sidebar and shows the tag read-only from the file's own elements; the page's features (`/t/tag-file.js`) replace that
   with the editor, which reads the tag from the browser's copy by the file name of the page
   ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
-- **Saving is the same replace-all** as the dialog's (`PUT /v1/tags` with `If-Match`), with the other tags sent back
+- **Saving is the same replace-all** as the dialog's (`t.replace` with the etag), with the other tags sent back
   as they are. A rename gives the tag a new file, so the page moves to the new file's URL; deleting it saves at once
   and moves to the reorder page.
 - **The reorder page and the sidebar's tag menu link** each tag to its file (the menu with 編集 beside the tag's name,
@@ -303,10 +303,12 @@ Ruby does not normalize, lowercase or otherwise rewrite names; what it writes is
 
 ### API: get-all and replace-all
 
-Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
+Only two operations exist, as methods of `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)); before 2026-11-15
+they were `GET` and `PUT /v1/tags` of the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
 
-- **Get all:** list `t/`, read every tag file, return them in file-name order. Takes the shared lock.
-- **Replace all:** the browser sends the complete set of tag files. Under the exclusive lock the server
+- **Get all (`t.list`):** list `t/`, read every tag file, return them in file-name order, with the set's ETag and the
+  global version they belong to. Takes the shared lock.
+- **Replace all (`t.replace`):** the browser sends the complete set of tag files. Under the exclusive lock the server
   1. checks every file name (above) and rejects the whole request, writing nothing, if one fails;
   2. writes each file to a temporary file in `t/` (a name the listing ignores, for example starting with `.`) and
      renames it into place;
@@ -317,28 +319,36 @@ Only two operations exist ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
   (one for all tags).
 - **The server has no reorder or rename feature.** Reordering, renaming and editing all send a new complete set
   computed by the browser. The one per-tag operation is adding a memory item
-  ([below](#adding-memory-has-its-own-endpoint)).
-- Get-all returns an `ETag` and replace-all requires `If-Match`
-  ([below](#concurrent-tabs-etag-and-if-match-crashes-are-accepted)).
+  ([below](#adding-memory-has-its-own-method)).
+- Get-all returns an ETag and replace-all requires it
+  ([below](#concurrent-tabs-the-etag-crashes-are-accepted)).
+- **Every change is announced** as one `t.batch.updated` ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)) with the actor
+  that made it: a `t_full` delete (`{file}`) for each file that went, a put (the tag) for each that came or changed,
+  then the `t_set` put of the new ETag. A change made outside the server (a file edited by hand) is not announced: it
+  is seen at the next `t.list`.
 
 ### In the browser: t_full, like c_meta
 
 Tags are handled in the browser the way the conversation meta is (`c_meta`,
-[LCTYSP-0010](LCTYSP-0010_data-and-settings.md)):
+[LCTYSP-0010](LCTYSP-0010_data-and-settings.md)), and since 2026-11-15 follow the server the same way, over the tab's
+`/v1/rpc` connection ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)):
 
-- **IndexedDB `lcty_t`, stores `t_full` and `t_set`** (derived; they can be dropped at any time): a copy of
-  `GET /v1/tags`, every tag in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's `ETag`. "Full"
-  as opposed to `c_meta`'s head lines only: a tag file is small and every reader needs all of it.
-  - **`t_full` is row-oriented, like `c_meta`:** one row per tag file, the tag as `GET /v1/tags` gives it, with the key
-    path `file` (NFC-normalized; so is the `name` of an invalid tag, which comes from the file name). Key order is
-    file-name order, which is the order of the tags (`NNNNN-`), so the rows
-    read in key order are the set in order. A reorder changes a tag's key; a sync rewrites every row anyway.
-  - **`t_set` holds the set's `ETag`,** one record under the key `"set"`, `{etag}`: the ETag is the whole set's, so it
-    is not a row. Its presence marks a copy, so an empty set (no rows) is a copy too.
-  - **The two stores are always written and read in one transaction** (`sync_full` clears the rows, puts every tag
-    and the ETag; `get` reads both), so the rows and the ETag are always the same set.
+- **IndexedDB `lcty_t`, stores `t_full` and `t_set`** (derived; they can be dropped at any time): a copy of `t.list`,
+  every tag in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's ETag. "Full" as opposed to
+  `c_meta`'s head lines only: a tag file is small and every reader needs all of it.
+  - **`t_full` is row-oriented, like `c_meta`:** one row per tag file, the tag as `t.list` gives it, with the key path
+    `file` (NFC-normalized; so is the `name` of an invalid tag, which comes from the file name). Key order is file-name
+    order, which is the order of the tags (`NNNNN-`), so the rows read in key order are the set in order. A reorder
+    changes a tag's key: the old key is deleted and the new one put.
+  - **`t_set` holds the set's ETag,** one record under the key `"set"`, `{etag}`: the ETag is the whole set's, so it
+    is not a row.
+  - **The two stores are one copy:** they are always written and read in one transaction (`replace` clears the rows,
+    puts every tag and the ETag; `apply` writes the records of `t_full` and `t_set` of one notification; `get` reads
+    both), so the rows and the ETag are always the same set. The copy's row in the store `sync` (`{store: "t_full",
+    boot, seq}`) is the version it was brought to, under the version rule of
+    [LCTYSP-0014](LCTYSP-0014_browser-sync.md); a copy without it has never been filled, whatever its stores hold.
   - Version 1 held the set as one record `"set"`, `{tags, etag}`, in `t_full` with out-of-line keys. Since the copy is
-    derived, an upgrade drops every store and recreates them empty, and the next `get` syncs; nothing is converted.
+    derived, an upgrade drops every store and recreates them empty, and the next read fills them; nothing is converted.
 - **One database per resource:** `lcty_c` for what is derived from `c/` (store `c_meta`) and `lcty_t` for what
   is derived from `t/` (stores `t_full` and `t_set`), in line with `/c/` and `/t/` on the site and `c/` and `t/` in the
   data directory.
@@ -347,11 +357,12 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
     so a shared database would mean the same version and schema written in two places, and one worker's upgrade could
     be blocked by the other's connection. Separate databases can also be dropped one at a time. The two copies never
     need to be read in one transaction.
-  - **The same pattern for both:** each worker is also the only code that opens its database, readers included.
-    `lcty.v1.c.worker.cjs` has the operations `replace`, `apply` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
+  - **The same pattern for both:** each worker is also the only code that opens its database, readers included, and
+    neither sends a request: the page reads over its connection and posts what it got. `lcty.v1.c.worker.cjs` has the
+    operations `replace`, `apply` and `get` ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md),
     [LCTYSP-1001](LCTYSP-1001_lcty-c.feature)); `js/api/meta-db.js` and `lcty.v1.cjs` read `c_meta` through it.
-    `lcty.v1.t.worker.cjs` keeps the tags of conversations, `t_has_many_c`, with the same `replace` and `apply`
-    ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
+    `lcty.v1.t.worker.cjs` keeps the tag definitions (`t_full` and `t_set`) and the tags of conversations
+    (`t_has_many_c`) with the same `replace` and `apply` ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)).
 - **The name is the resource's, as the server's files are:** `lcty_<resource>` (`lcty_c`, `lcty_t`), cut at the
   same grain as the server's SQLite files `lcty_<resource>.sqlite`
   ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)). What is stored is versioned by the database's own version, an
@@ -360,58 +371,56 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   and versions these databases had before they were named after the version of the files for a time; a database left
   from then is opened again as it is. Those of that time (`lcty_v1_c`, `lcty_v1_t`) and the older `lcty` are left as
   they are, as copies nothing reads.
-- **Every asynchronous operation on the tags is one worker:** `lcty.v1.t.worker.cjs`, a classic worker script with no
-  imports like `lcty.v1.c.worker.cjs`, and the only code that opens `lcty_t` (readers included). `js/api/lcty-t.js`
-  starts one per call.
+- **Every asynchronous operation on the copies of the tags is one worker:** `lcty.v1.t.worker.cjs`, a classic worker
+  script with no imports like `lcty.v1.c.worker.cjs`, and the only code that opens `lcty_t` (readers included).
+  `js/api/lcty-t.js` starts one per tab.
 - **The workers are RPC servers that run as a `Worker` or as a `SharedWorker` alike:** both `lcty.v1.c.worker.cjs` and
   `lcty.v1.t.worker.cjs` set the global `onmessage` (which a `Worker` uses) and `onconnect` (which a `SharedWorker` uses,
-  giving each port the same handler). A message `{id, op, endpoint, payload}` is answered on the port it came from (the
-  worker itself, or the `SharedWorker`'s port: the event's `target`) by `{id, result}`, or on a failure by
-  `{id, errorType}`: `"unknownOperation"` for an `op` the worker does not have; `"error"` with `error` (the `Error`
-  itself, as the structured clone keeps it) and `status` (the HTTP status, `null` when there is none, since the clone
-  drops it); or `"errorMessage"` with `errorMessage` (the error as text) and `status` when the error cannot be posted. A
-  message without an `id` cannot be answered. Classic scripts, not module workers, so a top-level `var` sets the global
-  handler. Errors are posted, not thrown, since a rejection inside an async message handler does not reliably reach the
-  page as the `Worker`'s `error` event; that event is left for a worker that could not be loaded
-  ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature), [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)).
-  - **`endpoint` is the URL of the site's `v1/`,** which the page knows (`siteUrl("v1/")`), so the worker does not
-    depend on where it is served. Every message carries it: the worker keeps no state between messages, and the ports
-    of a `SharedWorker` may come from any page of the site. It must be an absolute URL on the worker's origin, ending
-    with `/`, since the copy in IndexedDB is the origin's and must not be filled from another server; otherwise the
-    message is answered with an `"error"` before any operation (also for an `op` that sends no request, so every
-    message is checked the same way).
+  giving each port the same handler). A message `{id, op, payload}` is answered on the port it came from (the worker
+  itself, or the `SharedWorker`'s port: the event's `target`) by `{id, result}`, or on a failure by `{id, errorType}`:
+  `"unknownOperation"` for an `op` the worker does not have; `"error"` with `error` (the `Error` itself, as the
+  structured clone keeps it); or `"errorMessage"` with `errorMessage` (the error as text) when the error cannot be
+  posted. A message without an `id` cannot be answered. Classic scripts, not module workers, so a top-level `var` sets
+  the global handler. Errors are posted, not thrown, since a rejection inside an async message handler does not
+  reliably reach the page as the `Worker`'s `error` event; that event is left for a worker that could not be loaded
+  ([LCTYSP-1001](LCTYSP-1001_lcty-c.feature), [LCTYSP-1021](LCTYSP-1021_lcty-t.feature)). The messages of
+  `lcty.v1.c.worker.cjs` also carry the `endpoint` of the site's `v1/`; those of `lcty.v1.t.worker.cjs` no longer do,
+  since it sends no request.
 
-  | `op`        | `payload`      | What the worker does                                                                                       | `result`          |
-  | ----------- | -------------- | ---------------------------------------------------------------------------------------------------------- | ----------------- |
-  | `sync_full` | none           | `GET v1/tags`, then replaces the rows and the ETag in one transaction; a failure leaves the copy as it was | none              |
-  | `get`       | none           | reads the rows (in file-name order) and the ETag; when there is no copy yet, syncs first                   | `{tags, etag}`    |
-  | `put`       | `{tags, etag}` | `PUT v1/tags` with `{tags}` and the `If-Match` `etag`, then syncs (also on failure)                        | the new `ETag`    |
-  | `addMemory` | `{file, body}` | `POST v1/tags/:file/memory` with `body`, then syncs (also on failure)                                      | the server's JSON |
-  - **`put` takes the ETag from the caller,** the one `get` returned with the tags the user edited, not the copy's:
-    the copy may have been synced to a newer set meanwhile, and sending its ETag would let the save overwrite a change
-    the user never saw.
-  - A failure of the sync after `put` or `addMemory` is not reported: the change is what the caller asked about, and
-    the next sync fixes the copy.
-- **In a tab the calls run one at a time,** in the order they were made (`js/api/lcty-t.js` chains them), so an older
-  `GET` never overwrites a newer copy in this tab and a `get` after a change sees it. Tabs are not coordinated: their
-  copies are the same database, and the last sync wins.
-- **When a sync runs:** every page runs `sync_full` whenever it is shown: at once when it loads, and again when it
-  comes back from the back/forward cache (`pageshow` with `persisted`), where no script runs anew. `js/ui/sidebar.js`
-  does it, for the tags and the meta alike (every page has the sidebar), and then shows the new display names. `put`
-  and `addMemory` sync after the request, and the first `get` in a browser syncs. The reorder page, which edits the
-  set, reads it after the sidebar's `sync_full` (the calls of a tab run in order), so it starts from the server's.
+  | `op`           | `payload`                       | What the worker does                                                       | `result`              |
+  | -------------- | ------------------------------- | -------------------------------------------------------------------------- | --------------------- |
+  | `get`          | none                            | reads the rows of `t_full` (in file-name order) and the ETag               | `{tags, etag, stale}` |
+  | `replace`      | `{store, version, rows, etag?}` | replaces the copy `t_full` (with the ETag) or `t_has_many_c`, unless newer | `{applied}`           |
+  | `apply`        | `{version, records}`            | writes the records of one `t.batch.updated` into each copy that is older   | `{applied: [copies]}` |
+  | `get_has_many` | none                            | reads the rows of `t_has_many_c`                                           | `{rows, stale}`       |
+- **The changes go over the tab's connection,** not through the worker: `js/api/lcty-t.js` sends `t.replace` with the
+  ETag the caller read the tags with (the one `getTags` returned with the tags the user edited, not the copy's: the
+  copy may have been brought to a newer set meanwhile, and sending its ETag would let the save overwrite a change the
+  user never saw) and `t.memory.add`. The server announces the change before it answers, so the copy is written
+  before a `getTags` called after the change in the same tab. When a change fails, the lists are read again (the
+  server's set may have changed) before the error is passed on.
+- **In a tab the operations of the worker run one at a time,** in the order they were made (`js/api/lcty-t.js` chains
+  them), so an older read never overwrites a newer copy in this tab and a `get` after a change sees it. Tabs share the
+  copy (the same database), and the version rule keeps an older read or notification from overwriting a newer one.
+- **When the copy is read whole:** whenever the tab's connection opens (the first time and after every reconnection;
+  `js/ui/sidebar.js` reads `t.list` and `t.c.list` with the lists of conversations), when a page comes back from the
+  back/forward cache (`pageshow` with `persisted`), where no script runs anew, and by the first `getTags` on a copy
+  never filled. A tag file edited by hand shows then. The reorder page and the page of a tag file, which edit the set,
+  read it whole before they show it, so they start from the server's.
 - **Readers** go through the worker's `get`: the tag editor, the tag choice on the new conversation page, the
   conversation page, the memory dialog and the reorder page, and the display of references (part → display name):
   - **the header** (`<lcty-c>`'s chips) gets `data-tag-defs` and `data-tag-names` from the conversation page;
   - **the sidebar's list** (`<lcty-conv-list>`) gets the same two attributes, from `<lcty-sidebar>` itself as soon
     as it is in the document (the worker's `get`, found at `../lcty.v1/lcty.v1.t.worker.cjs` from the page, so the names are
-    there with the first view of the list) and from `js/ui/sidebar.js` once the module has read the tags and whenever
-    the tags dialog saves them. A chip shows the display name and keeps its reference in `data-tag`;
+    there with the first view of the list; a copy never filled is left to the module) and from `js/ui/sidebar.js` once
+    the module has read the tags and whenever the copy changes. A chip shows the display name and keeps its reference
+    in `data-tag`;
   - **`tag:` in search** needs no copy: the search panel derives the part from what was typed (`tagPart`), which
     gives the same part for a display name and for the part itself (`tag:C#` and `tag:c~23`). A click on a chip, in
     the header or the list, puts the shown name into the search box.
-- **On 412** (the set was changed elsewhere since the caller's `get`) the worker has already synced, so the page reads
-  the new set with `get` and the user redoes the edit on it.
+- **When a save is refused as changed** (`TAGS_CHANGED`: the set was changed elsewhere since the caller's `getTags`)
+  the lists have already been read again, so the page reads the new set with `getTags` and the user redoes the edit on
+  it.
 - No `localStorage` snapshot for now.
 
 ### Reordering has its own page
@@ -429,18 +438,18 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   and its escaping live in one place (Ruby), and the server can vouch for what is in `t/`.
 - The server still does no Unicode processing: the display name, prompt and memory text are stored exactly as sent
   (HTML-escaped), and the file name is the one the browser sent.
-- Memory items keep their `id` and `at` through replace-all; an item without `at` gets the current time, as
-  `PUT /v1/tags` does today.
+- Memory items keep their `id` and `at` through replace-all; an item without `at` gets the current time.
 - Not adopted: the browser writes the HTML and the server stores the bytes. The markup would live in JavaScript and the
   server could not vouch for the content.
 
-### Adding memory has its own endpoint
+### Adding memory has its own method
 
-- Accepting a proposal uses a small add-memory endpoint ([LCTYSP-0006](LCTYSP-0006_http-api.md)) that names the tag by
-  its file name (`00010-ruby.html`, as get-all returned it). Under the exclusive lock on `t.lock`, the server reads that
-  one file, appends the item (assigning `id` and `at`), and writes the file back via a temporary file and a rename.
-  A file that does not exist (for example renamed or renumbered by another tab) is 404, and the browser gets all again.
-- It changes the set, so it changes the set's `ETag` (below): a tab that loaded the tags before the addition cannot
+- Accepting a proposal uses a small add-memory method, `t.memory.add` of `/v1/rpc`
+  ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), that names the tag by its file name (`00010-ruby.html`, as get-all
+  returned it). Under the exclusive lock on `t.lock`, the server reads that one file, appends the item (assigning `id`
+  and `at`), and writes the file back via a temporary file and a rename. A file that does not exist (for example
+  renamed or renumbered by another tab) is refused (error 9), and the browser gets all again.
+- It changes the set, so it changes the set's ETag (below): a tab that loaded the tags before the addition cannot
   replace-all over it without getting all again.
 - Not adopted: adding memory through replace-all. Every addition would rewrite every file and could undo another tab's
   edits to other tags.
@@ -455,13 +464,14 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 - Not adopted: a stable id (for example a UUIDv7) inside each tag file that conversations refer to. It would need the
   id in conversation files or `conversation_tags` and a mapping for `tag:name` in search.
 
-### Concurrent tabs: ETag and If-Match; crashes are accepted
+### Concurrent tabs: the ETag; crashes are accepted
 
-- Get-all returns an `ETag` for the whole set of tag files, computed by the server under the lock from the listed file
+- Get-all returns an ETag for the whole set of tag files, computed by the server under the lock from the listed file
   names and their contents (so a change made outside the server also changes it).
-- Replace-all requires `If-Match` with that `ETag`. When another tab (or an add-memory request) has changed the set in
-  between, it fails with 412 and writes nothing; the browser gets all again and the user redoes the edit on the new
-  state. A request without `If-Match` is rejected with 428. A successful replace-all returns the new `ETag`.
+- Replace-all requires that ETag (`etag` of `t.replace`; before, `If-Match` of `PUT /v1/tags`). When another tab (or
+  an add-memory request) has changed the set in between, it is refused (error 8, `TAGS_CHANGED`) and writes nothing;
+  the browser gets all again and the user redoes the edit on the new state. A request without an etag is refused as
+  invalid (error 3). A successful replace-all returns the new ETag.
 - **A crash during replace-all is accepted:** it can leave a mix of old and new files. Each file itself is whole, thanks
   to the temporary file and rename.
 - Not adopted for now: writing the whole set to `t.new/` and swapping directories with recovery at startup. It can be

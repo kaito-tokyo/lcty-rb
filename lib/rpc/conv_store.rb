@@ -40,6 +40,9 @@ module Lcty
     NOT_FOUND = 4 # no such conversation
     EXISTS = 5 # the conversation already exists
     FORMER = 6 # the conversation is in the format of LCTYSP-0003, not converted yet
+    # (7 is UNAVAILABLE, lib/rpc/servlet.rb)
+    CHANGED = 8 # the tag definitions are not the set the request names (its etag)
+    NO_TAG = 9 # no such tag file
 
     class << self
       # The search index (Chatty::SearchIndex) whose file, _index.sqlite, caches the number of elements of every
@@ -51,6 +54,8 @@ module Lcty
       attr_accessor :tags
       # What was measured of the replies (Chatty::CStore, lcty_c.sqlite): c.stats.put and c.stats.list
       attr_accessor :c_store
+      # The tag definitions (Chatty::TagFiles, t/): t.list, t.replace and t.memory.add
+      attr_accessor :tag_files
     end
 
     module ConvStore

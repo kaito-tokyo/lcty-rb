@@ -4,7 +4,7 @@
 
 // Tags and memory: the system prompt draft, the tag editor and memory proposals (LCTYSP-0009).
 
-import { addMemory, getTags, putTags } from "./api/lcty-t.js";
+import { addMemory, getTags, putTags, TAGS_CHANGED } from "./api/lcty-t.js";
 import { tr } from "./i18n.js";
 import { stream } from "./llm/client.js";
 import { buildRequest } from "./llm/history.js";
@@ -244,12 +244,12 @@ export function renderTagsEditor(
 		try {
 			version = await putTags(tags, version);
 		} catch (e) {
-			if (e.status === 412) {
+			if (e.code === TAGS_CHANGED) {
 				// Changed in another tab meanwhile: take the new state; the user redoes the edit on it
 				try {
 					({ tags: saved, etag: version } = await getTags());
 				} catch (err) {
-					// The edits are kept; saving again gets 412 until the tags can be loaded
+					// The edits are kept; saving again is refused until the tags can be loaded
 					status.textContent = tr(
 						"tagsLoadFailed",
 						"Failed to load the tags: {error}",
@@ -276,10 +276,10 @@ export function renderTagsEditor(
 			currentFile = i < 0 ? null : tags[i].file;
 		}
 		try {
-			// Take timestamps etc. from the saved values; the ETag is the one this GET read them with
+			// Take timestamps etc. from the saved values, as the copy has them now
 			({ tags: saved, etag: version } = await getTags());
 		} catch {
-			saved = tags; // Saved: keep what was sent, with the ETag PUT returned
+			saved = tags; // Saved: keep what was sent, with the ETag t.replace returned
 		}
 		reset(saved);
 		onSaved(structuredClone(saved), { file: currentFile });

@@ -416,7 +416,7 @@ Feature: LCTYSP-1016 The elements of a conversation file
     Then its list is empty
 
   Scenario: The sidebar names its list's tags from the browser's copy of the tags
-    Given "t_full" of the database "lcty_t" holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"
+    Given the copy "t_full" of the database "lcty_t", filled at "b1.1", holds the tag file "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"
     When a <lcty-sidebar> is put into the body
     Then its list's data-tag-defs becomes "c~23 ruby" and data-tag-names "C# Ruby"
 

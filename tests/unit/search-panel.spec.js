@@ -8,12 +8,13 @@
 // js/search/search-panel.js runs in a real browser on the test server's origin, on the empty unit page, with a real
 // <lcty-conv-list> (from /c/lcty.v1.js), the real copies of the list (api/meta-db.js and api/lcty-t.js with their
 // workers, lcty_c and lcty_t) and the real semantic search worker (/fuzzy_search.worker.js). The tab's /v1/rpc
-// connection is a stand-in (window.rpc, answering window.lists) handed to readMetaDbFrom and
-// readTagsOfConversationsFrom, and the notifications are passed to applyMetaBatch and applyTagBatch, so the workers
-// store the copies as they do in a page; the same stand-in answers vectors.eg2_264.embed with the query vector
-// (window.embedded keeps the texts it was asked). Every request is answered by a route the test sets (server.*), which
-// also records it: the tags, the keyword search, the snippets, the rounds of the conversations and the vector pair
-// (its JSON, and its rows and ids by Range; one-hot rows, so the query's scores are known).
+// connection is a stand-in (window.rpc, answering window.lists: c.list, c.recordcount.list, t.list with the tag
+// definitions and t.c.list) handed to readMetaDbFrom and readTagsFrom, and the notifications are passed to
+// applyMetaBatch and applyTagBatch, so the workers store the copies as they do in a page; the same stand-in answers
+// vectors.eg2_264.embed with the query vector (window.embedded keeps the texts it was asked). Every request is answered
+// by a route the test sets (server.*), which also records it: the keyword search, the snippets, the rounds of the
+// conversations and the vector pair (its JSON, and its rows and ids by Range; one-hot rows, so the query's scores are
+// known).
 // What the panel shows is read from the list (its links) and from the items it gave list.show(), kept in window.shown.
 
 import { expect, test } from "@playwright/test";
@@ -66,7 +67,7 @@ function listsOf(version, convs) {
 	};
 }
 
-/** GET /v1/tags: "y" before "x" in the order of the files, so a conversation's tags are not shown by reference. */
+/** t.list: "y" before "x" in the order of the files, so a conversation's tags are not shown by reference. */
 const TAGS = [
 	{ file: "00010-y.html", name: "y", ops: [], prompt: "", memory: [] },
 	{ file: "00020-x.html", name: "x", ops: [], prompt: "", memory: [] },
@@ -152,7 +153,6 @@ async function background(page, context) {
 		}, QUERY);
 	});
 	const server = {
-		tags: [],
 		searches: [],
 		snippets: [],
 		conversations: 0,
@@ -162,13 +162,7 @@ async function background(page, context) {
 		pair: pairOf([]),
 		pairJson: (route) => route.fulfill({ json: server.pair.json }),
 	};
-	await test.step("And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations and the vector pair are answered by the test, and vectors.eg2_264.embed by the tab's connection", async () => {
-		await context.route("**/v1/tags", (route) =>
-			route.fulfill({
-				headers: { ETag: '"t1"' },
-				json: { tags: server.tags },
-			}),
-		);
+	await test.step("And POST /v1/search, POST /v1/snippets, GET /v1/conversations and the vector pair are answered by the test, and vectors.eg2_264.embed by the tab's connection", async () => {
 		await context.route("**/v1/search", (route) => {
 			server.searches.push(route.request().postDataJSON());
 			return server.search(route);
@@ -189,32 +183,32 @@ async function background(page, context) {
 				answerRange(route, server.pair[ext]),
 			);
 	});
-	await test.step('And GET /v1/tags defines the tags "y" and then "x"', () => {
-		server.tags = TAGS;
-	});
+	await test.step('And t.list of the tab\'s connection defines at the version "b007.1" the tags "y" and then "x", with the ETag "t1"', () =>
+		holdLists(page, {
+			"t.list": { version: "b007.1", etag: '"t1"', items: TAGS },
+		}));
 	await test.step('And the lists of the tab\'s connection hold at the version "b007.1" "a" (4 elements, tags "w", "x" and "y", newest), "b" (2 elements, tag "x") and "c" (6 elements, no tags, oldest)', () =>
 		holdLists(page, listsOf("b007.1", CONVERSATIONS)));
 	return server;
 }
 
-/** What the stand-in of the tab's connection answers from now on. */
+/** What the stand-in of the tab's connection answers from now on for the lists in lists (it keeps the others). */
 function holdLists(page, lists) {
 	return page.evaluate((lists) => {
-		window.lists = lists;
+		Object.assign(window.lists, lists);
 	}, lists);
 }
 
 /** Read the lists over the stand-in into the copies, as the sidebar does when the connection opens. */
 function readLists(page, which = ["meta", "tags"]) {
 	return page.evaluate(async (which) => {
-		const [{ readMetaDbFrom }, { readTagsOfConversationsFrom }] =
-			await Promise.all([
-				import("/js/api/meta-db.js"),
-				import("/js/api/lcty-t.js"),
-			]);
+		const [{ readMetaDbFrom }, { readTagsFrom }] = await Promise.all([
+			import("/js/api/meta-db.js"),
+			import("/js/api/lcty-t.js"),
+		]);
 		await Promise.all([
 			which.includes("meta") && readMetaDbFrom(window.rpc),
-			which.includes("tags") && readTagsOfConversationsFrom(window.rpc),
+			which.includes("tags") && readTagsFrom(window.rpc),
 		]);
 	}, which);
 }
@@ -367,7 +361,7 @@ test("Opening the panel waits for the first read of the lists, then lists the co
 			text: "",
 		});
 	});
-	await test.step("When the tab's connection reads c.list, c.recordcount.list and t.c.list into the copies", () =>
+	await test.step("When the tab's connection reads c.list, c.recordcount.list, t.list and t.c.list into the copies", () =>
 		readLists(page));
 	await test.step('Then the list shows "a", "b" and "c", newest first', async () => {
 		// Each copy that was stored shows the list again: wait for the one that has the tags too

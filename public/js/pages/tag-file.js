@@ -4,7 +4,7 @@
 
 // The page of a tag file, /t/NNNNN-<part>.html: the tag editor for that tag alone (LCTYSP-0005, LCTYSP-0009).
 
-import { getTags } from "../api/lcty-t.js";
+import { forceSyncTags, getTags } from "../api/lcty-t.js";
 import { tabRpc } from "../api/tab-rpc.js";
 import { showToast } from "../common.js";
 import { tr } from "../i18n.js";
@@ -62,7 +62,8 @@ export function initTagFilePage() {
 	});
 
 	(async () => {
-		// The page edits the set, so it reads it after initSidebar's sync_full (LCTYSP-0009)
+		// The page edits the set, so it starts from the server's (LCTYSP-0009)
+		await forceSyncTags().catch(() => {});
 		await load();
 		panel.refresh();
 	})();

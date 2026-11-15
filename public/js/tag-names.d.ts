@@ -15,7 +15,7 @@ export interface TagMemory {
 }
 
 /**
- * A tag definition as GET /v1/tags gives it: file is its file name (NNNNN-<part>.html, NFC), or null for a new tag
+ * A tag definition as t.list of /v1/rpc gives it: file is its file name (NNNNN-<part>.html, NFC), or null for a new tag
  * not saved yet. invalid marks a file without <lcty-t>: it keeps its file name and takes no memory.
  */
 export interface TagDef {

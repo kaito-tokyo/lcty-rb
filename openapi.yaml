@@ -143,13 +143,6 @@ paths:
     get:
       tags: [API]
       summary: The default settings (LCTYSP-0010)
-  /v1/tags:
-    get:
-      tags: [API]
-      summary: Every tag, with the ETag of the set
-    put:
-      tags: [API]
-      summary: Replace every tag (If-Match required)
   /v1/conversations:
     get:
       tags: [API]

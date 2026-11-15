@@ -24,10 +24,11 @@ import type { SearchPanel } from "../search/search-panel.js";
  * and focuses the box; its "Edit tags" opens the tags dialog. The menu shows the tags whenever the chips' names are
  * set (after reading, syncing or saving them), and reads the browser's copy again each time it opens.
  *
- * Every page has the sidebar: the browser's copy of the tag definitions is replaced with the server's (sync_full)
- * whenever the page is shown: at once when it loads, and again when it comes back from the back/forward cache
- * (pageshow with persisted), where no script runs anew (LCTYSP-0009). The lists of conversations follow /v1/rpc
- * instead, whose connection is opened again after the cache closed it.
+ * Every page has the sidebar, which keeps the browser's copies of the list and of the tags following the server over
+ * the tab's /v1/rpc connection (LCTYSP-0014): every (re)connection reads them whole (c.list, c.recordcount.list, t.list
+ * and t.c.list) and every notification is applied. A page that comes back from the back/forward cache (pageshow with
+ * persisted), where no script runs anew, reads the tags again, so a tag file edited by hand shows (LCTYSP-0009). The
+ * chips' names are shown again whenever the copy of the tags changes (onTagsChange).
  *
  * @param sidebar the <lcty-sidebar>
  * @param o.onSelect called when a conversation is chosen; return true when it was handled (otherwise the item's link

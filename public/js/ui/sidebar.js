@@ -8,7 +8,8 @@ import {
 	applyTagBatch,
 	forceSyncTags,
 	getTags,
-	readTagsOfConversationsFrom,
+	onTagsChange,
+	readTagsFrom,
 } from "../api/lcty-t.js";
 import { applyMetaBatch, readMetaDbFrom } from "../api/meta-db.js";
 import { onTabNotify, onTabOpen, tabRpc } from "../api/tab-rpc.js";
@@ -35,7 +36,7 @@ export function initSidebar(sidebar, { onSelect, onTagsSaved }) {
 	onTabNotify("c.batch.updated", applyMetaBatch);
 	onTabNotify("t.batch.updated", applyTagBatch);
 	const readLists = (rpc) =>
-		Promise.all([readMetaDbFrom(rpc), readTagsOfConversationsFrom(rpc)]);
+		Promise.all([readMetaDbFrom(rpc), readTagsFrom(rpc)]);
 	onTabOpen((rpc) =>
 		readLists(rpc).catch((e) =>
 			console.warn("the list of conversations could not be read", e),
@@ -80,20 +81,14 @@ export function initSidebar(sidebar, { onSelect, onTagsSaved }) {
 			.then(({ tags }) => showTags(tags))
 			.catch(() => {}); // the chips keep their references
 	readTags();
-	// Opening the menu reads the browser's copy again: another tab may have changed the tags
-	sidebar.tagMenu.addEventListener("beforetoggle", (e) => {
-		if (e.newState === "open") readTags();
-	});
-	// The tag definitions are synced whenever the page is shown, also from the back/forward cache (LCTYSP-0009)
-	const forceSync = () => {
-		forceSyncTags()
-			.then(getTags)
-			.then(({ tags }) => showTags(tags))
-			.catch((e) => console.warn("the tags could not be synced", e));
-	};
-	forceSync();
+	// The copy follows the server over the tab's connection (LCTYSP-0014): every change stored is shown
+	onTagsChange(readTags);
+	// A page shown again from the back/forward cache reads the tags again: files edited by hand show then (LCTYSP-0009)
 	addEventListener("pageshow", (e) => {
-		if (e.persisted) forceSync();
+		if (e.persisted)
+			forceSyncTags().catch((e) =>
+				console.warn("the tags could not be synced", e),
+			);
 	});
 	initSettingsDialog(sidebar.settingsButton);
 	return panel;

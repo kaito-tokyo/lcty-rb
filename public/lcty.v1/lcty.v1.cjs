@@ -590,8 +590,8 @@
 	#filled = false;
 
 	// The display names of the list's tags, for the first paint too: the browser's copy of the tags (IndexedDB "lcty_t",
-	// store "t_full") through the worker that alone opens it (lcty.v1.t.worker.cjs, operation "get", which fetches
-	// GET /v1/tags first when there is no copy yet; LCTYSP-0009), found from the page's URL like lcty.v1.c.worker.cjs
+	// store "t_full") through the worker that alone opens it (lcty.v1.t.worker.cjs, operation "get"; a copy never filled
+	// is left to the module, which reads it over /v1/rpc; LCTYSP-0009), found from the page's URL like lcty.v1.c.worker.cjs
 	// below.
 	// The references are the tag files' names without the number and .html (tagRef in js/tag-names.js). The module sets
 	// the same attributes when it has read the tags; whichever comes first, the second sets the same values.
@@ -607,7 +607,11 @@
 		worker.onmessage = ({ data }) => {
 			worker.terminate();
 			const tags = data?.result?.tags;
-			if (!Array.isArray(tags) || this.list.hasAttribute("data-tag-defs"))
+			if (
+				!Array.isArray(tags) ||
+				data.result.stale ||
+				this.list.hasAttribute("data-tag-defs")
+			)
 				return;
 			try {
 				const refs = tags.map((t) => t.file.normalize("NFC").slice(6, -5));
@@ -622,11 +626,7 @@
 			e.preventDefault();
 			worker.terminate();
 		};
-		worker.postMessage({
-			id: 1,
-			op: "get",
-			endpoint: new URL("../v1/", document.baseURI).href,
-		});
+		worker.postMessage({ id: 1, op: "get" });
 	}
 
 	// The list is filled from the browser's copies of the list as soon as the sidebar is in the document, before any

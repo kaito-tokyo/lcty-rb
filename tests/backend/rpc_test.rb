@@ -802,6 +802,200 @@ class RpcTest < Lcty::Scenarios
     end
   end
 
+  # ---- The tag definitions ----
+
+  # A tag file of this test: a random part (the tests share the tag files)
+  def tag_file(part = "t-#{SecureRandom.hex(5)}", extra = {})
+    { 'file' => "00500-#{part}.html", 'name' => part, 'ops' => [], 'prompt' => '', 'memory' => [] }.merge(extra)
+  end
+
+  # [tags, etag] from t.list
+  def tag_list
+    r = rpc('t.list')['result']
+    [r['items'], r['etag']]
+  end
+
+  def add_tag(tag)
+    tags, etag = tag_list
+    r = rpc('t.replace', 'tags' => tags + [tag], 'etag' => etag)
+    raise r.inspect if r['error']
+    tag
+  end
+
+  # A page receiving t.batch.updated
+  def tag_page
+    page.tap { |pg| pg.initialize_session(%w[t.batch.updated]) }
+  end
+
+  # The t_full and t_set records of the page's t.batch.updated: [[store, op, file or etag], ...] for each
+  def tag_records(pg)
+    wait_until { pg.notes('t.batch.updated').any? }
+    pg.notes('t.batch.updated').map do |n|
+      n['params']['records'].map { |x| [x['store'], x['op'], x['row']['file'] || x['row']['etag']] }
+    end
+  end
+
+  scenario 't.list returns every tag file with the ETag of the set and the version' do
+    r = nil
+    step('Given a tag file') { add_tag(tag_file) }
+    step('When t.list is called') { r = rpc('t.list')['result'] }
+    step('Then the result has the version, the etag and the items, each with file, name, ops, prompt and memory') do
+      assert_equal %w[etag items version], r.keys.sort
+      refute_empty r['items']
+      r['items'].each { |t| assert_equal %w[file memory name ops prompt], t.keys.sort }
+    end
+    step('And the etag is a quoted SHA-256 and the version is that of the last change') do
+      assert_match(/\A"[0-9a-f]{64}"\z/, r['etag'])
+      assert_equal rpc('initialize', 'capabilities' => { 'receives' => [] })['result']['version'], r['version']
+    end
+  end
+
+  scenario 't.replace replaces the tag files as a whole and announces them with the actor' do
+    before = etag = pg = r = nil
+    memory = { 'id' => "m-#{SecureRandom.hex(5)}", 'text' => 'a note', 'at' => '2026-11-07T00:00:00+09:00' }
+    tag = tag_file("new-#{SecureRandom.hex(5)}", 'name' => 'New', 'ops' => [{ 'type' => 'add-memory', 'content' => 'decisions' }],
+                                                 'prompt' => 'Be brief.', 'memory' => [memory])
+    step('Given the tags and the etag from t.list, and a page receiving t.batch.updated') do
+      before, etag = tag_list
+      pg = tag_page
+    end
+    step('When t.replace sends them and a new tag file with a policy, a prompt and a memory item, with the etag') do
+      r = rpc('t.replace', 'tags' => before + [tag], 'etag' => etag)['result']
+    end
+    after = nil
+    step('Then the result has the version and a new etag, the one t.list gives next') do
+      after, now = tag_list
+      assert_equal %w[etag version], r.keys.sort
+      refute_equal etag, r['etag']
+      assert_equal now, r['etag']
+    end
+    step('And t.list has the new tag with its policy, its prompt and its memory item, and the tags that were there before') do
+      assert_equal tag, after.find { |t| t['file'] == tag['file'] }
+      assert_equal before, after.reject { |t| t['file'] == tag['file'] }
+    end
+    note = nil
+    step('And the page gets one t.batch.updated with the version and the actorId of the request') do
+      wait_until { pg.notes('t.batch.updated').any? }
+      settle
+      assert_equal 1, pg.notes('t.batch.updated').size
+      note = pg.notes('t.batch.updated')[0]['params']
+      assert_equal [r['version'], rpc_actor], note.values_at('version', 'actorId')
+    end
+    step('And its records put the new tag, then put the new etag in t_set') do
+      assert_equal [{ 'store' => 't_full', 'op' => 'put', 'row' => tag },
+                    { 'store' => 't_set', 'op' => 'put', 'row' => { 'etag' => r['etag'] } }], note['records']
+    end
+  end
+
+  scenario 't.replace announces the tag files that went as deletes' do
+    tag = pg = r = nil
+    step('Given a tag file, and a page receiving t.batch.updated') do
+      tag = add_tag(tag_file)
+      pg = tag_page
+    end
+    step('When t.replace sends the tags without it, with the current etag') do
+      tags, etag = tag_list
+      r = rpc('t.replace', 'tags' => tags.reject { |t| t['file'] == tag['file'] }, 'etag' => etag)['result']
+    end
+    step("Then the page's t.batch.updated deletes its file from t_full, then puts the new etag in t_set") do
+      assert_equal [[['t_full', 'delete', tag['file']], ['t_set', 'put', r['etag']]]], tag_records(pg)
+    end
+  end
+
+  [
+    ['without an etag', 3, '"etag must be a string"', 'etag must be a string', ->(_) { nil }],
+    ['with the old etag', 8, '"the tags have changed"', 'the tags have changed', ->(old) { old }]
+  ].each do |label, code, message_label, message, etag_of|
+    scenario "t.replace refuses a set that is not the current one (#{label})" do
+      old = before = r = nil
+      step('Given the etag from t.list, changed since by another t.replace') do
+        old = tag_list[1]
+        add_tag(tag_file)
+        before = tag_list[0]
+      end
+      step("When t.replace sends a new set #{label}") do
+        r = rpc('t.replace', { 'tags' => [] }.merge((e = etag_of.(old)) ? { 'etag' => e } : {}))
+      end
+      step("Then the error is #{code} with the message #{message_label}") do
+        assert_equal [code, message], r['error'].values_at('code', 'message')
+      end
+      step('And the tags are unchanged') { assert_equal before, tag_list[0] }
+    end
+  end
+
+  [
+    ['tags that are no array', '"body must be {\"tags\": [...]}"', ->(_) { 'x' }, 'body must be {"tags": [...]}'],
+    ['a file name without its number', '"invalid tag file name \"ruby.html\": must be NNNNN-<name>.html"',
+     ->(tags) { tags + [tag_file.merge('file' => 'ruby.html')] }, 'invalid tag file name "ruby.html": must be NNNNN-<name>.html'],
+    ['two files with the same part', '"tag file names must be unique"',
+     ->(tags) { t = tag_file; tags + [t, t.merge('file' => t['file'].sub('00500', '00510'))] }, 'tag file names must be unique'],
+    ['a memory item with a blank text', '"memory must be an array of {id, text}"',
+     ->(tags) { tags + [tag_file("m-#{SecureRandom.hex(5)}", 'memory' => [{ 'id' => 'm1', 'text' => '  ' }])] },
+     'memory must be an array of {id, text}']
+  ].each do |label, message_label, tags_of, message|
+    scenario "t.replace refuses tag sets that are not valid (#{label})" do
+      before, etag = tag_list
+      r = nil
+      step("When t.replace sends #{label} with the current etag") do
+        r = rpc('t.replace', 'tags' => instance_exec(before, &tags_of), 'etag' => etag)
+      end
+      step("Then the error is 3 with the message #{message_label}") do
+        assert_equal [3, message], r['error'].values_at('code', 'message')
+      end
+      step('And the tags are unchanged') { assert_equal before, tag_list[0] }
+    end
+  end
+
+  scenario 't.memory.add adds a memory item and announces the tag' do
+    tag = etag = pg = item = nil
+    step('Given a tag file with a display name in Japanese, the etag from t.list, and a page receiving t.batch.updated') do
+      part = "メモ-#{SecureRandom.hex(5)}"
+      tag = add_tag(tag_file(part, 'name' => part))
+      etag = tag_list[1]
+      pg = tag_page
+    end
+    step('When t.memory.add sends the text "  remember this  " and the source {"conv_id": "c1"} to its file') do
+      r = rpc('t.memory.add', 'file' => tag['file'], 'text' => '  remember this  ', 'source' => { 'conv_id' => 'c1' })
+      assert_equal %w[item version], r['result'].keys.sort
+      item = r['result']['item']
+    end
+    step('Then the item has a UUIDv7 id, the text "remember this", the time it was added and the source') do
+      assert Chatty::Uuid.valid?(item['id']), item['id']
+      assert_equal 'remember this', item['text']
+      assert_in_delta Time.now.to_f, Time.iso8601(item['at']).to_f, 60
+      assert_equal({ 'conv_id' => 'c1' }, item['source'])
+    end
+    now = nil
+    step('And t.list has the item under the tag and another etag') do
+      tags, now = tag_list
+      assert_equal [item], tags.find { |t| t['file'] == tag['file'] }['memory']
+      refute_equal etag, now
+    end
+    step("And the page's t.batch.updated puts the tag with the item, then the new etag in t_set") do
+      assert_equal [[['t_full', 'put', tag['file']], ['t_set', 'put', now]]], tag_records(pg)
+      assert_equal [item], pg.notes('t.batch.updated')[0]['params']['records'][0]['row']['memory']
+    end
+  end
+
+  [
+    ['a text for an unknown file', 9, '"no such tag file"', 'no such tag file',
+     ->(_) { { 'file' => "00500-nope-#{SecureRandom.hex(5)}.html", 'text' => 'x' } }],
+    ['a text for a name without its number', 3, '"invalid tag file name: must be NNNNN-<name>.html"',
+     'invalid tag file name: must be NNNNN-<name>.html', ->(t) { { 'file' => t['name'], 'text' => 'x' } }],
+    ['a blank text for its file', 3, '"text is required"', 'text is required', ->(t) { { 'file' => t['file'], 'text' => '   ' } }]
+  ].each do |request, code, message_label, message, params|
+    scenario "t.memory.add refuses what cannot be done (#{request})" do
+      tag = r = nil
+      memory = { 'id' => "m-#{SecureRandom.hex(5)}", 'text' => 'kept', 'at' => '2026-11-07T00:00:00+09:00' }
+      step('Given a tag file with a memory item') { tag = add_tag(tag_file("mem-#{SecureRandom.hex(5)}", 'memory' => [memory])) }
+      step("When t.memory.add is sent #{request}") { r = rpc('t.memory.add', params.(tag)) }
+      step("Then the error is #{code} with the message #{message_label}") do
+        assert_equal [code, message], r['error'].values_at('code', 'message')
+      end
+      step('And the tag file is unchanged') { assert_equal tag, tag_list[0].find { |t| t['file'] == tag['file'] } }
+    end
+  end
+
   scenario 'c.update.title fits the title into the slot and sends a c_meta record' do
     cid = pg = r = nil
     long = 'a much longer title that cannot fit'

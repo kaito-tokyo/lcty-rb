@@ -127,6 +127,11 @@ the version they were last brought to, so that an older answer never overwrites 
   ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#the-tags-of-a-conversation)): which conversations each tag has, one
   row `{tag, cid}` per tag and conversation, keyed by both. `t.c.list` answers every row with its version and
   `t.batch.updated` the changes; the sidebar shows a conversation's tags in the order of the tags' files (`t_full`).
+- **The tag definitions follow the same way:** `t_full` and `t_set` of `lcty_t`, one copy with its own version, are
+  filled from `t.list` (every tag file and the set's ETag) and changed by the `t_full` and `t_set` records of
+  `t.batch.updated` ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)). A tag file
+  edited outside the server is not announced; the copy takes it at its next `t.list`, which the sidebar reads with the
+  other lists whenever the connection opens and when the page comes back from the back/forward cache.
 - **The number of messages is a store of its own in `lcty_c`: `c_recordcount`.** It is a resource of `c/`, so it
   belongs in the database of `c/`; but it costs more than the meta (counting reads the whole file, where the meta needs
   only the head lines and the modification time), so it is kept apart from `c_meta` and can be read, updated or left
@@ -223,8 +228,6 @@ is not the page's own resend.
 
 ## Open points
 
-- **Writing the tag definitions** has no RPC method yet, and they (`t_full`) are not read over it, so `t_full` keeps
-  its sync of today until they do.
 - **Protecting the user's data before the reload:** what the user has in the page and the server does not (an unsent
   message in the composer, say) must not be lost when the user reloads an out-of-sync page; how it is kept is to be
   discussed.

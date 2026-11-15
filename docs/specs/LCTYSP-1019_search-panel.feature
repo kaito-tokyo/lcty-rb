@@ -23,15 +23,15 @@ Feature: LCTYSP-1019 The search panel of the sidebar
   Background:
     Given a page on the server's origin
     And a search box, a status and a <lcty-conv-list> in the page
-    And GET /v1/tags, POST /v1/search, POST /v1/snippets, GET /v1/conversations and the vector pair are answered by the test, and vectors.eg2_264.embed by the tab's connection
-    And GET /v1/tags defines the tags "y" and then "x"
+    And POST /v1/search, POST /v1/snippets, GET /v1/conversations and the vector pair are answered by the test, and vectors.eg2_264.embed by the tab's connection
+    And t.list of the tab's connection defines at the version "b007.1" the tags "y" and then "x", with the ETag "t1"
     And the lists of the tab's connection hold at the version "b007.1" "a" (4 elements, tags "w", "x" and "y", newest), "b" (2 elements, tag "x") and "c" (6 elements, no tags, oldest)
 
   Scenario: Opening the panel waits for the first read of the lists, then lists the copies
     Given createSearchPanel has made the panel
     When refresh() is called before the lists have been read
     Then the list is shown empty, with no message
-    When the tab's connection reads c.list, c.recordcount.list and t.c.list into the copies
+    When the tab's connection reads c.list, c.recordcount.list, t.list and t.c.list into the copies
     Then the list shows "a", "b" and "c", newest first
     And each item has its title, its tags in the order of the tag files with the undefined "w" last, and its number of messages
 

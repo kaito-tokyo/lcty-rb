@@ -326,6 +326,69 @@ Feature: LCTYSP-3020 The RPC protocol
     When c.delete is called for it twice
     Then its file is gone and neither has an error
 
+  # ---- The tag definitions ----
+
+  Scenario: t.list returns every tag file with the ETag of the set and the version
+    Given a tag file
+    When t.list is called
+    Then the result has the version, the etag and the items, each with file, name, ops, prompt and memory
+    And the etag is a quoted SHA-256 and the version is that of the last change
+
+  Scenario: t.replace replaces the tag files as a whole and announces them with the actor
+    Given the tags and the etag from t.list, and a page receiving t.batch.updated
+    When t.replace sends them and a new tag file with a policy, a prompt and a memory item, with the etag
+    Then the result has the version and a new etag, the one t.list gives next
+    And t.list has the new tag with its policy, its prompt and its memory item, and the tags that were there before
+    And the page gets one t.batch.updated with the version and the actorId of the request
+    And its records put the new tag, then put the new etag in t_set
+
+  Scenario: t.replace announces the tag files that went as deletes
+    Given a tag file, and a page receiving t.batch.updated
+    When t.replace sends the tags without it, with the current etag
+    Then the page's t.batch.updated deletes its file from t_full, then puts the new etag in t_set
+
+  Scenario Outline: t.replace refuses a set that is not the current one
+    Given the etag from t.list, changed since by another t.replace
+    When t.replace sends a new set <etag>
+    Then the error is <code> with the message <message>
+    And the tags are unchanged
+
+    Examples:
+      | etag              | code | message                     |
+      | without an etag   | 3    | "etag must be a string"     |
+      | with the old etag | 8    | "the tags have changed"     |
+
+  Scenario Outline: t.replace refuses tag sets that are not valid
+    When t.replace sends <tags> with the current etag
+    Then the error is 3 with the message <message>
+    And the tags are unchanged
+
+    Examples:
+      | tags                            | message                                                           |
+      | tags that are no array          | "body must be {\"tags\": [...]}"                                  |
+      | a file name without its number  | "invalid tag file name \"ruby.html\": must be NNNNN-<name>.html"  |
+      | two files with the same part    | "tag file names must be unique"                                   |
+      | a memory item with a blank text | "memory must be an array of {id, text}"                           |
+
+  Scenario: t.memory.add adds a memory item and announces the tag
+    Given a tag file with a display name in Japanese, the etag from t.list, and a page receiving t.batch.updated
+    When t.memory.add sends the text "  remember this  " and the source {"conv_id": "c1"} to its file
+    Then the item has a UUIDv7 id, the text "remember this", the time it was added and the source
+    And t.list has the item under the tag and another etag
+    And the page's t.batch.updated puts the tag with the item, then the new etag in t_set
+
+  Scenario Outline: t.memory.add refuses what cannot be done
+    Given a tag file with a memory item
+    When t.memory.add is sent <request>
+    Then the error is <code> with the message <message>
+    And the tag file is unchanged
+
+    Examples:
+      | request                                 | code | message                                             |
+      | a text for an unknown file              | 9    | "no such tag file"                                  |
+      | a text for a name without its number    | 3    | "invalid tag file name: must be NNNNN-<name>.html"  |
+      | a blank text for its file               | 3    | "text is required"                                  |
+
   Scenario: c.update.title fits the title into the slot and sends a c_meta record
     Given a conversation with a title slot of 32 bytes, and a page receiving c.batch.updated
     When its title is changed to a longer one
