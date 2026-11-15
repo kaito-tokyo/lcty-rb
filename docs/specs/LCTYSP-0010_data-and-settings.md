@@ -152,9 +152,10 @@ browser.
     listened on once.
   - `--base-url=PATH`: the path the site is served under ([LCTYSP-3019](LCTYSP-3019_entry-point.feature)). Default
     `/`.
-  - `--allowed-origin=ORIGIN`: an origin whose pages may use `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)),
-    once per origin. Default: `http://<address>:<port>` of every address listened on, and `http://localhost:<port>`
-    when one of them is `127.0.0.1`.
+  - `--allowed-origin=ORIGIN`: an origin whose pages may use `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md))
+    and write to the server, once per origin; its host is also one the server answers for
+    ([LCTYSP-0016](LCTYSP-0016_hardening.md)). Default: `http://<address>:<port>` of every address listened on, and
+    `http://localhost:<port>` when one of them is `127.0.0.1`.
   - `--basic-auth=USER:HASH`: a user of Basic authentication ([below](#authentication)), once per user, as
     `tools/hash_password.rb USER` prints it. Default: none, and no request needs credentials.
   - `--help` lists them; `--port` is refused with a pointer to `LCTY_PORT`.

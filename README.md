@@ -67,8 +67,9 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
     - `--bind-ip`: an IP address to listen on, once per address, all at one port (default 127.0.0.1 only).
     - `--base-url`: the path the site is served under (default `/`).
     - `--allowed-origin`: an origin whose pages may use `/v1/rpc`, once per origin. Add the URL you open the site with
-      when it is not one of the addresses listened on or `localhost` (a `.local` name, say); the server logs the
-      Origin it refused.
+      when it is not one of the addresses listened on or `localhost` (a `.local` name, say, or the name of a reverse
+      proxy): the server answers no other host (421) and takes no write from another origin (403), and logs the Host
+      or the Origin it refused.
     - For a quick start the environment variables `LCTY_BIND_IP`, `LCTY_BASE_URL` and `LCTY_ALLOWED_ORIGIN` override
       the file with one value each (several addresses or origins go in the file or on the command line), and the
       command line overrides both. `LCTY_DATA_DIR` is an environment variable only.

@@ -39,6 +39,7 @@ require_relative 'lib/v1/servlet'
 require_relative 'lib/servlets'
 require_relative 'lib/rpc/servlet'
 require_relative 'lib/embedding'
+require_relative 'lib/request_guard'
 
 module Lcty
   # The path the site is served under (Chatty.base_url: --base-url or LCTY_BASE_URL), starting and ending with "/"
@@ -138,9 +139,13 @@ module Lcty
       # Every connection is closed once its response is sent (Connection: close): WEBrick serves 100 connections at a
       # time and waits up to 30 seconds for the next request on an idle one, while a browser may keep one it no longer
       # uses (Firefox keeps those of a closed window), so idle ones would fill the server. A request without valid
-      # credentials is answered 401 with a Basic challenge (raised as a status)
+      # credentials is answered 401 with a Basic challenge (raised as a status). Before that, the request guard checks its
+      # Host, its origin and its body (LCTYSP-0016)
+      guard = Chatty::RequestGuard.new(base: base_url, origins: -> { Rpc.allowed_origins },
+                                       listen: -> { [ips, Chatty.port] }, logger: Log.new)
       config[:RequestCallback] = lambda do |req, res|
         res.keep_alive = false
+        guard.check(req, res)
         auth&.authenticate(req, res)
       end
       server = WEBrick::HTTPServer.new(config)

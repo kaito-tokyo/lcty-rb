@@ -6,7 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0016: Hardening
 
-- Status: Draft. A plan: nothing of it is implemented yet.
+- Status: Draft, in part implemented. Step 1 is `lib/request_guard.rb`
+  ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)); step 3 is done for every write of the pages (the tags of a conversation, deleting one, the tag definitions and
+  memory). Not done: step 2 (the headers), the rest of step 3 and step 4.
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md#security) (security), [LCTYSP-0006](LCTYSP-0006_http-api.md)
   (the HTTP API), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#authentication) (Basic authentication and the
   allowed origins), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (`/v1/rpc`)
@@ -107,6 +109,12 @@ In order. Each step is one pull request with its tests, and each leaves the serv
   so no other origin is ever given access.
 - **The size of a body:** every body of the HTTP API is at most 64 MiB, as `/v1/rpc`'s messages, checked from
   `Content-Length` before it is read.
+- **How it is done:** `lib/request_guard.rb`, called by WEBrick's `RequestCallback` before Basic authentication, so a
+  request from a host or an origin that is not served gets no challenge. A refusal is answered with a short text of
+  its own in UTF-8 (`misdirected request`, `cross-origin`, …) that names none of the allowed hosts or origins: the
+  answer to a `Host` refused is read by the page of a rebound name. The log line names the method, the path, the
+  status and what was checked. The size is checked by `Content-Length` only; a chunked body is read by the servlet,
+  whose own limit applies.
 - **Not `Accept`:** the type of a response is fixed by its path and extension (`.json`, `.html`, `.js`, `/v1/` is
   JSON), so there is nothing to negotiate and nothing to refuse with `406`. Refusing one would stop none of the
   attacks above either: the origin and the type of the body do.
