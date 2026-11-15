@@ -6,10 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0016: Hardening
 
-- Status: Draft, in part implemented. Step 1 is `lib/request_guard.rb`
-  ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)) and step 2 `lib/secure_server.rb`
-  ([LCTYSP-3030](LCTYSP-3030_secure-server.feature)); step 3 is done (every write goes through `/v1/rpc`, and the HTTP
-  API serves reads only), and of step 4 the UI tests fail on any report of the policy. Not done: the rest of step 4.
+- Status: Draft, implemented. Step 1 is `lib/request_guard.rb` ([LCTYSP-3029](LCTYSP-3029_request-guard.feature)) and
+  step 2 `lib/secure_server.rb` ([LCTYSP-3030](LCTYSP-3030_secure-server.feature)); step 3 is done (every write goes
+  through `/v1/rpc`, and the HTTP API serves reads only), and so is step 4 (the UI tests fail on any report of the
+  policy, and the OWASP sources were compared again on 2026-11-15).
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md#security) (security), [LCTYSP-0006](LCTYSP-0006_http-api.md)
   (the HTTP API), [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#authentication) (Basic authentication and the
   allowed origins), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (`/v1/rpc`)
@@ -18,9 +18,10 @@ SPDX-License-Identifier: Apache-2.0
 
 The server is reached by browsers, and a browser does what any page tells it to: it sends requests to the server from
 other sites, with the credentials it holds, and it reads what a page of the right origin is allowed to read. lcty-rb
-checks almost nothing of this today. This plan checks every request before it is served (its `Host`, the `Origin` of
-a write, the type of its body), answers with the headers that keep a browser from misusing the pages (a Content
-Security Policy among them), and then moves every write to `/v1/rpc`, so that one way in has to be guarded.
+checked almost nothing of this ([below](#what-was-found)). This plan checks every request before it is served (its
+`Host`, the `Origin` of a write, the type of its body), answers with the headers that keep a browser from misusing the
+pages (a Content Security Policy among them), and moves every write to `/v1/rpc`, so that one way in has to be
+guarded.
 
 ## What is guarded against
 
@@ -249,7 +250,9 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
   Firefox, so a policy that breaks a page is found before it ships.
 - The headers are compared with OWASP's lists (`ci/headers_add.json` and `ci/headers_remove.json` of the Secure
   Headers Project) and with its HTTP Security Response Headers, CSRF Prevention and Content Security Policy Cheat
-  Sheets when this spec is revised: what they add is either done here or listed as not taken, with the reason.
+  Sheets when this spec is revised: what they add is either done here or listed as not taken, with the reason. Last
+  compared on 2026-11-15, with the versions named in the sections below; the one change since the comparison before
+  is the note of the HTTP Security Response Headers Cheat Sheet on nginx (below).
 - LCTYSP-0001 points here, and the README says what lcty-rb guards against and what is left to the proxy.
 
 ## Decisions made
@@ -298,7 +301,7 @@ the reasons above.
 
 The [HTTP Security Response Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)
 of the OWASP Cheat Sheet Series (`cheatsheets/HTTP_Headers_Cheat_Sheet.md` of
-[OWASP/CheatSheetSeries](https://github.com/OWASP/CheatSheetSeries), as of 2026-10-04) explains each header and
+[OWASP/CheatSheetSeries](https://github.com/OWASP/CheatSheetSeries), as of 2026-11-12) explains each header and
 recommends a value. Where it differs from the Secure Headers Project, or adds to it:
 
 - `Referrer-Policy: strict-origin-when-cross-origin`: not taken; `no-referrer`, above.
@@ -317,6 +320,10 @@ recommends a value. Where it differs from the Secure Headers Project, or adds to
 - `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`: left to the HTTPS proxy, above.
 - File downloads: `Content-Disposition: attachment` and `application/octet-stream` for files users provide. lcty-rb
   serves none for download: a conversation file is a page, and the vectors are `application/octet-stream`.
+- nginx: an `add_header` inside a `location` block drops every `add_header` of the enclosing `server` block for that
+  location (added on 2026-11-12). It concerns only a reverse proxy that adds headers itself, here
+  `Strict-Transport-Security`; the headers lcty-rb sends pass through it unchanged. The README says so where it leaves
+  that header to the proxy.
 
 ## OWASP CSRF Prevention Cheat Sheet
 

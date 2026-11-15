@@ -91,11 +91,13 @@ Two principles drive the design:
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md#authentication)). Basic sends the password itself with every request,
   so from outside the machine HTTPS goes in front (a reverse proxy): TLS protects the password, the server only checks
   it.
-- Requests are not otherwise checked: there is no `Host` check, `Origin` is checked only by `/v1/rpc`
-  ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), and no headers are added to every response. The server
-  is meant for the user's own machine and mostly serves static files, whose caching is the browser's default (WEBrick
-  sends `ETag` and `Last-Modified`). This leaves cross-site writes and DNS rebinding open;
-  [LCTYSP-0016](LCTYSP-0016_hardening.md) is the plan that closes them.
+- Every request is checked before it is served, and every response carries protective headers
+  ([LCTYSP-0016](LCTYSP-0016_hardening.md)): the server answers only the hosts it is reached by (against DNS
+  rebinding), takes a write only from its own pages (against cross-site writes), writes only through `/v1/rpc`, whose
+  handshake checks `Origin` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), and sends a Content Security Policy and the
+  other headers of the OWASP Secure Headers Project. What needs HTTPS (TLS and `Strict-Transport-Security`) is the
+  reverse proxy's. The static files keep the browser's default caching (WEBrick sends `ETag` and `Last-Modified`); the
+  user's data is kept out of shared caches.
 - Conversation ids are limited to `[A-Za-z0-9_-]{1,80}`.
 
 ## Encoding
