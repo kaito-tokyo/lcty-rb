@@ -6,7 +6,12 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0012: RPC protocol
 
-- Status: Draft (prototype at `/v1/rpc`; nothing uses it yet)
+- Status: Draft, in use. The conversation page and the new conversation page write conversations over it
+  (`lcty.v1.async.mjs`, `js/pages/new.js`), every page with the sidebar follows the lists over the tab's connection
+  (`js/api/tab-rpc.js`, [LCTYSP-0014](LCTYSP-0014_browser-sync.md)), and the search panel embeds queries and follows
+  the vector pair over it ([LCTYSP-0019](LCTYSP-0019_server-embedding.md)). Not done: the tags of a conversation
+  and its deletion (`js/api/storage.js`), and the tag definitions (`lcty.v1.t.worker.cjs`), are still written through
+  the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
 - Related: [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the conversation file this protocol writes),
   [LCTYSP-0006](LCTYSP-0006_http-api.md) (the HTTP API it is to replace for changes),
   [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the browser's copies it keeps up to date)
