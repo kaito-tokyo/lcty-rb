@@ -11,8 +11,8 @@ Feature: LCTYSP-2002 The conversation page
   A conversation file is a page of its own: /c/<id>.html shows the frame <lcty-c> with the sidebar, the header (the
   title, the tags and the delete button), the messages and the composer, and its features module lets the user send a
   message, undo the last turn, regenerate the last reply, fork from a user message, stop a generation and delete the
-  conversation, and saves every change on the server. Each Scenario creates its conversation through the HTTP API
-  (LCTYSP-0006), most of them one of two finished turns ("最初の質問", "最初の答え", "二番目の質問", "二番目の答え"),
+  conversation, and saves every change on the server. Each Scenario creates its conversation through /v1/rpc
+  (LCTYSP-0012), most of them one of two finished turns ("最初の質問", "最初の答え", "二番目の質問", "二番目の答え"),
   and llama-server is the fake of tests/ui/fixtures.js, whose replies each Scenario queues. A message is sent by typing
   it into the composer and pressing Enter. The action buttons of a message show only while it is hovered, so a step
   that looks at one or clicks it hovers the message first.
@@ -210,7 +210,7 @@ Feature: LCTYSP-2002 The conversation page
     And the page sends nothing more when "送らない質問" is typed and Enter is pressed
 
   Scenario: A conversation of the format before lcty-msg is shown read-only
-    Given a conversation of two finished turns created through the HTTP API, in the format of LCTYSP-0003
+    Given the conversation of two finished turns in the format of LCTYSP-0003 that the data directory starts with
     When it is opened
     Then the page shows its four messages
     And the composer is disabled and says that the conversation is in the former format

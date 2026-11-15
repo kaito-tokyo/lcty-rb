@@ -3,49 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The behaviour of public/js/api/storage.js (LCTYSP-0003, LCTYSP-0006, LCTYSP-0007, LCTYSP-0009, LCTYSP-0010). Each
-# Scenario is a test of the same title in tests/unit/storage.test.js (in Node.js) or tests/unit/storage.spec.js (in the
-# browser), whose steps are the lines below.
+# Scenario is a test of the same title in tests/unit/storage.test.js (in Node.js), whose steps are the lines below.
 
 Feature: LCTYSP-1009 The client of the HTTP API
 
   js/api/storage.js is how the pages talk to the server's HTTP API: one function per endpoint, each sending one
   request to the page's origin and resolving to the parsed JSON of the answer. A body is sent as JSON with the
   Content-Type application/json, and ids and names in a path are percent-encoded. An answer that is not OK becomes an
-  Error "<status> <body>", the body cut to 200 characters, with the status as its status. The tags are not here: js/api/lcty-t.js and its worker
-  (LCTYSP-1021) send their requests. The requests that change conversations (create, append, pop, delete) send nothing
-  else: the browser's copies of the list hear of the change from the server, over /v1/rpc (LCTYSP-0014). toLine turns
-  a message into a line to append: a reply also carries its content rendered by js/convert/reply.js, as the screen shows
-  it.
-
-  In the steps a GET /v1/meta-all.json, which nothing should send any more, is counted apart from the other requests.
+  Error "<status> <body>", the body cut to 200 characters, with the status as its status. The API serves reads
+  only: the pages write through /v1/rpc (LCTYSP-0012), and read the tags there too (js/api/lcty-t.js, LCTYSP-1021).
 
   Background:
     Given requests to /v1/ are answered by the test, which records them
-
-  Scenario: A user message becomes a message line without HTML
-    Given the user message {"id": "m1", "role": "user", "content": "**Hi**", "at": "2026-11-07T00:00:00.000Z"}
-    When toLine is called with it
-    Then it returns {"type": "message", "id": "m1", "role": "user", "content": "**Hi**", "at": "2026-11-07T00:00:00.000Z"}
-
-  Scenario: A reply carries its content rendered as HTML
-    Given the assistant message {"id": "m2", "role": "assistant", "content": "**bold** text"}
-    When toLine is called with it
-    Then it returns {"type": "message", "id": "m2", "role": "assistant", "content": "**bold** text", "content_html": "<p><strong>bold</strong> text</p>"}
-
-  Scenario: The HTML of a reply is what replyHtml makes of its content
-    Given an assistant message whose content has a heading, a list, a table, a code block and a link
-    When toLine is called with it
-    Then its content_html equals replyHtml of the content
-
-  Scenario: A reply without content carries empty HTML
-    Given the assistant message {"id": "m3", "role": "assistant"}
-    When toLine is called with it
-    Then it returns {"type": "message", "id": "m3", "role": "assistant", "content_html": ""}
-
-  Scenario: toLine leaves the message as it was
-    Given an assistant message with content
-    When toLine is called with it
-    Then the message has no type and no content_html
 
   Scenario Outline: Each function sends its request and resolves to the answer
     Given the server answers {"ok": true}
@@ -59,10 +28,6 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | call                                                                     | method | url                                       | body                                                          | type             |
       | listConversations()                                                      | GET    | /v1/conversations                         | none                                                          | none             |
       | getConversation("a b/c")                                                 | GET    | /v1/conversations/a%20b%2Fc               | none                                                          | none             |
-      | createConversation({"id": "c1", "tags": []}, [{"type": "message"}])      | POST   | /v1/conversations                         | {"meta":{"id":"c1","tags":[]},"lines":[{"type":"message"}]}   | application/json |
-      | appendLines("a b", [{"type": "title", "title": "T"}])                    | POST   | /v1/conversations/a%20b/lines             | [{"type":"title","title":"T"}]                                | application/json |
-      | popMessages("c1", 2)                                                     | POST   | /v1/conversations/c1/pop                  | {"from":2}                                                    | application/json |
-      | deleteConversation("c/1")                                                | DELETE | /v1/conversations/c%2F1                   | none                                                          | none             |
       | getDefaults()                                                            | GET    | /v1/defaults.json                         | none                                                          | none             |
       | searchConversations({"q": "x", "tags": ["t"], "limit": 5})               | POST   | /v1/search                                | {"q":"x","tags":["t"],"limit":5}                              | application/json |
       | fetchSnippets(["r1", "r2"], "x")                                         | POST   | /v1/snippets                              | {"ids":["r1","r2"],"q":"x"}                                   | application/json |
@@ -81,8 +46,6 @@ Feature: LCTYSP-1009 The client of the HTTP API
       | call                         | status | text           | message                  |
       | listConversations()          | 500    | boom           | 500 boom                 |
       | getConversation("nope")      | 404    | not found      | 404 not found            |
-      | createConversation({}, [])   | 409    | already exists | 409 already exists       |
-      | popMessages("c1", 0)         | 409    | too far back   | 409 too far back         |
 
   Scenario: A long error body is cut to 200 characters
     Given the server answers with the status 500 and a text of 300 characters
@@ -99,16 +62,3 @@ Feature: LCTYSP-1009 The client of the HTTP API
     When listConversations() is called
     Then it rejects with a TypeError
 
-  Scenario Outline: A change of conversations sends only its own request
-    Given a page on the server's origin
-    Given the server answers {"ok": true}
-    When <call> is called
-    Then it resolves
-    And no other request is sent and no worker is started within 1 second
-
-    Examples:
-      | call                                    |
-      | createConversation({"id": "c1"}, [])    |
-      | appendLines("c1", [])                   |
-      | popMessages("c1", 2)                    |
-      | deleteConversation("c1")                |

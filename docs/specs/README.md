@@ -49,7 +49,7 @@ for the backend ones).
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | Reading server-sent events                    | `tests/unit/sse.test.js`                                     |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | Streaming a reply through the Responses API   | `tests/unit/responses.test.js`                               |
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | Building the request from a conversation      | `tests/unit/history.test.js`                                 |
-| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | The client of the HTTP API                    | `tests/unit/storage.test.js`, `tests/unit/storage.spec.js`   |
+| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | The client of the HTTP API                    | `tests/unit/storage.test.js`                                 |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | The copies of the list of conversations       | `tests/unit/meta-db.spec.js`                                 |
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | The vector store and the query embedding      | `tests/unit/vectors.test.js`                                 |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | The semantic search worker                    | `tests/unit/fuzzy-search-worker.test.js`                     |
@@ -73,7 +73,7 @@ for the backend ones).
 | [LCTYSP-2005](LCTYSP-2005_site-routing.feature)               | The paths of the site                         | `tests/ui/site.spec.js`                                      |
 | [LCTYSP-3001](LCTYSP-3001_uuid-v7.feature)                    | Message ids as UUIDv7                         | `tests/backend/uuid_test.rb`                                 |
 | [LCTYSP-3002](LCTYSP-3002_conversation-html.feature)          | Conversation files as HTML                    | `tests/backend/conv_html_test.rb`                            |
-| [LCTYSP-3003](LCTYSP-3003_store.feature)                      | Storing conversations, tags and memory        | `tests/backend/store_test.rb`                                |
+| [LCTYSP-3003](LCTYSP-3003_store.feature)                      | Reading the conversations of LCTYSP-0003      | `tests/backend/store_test.rb`                                |
 | [LCTYSP-3004](LCTYSP-3004_search-index.feature)               | The search index                              | `tests/backend/search_index_test.rb`                         |
 | [LCTYSP-3005](LCTYSP-3005_tag-store.feature)                  | The tag store                                 | `tests/backend/tag_store_test.rb`                            |
 | [LCTYSP-3008](LCTYSP-3008_server-settings.feature)            | Server settings                               | `tests/backend/config_test.rb`                               |

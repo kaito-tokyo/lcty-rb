@@ -58,9 +58,10 @@ As in [LCTYSP-1000](LCTYSP-1000_frontend-unit-tests.md):
 - The `Feature:` line is `LCTYSP-2NNN Title`, followed by a paragraph that says what the page is for and what the
   Scenarios have in common (the data they make, the fake `llama-server`).
 - Scenarios describe what a user can see: what the page shows, what the server has saved, where the browser goes. A
-  Scenario makes the data it needs (through the HTTP API, `tests/ui/fixtures.js`) and does not depend on the data of
-  another, since every test shares one server and one data directory. A Scenario Outline is used when only the data
-  changes.
+  Scenario makes the data it needs (through `/v1/rpc`, `tests/ui/fixtures.js`) and does not depend on the data of
+  another, since every test shares one server and one data directory. What no API writes (a conversation in the format
+  of LCTYSP-0003) is in `tests/ui/seed`, which every data directory of the tests starts as a copy of. A Scenario
+  Outline is used when only the data changes.
 
 ## How a test is written
 

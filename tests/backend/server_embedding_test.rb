@@ -210,8 +210,9 @@ class ServerEmbeddingTest < Lcty::Scenarios
   scenario 'Deleting a conversation fills its rows with NaN' do
     step('Given a data directory with the conversation "c1" holding a system message, a user message and a model reply') { background }
     step('Given the embedding is started and has embedded "c1"') { started_and_embedded }
-    step('When "c1" is deleted with DELETE /v1/conversations/c1') do
-      assert_equal '200', http('DELETE', "/v1/conversations/#{@cid}").code
+    step('When "c1" is deleted with c.delete of /v1/rpc') do
+      r = rpc('c.delete', 'cid' => @cid)
+      assert_nil r['error'], r.inspect
     end
     step('Then the rows of the user message and the model reply are listed as invalid') do
       invalid = Embedding.pair.summary['invalid']

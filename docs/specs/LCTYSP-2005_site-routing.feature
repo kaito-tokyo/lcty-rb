@@ -39,7 +39,7 @@ Feature: LCTYSP-2005 The paths of the site
       | /t      | /t/       |
 
   Scenario: A conversation file is served as it is
-    Given a conversation titled "経路のテスト" made through the HTTP API
+    Given a conversation titled "経路のテスト" made through /v1/rpc
     When /c/<id>.html is requested
     Then the answer is 200 with the type "text/html"
     And the body starts with "<!DOCTYPE html>" and holds the title "経路のテスト"

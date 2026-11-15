@@ -74,11 +74,6 @@ class V1ServletTest < Lcty::Scenarios
     assert_equal({ 'error' => message }, res.json)
   end
 
-  def assert_ok(res, status = 200)
-    assert_equal status, res.status, res.raw
-    assert_equal({ 'ok' => true }, res.json)
-  end
-
   def hex
     SecureRandom.hex(5)
   end
@@ -112,25 +107,18 @@ class V1ServletTest < Lcty::Scenarios
     { 'type' => 'message', 'id' => Uuid.v7, 'role' => 'assistant', 'content' => content, 'at' => self.class.next_at }.merge(extra)
   end
 
+  # A conversation file of LCTYSP-0003 in c/, added to the search index as at startup; returns its id
   def create(lines = [], tags = [], id = new_id)
-    res = http('POST', '/v1/conversations',
-               'meta' => { 'id' => id, 'created_at' => '2026-11-07T00:00:00Z', 'tags' => tags }, 'lines' => lines)
-    assert_equal 201, res.status, res.raw
+    self.class.port
+    meta = { 'type' => 'meta', 'id' => id, 'created_at' => '2026-11-07T00:00:00Z', 'tags' => tags }
+    path = Chatty::Store.conv_path(id)
+    Chatty::Store.write_atomic(path, Chatty::ConvHtml.document([meta] + lines))
+    Chatty::INDEX.sync(id, *Chatty::Store.index_state(path))
     id
-  end
-
-  def conv(id)
-    res = http('GET', "/v1/conversations/#{id}")
-    assert_equal 200, res.status, res.raw
-    res.json
   end
 
   def conv_file(id)
     File.binread(Chatty::Store.conv_path(id))
-  end
-
-  def four_messages
-    create([user('one'), assistant('two'), user('three'), assistant('four')])
   end
 
   def search(body)
@@ -157,20 +145,16 @@ class V1ServletTest < Lcty::Scenarios
     end
   end
 
-  scenario 'A new conversation is created and listed' do
-    id = new_id
+  scenario 'A conversation is listed with its title, messages and tags' do
+    id = list = nil
     tag = "t-#{hex}"
     own = user('hi')
-    res = nil
-    step('When POST /v1/conversations creates a conversation with the title "Hello", the tag "t", an inherited user message, a user message and an assistant message') do
-      lines = [{ 'type' => 'title', 'title' => 'Hello' }, user('old', 'inherited' => true), own, assistant('hello')]
-      res = http('POST', '/v1/conversations',
-                 'meta' => { 'id' => id, 'created_at' => '2026-11-07T00:00:00Z', 'tags' => [tag] }, 'lines' => lines)
+    step('Given a conversation with the title "Hello", the tag "t", an inherited user message, a user message and an assistant message') do
+      id = create([{ 'type' => 'title', 'title' => 'Hello' }, user('old', 'inherited' => true), own, assistant('hello')], [tag])
     end
-    step('Then the status is 201 and the body is {"ok": true}') { assert_ok res, 201 }
+    step('When GET /v1/conversations is requested') { list = http('GET', '/v1/conversations').json }
     entry = nil
-    step('And GET /v1/conversations lists it with the title "Hello", 3 messages and the tags ["t"]') do
-      list = http('GET', '/v1/conversations').json
+    step('Then it lists the conversation with the title "Hello", 3 messages and the tags ["t"]') do
       entry = list.find { |c| c['id'] == id }
       assert entry, 'listed'
       assert_equal 'Hello', entry['title']
@@ -209,50 +193,9 @@ class V1ServletTest < Lcty::Scenarios
     end
   end
 
-  [
-    ['an array', '"body must be an object"', -> { [] }, 'body must be an object'],
-    ['no meta', '"meta must be an object"', -> { { 'lines' => [] } }, 'meta must be an object'],
-    ['a meta without an id', '"invalid id"', -> { { 'meta' => {} } }, 'invalid id'],
-    ['an id with a space', '"invalid id"', -> { { 'meta' => { 'id' => 'a b' } } }, 'invalid id'],
-    ['tags that are not unique', '"tags must be an array of unique tag references"',
-     -> { { 'meta' => { 'id' => new_id, 'tags' => %w[x x] } } }, 'tags must be an array of unique tag references'],
-    ['a tag reference with a slash', '"tags must be an array of unique tag references"',
-     -> { { 'meta' => { 'id' => new_id, 'tags' => %w[a/b] } } }, 'tags must be an array of unique tag references'],
-    ['a tags line', '"line type not allowed: \"tags\""',
-     -> { { 'meta' => { 'id' => new_id }, 'lines' => [{ 'type' => 'tags', 'tags' => [] }] } }, 'line type not allowed: "tags"'],
-    ['a message id that is not a UUIDv7', '"message id must be a UUIDv7: \"abc\""',
-     -> { { 'meta' => { 'id' => new_id }, 'lines' => [user('x', 'id' => 'abc')] } }, 'message id must be a UUIDv7: "abc"'],
-    ['a command that is not a command name', '"invalid command: \"Send!\""',
-     -> { { 'meta' => { 'id' => new_id }, 'lines' => [{ 'type' => 'cmd', 'op' => 'Send!' }] } }, 'invalid command: "Send!"']
-  ].each do |label, error_label, body, message|
-    scenario "A conversation that cannot be created is rejected with 400 (#{label})" do
-      res = nil
-      sent = instance_exec(&body)
-      step("When POST /v1/conversations sends #{label}") { res = http('POST', '/v1/conversations', sent) }
-      step("Then the status is 400 with the error #{error_label}") do
-        assert_error res, 400, message
-        id = sent.is_a?(Hash) && sent['meta'].is_a?(Hash) && sent['meta']['id']
-        refute File.exist?(File.join(Chatty::CONV_DIR, "#{id}.html")), 'nothing is written' if id
-      end
-    end
-  end
-
-  scenario 'Creating a conversation whose id exists is a conflict' do
-    id = before = res = nil
-    step('Given a conversation') do
-      id = create([user('first')])
-      before = conv_file(id)
-    end
-    step('When POST /v1/conversations creates another one with the same id') do
-      res = http('POST', '/v1/conversations', 'meta' => { 'id' => id }, 'lines' => [user('second')])
-    end
-    step('Then the status is 409 with the error "already exists"') { assert_error res, 409, 'already exists' }
-    step('And the conversation file is unchanged') { assert_equal before, conv_file(id) }
-  end
-
   scenario 'A body that is not JSON is rejected' do
     res = nil
-    step('When POST /v1/conversations sends "{not json"') { res = http('POST', '/v1/conversations', '{not json') }
+    step('When POST /v1/search sends "{not json"') { res = http('POST', '/v1/search', '{not json') }
     step('Then the status is 400 with an error that starts with "invalid JSON: "') do
       assert_equal 400, res.status
       assert res.json['error'].start_with?('invalid JSON: '), res.json['error']
@@ -261,16 +204,16 @@ class V1ServletTest < Lcty::Scenarios
 
   scenario 'A body that is not UTF-8 is rejected' do
     res = nil
-    step('When POST /v1/conversations sends the bytes of a JSON string with the byte 0xff in it') do
-      res = http('POST', '/v1/conversations', "{\"meta\": \"\xFF\"}".b)
+    step('When POST /v1/search sends the bytes of a JSON string with the byte 0xff in it') do
+      res = http('POST', '/v1/search', "{\"q\": \"\xFF\"}".b)
     end
     step('Then the status is 400 with the error "invalid UTF-8"') { assert_error res, 400, 'invalid UTF-8' }
   end
 
   scenario 'A body over 64 MiB is rejected before it is read' do
     status = body = nil
-    step('When a POST to /v1/conversations says its Content-Length is 64 MiB and one byte, and sends no body') do
-      status, body = raw_request("POST /v1/conversations HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n" \
+    step('When a POST to /v1/search says its Content-Length is 64 MiB and one byte, and sends no body') do
+      status, body = raw_request("POST /v1/search HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n" \
                                  "Content-Length: #{64 * 1024 * 1024 + 1}\r\nConnection: close\r\n\r\n")
     end
     step('Then the status is 413 with the error "too large"') do
@@ -282,12 +225,7 @@ class V1ServletTest < Lcty::Scenarios
   [
     ['GET /v1/conversations/<unknown id>', 404, '"not found"', 'not found',
      ->(unknown) { http('GET', "/v1/conversations/#{unknown}") }],
-    ['GET /v1/conversations/a.b', 400, '"invalid id"', 'invalid id', ->(_) { http('GET', '/v1/conversations/a.b') }],
-    ['POST /v1/conversations/<unknown id>/lines', 404, '"not found"', 'not found',
-     ->(unknown) { http('POST', "/v1/conversations/#{unknown}/lines", [user('x')]) }],
-    ['POST /v1/conversations/<unknown id>/pop', 404, '"not found"', 'not found',
-     ->(unknown) { http('POST', "/v1/conversations/#{unknown}/pop", 'from' => 0) }],
-    ['DELETE /v1/conversations/a.b', 400, '"invalid id"', 'invalid id', ->(_) { http('DELETE', '/v1/conversations/a.b') }]
+    ['GET /v1/conversations/a.b', 400, '"invalid id"', 'invalid id', ->(_) { http('GET', '/v1/conversations/a.b') }]
   ].each do |request, status, error_label, message, send|
     scenario "An unknown or invalid conversation id (#{request})" do
       res = nil
@@ -296,164 +234,21 @@ class V1ServletTest < Lcty::Scenarios
     end
   end
 
-  scenario 'Appending lines adds messages and sets the title and the tags' do
-    id = res = nil
-    a = "a-#{hex}"
-    b = "b-#{hex}"
-    step('Given a conversation with a user and an assistant message and the tag "a"') do
-      id = create([user('hi'), assistant('hello')], [a])
-    end
-    step('When POST /v1/conversations/<id>/lines appends a user message, a title line "Renamed" and a tags line ["b"]') do
-      res = http('POST', "/v1/conversations/#{id}/lines",
-                 [user('more'), { 'type' => 'title', 'title' => 'Renamed' }, { 'type' => 'tags', 'tags' => [b] }])
-    end
-    step('Then the status is 200 and the body is {"ok": true}') { assert_ok res }
-    step('And the conversation has 3 messages, the title "Renamed" and the tags ["b"]') do
-      c = conv(id)
-      assert_equal %w[hi hello more], c['messages'].map { |m| m['content'] }
-      assert_equal 'Renamed', c['title']
-      assert_equal [b], c['tags']
-    end
-    step('And the conversation file has the title "Renamed" but not the tag "b"') do
-      file = conv_file(id)
-      assert_includes file, 'Renamed'
-      refute_includes file, b
-      assert_includes file, a
-    end
-  end
-
   [
-    ['an object', '"lines must be an array of objects"', -> { user('x') }, 'lines must be an array of objects'],
-    ['a meta line', '"line type not allowed: \"meta\""', -> { [{ 'type' => 'meta' }] }, 'line type not allowed: "meta"'],
-    ['a valid message and a message whose id is not a UUIDv7', '"message id must be a UUIDv7: \"nope\""',
-     -> { [user('fine'), user('bad', 'id' => 'nope')] }, 'message id must be a UUIDv7: "nope"'],
-    ['an assistant message whose content_html is a number', '"content_html must be a string"',
-     -> { [assistant('x', 'content_html' => 1)] }, 'content_html must be a string'],
-    ['a tags line with a tag reference with a space', '"tags must be an array of unique tag references"',
-     -> { [{ 'type' => 'tags', 'tags' => ['a b'] }] }, 'tags must be an array of unique tag references']
-  ].each do |label, error_label, lines, message|
-    scenario "Lines that cannot be appended are rejected with 400 (#{label})" do
+    ['POST /v1/conversations', 404, ->(id) { http('POST', '/v1/conversations', 'meta' => { 'id' => id }, 'lines' => []) }],
+    ['POST /v1/conversations/<id>/lines', 404, ->(id) { http('POST', "/v1/conversations/#{id}/lines", [user('x')]) }],
+    ['POST /v1/conversations/<id>/pop', 404, ->(id) { http('POST', "/v1/conversations/#{id}/pop", 'from' => 0) }],
+    ['DELETE /v1/conversations/<id>', 405, ->(id) { http('DELETE', "/v1/conversations/#{id}") }]
+  ].each do |request, status, send|
+    scenario "The writes of conversations are gone (#{request})" do
       id = before = res = nil
-      step('Given a conversation with a user and an assistant message and the tag "a"') do
-        id = create([user('hi'), assistant('hello')], ["a-#{hex}"])
+      step('Given a conversation with a user and an assistant message') do
+        id = create([user('hi'), assistant('hello')])
         before = conv_file(id)
       end
-      step("When POST /v1/conversations/<id>/lines sends #{label}") do
-        res = http('POST', "/v1/conversations/#{id}/lines", instance_exec(&lines))
-      end
-      step("Then the status is 400 with the error #{error_label}") { assert_error res, 400, message }
+      step("When #{request} is requested") { res = instance_exec(id, &send) }
+      step("Then the status is #{status}") { assert_equal status, res.status, res.raw }
       step('And the conversation file is unchanged') { assert_equal before, conv_file(id) }
-    end
-  end
-
-  scenario 'Popping the last turn deletes the messages from there' do
-    id = res = nil
-    step('Given a conversation with the messages user, assistant, user, assistant') { id = four_messages }
-    step('When POST /v1/conversations/<id>/pop sends {"from": 2}') do
-      res = http('POST', "/v1/conversations/#{id}/pop", 'from' => 2)
-    end
-    step('Then the status is 200 and the body is {"ok": true}') { assert_ok res }
-    step('And the conversation has its first 2 messages left') do
-      assert_equal %w[one two], conv(id)['messages'].map { |m| m['content'] }
-    end
-  end
-
-  scenario 'Popping before the last user message is a conflict' do
-    id = res = nil
-    step('Given a conversation with the messages user, assistant, user, assistant') { id = four_messages }
-    step('When POST /v1/conversations/<id>/pop sends {"from": 1}') do
-      res = http('POST', "/v1/conversations/#{id}/pop", 'from' => 1)
-    end
-    step('Then the status is 409 with the error "can only pop the last turn (from must be >= index of the last user message)"') do
-      assert_error res, 409, 'can only pop the last turn (from must be >= index of the last user message)'
-    end
-    step('And the conversation still has 4 messages') { assert_equal 4, conv(id)['messages'].size }
-  end
-
-  scenario 'Popping from past the last message changes nothing' do
-    id = res = nil
-    step('Given a conversation with the messages user, assistant, user, assistant') { id = four_messages }
-    step('When POST /v1/conversations/<id>/pop sends {"from": 10}') do
-      res = http('POST', "/v1/conversations/#{id}/pop", 'from' => 10)
-    end
-    step('Then the status is 200 and the body is {"ok": true}') { assert_ok res }
-    step('And the conversation still has 4 messages') { assert_equal 4, conv(id)['messages'].size }
-  end
-
-  [
-    ['an array', '"body must be an object"', [], 'body must be an object'],
-    ['{"from": "2"}', '"from must be an integer"', { 'from' => '2' }, 'from must be an integer'],
-    ['{"from": -1}', '"from must be an integer"', { 'from' => -1 }, 'from must be an integer']
-  ].each do |label, error_label, body, message|
-    scenario "A pop that is not understood is rejected with 400 (#{label})" do
-      id = res = nil
-      step('Given a conversation with the messages user, assistant, user, assistant') { id = four_messages }
-      step("When POST /v1/conversations/<id>/pop sends #{label}") do
-        res = http('POST', "/v1/conversations/#{id}/pop", body)
-      end
-      step("Then the status is 400 with the error #{error_label}") { assert_error res, 400, message }
-    end
-  end
-
-  scenario 'Deleting a conversation removes it with its tags and its index entries' do
-    id = res = nil
-    word = unique_word
-    round = user("about #{word}")
-    tag = "gone-#{hex}"
-    step('Given a conversation with a round with a unique word whose tags were changed to ["gone"]') do
-      id = create([round, assistant('noted')])
-      assert_ok http('POST', "/v1/conversations/#{id}/lines", [{ 'type' => 'tags', 'tags' => [tag] }])
-      assert_includes search('q' => word).map { |r| r['id'] }, round['id']
-    end
-    step('And what was measured of a reply of it is recorded in lcty_c.sqlite') do
-      Chatty::C_STORE.put_message_stats("msg-m-#{Chatty::Uuid.v7}", id, 'timings' => { 'prompt_n' => 1 })
-      refute_empty Chatty::C_STORE.stats_of(id)
-    end
-    step('When DELETE /v1/conversations/<id> is requested') { res = http('DELETE', "/v1/conversations/#{id}") }
-    step('Then the status is 200 and the body is {"ok": true}') { assert_ok res }
-    step('And GET /v1/conversations/<id> answers 404') do
-      assert_error http('GET', "/v1/conversations/#{id}"), 404, 'not found'
-    end
-    step('And it is not in /v1/conversations') do
-      refute_includes http('GET', '/v1/conversations').json.map { |c| c['id'] }, id
-    end
-    step('And a search for its word no longer finds its round') do
-      refute_includes search('q' => word).map { |r| r['id'] }, round['id']
-    end
-    step('And its current tags are forgotten') { assert_nil Chatty::TAGS.conversation_tags(id) }
-    step('And the search index keeps no tag for it') { refute_includes Chatty::INDEX.convs_with_tags([tag]), id }
-    step('And lcty_c.sqlite keeps nothing measured of its replies') { assert_empty Chatty::C_STORE.stats_of(id) }
-    step('And deleting it again still answers 200') { assert_ok http('DELETE', "/v1/conversations/#{id}") }
-  end
-
-  scenario 'Deleting a conversation is announced to the pages' do
-    id = before = nil
-    tag = "gone-#{hex}"
-    changes = []
-    step('Given a conversation whose tags were changed to ["gone"], and the changes announced through Chatty.commit recorded') do
-      id = create([user('hi')])
-      assert_ok http('POST', "/v1/conversations/#{id}/lines", [{ 'type' => 'tags', 'tags' => [tag] }])
-      before = Chatty.committer
-      Chatty.committer = ->(method, &block) { block.call.tap { |rs| changes << [method, rs] } }
-    end
-    begin
-      step('When DELETE /v1/conversations/<id> is requested') { assert_ok http('DELETE', "/v1/conversations/#{id}") }
-      step('Then a c.batch.updated deletes it from c_meta and c_recordcount') do
-        assert_equal ['c.batch.updated', [%w[c_meta delete], %w[c_recordcount delete]]],
-                     [changes[0][0], changes[0][1].map { |r| r.values_at('store', 'op') }]
-        assert(changes[0][1].all? { |r| r['row'] == { 'cid' => id } })
-      end
-      step('And a t.batch.updated deletes its row of t_has_many_c') do
-        assert_equal ['t.batch.updated', [{ 'store' => 't_has_many_c', 'op' => 'delete', 'row' => { 'tag' => tag, 'cid' => id } }]],
-                     changes[1]
-      end
-      step('And deleting it again announces no record') do
-        changes.clear
-        assert_ok http('DELETE', "/v1/conversations/#{id}")
-        assert_equal [[], []], changes.map(&:last)
-      end
-    ensure
-      Chatty.committer = before
     end
   end
 
@@ -554,21 +349,30 @@ class V1ServletTest < Lcty::Scenarios
   [
     ['GET /v1/nope', ->() { http('GET', '/v1/nope') }],
     ['GET /v1/vectors/pending', ->() { http('GET', '/v1/vectors/pending?model=embeddinggemma-2') }],
-    ['PUT /v1/vectors', ->() { http('PUT', '/v1/vectors?model=embeddinggemma-2', 'x', 'content-type' => 'application/octet-stream') }],
-    ['DELETE /v1/defaults.json', ->() { http('DELETE', '/v1/defaults.json') }],
-    ['PATCH /v1/conversations', ->() { http('PATCH', '/v1/conversations', {}) }],
     ['GET /v1/tags', ->() { http('GET', '/v1/tags') }],
-    ['PUT /v1/tags', ->() { http('PUT', '/v1/tags', { 'tags' => [] }, 'if-match' => '*') }],
     ['POST /v1/tags/00010-a.html/memory', ->() { http('POST', '/v1/tags/00010-a.html/memory', 'text' => 'x') }],
     ['GET /v1/tags/a/memory', ->() { http('GET', '/v1/tags/a/memory') }],
-    ['PATCH /v1/tags/a/memory/b', ->() { http('PATCH', '/v1/tags/a/memory/b', 'text' => 'x') }],
-    ['DELETE /v1/tags/a/memory/b', ->() { http('DELETE', '/v1/tags/a/memory/b') }],
     ['GET /v1/conversations/a/lines', ->() { http('GET', '/v1/conversations/a/lines') }]
   ].each do |request, send|
     scenario "An unknown endpoint is 404 (#{request})" do
       res = nil
       step("When #{request} is requested") { res = instance_exec(&send) }
       step('Then the status is 404 with the error "no such endpoint"') { assert_error res, 404, 'no such endpoint' }
+    end
+  end
+
+  [
+    ['PUT /v1/vectors', ->() { http('PUT', '/v1/vectors?model=embeddinggemma-2', 'x', 'content-type' => 'application/octet-stream') }],
+    ['DELETE /v1/defaults.json', ->() { http('DELETE', '/v1/defaults.json') }],
+    ['PATCH /v1/conversations', ->() { http('PATCH', '/v1/conversations', {}) }],
+    ['PUT /v1/tags', ->() { http('PUT', '/v1/tags', { 'tags' => [] }, 'if-match' => '*') }],
+    ['PATCH /v1/tags/a/memory/b', ->() { http('PATCH', '/v1/tags/a/memory/b', 'text' => 'x') }],
+    ['DELETE /v1/tags/a/memory/b', ->() { http('DELETE', '/v1/tags/a/memory/b') }]
+  ].each do |request, send|
+    scenario "A method other than GET and POST is not allowed (#{request})" do
+      res = nil
+      step("When #{request} is requested") { res = instance_exec(&send) }
+      step('Then the status is 405') { assert_equal 405, res.status, res.raw }
     end
   end
 

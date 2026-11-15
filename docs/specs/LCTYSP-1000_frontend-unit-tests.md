@@ -47,7 +47,7 @@ The last two columns count the Scenarios (an Examples row counts as one) tested 
 | [LCTYSP-1006](LCTYSP-1006_sse.feature)                        | `js/llm/sse.js`: server-sent events                         |      23 |       0 |
 | [LCTYSP-1007](LCTYSP-1007_responses-stream.feature)           | `js/llm/responses.js` and `client.js`: the Responses API    |      29 |       0 |
 | [LCTYSP-1008](LCTYSP-1008_llm-request.feature)                | `js/llm/history.js`: the request from a conversation        |      17 |       0 |
-| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      22 |       4 |
+| [LCTYSP-1009](LCTYSP-1009_storage-api.feature)                | `js/api/storage.js`: the client of the HTTP API             |      11 |       0 |
 | [LCTYSP-1010](LCTYSP-1010_meta-db.feature)                    | `js/api/meta-db.js`: the copies of the list                 |       0 |       9 |
 | [LCTYSP-1011](LCTYSP-1011_vector-store.feature)               | `js/search/vectors.js`: the vector store and query vectors  |      22 |       0 |
 | [LCTYSP-1013](LCTYSP-1013_fuzzy-search-worker.feature)        | `fuzzy_search.worker.js`: semantic search                   |      33 |       0 |
@@ -85,7 +85,7 @@ A Scenario runs in Node.js unless it needs the browser: elements and the HTML pa
 custom elements, Shadow DOM, dialogs), IndexedDB, or the page's origin read by the module itself.
 Such a Scenario has "Given a page on the server's origin" among its lines: in the Background when every
 Scenario of the feature needs it, or else as the first line of each Scenario that does, so a feature can be split
-between the two (LCTYSP-1009, for example). Node.js gets no fake DOM (no jsdom or happy-dom): what is tested there is
+between the two (LCTYSP-1027, for example). Node.js gets no fake DOM (no jsdom or happy-dom): what is tested there is
 what the module does without one. Only a global the module merely reads on the way is stood in for, and the test file's
 head comment says which; for example `document.documentElement.lang`, the only part of the page `LctyT._()` reads.
 

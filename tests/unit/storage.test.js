@@ -9,26 +9,11 @@
 // js/api/storage.js runs in Node.js (node-unit.js): every request it makes is answered by the test through
 // routeFetch(), which replaces the global fetch, so its requests resolve against the test server's origin as in a page.
 // A request that fails without an answer is a fetch that rejects with a TypeError, as fetch does. A call of the
-// feature, such as appendLines("c1", []), is the function's name and JSON arguments.
-//
-// Stand-ins: toLine renders replies with js/convert/reply.js, whose code blocks' label is tr() of js/i18n.js, so the
-// global LctyT is made by useLctyT() (English). The requests that change conversations call requestMetaDbSync() of
-// js/api/meta-db.js, which waits for requestIdleCallback and then starts the meta sync worker; Node.js has neither, so
-// requestIdleCallback is a stand-in that never calls back: no sync runs here. The Scenarios about the sync (the meta
-// sync worker fetching GET /v1/meta-all.json, or not) run in the browser, in tests/unit/storage.spec.js.
+// feature, such as getConversation("c1"), is the function's name and JSON arguments.
 
-import {
-	expect,
-	publicUrl,
-	routeFetch,
-	scenario,
-	useLctyT,
-} from "./node-unit.js";
+import { expect, publicUrl, routeFetch, scenario } from "./node-unit.js";
 
-globalThis.requestIdleCallback = () => 0;
-await useLctyT();
 const storage = await import(publicUrl("js/api/storage.js"));
-const { replyHtml } = await import(publicUrl("js/convert/reply.js"));
 
 // ---- Background ----
 
@@ -115,150 +100,6 @@ async function givenTheStatus(step, server, status, text, line) {
 	);
 }
 
-/** toLine(message), with the message as it is after the call. */
-function toLine(message) {
-	const line = storage.toLine(message);
-	return { line, message };
-}
-
-async function whenToLine(step, message) {
-	let result;
-	await step("When toLine is called with it", () => {
-		result = toLine(message);
-	});
-	return result;
-}
-
-// ---- Scenarios: toLine ----
-
-scenario(
-	"A user message becomes a message line without HTML",
-	async ({ step, t }) => {
-		await background(step, t);
-		let message;
-		await step(
-			'Given the user message {"id": "m1", "role": "user", "content": "**Hi**", "at": "2026-11-07T00:00:00.000Z"}',
-			() => {
-				message = {
-					id: "m1",
-					role: "user",
-					content: "**Hi**",
-					at: "2026-11-07T00:00:00.000Z",
-				};
-			},
-		);
-		const { line } = await whenToLine(step, message);
-		await step(
-			'Then it returns {"type": "message", "id": "m1", "role": "user", "content": "**Hi**", "at": "2026-11-07T00:00:00.000Z"}',
-			() => {
-				expect(line).toStrictEqual({
-					type: "message",
-					id: "m1",
-					role: "user",
-					content: "**Hi**",
-					at: "2026-11-07T00:00:00.000Z",
-				});
-			},
-		);
-	},
-);
-
-scenario(
-	"A reply carries its content rendered as HTML",
-	async ({ step, t }) => {
-		await background(step, t);
-		let message;
-		await step(
-			'Given the assistant message {"id": "m2", "role": "assistant", "content": "**bold** text"}',
-			() => {
-				message = { id: "m2", role: "assistant", content: "**bold** text" };
-			},
-		);
-		const { line } = await whenToLine(step, message);
-		await step(
-			'Then it returns {"type": "message", "id": "m2", "role": "assistant", "content": "**bold** text", "content_html": "<p><strong>bold</strong> text</p>"}',
-			() => {
-				expect(line).toStrictEqual({
-					type: "message",
-					id: "m2",
-					role: "assistant",
-					content: "**bold** text",
-					content_html: "<p><strong>bold</strong> text</p>",
-				});
-			},
-		);
-	},
-);
-
-scenario(
-	"The HTML of a reply is what replyHtml makes of its content",
-	async ({ step, t }) => {
-		await background(step, t);
-		let message;
-		await step(
-			"Given an assistant message whose content has a heading, a list, a table, a code block and a link",
-			() => {
-				message = {
-					role: "assistant",
-					content:
-						"# Title\n\n- one\n- two\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n```js\nlet x = 1;\n```\n\nSee [docs](https://example.com).",
-				};
-			},
-		);
-		let result;
-		await step("When toLine is called with it", () => {
-			result = {
-				html: storage.toLine(message).content_html,
-				expected: replyHtml(message.content),
-			};
-		});
-		await step("Then its content_html equals replyHtml of the content", () => {
-			expect(result.html).toBe(result.expected);
-			expect(result.html).toContain("<h1>");
-			expect(result.html).toContain("<table>");
-		});
-	},
-);
-
-scenario("A reply without content carries empty HTML", async ({ step, t }) => {
-	await background(step, t);
-	let message;
-	await step(
-		'Given the assistant message {"id": "m3", "role": "assistant"}',
-		() => {
-			message = { id: "m3", role: "assistant" };
-		},
-	);
-	const { line } = await whenToLine(step, message);
-	await step(
-		'Then it returns {"type": "message", "id": "m3", "role": "assistant", "content_html": ""}',
-		() => {
-			expect(line).toStrictEqual({
-				type: "message",
-				id: "m3",
-				role: "assistant",
-				content_html: "",
-			});
-		},
-	);
-});
-
-scenario("toLine leaves the message as it was", async ({ step, t }) => {
-	await background(step, t);
-	let message;
-	await step("Given an assistant message with content", () => {
-		message = { id: "m4", role: "assistant", content: "*hi*" };
-	});
-	const result = await whenToLine(step, message);
-	await step("Then the message has no type and no content_html", () => {
-		expect(result.message).toStrictEqual({
-			id: "m4",
-			role: "assistant",
-			content: "*hi*",
-		});
-	});
-});
-
 // ---- Scenarios: the requests ----
 
 for (const [call, method, url, body, type] of [
@@ -267,34 +108,6 @@ for (const [call, method, url, body, type] of [
 		'getConversation("a b/c")',
 		"GET",
 		"/v1/conversations/a%20b%2Fc",
-		"none",
-		"none",
-	],
-	[
-		'createConversation({"id": "c1", "tags": []}, [{"type": "message"}])',
-		"POST",
-		"/v1/conversations",
-		'{"meta":{"id":"c1","tags":[]},"lines":[{"type":"message"}]}',
-		"application/json",
-	],
-	[
-		'appendLines("a b", [{"type": "title", "title": "T"}])',
-		"POST",
-		"/v1/conversations/a%20b/lines",
-		'[{"type":"title","title":"T"}]',
-		"application/json",
-	],
-	[
-		'popMessages("c1", 2)',
-		"POST",
-		"/v1/conversations/c1/pop",
-		'{"from":2}',
-		"application/json",
-	],
-	[
-		'deleteConversation("c/1")',
-		"DELETE",
-		"/v1/conversations/c%2F1",
 		"none",
 		"none",
 	],
@@ -363,8 +176,6 @@ scenario(
 for (const [call, status, text, message] of [
 	["listConversations()", 500, "boom", "500 boom"],
 	['getConversation("nope")', 404, "not found", "404 not found"],
-	["createConversation({}, [])", 409, "already exists", "409 already exists"],
-	['popMessages("c1", 0)', 409, "too far back", "409 too far back"],
 ]) {
 	scenario(
 		`An answer that is not OK becomes an Error with the status and the body (${call})`,

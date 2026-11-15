@@ -19,7 +19,6 @@ class StoreTest < Lcty::Scenarios
   ConvHtml = Chatty::ConvHtml
   HttpError = Chatty::HttpError
   AT = '2026-11-07T10:00:00+09:00'
-  UUID_RE = /\A\h{8}-\h{4}-7\h{3}-[89ab]\h{3}-\h{12}\z/.freeze
 
   def background
     step('Given the data directory is opened with Chatty.open_data') { Lcty.open_data }
@@ -46,14 +45,12 @@ class StoreTest < Lcty::Scenarios
       'content' => content }.merge(extra)
   end
 
-  # Create a conversation and return its id
+  # A conversation file of LCTYSP-0003 with the current head, as the HTTP API once wrote it; returns its id
   def create(lines = [], meta = {})
-    Store.create('meta' => { 'id' => new_id, 'created_at' => AT, 'tags' => [], 'instructions' => 'sys' }.merge(meta),
-                 'lines' => lines)
-  end
-
-  def contents(id)
-    Store.conversation(id)['messages'].map { |m| m['content'] }
+    id = new_id
+    meta = { 'type' => 'meta', 'id' => id, 'created_at' => AT, 'tags' => [], 'instructions' => 'sys' }.merge(meta)
+    Store.write_atomic(path_of(id), ConvHtml.document([meta] + lines))
+    id
   end
 
   def assert_http(status, message, &block)
@@ -86,382 +83,30 @@ class StoreTest < Lcty::Scenarios
       ConvHtml.encode([{ 'type' => 'setup', 'instructions' => 'old sys' }, message])
   end
 
-  # ---- Creating ----
+  # ---- Reading ----
 
-  scenario 'Creating a conversation writes its file with the current head' do
+  scenario 'A conversation is read as its meta, title, tags and messages' do
     background
-    id = result = conv = nil
-    step('When Store.create is given a new id, the tags "ruby", the instructions "Be brief", the title "First" and a user message without an id') do
-      id = new_id
-      result = Store.create('meta' => { 'id' => id, 'created_at' => AT, 'tags' => ['ruby'], 'instructions' => 'Be brief' },
-                            'lines' => [{ 'type' => 'title', 'title' => 'First' },
-                                        { 'type' => 'message', 'role' => 'user', 'at' => AT, 'content' => 'Hello' }])
+    id = conv = nil
+    step('Given a conversation with the tags "ruby", the instructions "Be brief", the title "First" and a user message') do
+      id = create([{ 'type' => 'title', 'title' => 'First' }, user('Hello')], 'tags' => ['ruby'], 'instructions' => 'Be brief')
     end
-    step('Then it returns the id and data/c/<id>.html starts with the head lines of the current format') do
-      assert_equal id, result
-      assert_current_head(id)
-    end
-    step('And Store.conversation returns the meta, the title "First", the tags ["ruby"] and the message') do
-      conv = Store.conversation(id)
+    step('When Store.conversation reads it') { conv = Store.conversation(id) }
+    step('Then it returns the meta, the title "First", the tags ["ruby"] and the message') do
       assert_equal({ 'id' => id, 'created_at' => AT, 'tags' => ['ruby'], 'instructions' => 'Be brief' }, conv['meta'])
       assert_equal 'First', conv['title']
       assert_equal ['ruby'], conv['tags']
       assert_equal [{ 'role' => 'user', 'at' => AT, 'content' => 'Hello' }], conv['messages'].map { |m| m.reject { |k, _| k == 'id' } }
     end
-    step('And the message was given a UUIDv7 id') do
-      assert Chatty::Uuid.valid?(conv['messages'][0]['id']), conv['messages'][0]['id']
-    end
   end
 
-  scenario 'Only the id, the creation time, the tags and the instructions of the meta are kept' do
+  scenario 'The current tags are those of lcty_t.sqlite once they were changed' do
     background
     id = nil
-    step('When Store.create is given a meta that also has "forked_from" and "backend"') do
-      id = create([], 'forked_from' => 'other', 'backend' => 'x')
-    end
-    step('Then the meta of the conversation has only id, created_at, tags and instructions') do
-      assert_equal %w[created_at id instructions tags], Store.conversation(id)['meta'].keys.sort
-      refute_includes read(id), 'other'
-    end
-  end
-
-  scenario 'A new conversation may end with a send command' do
-    background
-    id = nil
-    step('When Store.create is given a user message and a send command') do
-      id = create([user('go'), { 'type' => 'cmd', 'op' => 'send', 'at' => AT }])
-    end
-    step('Then the last line of the file is <lcty-cmd data-op="send" …></lcty-cmd>') do
-      assert_equal %(<lcty-cmd data-op="send" data-at="#{AT}"></lcty-cmd>), read(id).lines.last.chomp
-    end
-    step('And Store.conversation returns only the message') { assert_equal ['go'], contents(id) }
-  end
-
-  scenario 'Creating a conversation leaves the given objects as they were' do
-    background
-    meta = message = nil
-    step('Given a meta without tags and a user message without an id') do
-      meta = { 'id' => new_id, 'created_at' => AT }
-      message = user('hi')
-      message.delete('id')
-    end
-    step('When Store.create is given them') { Store.create('meta' => meta, 'lines' => [message]) }
-    step('Then the meta still has no tags') { refute meta.key?('tags'), meta.inspect }
-    step('And the message still has no id') { refute message.key?('id'), message.inspect }
-  end
-
-  scenario 'A conversation cannot be created twice' do
-    background
-    id = before = err = nil
-    step('Given a conversation that exists') do
-      id = create([user('a')])
-      before = read(id)
-    end
-    step('When Store.create is given its id again') do
-      err = http_error { Store.create('meta' => { 'id' => id }, 'lines' => [user('b')]) }
-    end
-    step('Then it raises HttpError 409 "already exists"') do
-      assert_error(409, 'already exists', err)
-      assert_equal before, read(id)
-    end
-  end
-
-  {
-    'a body that is not an object' => ['body must be an object', ->(_id) { [] }],
-    'a meta that is not an object' => ['meta must be an object', ->(_id) { { 'meta' => 'x' } }],
-    'the id "a b"' => ['invalid id', ->(_id) { { 'meta' => { 'id' => 'a b' } } }],
-    'the tags ["x", "x"]' => ['tags must be an array of unique tag references',
-                              ->(id) { { 'meta' => { 'id' => id, 'tags' => %w[x x] } } }],
-    'the tag "a:b"' => ['tags must be an array of unique tag references', ->(id) { { 'meta' => { 'id' => id, 'tags' => ['a:b'] } } }],
-    'lines that are not an array' => ['lines must be an array of objects', ->(id) { { 'meta' => { 'id' => id }, 'lines' => {} } }],
-    'a tags line' => ['line type not allowed: "tags"',
-                      ->(id) { { 'meta' => { 'id' => id }, 'lines' => [{ 'type' => 'tags', 'tags' => [] }] } }],
-    'a message id that is not a UUIDv7' => ['message id must be a UUIDv7: "1234"',
-                                            ->(id) { { 'meta' => { 'id' => id }, 'lines' => [{ 'type' => 'message', 'id' => '1234' }] } }],
-    'the command "Send"' => ['invalid command: "Send"',
-                             ->(id) { { 'meta' => { 'id' => id }, 'lines' => [{ 'type' => 'cmd', 'op' => 'Send' }] } }],
-    'a content_html that is not a string' => ['content_html must be a string',
-                                              ->(id) { { 'meta' => { 'id' => id }, 'lines' => [{ 'type' => 'message', 'content_html' => 1 }] } }],
-    'a role holding U+0001 in the 2nd line' => [
-      'lines[1].role contains a character that XML cannot represent: U+0001 at 4',
-      ->(id) { { 'meta' => { 'id' => id }, 'lines' => [{ 'type' => 'title', 'title' => 't' }, { 'type' => 'message', 'role' => "user\u0001" }] } }
-    ],
-    'a tag of the meta holding U+0001' => ['tags must be an array of unique tag references',
-                                           ->(id) { { 'meta' => { 'id' => id, 'tags' => ["a\u0001"] } } }],
-    'a tag of the meta holding U+3000' => ['tags must be an array of unique tag references',
-                                           ->(id) { { 'meta' => { 'id' => id, 'tags' => ["a　b"] } } }]
-  }.each do |request, (message, body)|
-    scenario "Store.create rejects a bad request with 400 and writes nothing (#{request})" do
-      background
-      id = new_id
-      err = nil
-      step("When Store.create is given #{request}") { err = http_error { Store.create(body.call(id)) } }
-      step("Then it raises HttpError 400 #{message.include?('"') ? "'#{message}'" : "\"#{message}\""}") do
-        assert_error(400, message, err)
-      end
-      step('And no file is written') { refute File.exist?(path_of(id)) }
-    end
-  end
-
-  # ---- Appending ----
-
-  scenario 'Appending adds the lines at the end of the file' do
-    background
-    id = before = added = nil
-    step('Given a conversation with one user message') do
-      id = create([user('one')])
-      before = read(id)
-    end
-    step('When Store.append is given an assistant message and a user message without an id') do
-      added = { 'type' => 'message', 'role' => 'user', 'at' => AT, 'content' => 'three' }
-      Store.append(id, [assistant('two'), added])
-    end
-    step('Then the file starts with exactly what it held before') do
-      assert read(id).start_with?(before)
-      assert_equal 2, read(id).lines.size - before.lines.size
-    end
-    step('And Store.conversation returns the three messages in order') { assert_equal %w[one two three], contents(id) }
-    step('And the appended user message was given a UUIDv7 id') do
-      assert_match UUID_RE, Store.conversation(id)['messages'][2]['id']
-    end
-  end
-
-  scenario 'A text with a character XML cannot represent is appended as base64' do
-    background
-    id = nil
-    text = "nul\u0000 esc\e end"
-    step('Given a conversation') { id = create }
-    step('When Store.append is given a user message whose content holds U+0000 and ESC') { Store.append(id, [user(text)]) }
-    step('Then the file holds data-content-base64 for it') do
-      assert_includes read(id), %(data-content-base64="#{[text.b].pack('m0')}")
-    end
-    step('And Store.conversation returns the content byte for byte') { assert_equal [text], contents(id) }
-  end
-
-  scenario 'Appending to a file that does not end with a newline starts a new line' do
-    background
-    id = nil
-    step('Given a conversation whose file lost its last newline') do
-      id = create([user('one')])
-      File.binwrite(path_of(id), read(id).chomp)
-    end
-    step('When Store.append is given a user message') { Store.append(id, [user('two')]) }
-    step('Then the message starts on a line of its own') do
-      assert read(id).lines.last.start_with?('<lcty-message '), read(id).lines.last
-    end
-    step('And Store.conversation returns every message') { assert_equal %w[one two], contents(id) }
-  end
-
-  scenario 'Appending a title line overwrites the title slot' do
-    background
-    id = size = nil
-    step('Given a conversation titled "Old"') do
-      id = create([{ 'type' => 'title', 'title' => 'Old' }, user('x')])
-      size = File.size(path_of(id))
-    end
-    step('When Store.append is given the title line "New"') { Store.append(id, [{ 'type' => 'title', 'title' => 'New' }]) }
-    step('Then Store.conversation returns the title "New"') { assert_equal 'New', Store.conversation(id)['title'] }
-    step('And the size of the file has not changed') { assert_equal size, File.size(path_of(id)) }
-  end
-
-  scenario 'Appending a tags line changes the current tags without touching the file' do
-    background
-    id = before = nil
-    step('Given a conversation created with the tags "a" and "b"') do
-      id = create([user('x')], 'tags' => %w[a b])
-      before = read(id)
-    end
-    step('When Store.append is given the tags line ["c"]') do
-      Store.append(id, [{ 'type' => 'tags', 'tags' => ['c'], 'at' => AT }])
-    end
+    step('Given a conversation created with the tags "a" and "b"') { id = create([user('x')], 'tags' => %w[a b]) }
+    step('When its tags are changed to ["c"] in lcty_t.sqlite') { Chatty::TAGS.set_conversation_tags(id, ['c']) }
     step('Then Store.conversation returns the tags ["c"]') { assert_equal ['c'], Store.conversation(id)['tags'] }
-    step('And the file is unchanged and still says data-setup-tags="a b"') do
-      assert_equal before, read(id)
-      assert_includes read(id), 'data-setup-tags="a b"'
-    end
-  end
-
-  scenario 'Appending no lines does nothing' do
-    background
-    id = before = nil
-    step('Given a conversation') do
-      id = create([user('x')])
-      before = read(id)
-    end
-    step('When Store.append is given no lines') { assert_nil Store.append(id, []) }
-    step('Then the file is unchanged') { assert_equal before, read(id) }
-  end
-
-  {
-    'a message for an unknown conversation' => [404, 'not found', ->(t) { Store.append(t.new_id, [t.user('x')]) }],
-    'a tags line for an unknown conversation' => [404, 'not found',
-                                                  ->(t) { Store.append(t.new_id, [{ 'type' => 'tags', 'tags' => ['a'] }]) }],
-    'a message for the id "../x"' => [400, 'invalid id', ->(t) { Store.append('../x', [t.user('x')]) }],
-    'no lines for an unknown conversation' => [404, 'not found', ->(t) { Store.append(t.new_id, []) }],
-    'no lines for the id "../x"' => [400, 'invalid id', ->(_t) { Store.append('../x', []) }],
-    'a command line' => [400, 'line type not allowed: "cmd"', ->(t) { Store.append(t.id, [{ 'type' => 'cmd', 'op' => 'send' }]) }],
-    'a meta line' => [400, 'line type not allowed: "meta"', ->(t) { Store.append(t.id, [{ 'type' => 'meta', 'id' => 'x' }]) }],
-    'a tags line whose tags are not a list' => [400, 'tags must be an array of unique tag references',
-                                                ->(t) { Store.append(t.id, [{ 'type' => 'tags', 'tags' => 'a' }]) }],
-    'a good line and a line with U+0001 in its at' => [
-      400, 'lines[1].at contains a character that XML cannot represent: U+0001 at 0',
-      ->(t) { Store.append(t.id, [t.user('fine'), t.user('bad', 'at' => "\u0001")]) }
-    ]
-  }.each do |request, (status, message, call)|
-    scenario "Store.append rejects a bad request (#{request})" do
-      background
-      before = nil
-      step('Given a conversation') do
-        @id = create([user('x')])
-        before = read(@id)
-      end
-      err = nil
-      step("When Store.append is given #{request}") { err = http_error { call.call(self) } }
-      step("Then it raises HttpError #{status} #{message.include?('"') ? "'#{message}'" : "\"#{message}\""}") do
-        assert_error(status, message, err)
-      end
-      step('And the file is unchanged') do
-        assert_equal before, read(@id)
-        assert_nil Chatty::TAGS.conversation_tags(@id)
-      end
-    end
-  end
-
-  attr_reader :id
-
-  # ---- The title ----
-
-  scenario 'Setting the title overwrites the slot in place' do
-    background
-    id = before = nil
-    step('Given a conversation with messages') do
-      id = create([{ 'type' => 'title', 'title' => 'Before' }, user('x'), assistant('y')])
-      before = read(id)
-    end
-    step('When Store.set_title sets the title "A & <B>"') { Store.set_title(id, 'type' => 'title', 'title' => 'A & <B>') }
-    step('Then only the bytes of the title slot on line 3 have changed') do
-      after = read(id)
-      assert_equal before.bytesize, after.bytesize
-      start = before.lines[0, 2].join.bytesize + '<title id="__512">'.bytesize
-      assert_equal before.byteslice(0, start), after.byteslice(0, start)
-      assert_equal before.byteslice(start + 512..-1), after.byteslice(start + 512..-1)
-      assert_equal ConvHtml.title_slot('A & <B>'), after.byteslice(start, 512)
-    end
-    step('And Store.conversation returns the title "A & <B>"') { assert_equal 'A & <B>', Store.conversation(id)['title'] }
-  end
-
-  scenario 'A title too long for the slot is cut to fit' do
-    background
-    id = size = nil
-    step('Given a conversation') do
-      id = create([user('x')])
-      size = File.size(path_of(id))
-    end
-    step('When Store.set_title sets a title of 300 "あ"') { Store.set_title(id, 'type' => 'title', 'title' => 'あ' * 300) }
-    step('Then Store.conversation returns the first 166 "あ"') { assert_equal 'あ' * 166, Store.conversation(id)['title'] }
-    step('And the size of the file has not changed') { assert_equal size, File.size(path_of(id)) }
-  end
-
-  scenario 'Setting the title of a file without a valid slot rewrites the file' do
-    background
-    id = nil
-    step('Given a conversation whose line 3 was replaced by a hand-written <title>') do
-      id = create([user('x')], 'tags' => ['t'])
-      lines = File.read(path_of(id), mode: 'r:UTF-8').lines
-      lines[2] = "<title>Hand</title>\n"
-      File.write(path_of(id), lines.join)
-      assert_equal 'Hand', Store.conversation(id)['title']
-    end
-    step('When Store.set_title sets the title "Fixed"') { Store.set_title(id, 'type' => 'title', 'title' => 'Fixed') }
-    step('Then the file has the head lines of the current format again') { assert_current_head(id) }
-    step('And Store.conversation returns the title "Fixed" with its meta and messages') do
-      conv = Store.conversation(id)
-      assert_equal 'Fixed', conv['title']
-      assert_equal ['t'], conv['meta']['tags']
-      assert_equal 'sys', conv['meta']['instructions']
-      assert_equal ['x'], contents(id)
-    end
-  end
-
-  scenario 'Setting the title of an unknown conversation is 404' do
-    background
-    step('Then Store.set_title raises HttpError 404 "not found" for an unknown id') do
-      assert_http(404, 'not found') { Store.set_title(new_id, 'type' => 'title', 'title' => 'x') }
-    end
-  end
-
-  # ---- Pop ----
-
-  scenario 'Pop removes the last turn' do
-    background
-    id = nil
-    step('Given a conversation with the messages user, assistant, user, assistant') do
-      id = create([{ 'type' => 'title', 'title' => 'Kept' }, user('u1'), assistant('a1'), user('u2'), assistant('a2')])
-    end
-    step('When Store.pop is given from 2, the index of the last user message') { Store.pop(id, 2) }
-    step('Then Store.conversation returns the first two messages') { assert_equal %w[u1 a1], contents(id) }
-    step('And the title is kept') do
-      assert_equal 'Kept', Store.conversation(id)['title']
-      assert_current_head(id)
-    end
-  end
-
-  scenario 'Pop may remove only the reply' do
-    background
-    id = nil
-    step('Given a conversation with the messages user, assistant') { id = create([user('u1'), assistant('a1')]) }
-    step('When Store.pop is given from 1') { Store.pop(id, 1) }
-    step('Then Store.conversation returns only the user message') { assert_equal %w[u1], contents(id) }
-  end
-
-  scenario 'Pop from the end or beyond does nothing' do
-    background
-    id = before = nil
-    step('Given a conversation with the messages user, assistant') do
-      id = create([user('u1'), assistant('a1')])
-      before = read(id)
-    end
-    step('When Store.pop is given from 2') do
-      assert_nil Store.pop(id, 2)
-      assert_nil Store.pop(id, 99)
-    end
-    step('Then the file is unchanged') { assert_equal before, read(id) }
-  end
-
-  scenario 'Pop may not go back more than one turn' do
-    background
-    id = before = nil
-    message = 'can only pop the last turn (from must be >= index of the last user message)'
-    step('Given a conversation with the messages user, assistant, user, assistant') do
-      id = create([user('u1'), assistant('a1'), user('u2'), assistant('a2')])
-      before = read(id)
-    end
-    err = nil
-    step('When Store.pop is given from 1') { err = http_error { Store.pop(id, 1) } }
-    step('Then it raises HttpError 409 "can only pop the last turn (from must be >= index of the last user message)"') do
-      assert_error(409, message, err)
-    end
-    step('And the file is unchanged') { assert_equal before, read(id) }
-    step('And a conversation without user messages raises the same 409 for from 0') do
-      other = create([assistant('a')])
-      assert_http(409, message) { Store.pop(other, 0) }
-    end
-  end
-
-  {
-    'from "1"' => [400, 'from must be an integer', ->(id) { Store.pop(id, '1') }],
-    'from -1' => [400, 'from must be an integer', ->(id) { Store.pop(id, -1) }],
-    'an unknown conversation' => [404, 'not found', ->(_id) { Store.pop("s3003-#{SecureRandom.hex(6)}", 0) }]
-  }.each do |request, (status, message, call)|
-    scenario "Store.pop rejects a bad from or id (#{request})" do
-      background
-      id = nil
-      step('Given a conversation with the messages user, assistant') { id = create([user('u1'), assistant('a1')]) }
-      step("Then Store.pop raises HttpError #{status} \"#{message}\" for #{request}") do
-        assert_http(status, message) { call.call(id) }
-        assert_equal %w[u1 a1], contents(id)
-      end
-    end
+    step('And the file still says data-setup-tags="a b"') { assert_includes read(id), 'data-setup-tags="a b"' }
   end
 
   scenario 'Store.conversation of an unknown or invalid id is an error' do
@@ -618,30 +263,16 @@ class StoreTest < Lcty::Scenarios
     step('Then the file has not changed') { assert_equal before, [read(id), File.mtime(path_of(id))] }
   end
 
-  scenario 'A file in the lcty-msg format is written only through /v1/rpc' do
+  scenario 'A file in the lcty-msg format is read too' do
     background
-    id = before = errors = nil
+    id = nil
     u = Chatty::Uuid.v7
     step('Given a conversation file in the lcty-msg format with a user message and a model message') do
       id = lcty_msg_file(lcty_msg_round(u, Chatty::Uuid.v7))
-      before = read(id)
     end
-    step('When a message is appended to it and the last turn is popped') do
-      errors = [http_error { Store.append(id, [user('more')]) }, http_error { Store.pop(id, 0) }]
-    end
-    step('Then both are refused with 409 and the file has not changed') do
-      message = 'the conversation is in the lcty-msg format (LCTYSP-0013); it is written only through /v1/rpc'
-      errors.each { |e| assert_error(409, message, e) }
-      assert_equal before, read(id)
-    end
-    step('And Store.conversation reads its messages') do
+    step('Then Store.conversation reads its messages') do
       assert_equal [%w[user q], %w[assistant a]], Store.conversation(id)['messages'].map { |m| [m['role'], m['content']] }
       assert_equal u, Store.conversation(id)['messages'][0]['id']
-    end
-    step('And appending a title overwrites the slot in place and leaves the elements as they are') do
-      Store.append(id, [{ 'type' => 'title', 'title' => 'New' }])
-      assert_equal 'New', Store.conversation(id)['title']
-      assert_equal before.lines.drop(ConvHtml::HEAD_LINES), read(id).lines.drop(ConvHtml::HEAD_LINES)
     end
   end
 
@@ -662,7 +293,7 @@ class StoreTest < Lcty::Scenarios
     end
   end
 
-  scenario 'Store.document and Store.encode_lines turn format errors into HttpError' do
+  scenario 'Store.document turns format errors into HttpError' do
     background
     step('Then Store.document raises HttpError 500 "a conversation needs a meta" for lines without a meta') do
       assert_http(500, 'a conversation needs a meta') { Store.document([{ 'type' => 'title', 'title' => 'x' }]) }
@@ -671,9 +302,6 @@ class StoreTest < Lcty::Scenarios
       err = assert_raises(HttpError) { Store.document([{ 'type' => 'meta', 'id' => "a\u0001" }]) }
       assert_equal 400, err.status
       assert_match(/\Ameta\.id contains a character that XML cannot represent: U\+0001 at 1\z/, err.message)
-    end
-    step('And Store.encode_lines raises HttpError 500 for an unknown line type') do
-      assert_http(500, 'unknown line type: "nope"') { Store.encode_lines([{ 'type' => 'nope' }]) }
     end
   end
 end

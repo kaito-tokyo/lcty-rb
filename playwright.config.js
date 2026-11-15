@@ -7,15 +7,16 @@
 // the browsers against the Ruby server, which runs on its own port with a fresh, empty data directory. llama-server is
 // replaced by a fake inside the browser (tests/ui/fixtures.js), so neither the real data nor the models are touched.
 
-import { mkdirSync, mkdtempSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 // The servers: by default the tests start one per browser on macOS's /usr/bin/ruby, on LCTY_TEST_PORT (Chromium; the
-// unit tests use it too) and the two ports after it (WebKit, Firefox), each with a data directory of its own.
-// LCTY_TEST_SERVER_URL points every test at one server that is already running instead, with an empty data directory
-// of its own (in CI, the container of .devcontainer/ruby-2.6.10/compose.yml).
+// unit tests use it too) and the two ports after it (WebKit, Firefox), each with a data directory of its own that
+// starts as a copy of tests/ui/seed (the files no API writes: a conversation of LCTYSP-0003). LCTY_TEST_SERVER_URL
+// points every test at one server that is already running instead, with a data directory of its own that starts the
+// same way (in CI, the container of .devcontainer/ruby-2.6.10/compose.yml).
 const external = process.env.LCTY_TEST_SERVER_URL;
 const PORT = Number(process.env.LCTY_TEST_PORT || 45290);
 const BROWSERS = [
@@ -68,6 +69,9 @@ export default defineConfig({
 		: BROWSERS.map(({ name }, i) => {
 				const dataDir = join(process.env.LCTY_TEST_DATA_DIR, name);
 				mkdirSync(dataDir, { recursive: true });
+				cpSync(new URL("tests/ui/seed", import.meta.url), dataDir, {
+					recursive: true,
+				});
 				return {
 					// No embedding server (LCTYSP-0019): the tests never start a model
 					command: "/usr/bin/ruby lcty.rb --no-embedding",

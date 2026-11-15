@@ -9,6 +9,7 @@ path = [
 	"package.json",
 	"tests/gfm/entities.json.upstream",
 	"tests/gfm/spec.txt.upstream",
+	"tests/ui/seed/c/t-former-0003.html",
 ]
 SPDX-FileCopyrightText = "2026 Kaito Udagawa <umireon@kaito.tokyo>"
 SPDX-License-Identifier = "Apache-2.0"

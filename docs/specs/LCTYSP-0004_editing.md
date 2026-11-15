@@ -27,7 +27,8 @@ while keeping the original, the user forks. Editing assistant messages is not of
    - In every case the remaining part is the prefix of the previous state, so the cache applies (measured: regenerate
      0.07–0.16 s, edit and resend about 0.3 s).
    - What was removed is gone; there is no redo.
-   - The rule limits what one mistake can lose to one turn. The server enforces it in `pop`.
+   - The rule limits what one mistake can lose to one turn. The page keeps it: `c.unappend` removes one element at a
+     time, and the page stops at the last user message.
 3. **To change an earlier point while keeping the original, fork.** "Fork from here" is offered on user messages and can
    start from any point in one operation (the original is not cut, so rule 2 does not apply). It creates a new
    conversation that **copies** everything before that message (excluding the message itself); the edited message is
@@ -41,14 +42,12 @@ while keeping the original, the user forks. Editing assistant messages is not of
 5. **Returning to the original after a fork can be slow.** Forking is fast, but continuing the original conversation
    afterwards may need a recompute ([LCTYSP-0002](LCTYSP-0002_llm-backend.md)).
 
-## Server-side check (`pop`)
+## Server-side check
 
-`POST /v1/conversations/:id/pop` with `{"from": n}` deletes the messages from index `n` (0-based, counting messages
-only). **If `n` is before the last user message, it is rejected with 409.**
-
-- `title` and `tags` elements after the cut are kept.
-- The file is rewritten through a temporary file and `rename` ([LCTYSP-0003](LCTYSP-0003_conversation-file.md)).
-- Ruby checks only this one rule; it does not otherwise know what the messages mean.
+The pages undo and regenerate with `c.unappend` of `/v1/rpc`, which removes one element at a time from the end of the
+file ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)). The `pop` of the HTTP API, which removed the messages from an index
+of a file of LCTYSP-0003 and refused with 409 an index before the last user message, is gone with the other writes of
+that API ([LCTYSP-0016](LCTYSP-0016_hardening.md#3-every-write-through-v1rpc)).
 
 ## Sequences
 
@@ -57,7 +56,8 @@ only). **If `n` is before the last user message, it is rejected with 409.**
 The pages write conversations in the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) through
 `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), one element at a time at the end of the file, each naming the
 last element it expects. A file of LCTYSP-0003 is read-only until `tools/convert.rb` converts it; the sequences after
-this section are those of such files, kept for reference.
+this section are those of such files, kept for reference: the writes of the HTTP API they show (`POST
+/v1/conversations`, `…/lines`) are gone ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
 
 ```
 One turn
@@ -79,7 +79,7 @@ UI   → rpc:     c.unappend, one element at a time from the end, back to the la
 Starting a conversation (and a fork)
 UI   → rpc:     c.create, then c.append.msg for the system prompt, the copied messages with new ids (a fork), the
                 first message, and c.append.cmd for the lock; sessionStorage lcty.run.<id> marks the lock as this tab's
-UI   → storage: POST …/lines [tags]   the tags at creation, to lcty_t.sqlite
+UI   → rpc:     c.update.tags  the tags at creation, to lcty_t.sqlite
 UI:             moves to /c/<id>.html, which runs the lock because this tab made it
 ```
 

@@ -44,7 +44,7 @@ Feature: LCTYSP-3028 Embedding on the server
 
   Scenario: Deleting a conversation fills its rows with NaN
     Given the embedding is started and has embedded "c1"
-    When "c1" is deleted with DELETE /v1/conversations/c1
+    When "c1" is deleted with c.delete of /v1/rpc
     Then the rows of the user message and the model reply are listed as invalid
 
   Scenario: A message removed while it is being embedded is dropped
