@@ -6,8 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0003: Conversation file
 
-- Status: Accepted; to be superseded by [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the `lcty-msg`
-  format, a draft) once the pages write it
+- Status: Superseded by [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (the `lcty-msg` format), which the
+  pages write over `/v1/rpc`. Nothing writes this format any more: a file in it is still read, and the conversation
+  page shows it read-only; `/v1/rpc` refuses to append to it (error 6) but changes its tags and deletes it, and
+  `tools/convert.rb` converts it to LCTYSP-0013.
 - Related: [LCTYSP-0004](LCTYSP-0004_editing.md), [LCTYSP-0005](LCTYSP-0005_page-and-elements.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)
 - Implementation: `lib/conv_html.rb`, `lib/store.rb`
 

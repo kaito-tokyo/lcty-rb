@@ -8,12 +8,13 @@ SPDX-License-Identifier: Apache-2.0
 
 - Status: Draft.
 - Related: [LCTYSP-0010](LCTYSP-0010_data-and-settings.md) (the data directory and its files),
-  [LCTYSP-0007](LCTYSP-0007_search.md) (`_index.sqlite`), [LCTYSP-0008](LCTYSP-0008_vector-binary.md)
-  (`lcty_fuzzy_search.sqlite`), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md) (`lcty_t.sqlite`),
+  [LCTYSP-0007](LCTYSP-0007_search.md) (`_index.sqlite`), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)
+  (`lcty_t.sqlite`), [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md) (`lcty_c.sqlite`),
+  [LCTYSP-0019](LCTYSP-0019_server-embedding.md) (the vector pair, which is not SQLite),
   [LCTYSP-0014](LCTYSP-0014_browser-sync.md) (the browser's databases)
-- Implementation: `lib/search_index.rb`, `lib/v1/vector_db.rb`, `lib/tag_store.rb`, `Chatty.open_data` in
-  `lib/store.rb`; tested by [LCTYSP-3004](LCTYSP-3004_search-index.feature),
-  [LCTYSP-3005](LCTYSP-3005_tag-store.feature) and [LCTYSP-3007](LCTYSP-3007_vector-db.feature)
+- Implementation: `lib/search_index.rb`, `lib/tag_store.rb`, `lib/c_store.rb`, `Chatty.open_data` in `lib/store.rb`;
+  tested by [LCTYSP-3004](LCTYSP-3004_search-index.feature), [LCTYSP-3005](LCTYSP-3005_tag-store.feature) and
+  [LCTYSP-3023](LCTYSP-3023_convert.feature)
 
 ## Summary
 
@@ -35,12 +36,10 @@ sides.
 ## One file per resource, as the browser's databases
 
 - **The server's files and the browser's databases are cut at the same grain:** `lcty_c.sqlite` and the browser's
-  `lcty_c` for `c/`, `lcty_t.sqlite` and `lcty_t` for `t/`, `lcty_fuzzy_search.sqlite` for the vectors of fuzzy
-  (semantic) search. A resource whose data needs migrating has a file of its own, so its version is its own.
+  `lcty_c` for `c/`, `lcty_t.sqlite` and `lcty_t` for `t/`. A resource whose data needs migrating has a file of its
+  own, so its version is its own.
 - **Today's files:**
   - `lcty_t.sqlite`: `t_has_many_c`, source data, version 4 ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)).
-  - `lcty_fuzzy_search.sqlite`: `vectors`, which only the browser can make again
-    ([LCTYSP-0008](LCTYSP-0008_vector-binary.md)). It has no leading `_`, so backups keep it.
   - `lcty_c.sqlite`: `message_stats`, source data, version 1: what was measured of a reply (`data-timings`,
     `data-usage` and `data-client`), which the format of [LCTYSP-0013](LCTYSP-0013_conversation-file-lcty-msg.md)
     moved out of the conversation file. `tools/convert.rb` and the server make it; the server writes and reads it through
@@ -48,6 +47,10 @@ sides.
     when its reply is unappended or its conversation deleted. The conversation
     files are still the source of truth of everything else of `c/`, and what is derived from them is in
     `_index.sqlite`.
+- **The vectors of semantic search are not SQLite:** they are the vector pair of
+  [LCTYSP-0019](LCTYSP-0019_server-embedding.md) (`lcty_fuzzy_search.eg2_264.dat` and `.idx`), whose model and row
+  layout are named in the file names. The `lcty_fuzzy_search.sqlite` of an older version, whose vectors the browser
+  made, is not read any more and may be deleted ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md#data-directory)).
 - **The browser's databases** have the names of the resources, `lcty_c` and `lcty_t`
   ([LCTYSP-0009](LCTYSP-0009_tags-and-memory.md#in-the-browser-t_full-like-c_meta)), the names and versions they had
   before they were named after the version of the files (`lcty_v1_c`, `lcty_v1_t`) for a time.
@@ -78,11 +81,11 @@ At startup, before anything is opened (`Chatty.open_data`):
 
 1. `tags.sqlite` is renamed to `lcty_t.sqlite` when the latter does not exist, after a checkpoint, and its `-wal` and
    `-shm` are removed (`TagStore.rename_former`).
-2. When `lcty_fuzzy_search.sqlite` does not exist and the old `_index.sqlite` has a table `vectors` (with `model`),
-   its vectors are carried over into a new `lcty_fuzzy_search.sqlite` (`VectorDB.carry_over`), so the browser need not
-   embed everything again.
-3. `_index.sqlite` is discarded.
-4. The cache files of the layout before that (`_vectors.*`) are deleted after the vectors are garbage-collected.
+2. `_index.sqlite` is discarded.
+
+Carrying the browser's vectors over into `lcty_fuzzy_search.sqlite` (`VectorDB.carry_over`) and deleting the cache
+files `_vectors.*` were removed with that file, when the server took over embedding
+([LCTYSP-0019](LCTYSP-0019_server-embedding.md)).
 
 ## What other frameworks keep
 

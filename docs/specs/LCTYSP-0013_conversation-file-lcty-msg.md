@@ -6,13 +6,15 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0013: Conversation file (`lcty-msg`)
 
-- Status: Draft. It is to supersede [LCTYSP-0003](LCTYSP-0003_conversation-file.md), which describes the files of
-  today, once the pages write this format; the RPC prototype writes it already, into `c/`.
+- Status: Draft, in use. The pages write every conversation in this format over
+  [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (`lcty.v1.async.mjs`, `js/pages/new.js`), and it supersedes
+  [LCTYSP-0003](LCTYSP-0003_conversation-file.md), whose files are only read until `tools/convert.rb` converts them.
+  It stays a draft for its [Open points](#open-points).
 - Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md) (the current format, and the rules this one keeps: the head,
   the title slot, characters XML cannot represent, the presentation allowlist),
   [LCTYSP-0012](LCTYSP-0012_rpc-protocol.md) (the protocol that writes it)
-- Implementation: `lib/rpc/conv_store.rb` (prototype); tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature). The pages
-  show such a file read-only (`<lcty-msg>` and `<lcty-thinking>` of `lcty.v1.cjs`,
+- Implementation: `lib/rpc/conv_store.rb`; tested by [LCTYSP-3020](LCTYSP-3020_rpc.feature). The pages show such a
+  file (`<lcty-msg>` and `<lcty-thinking>` of `lcty.v1.cjs`,
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)); tested by [LCTYSP-1016](LCTYSP-1016_conversation-file-elements.feature)
   and [LCTYSP-1017](LCTYSP-1017_conversation-elements.feature)
 
