@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0018: Markdown streaming
 
-- Status: Draft. `lcty-elements.js` streams a reply as [In the page](#in-the-page) says, with the tail's box and
+- Status: Accepted. `lcty-elements.js` streams a reply as [In the page](#in-the-page) says, with the tail's box and
   following the reply of `tail-box.js`; every question of [Open questions](#open-questions) is decided.
 - Related: [LCTYSP-0017](LCTYSP-0017_markdown.md) (the HTML of a complete text),
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams) (rendering streams),

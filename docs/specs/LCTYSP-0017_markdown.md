@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0017: Markdown
 
-- Status: Draft. The pages render with the GFM parser and the committed converter (`convert/reply.js`); see
+- Status: Accepted. The pages render with the GFM parser and the committed converter (`convert/reply.js`); see
   [What changes](#what-changes).
 - Related: [LCTYSP-0003](LCTYSP-0003_conversation-file.md#presentation-allowlist) (the presentation allowlist),
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md) (rendering streams, suggested next messages),
