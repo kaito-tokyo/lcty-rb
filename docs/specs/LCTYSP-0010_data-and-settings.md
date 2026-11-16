@@ -6,8 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # LCTYSP-0010: Data directory and settings
 
-- Status: Accepted. Keeping the browser's copies up to date is to be superseded by
-  [LCTYSP-0014](LCTYSP-0014_browser-sync.md) once the pages use `/v1/rpc`.
+- Status: Accepted. The browser's copies are kept up to date as [LCTYSP-0014](LCTYSP-0014_browser-sync.md) says,
+  over `/v1/rpc` ([In the browser](#in-the-browser)).
 - Related: [LCTYSP-0001](LCTYSP-0001_architecture.md), [LCTYSP-0003](LCTYSP-0003_conversation-file.md), [LCTYSP-0007](LCTYSP-0007_search.md), [LCTYSP-0008](LCTYSP-0008_vector-binary.md), [LCTYSP-0009](LCTYSP-0009_tags-and-memory.md)
 - Implementation: `lib/config.rb` (`LCTY_DATA_DIR`, the port, and the options of `server_settings.txt`, the
   environment and the command line), `lcty.rb` (the base URL, the command line and choosing the port),

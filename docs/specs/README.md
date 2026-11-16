@@ -12,7 +12,7 @@ Specifications of lcty-rb. Each spec describes the current design of one topic a
 | -------------------------------------------------------- | --------------------------------- | ------------------------- |
 | [LCTYSP-0001](LCTYSP-0001_architecture.md)               | Architecture                      | Accepted                  |
 | [LCTYSP-0002](LCTYSP-0002_llm-backend.md)                | LLM backend                       | Accepted                  |
-| [LCTYSP-0003](LCTYSP-0003_conversation-file.md)          | Conversation file                 | Accepted                  |
+| [LCTYSP-0003](LCTYSP-0003_conversation-file.md)          | Conversation file                 | Superseded by LCTYSP-0013 |
 | [LCTYSP-0004](LCTYSP-0004_editing.md)                    | Editing a conversation            | Accepted                  |
 | [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)          | Pages and custom elements         | Accepted                  |
 | [LCTYSP-0006](LCTYSP-0006_http-api.md)                   | HTTP API                          | Accepted                  |
