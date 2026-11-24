@@ -18,7 +18,8 @@
  *   lcty.v1.c.worker.cjs (LCTYSP-0014), each with its row in the store "sync" (key path "store"), the version it was
  *   last brought to:
  *   - the copy "t_full", the tag definitions: the store "t_full" (key path "file"), one {@link Tag} per row, in key
- *     order, which is file-name order and so the order of the tags; and the store "t_set" (out-of-line keys), one
+ *     order, which is file-name order, not the order of the tags (get sorts them by order, as the server does: no order
+ *     last, ties by file name); and the store "t_set" (out-of-line keys), one
  *     {@link TagSet} under the key "set". Both are written in one transaction, so the rows and the ETag are always one
  *     set. Filled by replace from t.list, changed by apply from the t_full and t_set records of t.batch.updated.
  *   - the copy "t_has_many_c": the store "t_has_many_c" (key path ["tag", "cid"]), one {@link TagHasC} per tag and
@@ -46,6 +47,8 @@ export interface SyncRow {
 export interface Tag {
 	file: string;
 	name: string;
+	/** data-order of the tag file, its place in the order; null without one. */
+	order: number | null;
 	ops: { type: string; content: string }[];
 	prompt: string;
 	memory: { id: string; text: string; at: string; source?: unknown }[];
@@ -67,7 +70,7 @@ export type TagRecord =
 
 /** The operations, with their payload and what they answer as result. */
 export interface Operations {
-	/** t_full and t_set: the tags in file-name order and the ETag; stale true when the copy has never been filled. */
+	/** t_full and t_set: the tags in the order of the tags and the ETag; stale true when the copy has never been filled. */
 	get: {
 		payload: undefined;
 		result: { tags: Tag[]; etag: string | null; stale: boolean };

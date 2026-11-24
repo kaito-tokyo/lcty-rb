@@ -86,7 +86,7 @@ export function initNewPage() {
 						chip.className = "tag-chip";
 						chip.textContent = t.name;
 						label.append(box, chip);
-						// ⚙︎ after each tag: its file's page, /t/NNNNN-<part>.html
+						// ⚙︎ after each tag: its file's page, /t/<part>.html
 						const edit = document.createElement("a");
 						edit.href = siteUrl(`t/${encodeURIComponent(t.file)}`).href;
 						edit.title = tr("editTagNamed", "Edit {name}", { name: t.name });

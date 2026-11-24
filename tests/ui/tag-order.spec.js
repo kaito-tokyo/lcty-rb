@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // LCTYSP-2004: the scenarios of docs/specs/LCTYSP-2004_tag-pages.feature, the tag reorder page /t/ and the tag files'
-// pages /t/NNNNN-<part>.html (LCTYSP-0005, LCTYSP-0009). Each test has the title of its Scenario and one test.step per
+// pages /t/<part>.html (LCTYSP-0005, LCTYSP-0009). Each test has the title of its Scenario and one test.step per
 // line of it, so the two read side by side. A and B in the steps are names made unique by uniqueWord.
 
 import {
@@ -37,7 +37,7 @@ const orderItems = (page) => page.locator("#tag-order > li");
 /** The names, in order, as the reorder page lists them. */
 const listed = (names) => names.map((n) => new RegExp(n));
 
-test("The tags dialog links to /t/, where moving a tag and saving renumbers the files", async ({
+test("The tags dialog links to /t/, where moving a tag and saving rewrites the order and keeps the files", async ({
 	page,
 	request,
 }) => {
@@ -71,12 +71,15 @@ test("The tags dialog links to /t/, where moving a tag and saving renumbers the 
 	await test.step('Then the toast says "タグを保存しました"', async () => {
 		await expect(page.locator("#toast")).toHaveText("タグを保存しました");
 	});
-	await test.step('And the server has the files "00010-B.html" and "00020-A.html", in that order', async () => {
+	await test.step("And t.list of the server lists B and A in that order, with the orders 10 and 20", async () => {
 		tags = await getTags(request);
-		expect(tags.map((t) => t.file)).toEqual([
-			`00010-${b}.html`,
-			`00020-${a}.html`,
+		expect(tags.map((t) => [t.name, t.order])).toEqual([
+			[b, 10],
+			[a, 20],
 		]);
+	});
+	await test.step('And their files are still "B.html" and "A.html"', () => {
+		expect(tags.map((t) => t.file)).toEqual([`${b}.html`, `${a}.html`]);
 	});
 	await test.step("And A keeps its name, its prompt and its memory", () => {
 		expect(tags[1]).toMatchObject({
@@ -84,6 +87,13 @@ test("The tags dialog links to /t/, where moving a tag and saving renumbers the 
 			prompt: "A",
 			memory: [{ id: "m1", text: "keep" }],
 		});
+	});
+	await test.step("And the name B on the reorder page still links to /t/B.html", async () => {
+		const href = await page
+			.locator("#tag-order")
+			.getByRole("link", { name: b })
+			.evaluate((l) => new URL(l.href).pathname);
+		expect(href).toBe(`/t/${b}.html`);
 	});
 });
 
@@ -96,8 +106,9 @@ test("The reorder page does not list an invalid tag and sends it back as it is",
 	// A tag file without <lcty-t> cannot be put in the server's data directory from here (it may be another
 	// machine's), so the answers of t.list list one more, and t.replace is answered by the test
 	const invalid = {
-		file: "00015-broken.html",
+		file: "broken.html",
 		name: "broken",
+		order: null,
 		ops: [],
 		prompt: "",
 		memory: [],
@@ -106,7 +117,7 @@ test("The reorder page does not list an invalid tag and sends it back as it is",
 	const puts = [];
 	await test.step("Given the tags A and B, in that order", () =>
 		putTags(request, [{ name: a }, { name: b }]));
-	await test.step('And t.list of the page\'s /v1/rpc also lists the invalid tag "00015-broken.html", and t.replace is answered by the test', () =>
+	await test.step('And t.list of the page\'s /v1/rpc also lists the invalid tag "broken.html" last, and t.replace is answered by the test', () =>
 		context.routeWebSocket("**/v1/rpc", (ws) => {
 			const server = ws.connectToServer();
 			const lists = new Set(); // the ids of the page's t.list requests
@@ -130,9 +141,7 @@ test("The reorder page does not list an invalid tag and sends it back as it is",
 			server.onMessage((text) => {
 				const m = JSON.parse(text);
 				if (lists.delete(m.id) && m.result) {
-					m.result.items = [...m.result.items, invalid].sort((x, y) =>
-						x.file < y.file ? -1 : 1,
-					);
+					m.result.items = [...m.result.items, invalid]; // a tag without an order comes last
 					ws.send(JSON.stringify(m));
 					return;
 				}
@@ -151,9 +160,9 @@ test("The reorder page does not list an invalid tag and sends it back as it is",
 	await test.step('Then the toast says "タグを保存しました"', async () => {
 		await expect(page.locator("#toast")).toHaveText("タグを保存しました");
 	});
-	await test.step('And one t.replace was sent, with the files "00010-B.html", "00020-A.html" and "00015-broken.html", in that order', () => {
+	await test.step('And one t.replace was sent, with the files "B.html", "A.html" and "broken.html", in that order', () => {
 		expect(puts.map((p) => p.tags.map((t) => t.file))).toEqual([
-			[`00010-${b}.html`, `00020-${a}.html`, "00015-broken.html"],
+			[`${b}.html`, `${a}.html`, "broken.html"],
 		]);
 	});
 	await test.step("And the invalid tag is sent back as it was received", () => {
@@ -177,8 +186,8 @@ test("A tag's name on the reorder page opens its file, which edits the tag and m
 		await page.goto("/t/");
 		await page.locator("#tag-order").getByRole("link", { name: b }).click();
 	});
-	await test.step("Then the browser is on /t/00020-B.html, whose title is B", async () => {
-		await expect(page).toHaveURL(new RegExp(`/t/00020-${b}\\.html$`));
+	await test.step("Then the browser is on /t/B.html, whose title is B", async () => {
+		await expect(page).toHaveURL(new RegExp(`/t/${b}\\.html$`));
 		await expect(page).toHaveTitle(b);
 	});
 	await test.step("And the page shows the sidebar", async () => {
@@ -196,17 +205,17 @@ test("A tag's name on the reorder page opens its file, which edits the tag and m
 			.getByRole("button", { name: "保存", exact: true })
 			.click();
 	});
-	await test.step('Then the browser is on /t/00020-Bx.html, whose name field holds "Bx"', async () => {
-		await expect(page).toHaveURL(new RegExp(`/t/00020-${b}x\\.html$`));
+	await test.step('Then the browser is on /t/Bx.html, whose name field holds "Bx"', async () => {
+		await expect(page).toHaveURL(new RegExp(`/t/${b}x\\.html$`));
 		await expect(page.getByRole("textbox", { name: "タグの名前" })).toHaveValue(
 			`${b}x`,
 		);
 	});
-	await test.step('And the server has the files "00010-A.html" named A and "00020-Bx.html" named "Bx", in that order', async () => {
+	await test.step('And the server has the files "A.html" named A and "Bx.html" named "Bx", in that order', async () => {
 		tags = await getTags(request);
 		expect(tags.map((t) => [t.file, t.name])).toEqual([
-			[`00010-${a}.html`, a],
-			[`00020-${b}x.html`, `${b}x`],
+			[`${a}.html`, a],
+			[`${b}x.html`, `${b}x`],
 		]);
 	});
 	await test.step("And A keeps its memory", () => {
@@ -221,8 +230,8 @@ test("Deleting the tag on its file's page saves at once and goes to the reorder 
 	const [a, b] = [uniqueWord("a"), uniqueWord("b")];
 	await test.step("Given the tags A and B, in that order", () =>
 		putTags(request, [{ name: a }, { name: b }]));
-	await test.step("When the page of A's file /t/00010-A.html is opened", () =>
-		page.goto(`/t/00010-${a}.html`));
+	await test.step("When the page of A's file /t/A.html is opened", () =>
+		page.goto(`/t/${a}.html`));
 	await test.step('And the editor\'s button "削除" is pressed and the confirmation is accepted', async () => {
 		page.once("dialog", (d) => d.accept());
 		await page
@@ -236,10 +245,8 @@ test("Deleting the tag on its file's page saves at once and goes to the reorder 
 	await test.step("And the reorder page lists B alone", async () => {
 		await expect(orderItems(page)).toHaveText(listed([b]));
 	});
-	await test.step('And the server has the file "00020-B.html" alone', async () => {
-		expect((await getTags(request)).map((t) => t.file)).toEqual([
-			`00020-${b}.html`,
-		]);
+	await test.step('And the server has the file "B.html" alone', async () => {
+		expect((await getTags(request)).map((t) => t.file)).toEqual([`${b}.html`]);
 	});
 });
 
@@ -269,7 +276,7 @@ test("The reorder page shows the sidebar, whose links lead to /c/", async ({
 		page.waitForURL(`/c/${conv.id}.html`));
 });
 
-test("A tag named C# is the file 00010-c~23.html, and a conversation refers to it as c~23", async ({
+test("A tag named C# is the file c~23.html, and a conversation refers to it as c~23", async ({
 	page,
 	request,
 }) => {
@@ -287,13 +294,36 @@ test("A tag named C# is the file 00010-c~23.html, and a conversation refers to i
 			page.locator('#setup-tags input[value="c~23"]'),
 		).toBeAttached();
 	});
-	await test.step('And the server has the file "00010-c~23.html" named "C#" alone', async () => {
+	await test.step('And the server has the file "c~23.html" named "C#" alone', async () => {
 		expect((await getTags(request)).map((t) => [t.file, t.name])).toEqual([
-			["00010-c~23.html", "C#"],
+			["c~23.html", "C#"],
 		]);
 	});
 	await test.step('And the tag list shows the chip "C#"', async () => {
 		await expect(page.locator("#setup-tags .tag-chip")).toHaveText(["C#"]);
+	});
+});
+
+test("A tag named index cannot be saved, since its file would be the reorder page", async ({
+	page,
+	request,
+}) => {
+	const dialog = page.locator("dialog#tags-dialog");
+	const message =
+		"タグの名前「index」は予約されているため使えません（index、および . や lcty.v1 で始まる名前）";
+	await test.step("Given there are no tags", () => putTags(request, []));
+	await test.step("When the tags dialog is opened on the new conversation page /c/", () =>
+		openTagsDialog(page));
+	await test.step('And a new tag named "index" is saved in it', async () => {
+		await dialog.getByRole("button", { name: "＋ 新しいタグ" }).click();
+		await dialog.getByRole("textbox", { name: "タグの名前" }).fill("index");
+		await dialog.getByRole("button", { name: "保存", exact: true }).click();
+	});
+	await test.step(`Then the dialog says "${message}"`, async () => {
+		await expect(dialog.getByText(message, { exact: true })).toBeVisible();
+	});
+	await test.step("And the server has no tags", async () => {
+		expect(await getTags(request)).toEqual([]);
 	});
 });
 
@@ -324,9 +354,9 @@ test("A tag named in Japanese has a page that opens from the reorder page and ed
 		await page.goto("/t/");
 		await page.locator("#tag-order").getByRole("link", { name: tag }).click();
 	});
-	await test.step('Then the browser is on /t/00010-料理.html, whose title is "料理"', async () => {
+	await test.step('Then the browser is on /t/料理.html, whose title is "料理"', async () => {
 		await expect(page).toHaveURL(
-			new RegExp(`/t/00010-${encodeURIComponent(tag)}\\.html$`),
+			new RegExp(`/t/${encodeURIComponent(tag)}\\.html$`),
 		);
 		await expect(page).toHaveTitle(tag);
 	});

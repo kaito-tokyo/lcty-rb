@@ -79,10 +79,10 @@ async function background(step, t) {
 
 // ---- Definitions ----
 
-/** The definitions "a", "b", … of the feature: the tag files 00010-a.html, 00020-b.html, … named a, b, … */
+/** The definitions "a", "b", … of the feature: the tag files a.html, b.html, … named a, b, …, in that order */
 const defsOf = (...tags) =>
-	tags.map((t, i) => ({
-		file: `${String((i + 1) * 10).padStart(5, "0")}-${t.name}.html`,
+	tags.map((t) => ({
+		file: `${t.name}.html`,
 		ops: [],
 		...t,
 	}));
@@ -98,18 +98,18 @@ scenario(
 		await background(step, t);
 		let defs;
 		await step(
-			'Given the tag files "00010-ruby.html" named "Ruby" with a prompt and two memory items and "00020-go.html" named "Go" with a prompt and no memory',
+			'Given the tag files "ruby.html" named "Ruby" with a prompt and two memory items and "go.html" named "Go" with a prompt and no memory',
 			() => {
 				defs = [
 					{
-						file: "00010-ruby.html",
+						file: "ruby.html",
 						name: "Ruby",
 						ops: [],
 						prompt: "Ruby prompt",
 						memory: [{ text: "fact" }, { text: "rules" }],
 					},
 					{
-						file: "00020-go.html",
+						file: "go.html",
 						name: "Go",
 						ops: [],
 						prompt: "Go prompt",
@@ -142,11 +142,11 @@ scenario(
 		await background(step, t);
 		let defs;
 		await step(
-			'Given the tag file "00010-c~23.html" named "C#" with the prompt "Sharp" and the memory item "x"',
+			'Given the tag file "c~23.html" named "C#" with the prompt "Sharp" and the memory item "x"',
 			() => {
 				defs = [
 					{
-						file: "00010-c~23.html",
+						file: "c~23.html",
 						name: "C#",
 						ops: [],
 						prompt: "Sharp",
@@ -275,19 +275,19 @@ scenario(
 		const server = await background(step, t);
 		let defs;
 		await step(
-			'Given the tag files "00010-ruby.html" named "Ruby" with the memory item "existing", "00020-go.html" named "Go" without memory and "00030-python.html" named "Python"',
+			'Given the tag files "ruby.html" named "Ruby" with the memory item "existing", "go.html" named "Go" without memory and "python.html" named "Python"',
 			() => {
 				defs = [
 					{
-						file: "00010-ruby.html",
+						file: "ruby.html",
 						name: "Ruby",
 						ops: [],
 						prompt: "p",
 						memory: [{ text: "existing" }],
 					},
-					{ file: "00020-go.html", name: "Go", ops: [], prompt: "p" },
+					{ file: "go.html", name: "Go", ops: [], prompt: "p" },
 					{
-						file: "00030-python.html",
+						file: "python.html",
 						name: "Python",
 						ops: [],
 						prompt: "p",
@@ -411,12 +411,12 @@ scenario(
 			() => {
 				expect(out.result).toEqual({
 					proposals: [
-						{ tag: "Ruby", file: "00010-ruby.html", text: "New fact" },
-						{ tag: "Go", file: "00020-go.html", text: "Go fact" },
+						{ tag: "Ruby", file: "ruby.html", text: "New fact" },
+						{ tag: "Go", file: "go.html", text: "Go fact" },
 					],
 					tags: [
-						{ name: "Ruby", file: "00010-ruby.html" },
-						{ name: "Go", file: "00020-go.html" },
+						{ name: "Ruby", file: "ruby.html" },
+						{ name: "Go", file: "go.html" },
 					],
 					timings: { prompt_n: 12, predicted_n: 30 },
 				});
@@ -460,12 +460,12 @@ scenario(
 		let defs;
 		let conv;
 		await step(
-			'Given the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
+			'Given the definitions "ruby" and the invalid tag "broken.html" named "broken"',
 			() => {
 				defs = [
 					...defsOf({ name: "ruby", prompt: "p" }),
 					{
-						file: "00020-broken.html",
+						file: "broken.html",
 						name: "broken",
 						ops: [],
 						prompt: "",
@@ -514,11 +514,11 @@ scenario("A reply without proposals proposes nothing", async ({ step, t }) => {
 		out = await propose({ conv, defs });
 	});
 	await step(
-		'Then it returns no proposals and the tag "ruby" with the file "00010-ruby.html"',
+		'Then it returns no proposals and the tag "ruby" with the file "ruby.html"',
 		() => {
 			expect(out.result).toMatchObject({
 				proposals: [],
-				tags: [{ name: "ruby", file: "00010-ruby.html" }],
+				tags: [{ name: "ruby", file: "ruby.html" }],
 			});
 		},
 	);
@@ -544,8 +544,8 @@ scenario("Proposals that are not objects are skipped", async ({ step, t }) => {
 	await step('Then it returns only the proposal for "ruby"', () => {
 		expect(out).toMatchObject({
 			result: {
-				proposals: [{ tag: "ruby", file: "00010-ruby.html", text: "ok" }],
-				tags: [{ name: "ruby", file: "00010-ruby.html" }],
+				proposals: [{ tag: "ruby", file: "ruby.html", text: "ok" }],
+				tags: [{ name: "ruby", file: "ruby.html" }],
 			},
 		});
 	});

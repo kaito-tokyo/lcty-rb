@@ -18,7 +18,7 @@ Feature: LCTYSP-3030 The protective headers of every response
   under /v1/, plain text elsewhere.
 
   In the steps the site is mounted on a server of Lcty.listen on 127.0.0.1 (a free port), behind its request guard,
-  with a conversation file and a tag file in the tests' data directory, and the path /probe answers "x" as text/plain
+  with a conversation file and the tag file ruby.html in the tests' data directory, and the path /probe answers "x" as text/plain
   without a charset.
 
   Background:
@@ -60,8 +60,9 @@ Feature: LCTYSP-3030 The protective headers of every response
       | path                      | cache               |
       | /v1/defaults.json         | "private, no-cache" |
       | /c/<the conversation>.html | "private, no-cache" |
-      | /t/<the tag file>         | "private, no-cache" |
+      | /t/ruby.html              | "private, no-cache" |
       | /c/                       | "no-cache"          |
+      | /t/index.html             | "no-cache"          |
       | /lcty.v1/lcty.v1.cjs      | "no-cache"          |
       | /js/site.js               | "no-cache"          |
 

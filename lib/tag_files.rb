@@ -5,8 +5,9 @@
 # -*- encoding: utf-8 -*-
 # Tag definitions and memory: one HTML file per tag in data/t/ (LCTYSP-0009, "Tag files"). Source-of-truth data.
 #
-#   t/NNNNN-<file-name part>.html   one tag: <lcty-t> with its display name, <lcty-tagop> policies, <lcty-system> (the
-#                                   prompt) and <lcty-memory> items. The number is the draft order (file-name order)
+#   t/<file-name part>.html         one tag: <lcty-t> with its display name and its place in the order (data-order, the
+#                                   draft order), <lcty-tagop> policies, <lcty-system> (the prompt) and <lcty-memory>
+#                                   items. Files of the old form NNNNN-<part>.html are renamed when t/ is opened
 #   t.lock                          holds no data: flock is taken on it, shared for get-all, exclusive for replace-all
 #                                   and add-memory. One lock for all tags
 #
@@ -25,9 +26,12 @@ require_relative 'uuid'
 
 module Chatty
   class TagFiles
-    # A tag file as listed: 5 ASCII digits, '-', a non-empty part, '.html'. Anything else in t/ (temporary files, which
-    # start with '.', the copies of lcty.v1.*) is ignored.
-    LISTED_RE = /\A[0-9]{5}-.+\.html\z/m.freeze
+    # A tag file as listed: a non-empty part and '.html', not index.html and not starting with '.' or lcty.v1. Anything
+    # else in t/ (temporary files, which start with '.', the copies of lcty.v1.*) is ignored.
+    LISTED_RE = /\A(?!\.|lcty\.v1|index\.html\z).+\.html\z/m.freeze
+    NUMBERED_RE = /\A[0-9]{5}-(.+\.html)\z/m.freeze # The old form, NNNNN-<part>.html, renamed when t/ is opened
+    ORDER_RE = /\A[0-9]{1,9}\z/.freeze # data-order: anything else is no order
+    ORDER_STEP = 10
     MAX_FILE_BYTES = 255
     OP_TYPE_RE = /\A[a-z0-9-]+\z/.freeze
     OP_TYPES = %w[add-memory].freeze # Known operations; other types are ignored on reading and not written
@@ -56,6 +60,7 @@ module Chatty
       @dir = dir
       @lock_path = lock_path
       FileUtils.mkdir_p(@dir)
+      rename_numbered
     end
 
     # ---- File names (mechanical checks only) ----
@@ -67,13 +72,18 @@ module Chatty
       return 'must be valid UTF-8' unless name.valid_encoding?
       return "must be at most #{MAX_FILE_BYTES} bytes" if name.bytesize > MAX_FILE_BYTES
       return 'must not contain /, \\, : or NUL' if name.match?(%r{[/\\:\u0000]})
-      return 'must be NNNNN-<name>.html' unless LISTED_RE.match?(name)
+      return 'must be <name>.html, not index.html, and not start with . or lcty.v1' unless LISTED_RE.match?(name)
       nil
     end
 
-    # The file-name part: the name without NNNNN- and .html
+    # The file-name part: the name without .html
     def self.part(name)
-      name[6...-5]
+      name[0...-5]
+    end
+
+    # The order of the tags: data-order, those without one last, ties by file name (bytes)
+    def self.sort(tags)
+      tags.sort_by { |t| [t['order'] ? 0 : 1, t['order'] || 0, t['file'].b] }
     end
 
     # The ASCII symbols the browser escapes in a file-name part as ~ and two lowercase hex digits (tagPart of
@@ -89,11 +99,11 @@ module Chatty
 
     # ---- Get all ----
 
-    # [{"tags" => [...]}, etag]: every tag file in file-name order, parsed back into JSON
+    # [{"tags" => [...]}, etag]: every tag file in the order of the tags, parsed back into JSON
     def all
       with_lock(File::LOCK_SH) do
         files = listed
-        [{ 'tags' => files.map { |name, body| parse(name, body) }.compact }, etag_of(files)]
+        [{ 'tags' => TagFiles.sort(files.map { |name, body| parse(name, body) }) }, etag_of(files)]
       end
     end
 
@@ -105,7 +115,8 @@ module Chatty
 
     # Replace the whole set (the tag editor, the reorder page). if_match is the ETag the browser got with the set it
     # edited: nil is 428, a different one 412. A tag sent with invalid: true is a tag file without <lcty-t> that the
-    # set keeps as it is: it is neither written nor deleted. Returns the new ETag.
+    # set keeps as it is: it is neither written nor deleted. The others get data-order from their place in the set
+    # (10, 20, …). Returns the new ETag.
     def replace_all(obj, if_match)
       tags = validate_set!(obj)
       with_lock(File::LOCK_EX) do
@@ -119,9 +130,9 @@ module Chatty
           next unless File.exist?(path) && kept.any? { |k| File.identical?(k, path) }
           raise HttpError.new(400, "the tag file #{t['file'].inspect} cannot be read, so it cannot be overwritten")
         end
-        written = written.map do |t|
+        written = written.each_with_index.map do |t, i|
           path = File.join(@dir, t['file'])
-          write_atomic(path, build(t))
+          write_atomic(path, build(t.merge('order' => (i + 1) * ORDER_STEP)))
           path
         end
         # Delete the tag files that are not in the set. A file just written may be listed under a name that is not
@@ -182,23 +193,25 @@ module Chatty
         ConvHtml.set_text(e, 'data-content', m['text'].to_s)
         lines << e
       end
-      open = node(doc, 'lcty-t', name).to_xhtml(save_with: SAVE).sub(%r{</lcty-t>\z}, '')
+      open = node(doc, 'lcty-t', name, 'data-order' => tag['order']).to_xhtml(save_with: SAVE).sub(%r{</lcty-t>\z}, '')
       body = lines.map { |e| e.to_xhtml(save_with: SAVE) + "\n" }.join
       out = HEAD + open + "\n" + body + "</lcty-t>\n" + FOOT
       check_well_formed!(open + "\n" + body + '</lcty-t>')
       out
     end
 
-    # One tag file as JSON ({file, name, ops, prompt, memory}). A file without <lcty-t> is still a tag (with a warning):
-    # its name is taken from the file name, the rest is empty, and it is marked invalid: true. Replace-all keeps such a
-    # file as it is and add-memory refuses it, so a file put in t/ by hand is never rewritten or deleted unasked.
+    # One tag file as JSON ({file, name, order, ops, prompt, memory}). A file without <lcty-t> is still a tag (with a
+    # warning): its name is taken from the file name, it has no order, the rest is empty, and it is marked invalid:
+    # true. Replace-all keeps such a file as it is and add-memory refuses it, so a file put in t/ by hand is never
+    # rewritten or deleted unasked.
     def parse(file, body)
       t = Nokogiri::HTML5.parse(body).at_css('lcty-t')
       unless t
         warn "tag file #{file} has no <lcty-t>; listing it as invalid"
-        return { 'file' => file, 'name' => TagFiles.name_of_part(TagFiles.part(file)), 'ops' => [], 'prompt' => '',
-                 'memory' => [], 'invalid' => true }
+        return { 'file' => file, 'name' => TagFiles.name_of_part(TagFiles.part(file)), 'order' => nil, 'ops' => [],
+                 'prompt' => '', 'memory' => [], 'invalid' => true }
       end
+      order = ORDER_RE.match?(t['data-order'].to_s) ? t['data-order'].to_i : nil
       ops = []
       t.css('lcty-tagop').each do |e|
         type = e['data-type'].to_s
@@ -213,11 +226,36 @@ module Chatty
         item['source'] = src unless src.empty?
         item
       end
-      { 'file' => file, 'name' => ConvHtml.get_text(t, 'data-tag').to_s, 'ops' => ops,
+      { 'file' => file, 'name' => ConvHtml.get_text(t, 'data-tag').to_s, 'order' => order, 'ops' => ops,
         'prompt' => system ? ConvHtml.get_text(system, 'data-content').to_s : '', 'memory' => memory }
     end
 
     private
+
+    # Rename the files of the old form NNNNN-<part>.html to <part>.html, the number kept as data-order (a file without
+    # <lcty-t> is only renamed). A file whose new name is taken or not a tag file name stays, with a warning.
+    def rename_numbered
+      with_lock(File::LOCK_EX) do
+        Dir.children(@dir).map { |n| String.new(n, encoding: Encoding::UTF_8) }.sort.each do |old|
+          m = NUMBERED_RE.match(old)
+          next unless m && File.file?(File.join(@dir, old))
+
+          new = m[1]
+          if TagFiles.file_name_error(new) || File.exist?(File.join(@dir, new))
+            warn "tag file #{old} is not renamed to #{new}: the name is taken or cannot be a tag file"
+            next
+          end
+          body = File.read(File.join(@dir, old), mode: 'r:UTF-8')
+          tag = parse(new, body)
+          if tag['invalid']
+            File.rename(File.join(@dir, old), File.join(@dir, new))
+          else
+            write_atomic(File.join(@dir, new), build(tag.merge('order' => old[0, 5].to_i)))
+            File.unlink(File.join(@dir, old))
+          end
+        end
+      end
+    end
 
     # The path of the tag file `file` that replace-all keeps as it is: it must be listed (under this name, or under
     # another name of the same file: HFS+) and have no <lcty-t>
@@ -269,7 +307,7 @@ module Chatty
       tags
     end
 
-    # {name => body} of the tag files in t/, in file-name order
+    # {name => body} of the tag files in t/, in file-name order (the ETag's order, not the tags')
     def listed
       Dir.children(@dir).map { |n| String.new(n, encoding: Encoding::UTF_8) }.select { |n| LISTED_RE.match?(n) }.sort
          .each_with_object({}) do |name, h|

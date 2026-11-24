@@ -31,6 +31,7 @@ workers = Array.new([jobs, files.size].min) do
     while (file = (queue.pop(true) rescue nil))
       t = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       out, status = Open3.capture2e(RbConfig.ruby, '-E', 'UTF-8', file, *ARGV)
+      out = out.force_encoding(Encoding::UTF_8).scrub # read as UTF-8 even without LANG, so a failure's text can be scanned
       took = Process.clock_gettime(Process::CLOCK_MONOTONIC) - t
       counts = out.scan(/^(\d+) runs, (\d+) assertions, (\d+) failures, (\d+) errors, (\d+) skips/).last
       name = file.sub("#{__dir__}/", '')

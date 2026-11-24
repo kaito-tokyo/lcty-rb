@@ -13,7 +13,7 @@
 #   anything else        Content-Security-Policy: default-src 'none'; frame-ancestors 'none'
 #   every response       COMMON (nosniff, DENY, no-referrer, the cross-origin policies, Permissions-Policy, ...)
 #   the user's data      Cache-Control: private, no-cache: the API under v1/, the conversation files c/<id>.html and
-#                        the tag files t/NNNNN-<part>.html; the code keeps the no-cache its servlet gives it
+#                        the tag files t/<part>.html; the code keeps the no-cache its servlet gives it
 #   a text type          charset=utf-8 when it has no charset
 #
 # The base URL of the site is the server's config[:LctyBase]. A WebSocket's handshake is written by lib/rpc/websocket.rb
@@ -118,7 +118,7 @@ module Chatty
     end
 
     CONV_FILE = %r{\Ac/[A-Za-z0-9_-]{1,80}\.html\z}.freeze # a conversation file, by the ids of Chatty::ID_RE
-    TAG_FILE = %r{\At/[0-9]{5}-[^/]+\.html\z}.freeze # a tag file
+    TAG_FILE = %r{\At/(?!\.|lcty\.v1|index\.html\z)[^/]+\.html\z}.freeze # a tag file (as lib/tag_files.rb)
   end
 
   class SecureServer < WEBrick::HTTPServer

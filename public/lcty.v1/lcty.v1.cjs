@@ -593,7 +593,7 @@
 	// store "t_full") through the worker that alone opens it (lcty.v1.t.worker.cjs, operation "get"; a copy never filled
 	// is left to the module, which reads it over /v1/rpc; LCTYSP-0009), found from the page's URL like lcty.v1.c.worker.cjs
 	// below.
-	// The references are the tag files' names without the number and .html (tagRef in js/tag-names.js). The module sets
+	// The references are the tag files' names without .html (tagRef in js/tag-names.js). The module sets
 	// the same attributes when it has read the tags; whichever comes first, the second sets the same values.
 	#loadTagNames() {
 		let worker;
@@ -614,7 +614,7 @@
 			)
 				return;
 			try {
-				const refs = tags.map((t) => t.file.normalize("NFC").slice(6, -5));
+				const refs = tags.map((t) => t.file.normalize("NFC").slice(0, -5));
 				this.list.setAttribute(
 					"data-tag-names",
 					tags.map((t) => t.name).join(" "),
@@ -1061,7 +1061,7 @@
 }
 
 /**
- * <lcty-t>: a tag file shown as a page (/t/NNNNN-<part>.html. LCTYSP-0005, LCTYSP-0009). The file holds only the tag
+ * <lcty-t>: a tag file shown as a page (/t/<part>.html. LCTYSP-0005, LCTYSP-0009). The file holds only the tag
  * (its name in data-tag, its <lcty-tagop>, <lcty-system> and <lcty-memory> children), so the frame makes it a page like
  * the others: it puts an <lcty-sidebar> before itself and the class "page" on <body> (the layout of the pages with a
  * sidebar), and holds the view, an element of its own that it puts first among its children. The children of the file

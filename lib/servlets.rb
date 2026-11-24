@@ -116,10 +116,10 @@ module Lcty::Servlets
     end
   end
 
-  # /t/: the tag reorder page (public/t/index.html) and the tag files of tag_dir, /t/NNNNN-<part>.html (LCTYSP-0009).
+  # /t/: the tag reorder page (public/t/index.html) and the tag files of tag_dir, /t/<part>.html (LCTYSP-0009).
   # Mounted as mount("…t", T, tag_dir).
   class T < PageDirectoryServlet
-    TAG_FILE_RE = /\A[0-9]{5}-.+\.html\z/m.freeze # a tag file's name (as lib/tag_files.rb)
+    TAG_FILE_RE = /\A(?!\.|lcty\.v1|index\.html\z).+\.html\z/m.freeze # a tag file's name (as lib/tag_files.rb)
     MAX_FILE_BYTES = 255
 
     def initialize(server, tag_dir)

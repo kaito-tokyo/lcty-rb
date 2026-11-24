@@ -67,9 +67,9 @@ Feature: LCTYSP-2001 The new conversation page /c/
   Scenario: Each tag in the list has a ⚙︎ link to its file's page
     Given the tags A and B, in that order
     And the new conversation page /c/ is open
-    Then each tag is followed by the link "⚙︎" labelled "「A」を編集" and "「B」を編集", to /t/00010-A.html and /t/00020-B.html
+    Then each tag is followed by the link "⚙︎" labelled "「A」を編集" and "「B」を編集", to /t/A.html and /t/B.html
     When the "⚙︎" of B is clicked
-    Then the browser is on /t/00020-B.html
+    Then the browser is on /t/B.html
 
   Scenario: A fork starts from the source's system prompt and puts the chosen message into the composer
     Given a conversation with the system prompt "分岐元のシステムプロンプト" and two questions with their answers

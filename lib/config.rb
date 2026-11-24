@@ -262,9 +262,9 @@ module Chatty
   # A reference from a conversation to a tag: the file-name part of its tag file (`c~23` for C#), derived by the browser
   # (LCTYSP-0009). Checked mechanically only, never rewritten: no whitespace (data-setup-tags is space separated, and
   # the search box splits on JavaScript's \s, which also takes U+3000, U+00A0 and U+FEFF), no control character, no
-  # '/', '\' or ':', and at most TAG_REF_MAX_BYTES (255 minus "NNNNN-" and ".html")
+  # '/', '\' or ':', and at most TAG_REF_MAX_BYTES (255 minus ".html")
   TAG_REF_RE = %r{\A[^[:space:][:cntrl:]\u{FEFF}/\\:]+\z}.freeze
-  TAG_REF_MAX_BYTES = 244
+  TAG_REF_MAX_BYTES = 250
 
   def self.tag_ref?(s)
     s.is_a?(String) && s.valid_encoding? && s.bytesize <= TAG_REF_MAX_BYTES && TAG_REF_RE.match?(s)

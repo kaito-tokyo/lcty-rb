@@ -121,7 +121,7 @@ Feature: LCTYSP-3012 HTTP API
       | GET /v1/nope                    |
       | GET /v1/vectors/pending         |
       | GET /v1/tags                    |
-      | POST /v1/tags/00010-a.html/memory |
+      | POST /v1/tags/a.html/memory     |
       | GET /v1/tags/a/memory           |
       | GET /v1/conversations/a/lines   |
 

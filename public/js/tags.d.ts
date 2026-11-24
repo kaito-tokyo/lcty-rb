@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Tags and memory (LCTYSP-0009). A tag is a file t/NNNNN-<part>.html on the server: {file, name, ops, prompt,
-// memory}. NNNNN is the draft order, <part> is derived from the display name here (all Unicode handling is the
-// browser's; the server only checks file names mechanically), and conversations refer to a tag by its part.
+// Tags and memory (LCTYSP-0009). A tag is a file t/<part>.html on the server: {file, name, order, ops, prompt,
+// memory}. <part> is derived from the display name here (all Unicode handling is the browser's; the server only checks
+// file names mechanically), order is the draft order (the server writes it from the order of the set sent), and
+// conversations refer to a tag by its part.
 //  - (the name rules, file names and references are in tag-names.js)
 //  - composeDraft: builds a system prompt draft from the chosen tags (deterministic)
 //  - renderTagsEditor / initTagsDialog: editor for tag definitions and memory, in the tags dialog opened from the
@@ -40,8 +41,8 @@ export function composeDraft(
  * rest of the set is sent back as it is. Deleting it saves at once. onSaved's file is the tag's file after the save
  * (a new name gives a new file), or null when it was deleted.
  *
- * Saving checks every name (tagNameError) and that the names are unique as parts, and fails with a message when a new
- * tag would need a number past five digits. A save refused as changed (TAGS_CHANGED: the tags were changed in
+ * Saving checks every name (tagNameError, with its own message for a reserved name) and that the names are unique as
+ * parts; the tags are sent in the order shown, so a new tag goes last. A save refused as changed (TAGS_CHANGED: the tags were changed in
  * another tab meanwhile) takes the new state, and the user redoes the edit on it; when that state cannot be loaded, the
  * edits are kept and saving again is refused until the tags can be loaded.
  */

@@ -7,8 +7,8 @@
 # of its Scenario (an Examples row is added in parentheses, by its first column) and one step per line of it, so the
 # two read side by side.
 #
-# One server of Lcty.listen on 127.0.0.1 (a free port) serves the site for every test, with a conversation file and a
-# tag file of its own in the tests' data directory (helper.rb) and /probe mounted as a proc that answers text/plain
+# One server of Lcty.listen on 127.0.0.1 (a free port) serves the site for every test, with a conversation file and the
+# tag file ruby.html of its own in the tests' data directory (helper.rb) and /probe mounted as a proc that answers text/plain
 # without a charset. Requests go through Net::HTTP, whose Host is 127.0.0.1:<port>.
 
 require_relative 'helper'
@@ -19,7 +19,7 @@ require File.expand_path('../../lcty.rb', __dir__)
 
 class SecureServerTest < Lcty::Scenarios
   CONV = "hdr-#{Process.pid}"
-  TAG_FILE = "00010-hdr#{Process.pid}.html"
+  TAG_FILE = 'ruby.html'
 
   def self.port
     @port ||= begin
@@ -115,8 +115,9 @@ class SecureServerTest < Lcty::Scenarios
   [
     ['/v1/defaults.json', 'private, no-cache'],
     ['/c/<the conversation>.html', 'private, no-cache'],
-    ['/t/<the tag file>', 'private, no-cache'],
+    ['/t/ruby.html', 'private, no-cache'],
     ['/c/', 'no-cache'],
+    ['/t/index.html', 'no-cache'],
     ['/lcty.v1/lcty.v1.cjs', 'no-cache'],
     ['/js/site.js', 'no-cache']
   ].each do |path, cache|

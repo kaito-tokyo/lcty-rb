@@ -20,8 +20,9 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
   transaction. The copy "t_has_many_c" (key path ["tag", "cid"]) is which conversations each tag has, from t.c.list. A
   copy without its row in "sync" has never been filled and is stale. "replace" fills a copy with what its list answered
   unless it holds a newer version of the same boot; "apply" writes the records of one t.batch.updated, each copy its own
-  (those of "t_set" belong to "t_full") and only when it holds an older version of the same boot; "get" reads the tags
-  and "get_has_many" the tags of conversations.
+  (those of "t_set" belong to "t_full") and only when it holds an older version of the same boot; "get" reads the tags,
+  sorted by their order (those without one last, ties in file-name order), and "get_has_many" the tags of
+  conversations.
 
   js/api/lcty-t.js posts every operation to the tab's one worker, started by the first call, and runs them one at a
   time, in the order they were called. getTags() reads the copy, after reading t.list and t.c.list over the tab's
@@ -41,29 +42,29 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
 
   Scenario: A replace stores the tags with NFC file names and the ETag
     Given there is no database "lcty_t"
-    When the worker is posted a replace of "t_full" with the tag "00010-café.html", its name decomposed, at "b1.5" with the ETag "e1"
+    When the worker is posted a replace of "t_full" with the tag "café.html", its name decomposed, at "b1.5" with the ETag "e1"
     Then it answers {"applied": true}
     And the database "lcty_t" is at version 3 with only the stores "sync", "t_full", "t_has_many_c" and "t_set"
     And "t_full" has one row per tag, keyed by its file name
-    And "t_full" holds the tags ["00010-café.html"] composed and the ETag "e1"
+    And "t_full" holds the tags ["café.html"] composed and the ETag "e1"
     And "sync" holds "t_full" at "b1.5"
 
   Scenario: A replace composes the name of an invalid tag, which comes from its file name
     Given there is no database "lcty_t"
-    When the worker is posted a replace of "t_full" with the invalid tag "00010-café.html" named "café", both decomposed, and the tag "00020-cafe" U+0301 ".html" with the name decomposed
-    Then "t_full" holds the invalid tag "00010-café.html" named "café", both composed, with invalid true
+    When the worker is posted a replace of "t_full" with the invalid tag "café.html" named "café", both decomposed, and the tag "cafe" U+0301 "s.html" with the name decomposed
+    Then "t_full" holds the invalid tag "café.html" named "café", both composed, with invalid true
     And the other tag keeps its decomposed name
 
   Scenario: A database at version 1 is dropped, and the copy is stale
-    Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"
+    Given the database "lcty_t" is at version 1 with the record "set" of the tags ["a.html"] in "t_full"
     When the worker is posted {"id": 1, "op": "get"}
     Then it answers the tags [], the ETag null and stale true
     And the database "lcty_t" is at version 3 with only the stores "sync", "t_full", "t_has_many_c" and "t_set"
 
-  Scenario: Getting answers the tags in the order of their file names
-    Given "t_full" holds the tags ["00020-b.html", "00010-c.html", "00030-a.html"] and the ETag "e1" at "b1.5"
+  Scenario: Getting answers the tags in their order, those without one last
+    Given "t_full" holds the tags ["a.html", "b.html", "c.html", "d.html"] with the orders [20, null, 10, 20] and the ETag "e1" at "b1.5"
     When the worker is posted {"id": 1, "op": "get"}
-    Then it answers the tags ["00010-c.html", "00020-b.html", "00030-a.html"], the ETag "e1" and stale false
+    Then it answers the tags ["c.html", "a.html", "d.html", "b.html"], the ETag "e1" and stale false
 
   Scenario: Getting the tags of a copy never filled is stale
     Given "t_has_many_c" holds [["go", "c1"]] at "b1.5"
@@ -77,28 +78,28 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     Then it answers the tags [], the ETag "e1" and stale false
 
   Scenario: A replace replaces the set as a whole
-    Given "t_full" holds the tags ["00010-a.html", "00020-b.html"] and the ETag "e1" at "b1.5"
-    When the worker is posted a replace of "t_full" with the tags ["00010-c.html"] at "b1.6" with the ETag "e2"
+    Given "t_full" holds the tags ["a.html", "b.html"] and the ETag "e1" at "b1.5"
+    When the worker is posted a replace of "t_full" with the tags ["c.html"] at "b1.6" with the ETag "e2"
     Then it answers {"applied": true}
-    And "t_full" holds the tags ["00010-c.html"] and the ETag "e2"
+    And "t_full" holds the tags ["c.html"] and the ETag "e2"
     And "sync" holds "t_full" at "b1.6"
 
   Scenario Outline: A replace of the tags is written unless the copy is newer in the same boot
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "<held>"
-    When the worker is posted a replace of "t_full" with the tags ["00020-b.html"] at "<read>" with the ETag "e2"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "<held>"
+    When the worker is posted a replace of "t_full" with the tags ["b.html"] at "<read>" with the ETag "e2"
     Then it answers {"applied": <applied>}
     And "t_full" holds the tags <kept> and the ETag "<etag>"
     And "sync" holds "t_full" at "<version>"
 
     Examples:
       | held | read | applied | kept               | etag | version |
-      | b1.5 | b1.5 | true    | ["00020-b.html"]   | e2   | b1.5    |
-      | b1.7 | b1.5 | false   | ["00010-a.html"]   | e1   | b1.7    |
-      | b1.9 | b2.1 | true    | ["00020-b.html"]   | e2   | b2.1    |
+      | b1.5 | b1.5 | true    | ["b.html"]   | e2   | b1.5    |
+      | b1.7 | b1.5 | false   | ["a.html"]   | e1   | b1.7    |
+      | b1.9 | b2.1 | true    | ["b.html"]   | e2   | b2.1    |
 
   Scenario: A replace of the tags leaves the tags of conversations as they were
     Given "t_has_many_c" holds [["go", "c1"]] at "b1.5"
-    When the worker is posted a replace of "t_full" with the tags ["00010-a.html"] at "b1.6" with the ETag "e1"
+    When the worker is posted a replace of "t_full" with the tags ["a.html"] at "b1.6" with the ETag "e1"
     Then it answers {"applied": true}
     And "t_has_many_c" holds exactly [["go", "c1"]]
     And "sync" holds "t_has_many_c" at "b1.5"
@@ -108,15 +109,15 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     Then it answers the error type "unknownOperation"
 
   Scenario: The worker closes its connection after the operation
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     When the worker is posted {"id": 1, "op": "get"}
-    Then it answers the tags ["00010-a.html"], the ETag "e1" and stale false
+    Then it answers the tags ["a.html"], the ETag "e1" and stale false
     And the database "lcty_t" can be opened at version 3 without being blocked, while the worker is still alive
 
   Scenario: A SharedWorker answers on the port the message came from
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     When two ports of new SharedWorker("/lcty.v1/lcty.v1.t.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other
-    Then the first port is answered with the id 1, the tags ["00010-a.html"], the ETag "e1" and stale false
+    Then the first port is answered with the id 1, the tags ["a.html"], the ETag "e1" and stale false
     And the second port is answered with the id 2 and the error type "unknownOperation"
 
   Scenario: A replace fills "t_has_many_c" and stores the version
@@ -140,10 +141,10 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
       | b1.9 | b2.1 | true    | [["ruby", "c2"]]  | b2.1    |
 
   Scenario: A replace leaves the tags as they were
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     When the worker is posted a replace of "t_has_many_c" with the rows [["go", "c1"]] at "b1.5"
     Then it answers {"applied": true}
-    And "t_full" holds the tags ["00010-a.html"] and the ETag "e1"
+    And "t_full" holds the tags ["a.html"] and the ETag "e1"
 
   Scenario: A change is written onto an older copy of the same boot
     Given "t_has_many_c" holds [["go", "c1"], ["go", "c2"]] at "b1.5"
@@ -166,29 +167,29 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
       | b2.7   | b1.6 |
 
   Scenario: A change onto a copy that was never filled is left
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     When the worker is posted an apply at "b1.6" of a put of ["ruby", "c1"]
     Then it answers {"applied": []}
     And "t_has_many_c" holds exactly []
 
   Scenario: A change of the tags is written onto an older copy of the same boot
-    Given "t_full" holds the tags ["00010-a.html", "00020-b.html"] and the ETag "e1" at "b1.5"
-    When the worker is posted an apply at "b1.6" of a put of the tag "00030-c.html", a delete of "00010-a.html" and the ETag "e2"
+    Given "t_full" holds the tags ["a.html", "b.html"] and the ETag "e1" at "b1.5"
+    When the worker is posted an apply at "b1.6" of a put of the tag "c.html", a delete of "a.html" and the ETag "e2"
     Then it answers {"applied": ["t_full"]}
-    And "t_full" holds the tags ["00020-b.html", "00030-c.html"] and the ETag "e2"
+    And "t_full" holds the tags ["b.html", "c.html"] and the ETag "e2"
     And "sync" holds "t_full" at "b1.6"
 
   Scenario: A change of the tags composes the file names
-    Given "t_full" holds the tags ["00010-café.html"] and the ETag "e1" at "b1.5"
-    When the worker is posted an apply at "b1.6" of a delete of "00010-café.html" and a put of the tag "00020-café.html", both decomposed
+    Given "t_full" holds the tags ["café.html"] and the ETag "e1" at "b1.5"
+    When the worker is posted an apply at "b1.6" of a delete of "café.html" and a put of the tag "cafés.html", both decomposed
     Then it answers {"applied": ["t_full"]}
-    And "t_full" holds the tags ["00020-café.html"] composed and the ETag "e1"
+    And "t_full" holds the tags ["cafés.html"] composed and the ETag "e1"
 
   Scenario Outline: A change of the tags is left when the copy is not older in the same boot
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "<held>"
-    When the worker is posted an apply at "<change>" of a put of the tag "00020-b.html" and the ETag "e2"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "<held>"
+    When the worker is posted an apply at "<change>" of a put of the tag "b.html" and the ETag "e2"
     Then it answers {"applied": []}
-    And "t_full" holds the tags ["00010-a.html"] and the ETag "e1"
+    And "t_full" holds the tags ["a.html"] and the ETag "e1"
     And "sync" holds "t_full" at "<held>"
 
     Examples:
@@ -199,14 +200,14 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
 
   Scenario: A change of the tags onto a copy that was never filled is left
     Given "t_has_many_c" holds [["go", "c1"]] at "b1.5"
-    When the worker is posted an apply at "b1.6" of a put of the tag "00010-a.html" and the ETag "e2"
+    When the worker is posted an apply at "b1.6" of a put of the tag "a.html" and the ETag "e2"
     Then it answers {"applied": []}
     And "t_full" holds the tags [] and the ETag null
 
   Scenario Outline: A batch of both copies is applied to each under its own version
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "<held>"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "<held>"
     And "t_has_many_c" holds [["go", "c1"]] at "b1.5"
-    When the worker is posted an apply at "b1.6" of a put of the tag "00020-b.html", the ETag "e2" and a put of ["ruby", "c1"]
+    When the worker is posted an apply at "b1.6" of a put of the tag "b.html", the ETag "e2" and a put of ["ruby", "c1"]
     Then it answers {"applied": <applied>}
     And "t_full" holds the tags <kept> and the ETag "<etag>"
     And "sync" holds "t_full" at "<version>"
@@ -215,8 +216,8 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
 
     Examples:
       | held | applied                       | kept                             | etag | version |
-      | b1.5 | ["t_full", "t_has_many_c"]    | ["00010-a.html", "00020-b.html"] | e2   | b1.6    |
-      | b1.7 | ["t_has_many_c"]              | ["00010-a.html"]                 | e1   | b1.7    |
+      | b1.5 | ["t_full", "t_has_many_c"]    | ["a.html", "b.html"] | e2   | b1.6    |
+      | b1.7 | ["t_has_many_c"]              | ["a.html"]                 | e1   | b1.7    |
 
   Scenario: A change of other stores only does not open the database
     Given there is no database "lcty_t"
@@ -247,9 +248,9 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     Then it answers the rows [] and stale true
 
   Scenario: The calls of a tab run one at a time, in order
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
-    When applyTagBatch is called with a put of the tag "00020-b.html" at "b1.6" and then getTags() without waiting
-    Then getTags resolves to the tags ["00010-a.html", "00020-b.html"] and the ETag "e1"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
+    When applyTagBatch is called with a put of the tag "b.html" at "b1.6" and then getTags() without waiting
+    Then getTags resolves to the tags ["a.html", "b.html"] and the ETag "e1"
 
   Scenario: A call whose worker answers an error rejects with the error
     When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags [] at "5" with the ETag "e1"
@@ -257,41 +258,41 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
 
   Scenario: Getting the tags of a copy never filled reads the lists over the tab's connection
     Given there is no database "lcty_t"
-    And /v1/rpc answers "t.list" with the tags ["00010-a.html"] at "b1.5" with the ETag "e1", and "t.c.list" with the rows [["go", "c1"]] at "b1.5"
+    And /v1/rpc answers "t.list" with the tags ["a.html"] at "b1.5" with the ETag "e1", and "t.c.list" with the rows [["go", "c1"]] at "b1.5"
     When getTags() is called
-    Then it resolves to the tags ["00010-a.html"] and the ETag "e1"
+    Then it resolves to the tags ["a.html"] and the ETag "e1"
     And the methods called over /v1/rpc are "initialize", "t.list" and "t.c.list"
     And "t_has_many_c" holds exactly [["go", "c1"]]
 
   Scenario: Getting the tags of a filled copy opens no connection
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
-    And /v1/rpc answers "t.list" with the tags ["00010-b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
+    And /v1/rpc answers "t.list" with the tags ["b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"
     When getTags() is called
-    Then it resolves to the tags ["00010-a.html"] and the ETag "e1"
+    Then it resolves to the tags ["a.html"] and the ETag "e1"
     And no connection to /v1/rpc is opened
 
   Scenario: putTags sends t.replace with the ETag and resolves to the new one
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     And /v1/rpc answers "t.replace" with the ETag "e2" at "b1.6"
-    When putTags([{"file": "00010-b.html"}], "e1") is called
+    When putTags([{"file": "b.html"}], "e1") is called
     Then it resolves to "e2"
     And the methods called over /v1/rpc are "initialize" and "t.replace"
-    And "t.replace" was called with {"tags": [{"file": "00010-b.html"}], "etag": "e1"}
+    And "t.replace" was called with {"tags": [{"file": "b.html"}], "etag": "e1"}
 
   Scenario: A putTags that fails reads the lists again and rejects with the error
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
-    And /v1/rpc answers "t.replace" with the error 8 "the tags have changed", "t.list" with the tags ["00010-b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
+    And /v1/rpc answers "t.replace" with the error 8 "the tags have changed", "t.list" with the tags ["b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"
     When putTags([], "e1") is called
     Then it rejects with an RpcError "the tags have changed" whose code is TAGS_CHANGED, 8
     And the methods called over /v1/rpc are "initialize", "t.replace", "t.list" and "t.c.list"
-    And "t_full" holds the tags ["00010-b.html"] and the ETag "e2"
+    And "t_full" holds the tags ["b.html"] and the ETag "e2"
 
   Scenario: addMemory sends t.memory.add and resolves to the item
     Given /v1/rpc answers "t.memory.add" with the item {"id": "m1", "text": "t", "at": "2026-11-15T00:00:00Z"} at "b1.6"
-    When addMemory("00010-a.html", {"text": "t", "source": {"cid": "c1"}}) is called
+    When addMemory("a.html", {"text": "t", "source": {"cid": "c1"}}) is called
     Then it resolves to the item {"id": "m1", "text": "t", "at": "2026-11-15T00:00:00Z"}
     And the methods called over /v1/rpc are "initialize" and "t.memory.add"
-    And "t.memory.add" was called with {"file": "00010-a.html", "text": "t", "source": {"cid": "c1"}}
+    And "t.memory.add" was called with {"file": "a.html", "text": "t", "source": {"cid": "c1"}}
 
   Scenario: The tags of conversations are read by conversation
     Given "t_has_many_c" holds [["go", "c1"], ["go", "c2"], ["ruby", "c1"]] at "b1.5"
@@ -304,24 +305,24 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     Then it resolves to byCid {} and stale true
 
   Scenario: A read over rpc replaces the copies and calls the listeners
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     And "t_has_many_c" holds [["go", "c1"]] at "b1.5"
     And a listener is registered with onTagsChange
-    When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["00010-b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"
+    When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"
     Then the rpc was called with "t.list" and then "t.c.list"
     And the listener was called once
-    And "t_full" holds the tags ["00010-b.html"] and the ETag "e2"
+    And "t_full" holds the tags ["b.html"] and the ETag "e2"
     And "sync" holds "t_full" at "b1.6"
     And "t_has_many_c" holds exactly [["ruby", "c2"]]
     And "sync" holds "t_has_many_c" at "b1.6"
 
   Scenario: A read over rpc of an older version calls no listener
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.7"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.7"
     And "t_has_many_c" holds [["go", "c1"]] at "b1.7"
     And a listener is registered with onTagsChange
-    When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["00010-b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"
+    When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"
     Then the listener was not called
-    And "t_full" holds the tags ["00010-a.html"] and the ETag "e1"
+    And "t_full" holds the tags ["a.html"] and the ETag "e1"
     And "t_has_many_c" holds exactly [["go", "c1"]]
 
   Scenario: A batch is written onto the copy and calls the listeners
@@ -333,18 +334,18 @@ Feature: LCTYSP-1021 The tags in the browser: lcty.v1.t.worker.cjs
     And "sync" holds "t_has_many_c" at "b1.6"
 
   Scenario: A batch of the tags calls the listeners too
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     And a listener is registered with onTagsChange
-    When applyTagBatch is called with a delete of "00010-a.html" and the ETag "e2" at "b1.6"
+    When applyTagBatch is called with a delete of "a.html" and the ETag "e2" at "b1.6"
     Then the listener is called once
     And "t_full" holds the tags [] and the ETag "e2"
     And "sync" holds "t_full" at "b1.6"
 
   Scenario: A batch that arrives during a read is written after it
-    Given "t_full" holds the tags ["00010-a.html"] and the ETag "e1" at "b1.5"
+    Given "t_full" holds the tags ["a.html"] and the ETag "e1" at "b1.5"
     And "t_has_many_c" holds [["go", "c1"]] at "b1.5"
     And a listener is registered with onTagsChange
-    When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["00010-a.html"] at "b1.6" with the ETag "e1" and whose "t.c.list" answers the rows [["go", "c2"]] at "b1.6", after applyTagBatch was called with a put of ["ruby", "c2"] at "b1.7"
+    When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["a.html"] at "b1.6" with the ETag "e1" and whose "t.c.list" answers the rows [["go", "c2"]] at "b1.6", after applyTagBatch was called with a put of ["ruby", "c2"] at "b1.7"
     Then "t_has_many_c" holds exactly [["go", "c2"], ["ruby", "c2"]]
     And "sync" holds "t_has_many_c" at "b1.7"
     And "sync" holds "t_full" at "b1.6"

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The page of a tag file, /t/NNNNN-<part>.html: the tag editor for that tag alone (LCTYSP-0005, LCTYSP-0009).
+// The page of a tag file, /t/<part>.html: the tag editor for that tag alone (LCTYSP-0005, LCTYSP-0009).
 
 import { forceSyncTags, getTags } from "../api/lcty-t.js";
 import { tabRpc } from "../api/tab-rpc.js";

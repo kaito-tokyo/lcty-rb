@@ -275,14 +275,11 @@ export async function waitForSaved(request, id, n) {
 }
 
 /**
- * Replace every tag file (t.replace of /v1/rpc with the current ETag, LCTYSP-0009). A tag without a file gets
- * NNNNN-<name>.html in the order given (00010, 00020, …), so its name must already be a file-name part (lowercase).
+ * Replace every tag file (t.replace of /v1/rpc with the current ETag, LCTYSP-0009), in the order given. A tag
+ * without a file gets <name>.html, so its name must already be a file-name part (lowercase).
  */
 export async function putTags(_request, tags) {
-	const files = tags.map((t, i) => ({
-		file: `${String((i + 1) * 10).padStart(5, "0")}-${t.name}.html`,
-		...t,
-	}));
+	const files = tags.map((t) => ({ file: `${t.name}.html`, ...t }));
 	await withRpc(async (call) => {
 		const { etag } = await call("t.list");
 		await call("t.replace", { tags: files, etag });

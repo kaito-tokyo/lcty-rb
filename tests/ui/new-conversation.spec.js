@@ -181,18 +181,18 @@ test("Each tag in the list has a ⚙︎ link to its file's page", async ({
 		putTags(request, [{ name: a }, { name: b }]));
 	await test.step("And the new conversation page /c/ is open", () =>
 		openNewPage(page));
-	await test.step(`Then each tag is followed by the link "⚙︎" labelled "「A」を編集" and "「B」を編集", to /t/00010-A.html and /t/00020-B.html`, async () => {
+	await test.step(`Then each tag is followed by the link "⚙︎" labelled "「A」を編集" and "「B」を編集", to /t/A.html and /t/B.html`, async () => {
 		await expect(cogs).toHaveText(["⚙︎", "⚙︎"]);
 		await expect(cogs.nth(0)).toHaveAccessibleName(`「${a}」を編集`);
 		await expect(cogs.nth(1)).toHaveAccessibleName(`「${b}」を編集`);
 		const paths = await cogs.evaluateAll((links) =>
 			links.map((l) => new URL(l.href).pathname),
 		);
-		expect(paths).toEqual([`/t/00010-${a}.html`, `/t/00020-${b}.html`]);
+		expect(paths).toEqual([`/t/${a}.html`, `/t/${b}.html`]);
 	});
 	await test.step('When the "⚙︎" of B is clicked', () => cogs.nth(1).click());
-	await test.step("Then the browser is on /t/00020-B.html", async () => {
-		await expect(page).toHaveURL(new RegExp(`/t/00020-${b}\\.html$`));
+	await test.step("Then the browser is on /t/B.html", async () => {
+		await expect(page).toHaveURL(new RegExp(`/t/${b}\\.html$`));
 	});
 });
 

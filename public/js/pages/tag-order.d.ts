@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The tag reorder page (/t/. LCTYSP-0005, LCTYSP-0009). Lists the tag files in their order (file-name order) with
-// their display names, lets the user move them, and on save renumbers them 00010, 00020, … and sends the whole set
-// with t.replace of /v1/rpc; the contents of the tags are not changed. The tag editor has no order buttons: the order is
+// The tag reorder page (/t/. LCTYSP-0005, LCTYSP-0009). Lists the tags in their order with their display names, lets
+// the user move them, and on save sends the whole set in the new order with t.replace of /v1/rpc; the server writes
+// the new order into the files (data-order), whose names and other contents are not changed. The tag editor has no order buttons: the order is
 // changed only here. An invalid tag (a file without <lcty-t>) is not listed: it is sent back as it is, and the server
 // keeps its file.
 

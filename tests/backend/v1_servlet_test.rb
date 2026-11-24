@@ -350,7 +350,7 @@ class V1ServletTest < Lcty::Scenarios
     ['GET /v1/nope', ->() { http('GET', '/v1/nope') }],
     ['GET /v1/vectors/pending', ->() { http('GET', '/v1/vectors/pending?model=embeddinggemma-2') }],
     ['GET /v1/tags', ->() { http('GET', '/v1/tags') }],
-    ['POST /v1/tags/00010-a.html/memory', ->() { http('POST', '/v1/tags/00010-a.html/memory', 'text' => 'x') }],
+    ['POST /v1/tags/a.html/memory', ->() { http('POST', '/v1/tags/a.html/memory', 'text' => 'x') }],
     ['GET /v1/tags/a/memory', ->() { http('GET', '/v1/tags/a/memory') }],
     ['GET /v1/conversations/a/lines', ->() { http('GET', '/v1/conversations/a/lines') }]
   ].each do |request, send|

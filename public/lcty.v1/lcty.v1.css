@@ -1157,7 +1157,7 @@ lcty-c::part(lcty-memory__proposal) {
 	gap: 6px;
 	align-items: flex-start;
 }
-/* a tag file shown as a page (/t/NNNNN-<part>.html): <lcty-t> is the card, and its view shows the file's own
+/* a tag file shown as a page (/t/<part>.html): <lcty-t> is the card, and its view shows the file's own
    children, which are hidden */
 lcty-t > :is(lcty-tagop, lcty-system, lcty-memory) {
 	display: none;

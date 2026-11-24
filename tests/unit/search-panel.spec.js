@@ -67,10 +67,10 @@ function listsOf(version, convs) {
 	};
 }
 
-/** t.list: "y" before "x" in the order of the files, so a conversation's tags are not shown by reference. */
+/** t.list: "y" before "x" in the order of the tags, so a conversation's tags are not shown by reference. */
 const TAGS = [
-	{ file: "00010-y.html", name: "y", ops: [], prompt: "", memory: [] },
-	{ file: "00020-x.html", name: "x", ops: [], prompt: "", memory: [] },
+	{ file: "y.html", name: "y", order: 10, ops: [], prompt: "", memory: [] },
+	{ file: "x.html", name: "x", order: 20, ops: [], prompt: "", memory: [] },
 ];
 
 const REV = 1763000000000;

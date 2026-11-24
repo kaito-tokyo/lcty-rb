@@ -23,7 +23,8 @@ the model and added only when the user approves it.
 - **Tags are defined beforehand.** A tag has a display name, an optional prompt and memory, in a tag file of its own
   ([Storage](#storage-one-html-file-per-tag)). Two display names with the same file-name part are the same tag, and
   conversations refer to a tag by that part, which has no whitespace or `:` (to tell it apart from `tag:name` in
-  search). The order of the tag files is the order in which drafts are composed.
+  search). The order of the tags, which each tag file holds ([Tag files](#tag-files)), is the order in which drafts
+  are composed.
 - **The system prompt can only be set before the conversation starts.** It is fixed by the first send and saved as the
   conversation's instructions (the cache rule in [LCTYSP-0002](LCTYSP-0002_llm-backend.md)).
 - **Tags are only a hint.** Choosing tags before starting composes a draft into the system prompt field; the user may
@@ -122,13 +123,18 @@ Scope: tag definitions (name, prompt, order) and memory, and how conversations r
 
 ### Tag files
 
-- **One file per tag:** `$LCTY_DATA_DIR/t/NNNNN-<file-name part>.html`.
-  - `NNNNN` is a 5-digit, zero-padded order prefix. Tags are composed into the draft in file-name order (zero padding
-    makes it the numeric order). Numbers are given in steps of 10 (`00010`, `00020`, …), so a tag can be put between
-    two others without renaming the rest.
+- **One file per tag:** `$LCTY_DATA_DIR/t/<file-name part>.html`.
   - The file-name part is derived from the display name (below). Two names with the same file-name part are the same
     tag; the browser rejects a second definition with the same part.
-  - **The browser always sends tags in this file-name form** (`00010-ruby.html`), never as a bare display name.
+  - **The browser always sends tags in this file-name form** (`ruby.html`), never as a bare display name.
+- **The order of the tags is inside the files:** `data-order` of `<lcty-t>` ([Tag file markup](#tag-file-markup)), a
+  non-negative integer. The server writes it from the order of the set replace-all was sent, in steps of 10 (`10`,
+  `20`, …), so a tag can be put between two others by hand. Tags are composed into the draft, listed and returned in
+  this order; a file without `data-order` (put in `t/` by hand, or without `<lcty-t>`) comes after those with one, and
+  ties go by file name. Reordering rewrites the files' contents, never their names, so a tag's file, its page's URL
+  and its key in the browser's copy stay the same.
+  - Until 2026-11-24 the order was a 5-digit prefix of the file name (`00010-ruby.html`), and every reorder renamed
+    the files. The server renames such files at startup ([below](#numbered-tag-files-are-renamed-at-startup)).
 - **The display name is stored inside the HTML.** It keeps its case as the user typed it (after NFC), which the file
   name cannot give back (it is lowercased and escaped). The prompt and the memory items are stored in the same file.
   The server writes the markup ([below](#the-server-writes-the-html)) in the form of
@@ -136,6 +142,14 @@ Scope: tag definitions (name, prompt, order) and memory, and how conversations r
 - Files in `t/` that do not match the tag file pattern (for example the temporary files below) are ignored.
 - A file that matches the pattern but has no `<lcty-t>` is still a tag, marked invalid
   ([below](#tag-files-without-lcty-t)).
+
+#### Numbered tag files are renamed at startup
+
+When the server opens `t/` it renames each file of the old form `NNNNN-<part>.html` to `<part>.html`, under the
+exclusive lock on `t.lock`. A file with `<lcty-t>` is rewritten with `data-order` set to its number (`00010` → `10`),
+so the order is kept; a file without `<lcty-t>` is only renamed (it then has no order and goes last). A file is left as
+it is, with a warning, when the new name is already taken or is not a tag file name (`index`, a part starting with `.`
+or `lcty.v1`); it is then no longer listed. References from conversations are the part already, so none changes.
 
 #### Tag files without `<lcty-t>`
 
@@ -146,7 +160,7 @@ unasked.
 - **Get-all lists it** with a warning, as `{file, name, ops: [], prompt: "", memory: [], invalid: true}`. `invalid`
   is present only on such a tag.
   - The name comes from the file name, as far as the file name tells it: the file-name part with its `~xx` escapes
-    undone (`00020-c~23.html` gives `c#`). This is mechanical, not Unicode processing: a display name cannot contain
+    undone (`c~23.html` gives `c#`). This is mechanical, not Unicode processing: a display name cannot contain
     `~`, so `~` followed by the two hex digits of an escaped symbol is always an escape. The case and the form the user
     typed are not in the file name, so the name is lowercase like the part. The browser composes it to NFC with the
     file name.
@@ -163,7 +177,7 @@ unasked.
 
 #### Tag file pages
 
-- **The tag files are served** at `/t/NNNNN-<part>.html`, beside the reorder page `/t/`, as they are, as a
+- **The tag files are served** at `/t/<part>.html`, beside the reorder page `/t/`, as they are, as a
   conversation file is at `/c/<id>.html`. Only a name that passes the file-name check of replace-all and is a file in
   `t/` is served; anything else is 404. A file without `<lcty-t>` is served too.
 - **The screen is the tag editor** of the tags dialog, for that tag alone: its name, prompt and memory, its Delete
@@ -174,9 +188,10 @@ unasked.
 - **Saving is the same replace-all** as the dialog's (`t.replace` with the etag), with the other tags sent back
   as they are. A rename gives the tag a new file, so the page moves to the new file's URL; deleting it saves at once
   and moves to the reorder page.
-- **The reorder page and the sidebar's tag menu link** each tag to its file (the menu with 編集 beside the tag's name,
-  which itself searches by the tag; [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tags dialog and the
-  conversations' tag chips do not (not adopted for now).
+- **The reorder page, the sidebar's tag menu and the new conversation page's tag list link** each tag to its file
+  (the menu with 編集 beside the tag's name, which itself searches by the tag; the tag list with ⚙︎ after each tag;
+  [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tags dialog and the conversations' tag chips do not (not
+  adopted for now).
 
 ### Tag file markup
 
@@ -191,7 +206,7 @@ unasked.
 <link rel="stylesheet" href="lcty.v1.css" />
 </head>
 <body>
-<lcty-t data-tag="タグ名">
+<lcty-t data-tag="タグ名" data-order="10">
 <lcty-tagop data-tag="タグ名" data-type="add-memory" data-content="一段落にまとめて"></lcty-tagop>
 <lcty-system data-tag="タグ名" data-content="# 指示"></lcty-system>
 <lcty-memory id="t-mem-0190…" data-tag="タグ名" data-at="…" data-source-conv="…" data-source-msg="…" data-content="メモリ1"></lcty-memory>
@@ -207,6 +222,8 @@ unasked.
 - **The header** is the same as a conversation file's: `lcty.v1.js`, `lcty.v1.lang-ja.js` and `lcty.v1.css` by relative
   paths, so the file opens on its own (see [the assets](#lcty-v1-assets-in-every-directory) below).
 - **`<lcty-t>`** wraps the tag. `data-tag` is the display name (NFC, case kept), the one place the name is stored.
+  `data-order` is the tag's place in the order ([Tag files](#tag-files)): ASCII digits, at most 9 of them. A reader
+  takes any other value as no order.
 - **Every child repeats `data-tag`,** with the same value, so each element says which tag it belongs to on its own (for
   example when elements of several tags are shown together). The server writes the same name everywhere; a reader uses
   `<lcty-t>`'s.
@@ -230,8 +247,9 @@ unasked.
 - **No presentation children** for now: the elements are empty, and what is shown comes from `lcty.v1.cjs` (`<lcty-t>`,
   [Tag file pages](#tag-file-pages)).
 - **The JSON of the API** mirrors the markup:
-  `{file, name, ops: [{type, content}], prompt, memory: [{id, text, at, source?}]}`
-  ([LCTYSP-0006](LCTYSP-0006_http-api.md)).
+  `{file, name, order, ops: [{type, content}], prompt, memory: [{id, text, at, source?}]}`
+  ([LCTYSP-0006](LCTYSP-0006_http-api.md)). `order` is `data-order` as a number, or `null` without one; get-all gives
+  it, and replace-all ignores it (the order is the order of the set sent).
 
 #### lcty.v1 assets in every directory
 
@@ -256,6 +274,8 @@ implementations could disagree).
   - Category Cf includes ZWJ, so emoji ZWJ sequences cannot be used in names. Category Cn depends on the browser's
     Unicode version, so a character newer than the browser is rejected there.
 - Case is kept in the display name.
+- **Reserved:** a name whose file-name part (below) is `index`, or starts with `.` or `lcty.v1`. Such a file would be
+  the reorder page (`/t/index.html`), a hidden or temporary file, or a name `/t/` redirects to `/lcty.v1/`.
 
 **File-name part (derived by the browser):**
 
@@ -283,10 +303,11 @@ part = part.replace(
 
 **Checks in Ruby (mechanical only),** for each file name in a request:
 
-- starts with 5 ASCII digits and `-`, and ends with `.html`;
+- ends with `.html`, with a non-empty part before it;
+- does not start with `.` or `lcty.v1`, and is not `index.html`;
 - contains no `/`, `\`, `:` or NUL;
 - at most 255 bytes, and valid UTF-8;
-- the file-name parts (the name without the `NNNNN-` prefix) are unique within the request, compared byte by byte.
+- the names are unique within the request, compared byte by byte.
 
 Ruby does not normalize, lowercase or otherwise rewrite names; what it writes is exactly what the browser sent.
 
@@ -306,12 +327,12 @@ Ruby does not normalize, lowercase or otherwise rewrite names; what it writes is
 Only two operations exist, as methods of `/v1/rpc` ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)); before 2026-11-15
 they were `GET` and `PUT /v1/tags` of the HTTP API ([LCTYSP-0006](LCTYSP-0006_http-api.md)):
 
-- **Get all (`t.list`):** list `t/`, read every tag file, return them in file-name order, with the set's ETag and the
+- **Get all (`t.list`):** list `t/`, read every tag file, return them in the order of the tags, with the set's ETag and the
   global version they belong to. Takes the shared lock.
 - **Replace all (`t.replace`):** the browser sends the complete set of tag files. Under the exclusive lock the server
   1. checks every file name (above) and rejects the whole request, writing nothing, if one fails;
-  2. writes each file to a temporary file in `t/` (a name the listing ignores, for example starting with `.`) and
-     renames it into place;
+  2. writes each file, with `data-order` from its place in the set (10, 20, …), to a temporary file in `t/` (a name the
+     listing ignores, starting with `.`) and renames it into place;
   3. deletes the tag files that were in `t/` before and are not in the request. A file the server has just written is
      never deleted, even when its listed name is not byte-equal to the requested one (HFS+); the server checks this
      mechanically, for example with `File.identical?` against the files it wrote.
@@ -334,12 +355,12 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 `/v1/rpc` connection ([LCTYSP-0014](LCTYSP-0014_browser-sync.md)):
 
 - **IndexedDB `lcty_t`, stores `t_full` and `t_set`** (derived; they can be dropped at any time): a copy of `t.list`,
-  every tag in full (`file`, `name`, `ops`, `prompt`, `memory`), together with the set's ETag. "Full" as opposed to
+  every tag in full (`file`, `name`, `order`, `ops`, `prompt`, `memory`), together with the set's ETag. "Full" as opposed to
   `c_meta`'s head lines only: a tag file is small and every reader needs all of it.
   - **`t_full` is row-oriented, like `c_meta`:** one row per tag file, the tag as `t.list` gives it, with the key path
     `file` (NFC-normalized; so is the `name` of an invalid tag, which comes from the file name). Key order is file-name
-    order, which is the order of the tags (`NNNNN-`), so the rows read in key order are the set in order. A reorder
-    changes a tag's key: the old key is deleted and the new one put.
+    order, not the order of the tags: the worker's `get` sorts the rows by `order` as the server does (no order
+    last, ties by file name). A reorder puts every row again with its new `order`; the keys stay.
   - **`t_set` holds the set's ETag,** one record under the key `"set"`, `{etag}`: the ETag is the whole set's, so it
     is not a row.
   - **The two stores are one copy:** they are always written and read in one transaction (`replace` clears the rows,
@@ -389,7 +410,7 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 
   | `op`           | `payload`                       | What the worker does                                                       | `result`              |
   | -------------- | ------------------------------- | -------------------------------------------------------------------------- | --------------------- |
-  | `get`          | none                            | reads the rows of `t_full` (in file-name order) and the ETag               | `{tags, etag, stale}` |
+  | `get`          | none                            | reads the rows of `t_full` (in the order of the tags) and the ETag         | `{tags, etag, stale}` |
   | `replace`      | `{store, version, rows, etag?}` | replaces the copy `t_full` (with the ETag) or `t_has_many_c`, unless newer | `{applied}`           |
   | `apply`        | `{version, records}`            | writes the records of one `t.batch.updated` into each copy that is older   | `{applied: [copies]}` |
   | `get_has_many` | none                            | reads the rows of `t_has_many_c`                                           | `{rows, stale}`       |
@@ -426,10 +447,10 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 ### Reordering has its own page
 
 - Reordering moves to a separate page at `/t/` ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tag editor loses its
-  ↑↓ buttons; a tag added in the editor gets the number after the last one (largest + 10).
-- The reorder page shows the tags in their current order, lets the user move them, and on save renumbers all of them
-  in steps of 10 from `00010` and sends replace-all with the new file names and unchanged contents.
-- Draft composition ([above](#composing-the-draft)) uses file-name order instead of the `position` column.
+  ↑↓ buttons; a tag added in the editor goes last.
+- The reorder page shows the tags in their current order, lets the user move them, and on save sends replace-all with
+  the tags in the new order, their files and contents unchanged; the server gives them their new `data-order`.
+- Draft composition ([above](#composing-the-draft)) uses the order of the tags instead of the `position` column.
 
 ### The server writes the HTML
 
@@ -445,10 +466,10 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 ### Adding memory has its own method
 
 - Accepting a proposal uses a small add-memory method, `t.memory.add` of `/v1/rpc`
-  ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), that names the tag by its file name (`00010-ruby.html`, as get-all
+  ([LCTYSP-0012](LCTYSP-0012_rpc-protocol.md)), that names the tag by its file name (`ruby.html`, as get-all
   returned it). Under the exclusive lock on `t.lock`, the server reads that one file, appends the item (assigning `id`
-  and `at`), and writes the file back via a temporary file and a rename. A file that does not exist (for example
-  renamed or renumbered by another tab) is refused (error 9), and the browser gets all again.
+  and `at`), and writes the file back via a temporary file and a rename, keeping its `data-order`. A file that does
+  not exist (for example renamed or deleted by another tab) is refused (error 9), and the browser gets all again.
 - It changes the set, so it changes the set's ETag (below): a tab that loaded the tags before the addition cannot
   replace-all over it without getting all again.
 - Not adopted: adding memory through replace-all. Every addition would rewrite every file and could undo another tab's
@@ -479,7 +500,7 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 
 ### Conversations refer to tags by the file-name part
 
-- **Every reference from a conversation is the file-name part without the number** (`C#` → `c~23`, `Ruby` → `ruby`):
+- **Every reference from a conversation is the file-name part** (`C#` → `c~23`, `Ruby` → `ruby`):
   `data-setup-tags` of new conversations, the rows of `conversation_tags`, the search index (`conv_tags`) and
   `tag:` in search. It does not change when tags are reordered.
 - **The browser converts, Ruby compares bytes.** The browser derives the part from what the user chose or typed
@@ -488,8 +509,8 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
 - **Display:** the browser shows a reference with the display name of the tag file whose part it is. A reference with
   no tag file (a deleted or renamed tag) is an undefined tag and shows as the part itself.
 - **Ruby checks references mechanically** (in `tags` lines and `data-setup-tags`): valid UTF-8, no whitespace or
-  control characters (`data-setup-tags` is space separated), no `/`, `\` or `:`, and at most 244 bytes (255 minus
-  `NNNNN-` and `.html`). Like file names, it does not rewrite them.
+  control characters (`data-setup-tags` is space separated), no `/`, `\` or `:`, and at most 250 bytes (255 minus
+  `.html`). Like file names, it does not rewrite them.
 
 ### tags.sqlite: only conversation_tags remains; no conversion
 
@@ -506,7 +527,7 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   undefined tag, until the conversation's tags are changed.
 - Not adopted: converting the old tags in the browser or with a one-off script.
 
-Tag files are served at `/t/NNNNN-<part>.html`, beside the reorder page, as the page of the tag
+Tag files are served at `/t/<part>.html`, beside the reorder page, as the page of the tag
 ([Tag file pages](#tag-file-pages)). Not yet discussed: how the proposal flow uses the `add-memory` policy (adjusted
 later).
 The data directory is described in [LCTYSP-0010](LCTYSP-0010_data-and-settings.md), and the changes to the backend tests
