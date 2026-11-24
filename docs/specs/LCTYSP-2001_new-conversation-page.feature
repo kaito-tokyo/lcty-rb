@@ -64,6 +64,13 @@ Feature: LCTYSP-2001 The new conversation page /c/
     And the model got the tag's prompt in its instructions
     And the server has saved the conversation with the tag
 
+  Scenario: Each tag in the list has a ⚙︎ link to its file's page
+    Given the tags A and B, in that order
+    And the new conversation page /c/ is open
+    Then each tag is followed by the link "⚙︎" labelled "「A」を編集" and "「B」を編集", to /t/00010-A.html and /t/00020-B.html
+    When the "⚙︎" of B is clicked
+    Then the browser is on /t/00020-B.html
+
   Scenario: A fork starts from the source's system prompt and puts the chosen message into the composer
     Given a conversation with the system prompt "分岐元のシステムプロンプト" and two questions with their answers
     When the new conversation page is opened with fork=<the source's id> and at=2

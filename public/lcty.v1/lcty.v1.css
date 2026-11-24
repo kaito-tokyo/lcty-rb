@@ -164,8 +164,8 @@ lcty-c::part(lcty-c__tag--unknown) {
 	line-height: 1;
 	color: var(--fg-dim);
 } /* in <lcty-c>: lcty-c__tag-remove */
-/* the new-conversation picker (#setup-tags): browser defaults, except that a checkbox and its tag never wrap apart */
-#setup-tags > label {
+/* the new-conversation picker (#setup-tags): browser defaults, except that a checkbox, its tag and its ⚙︎ never wrap apart */
+#setup-tags > .tag-pick {
 	display: inline-block;
 }
 /* a chosen tag: its chip in the accent color */
