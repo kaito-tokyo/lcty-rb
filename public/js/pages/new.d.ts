@@ -14,9 +14,10 @@ export function initNewPage(): void;
 
 // Internals:
 // TITLE_MAX_SIZE (512) is the bytes of the title slot, as the files of LCTYSP-0003 have (LCTYSP-0013).
-// renderTags(): one checkbox per tag definition, each followed by a ⚙︎ link to the tag's file page
-// (/t/<part>.html, LCTYSP-0009) and kept with it in a span.tag-pick that never wraps apart, then the ⚙︎ button that
-// opens the tags dialog, laid out as inline content separated by spaces (no CSS of its own beyond that span). The checkboxes are rebuilt only when the definitions change, so focus stays on the box.
+// renderTags(): one checkbox per tag definition, each followed by a ⚙︎ (a link that looks like a button, a.button) to
+// the tag's file page (/t/<part>.html, LCTYSP-0009) and kept with it in a span.tag-pick that never wraps apart, then
+// the button "Edit tags" (タグを編集) that opens the tags dialog, laid out as inline content separated by spaces (no CSS
+// of its own beyond that span and the size of the ⚙︎). Only the ⚙︎ of a tag shows a cog, so each cog leads to a tag. The checkboxes are rebuilt only when the definitions change, so focus stays on the box.
 // tagsSaved(defs): after saving, the chosen tags that no longer exist are dropped (tags never defined, e.g. from a
 // fork, stay), and an untouched draft is composed again from the new prompts and memory.
 // create(): the conversation is created through /v1/rpc in the format of LCTYSP-0013 (LCTYSP-0012): c.create writes

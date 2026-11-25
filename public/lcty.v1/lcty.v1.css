@@ -168,6 +168,11 @@ lcty-c::part(lcty-c__tag--unknown) {
 #setup-tags > .tag-pick {
 	display: inline-block;
 }
+/* each tag's ⚙︎, a small button beside its chip that opens the tag's page */
+#setup-tags .tag-page-link {
+	padding: 0 6px;
+	line-height: 1.6;
+}
 /* a chosen tag: its chip in the accent color */
 #setup-tags input:checked + .tag-chip {
 	background: var(--accent);

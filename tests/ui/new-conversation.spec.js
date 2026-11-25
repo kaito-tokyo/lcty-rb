@@ -171,7 +171,7 @@ test("Choosing a tag fills the system prompt draft from its prompt and memory", 
 	});
 });
 
-test("Each tag in the list has a ⚙︎ link to its file's page", async ({
+test("Each tag in the list has a ⚙︎ beside it that opens its file's page", async ({
 	page,
 	request,
 }) => {
@@ -189,6 +189,16 @@ test("Each tag in the list has a ⚙︎ link to its file's page", async ({
 			links.map((l) => new URL(l.href).pathname),
 		);
 		expect(paths).toEqual([`/t/${a}.html`, `/t/${b}.html`]);
+	});
+	await test.step('And each "⚙︎" looks like a button, with a border', async () => {
+		for (const cog of await cogs.all())
+			await expect(cog).not.toHaveCSS("border-top-style", "none");
+	});
+	await test.step('And the list ends with the button "タグを編集", the only other control, which shows no ⚙︎', async () => {
+		const others = page.locator("#setup-tags > :not(.tag-pick)");
+		await expect(others).toHaveCount(1);
+		await expect(others).toHaveRole("button");
+		await expect(others).toHaveText("タグを編集");
 	});
 	await test.step('When the "⚙︎" of B is clicked', () => cogs.nth(1).click());
 	await test.step("Then the browser is on /t/B.html", async () => {

@@ -35,7 +35,7 @@ import type { SearchPanel } from "../search/search-panel.js";
  *   is followed)
  * @param o.onTagsSaved called with the new tag definitions after the tags dialog saved them
  * @returns the search panel ({refresh, setQuery, current, …}), with openTagsDialog(), which opens the tags dialog (for
- *   the ⚙︎ of the new conversation page's tag list)
+ *   the button "Edit tags" at the end of the new conversation page's tag list)
  */
 export function initSidebar(
 	sidebar: LctySidebarElement,

@@ -64,10 +64,12 @@ Feature: LCTYSP-2001 The new conversation page /c/
     And the model got the tag's prompt in its instructions
     And the server has saved the conversation with the tag
 
-  Scenario: Each tag in the list has a ⚙︎ link to its file's page
+  Scenario: Each tag in the list has a ⚙︎ beside it that opens its file's page
     Given the tags A and B, in that order
     And the new conversation page /c/ is open
     Then each tag is followed by the link "⚙︎" labelled "「A」を編集" and "「B」を編集", to /t/A.html and /t/B.html
+    And each "⚙︎" looks like a button, with a border
+    And the list ends with the button "タグを編集", the only other control, which shows no ⚙︎
     When the "⚙︎" of B is clicked
     Then the browser is on /t/B.html
 
