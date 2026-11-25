@@ -58,17 +58,15 @@ export function initNewPage() {
 
 	// ---- Tags and the system prompt draft (LCTYSP-0009) ----
 
-	// The ⚙︎ at the end of the tag list opens the same tags dialog as the sidebar's tag menu (js/tags.js)
+	// "Edit tags" at the end of the tag list opens the same tags dialog as the sidebar's tag menu (js/tags.js)
 	const tagsButton = document.createElement("button");
 	tagsButton.type = "button";
-	tagsButton.title = tr("editTags", "Edit tags");
-	tagsButton.setAttribute("aria-label", tr("editTags", "Edit tags"));
-	tagsButton.textContent = "⚙︎";
+	tagsButton.textContent = tr("editTags", "Edit tags");
 	tagsButton.addEventListener("click", () => panel.openTagsDialog());
 
 	function renderTags() {
 		const picker = form.tags;
-		// One checkbox and ⚙︎ link per tag definition, then ⚙︎; rebuilt only when the definitions change
+		// One checkbox and ⚙︎ button per tag definition, then "Edit tags"; rebuilt only when the definitions change
 		const names = JSON.stringify(state.tagDefs.map((t) => [t.file, t.name]));
 		if (picker.dataset.names !== names) {
 			picker.dataset.names = names;
@@ -86,8 +84,9 @@ export function initNewPage() {
 						chip.className = "tag-chip";
 						chip.textContent = t.name;
 						label.append(box, chip);
-						// ⚙︎ after each tag: its file's page, /t/<part>.html
+						// ⚙︎ beside each tag, a link that looks like a button: its file's page, /t/<part>.html
 						const edit = document.createElement("a");
+						edit.className = "button tag-page-link";
 						edit.href = siteUrl(`t/${encodeURIComponent(t.file)}`).href;
 						edit.title = tr("editTagNamed", "Edit {name}", { name: t.name });
 						edit.setAttribute("aria-label", edit.title);

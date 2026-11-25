@@ -51,7 +51,7 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 - Changing tags before the start recomposes the draft and replaces the field. Once the user has edited the field by
   hand it is not replaced (so their text is not lost); a "Rebuild from tags" button appears instead.
 - More memory makes the first send of a new conversation heavier (prompt processing is about 450 tok/s, so 2,000 tokens
-  take about 4.5 s). The tag editor (タグを編集 in the sidebar's tag menu on every page, or the ⚙︎ at the end of the new conversation page's tag list) shows an estimate of the memory size.
+  take about 4.5 s). The tag editor (タグを編集 in the sidebar's tag menu on every page, or the button タグを編集 at the end of the new conversation page's tag list) shows an estimate of the memory size.
 
 ### The tags of a conversation
 
@@ -189,7 +189,7 @@ unasked.
   as they are. A rename gives the tag a new file, so the page moves to the new file's URL; deleting it saves at once
   and moves to the reorder page.
 - **The reorder page, the sidebar's tag menu and the new conversation page's tag list link** each tag to its file
-  (the menu with 編集 beside the tag's name, which itself searches by the tag; the tag list with ⚙︎ after each tag;
+  (the menu with 編集 beside the tag's name, which itself searches by the tag; the tag list with a ⚙︎ button beside each tag;
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md)). The tags dialog and the conversations' tag chips do not (not
   adopted for now).
 
