@@ -90,3 +90,10 @@ Feature: LCTYSP-2004 The tag pages: /t/ and the tag files
     And the name field holds "料理" and can be edited
     And the tag file's module /t/tag-file.js has been loaded
     And no page error happened, and no request of the site was answered with a status of 400 or more
+
+  Scenario: The system prompt field of the tag editor shows at least 12 lines
+    Given the tag A
+    When the tags dialog is opened on the new conversation page /c/
+    Then A's system prompt field in the dialog is at least 12 lines tall
+    When the page of A's file /t/A.html is opened
+    Then the system prompt field of the page is at least 12 lines tall, and can be edited
