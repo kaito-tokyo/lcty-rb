@@ -367,8 +367,8 @@ test("A replace stores the tags with NFC file names and the ETag", async ({
 	await givenNoDatabase(page);
 	const answer = await whenPosted(
 		page,
-		'a replace of "t_full" with the tag "00010-café.html", its name decomposed, at "b1.5" with the ETag "e1"',
-		replaceTagsOf("b1.5", [tag(nfd("00010-café.html"))], "e1"),
+		'a replace of "t_full" with the tag "café.html", its name decomposed, at "b1.5" with the ETag "e1"',
+		replaceTagsOf("b1.5", [tag(nfd("café.html"))], "e1"),
 	);
 	await thenAnswersApplied(answer, true);
 	await thenVersion3(page);
@@ -376,11 +376,9 @@ test("A replace stores the tags with NFC file names and the ETag", async ({
 		const db = await readDb(page);
 		expect(db.keyPath).toBe("file");
 		// the row is the tag as t.list gave it, with only the file name composed
-		expect(db.tags).toEqual([
-			{ ...tag(nfd("00010-café.html")), file: "00010-café.html" },
-		]);
+		expect(db.tags).toEqual([{ ...tag(nfd("café.html")), file: "café.html" }]);
 	});
-	await thenTFullHolds(page, ["00010-café.html"], "e1", " composed");
+	await thenTFullHolds(page, ["café.html"], "e1", " composed");
 	await thenSyncAt(page, "t_full", "b1.5");
 });
 
@@ -391,27 +389,27 @@ test("A replace composes the name of an invalid tag, which comes from its file n
 	await background(page, context);
 	await givenNoDatabase(page);
 	const invalid = {
-		...tag(nfd("00010-café.html")),
+		...tag(nfd("café.html")),
 		name: nfd("café"),
 		invalid: true,
 	};
-	const other = { ...tag(nfd("00020-café.html")), name: nfd("Café") };
+	const other = { ...tag(nfd("cafés.html")), name: nfd("Cafés") };
 	await whenPosted(
 		page,
-		'a replace of "t_full" with the invalid tag "00010-café.html" named "café", both decomposed, and the tag "00020-cafe" U+0301 ".html" with the name decomposed',
+		'a replace of "t_full" with the invalid tag "café.html" named "café", both decomposed, and the tag "cafe" U+0301 "s.html" with the name decomposed',
 		replaceTagsOf("b1.5", [invalid, other], "e1"),
 	);
 	let db;
-	await test.step('Then "t_full" holds the invalid tag "00010-café.html" named "café", both composed, with invalid true', async () => {
+	await test.step('Then "t_full" holds the invalid tag "café.html" named "café", both composed, with invalid true', async () => {
 		db = await readDb(page);
 		expect(db.tags[0]).toEqual({
 			...invalid,
-			file: "00010-café.html",
+			file: "café.html",
 			name: "café",
 		});
 	});
 	await test.step("And the other tag keeps its decomposed name", () => {
-		expect(db.tags[1]).toEqual({ ...other, file: "00020-café.html" });
+		expect(db.tags[1]).toEqual({ ...other, file: "cafés.html" });
 	});
 });
 
@@ -420,8 +418,8 @@ test("A database at version 1 is dropped, and the copy is stale", async ({
 	context,
 }) => {
 	await background(page, context);
-	await test.step('Given the database "lcty_t" is at version 1 with the record "set" of the tags ["00010-a.html"] in "t_full"', () =>
-		seedVersion1(page, { tags: [tag("00010-a.html")], etag: "e1" }));
+	await test.step('Given the database "lcty_t" is at version 1 with the record "set" of the tags ["a.html"] in "t_full"', () =>
+		seedVersion1(page, { tags: [tag("a.html")], etag: "e1" }));
 	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
 		id: 1,
 		op: "get",
@@ -430,27 +428,43 @@ test("A database at version 1 is dropped, and the copy is stale", async ({
 	await thenVersion3(page);
 });
 
-test("Getting answers the tags in the order of their file names", async ({
+test("Getting answers the tags in their order, those without one last", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(
-		page,
-		["00020-b.html", "00010-c.html", "00030-a.html"],
-		"e1",
-		"b1.5",
-	);
+	const ordered = (file, order) => ({ ...tag(file), order });
+	await test.step('Given "t_full" holds the tags ["a.html", "b.html", "c.html", "d.html"] with the orders [20, null, 10, 20] and the ETag "e1" at "b1.5"', () =>
+		seed(page, {
+			set: {
+				tags: [
+					ordered("a.html", 20),
+					ordered("b.html", null),
+					ordered("c.html", 10),
+					ordered("d.html", 20),
+				],
+				etag: "e1",
+				version: "b1.5",
+			},
+		}));
 	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
 		id: 1,
 		op: "get",
 	});
-	await thenAnswersTags(
-		answer,
-		["00010-c.html", "00020-b.html", "00030-a.html"],
-		"e1",
-		false,
-	);
+	await test.step('Then it answers the tags ["c.html", "a.html", "d.html", "b.html"], the ETag "e1" and stale false', () => {
+		expect(answer.message).toEqual({
+			result: {
+				tags: [
+					ordered("c.html", 10),
+					ordered("a.html", 20),
+					ordered("d.html", 20),
+					ordered("b.html", null),
+				],
+				etag: "e1",
+				stale: false,
+			},
+		});
+	});
 });
 
 test("Getting the tags of a copy never filled is stale", async ({
@@ -484,14 +498,14 @@ test("An empty set is a copy too", async ({ page, context }) => {
 
 test("A replace replaces the set as a whole", async ({ page, context }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html", "00020-b.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html", "b.html"], "e1", "b1.5");
 	const answer = await whenPosted(
 		page,
-		'a replace of "t_full" with the tags ["00010-c.html"] at "b1.6" with the ETag "e2"',
-		replaceTagsOf("b1.6", [tag("00010-c.html")], "e2"),
+		'a replace of "t_full" with the tags ["c.html"] at "b1.6" with the ETag "e2"',
+		replaceTagsOf("b1.6", [tag("c.html")], "e2"),
 	);
 	await thenAnswersApplied(answer, true);
-	await thenTFullHolds(page, ["00010-c.html"], "e2");
+	await thenTFullHolds(page, ["c.html"], "e2");
 	await thenSyncAt(page, "t_full", "b1.6");
 });
 
@@ -500,7 +514,7 @@ for (const { held, read, applied, kept, etag, version } of [
 		held: "b1.5",
 		read: "b1.5",
 		applied: true,
-		kept: ["00020-b.html"],
+		kept: ["b.html"],
 		etag: "e2",
 		version: "b1.5",
 	},
@@ -508,7 +522,7 @@ for (const { held, read, applied, kept, etag, version } of [
 		held: "b1.7",
 		read: "b1.5",
 		applied: false,
-		kept: ["00010-a.html"],
+		kept: ["a.html"],
 		etag: "e1",
 		version: "b1.7",
 	},
@@ -516,7 +530,7 @@ for (const { held, read, applied, kept, etag, version } of [
 		held: "b1.9",
 		read: "b2.1",
 		applied: true,
-		kept: ["00020-b.html"],
+		kept: ["b.html"],
 		etag: "e2",
 		version: "b2.1",
 	},
@@ -526,11 +540,11 @@ for (const { held, read, applied, kept, etag, version } of [
 		context,
 	}) => {
 		await background(page, context);
-		await givenTFullHolds(page, ["00010-a.html"], "e1", held);
+		await givenTFullHolds(page, ["a.html"], "e1", held);
 		const answer = await whenPosted(
 			page,
-			`a replace of "t_full" with the tags ["00020-b.html"] at "${read}" with the ETag "e2"`,
-			replaceTagsOf(read, [tag("00020-b.html")], "e2"),
+			`a replace of "t_full" with the tags ["b.html"] at "${read}" with the ETag "e2"`,
+			replaceTagsOf(read, [tag("b.html")], "e2"),
 		);
 		await thenAnswersApplied(answer, applied);
 		await thenTFullHolds(page, kept, etag);
@@ -546,8 +560,8 @@ test("A replace of the tags leaves the tags of conversations as they were", asyn
 	await givenHasManyHolds(page, [["go", "c1"]], "b1.5");
 	const answer = await whenPosted(
 		page,
-		'a replace of "t_full" with the tags ["00010-a.html"] at "b1.6" with the ETag "e1"',
-		replaceTagsOf("b1.6", [tag("00010-a.html")], "e1"),
+		'a replace of "t_full" with the tags ["a.html"] at "b1.6" with the ETag "e1"',
+		replaceTagsOf("b1.6", [tag("a.html")], "e1"),
 	);
 	await thenAnswersApplied(answer, true);
 	await thenHasManyHolds(page, [["go", "c1"]]);
@@ -570,12 +584,12 @@ test("The worker closes its connection after the operation", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	const answer = await whenPosted(page, '{"id": 1, "op": "get"}', {
 		id: 1,
 		op: "get",
 	});
-	await thenAnswersTags(answer, ["00010-a.html"], "e1", false);
+	await thenAnswersTags(answer, ["a.html"], "e1", false);
 	await test.step('And the database "lcty_t" can be opened at version 3 without being blocked, while the worker is still alive', async () => {
 		const result = await page.evaluate(
 			() =>
@@ -602,7 +616,7 @@ test("A SharedWorker answers on the port the message came from", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	let answers;
 	await test.step('When two ports of new SharedWorker("/lcty.v1/lcty.v1.t.worker.cjs") are posted {"id": 1, "op": "get"} and {"id": 2, "op": "nope"}, one after the other', async () => {
 		answers = await page.evaluate(async (url) => {
@@ -617,10 +631,10 @@ test("A SharedWorker answers on the port the message came from", async ({
 			return { first, second };
 		}, WORKER_URL);
 	});
-	await test.step('Then the first port is answered with the id 1, the tags ["00010-a.html"], the ETag "e1" and stale false', () => {
+	await test.step('Then the first port is answered with the id 1, the tags ["a.html"], the ETag "e1" and stale false', () => {
 		expect(answers.first).toEqual({
 			id: 1,
-			result: { tags: [tag("00010-a.html")], etag: "e1", stale: false },
+			result: { tags: [tag("a.html")], etag: "e1", stale: false },
 		});
 	});
 	await test.step('And the second port is answered with the id 2 and the error type "unknownOperation"', () => {
@@ -694,14 +708,14 @@ for (const { held, read, applied, kept, version } of [
 
 test("A replace leaves the tags as they were", async ({ page, context }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	const answer = await whenPosted(
 		page,
 		'a replace of "t_has_many_c" with the rows [["go", "c1"]] at "b1.5"',
 		replaceOf("t_has_many_c", "b1.5", [["go", "c1"]]),
 	);
 	await thenAnswersApplied(answer, true);
-	await thenTFullHolds(page, ["00010-a.html"], "e1");
+	await thenTFullHolds(page, ["a.html"], "e1");
 });
 
 test("A change is written onto an older copy of the same boot", async ({
@@ -760,7 +774,7 @@ test("A change onto a copy that was never filled is left", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	const answer = await whenPosted(
 		page,
 		'an apply at "b1.6" of a put of ["ruby", "c1"]',
@@ -777,18 +791,14 @@ test("A change of the tags is written onto an older copy of the same boot", asyn
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html", "00020-b.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html", "b.html"], "e1", "b1.5");
 	const answer = await whenPosted(
 		page,
-		'an apply at "b1.6" of a put of the tag "00030-c.html", a delete of "00010-a.html" and the ETag "e2"',
-		applyOf("b1.6", [
-			tagPut("00030-c.html"),
-			tagDelete("00010-a.html"),
-			setPut("e2"),
-		]),
+		'an apply at "b1.6" of a put of the tag "c.html", a delete of "a.html" and the ETag "e2"',
+		applyOf("b1.6", [tagPut("c.html"), tagDelete("a.html"), setPut("e2")]),
 	);
 	await thenAnswersApplied(answer, ["t_full"]);
-	await thenTFullHolds(page, ["00020-b.html", "00030-c.html"], "e2");
+	await thenTFullHolds(page, ["b.html", "c.html"], "e2");
 	await thenSyncAt(page, "t_full", "b1.6");
 });
 
@@ -797,17 +807,14 @@ test("A change of the tags composes the file names", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-café.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["café.html"], "e1", "b1.5");
 	const answer = await whenPosted(
 		page,
-		'an apply at "b1.6" of a delete of "00010-café.html" and a put of the tag "00020-café.html", both decomposed',
-		applyOf("b1.6", [
-			tagDelete(nfd("00010-café.html")),
-			tagPut(nfd("00020-café.html")),
-		]),
+		'an apply at "b1.6" of a delete of "café.html" and a put of the tag "cafés.html", both decomposed',
+		applyOf("b1.6", [tagDelete(nfd("café.html")), tagPut(nfd("cafés.html"))]),
 	);
 	await thenAnswersApplied(answer, ["t_full"]);
-	await thenTFullHolds(page, ["00020-café.html"], "e1", " composed");
+	await thenTFullHolds(page, ["cafés.html"], "e1", " composed");
 });
 
 for (const { held, change } of [
@@ -820,14 +827,14 @@ for (const { held, change } of [
 		context,
 	}) => {
 		await background(page, context);
-		await givenTFullHolds(page, ["00010-a.html"], "e1", held);
+		await givenTFullHolds(page, ["a.html"], "e1", held);
 		const answer = await whenPosted(
 			page,
-			`an apply at "${change}" of a put of the tag "00020-b.html" and the ETag "e2"`,
-			applyOf(change, [tagPut("00020-b.html"), setPut("e2")]),
+			`an apply at "${change}" of a put of the tag "b.html" and the ETag "e2"`,
+			applyOf(change, [tagPut("b.html"), setPut("e2")]),
 		);
 		await thenAnswersApplied(answer, []);
-		await thenTFullHolds(page, ["00010-a.html"], "e1");
+		await thenTFullHolds(page, ["a.html"], "e1");
 		await thenSyncAt(page, "t_full", held);
 	});
 }
@@ -840,8 +847,8 @@ test("A change of the tags onto a copy that was never filled is left", async ({
 	await givenHasManyHolds(page, [["go", "c1"]], "b1.5");
 	const answer = await whenPosted(
 		page,
-		'an apply at "b1.6" of a put of the tag "00010-a.html" and the ETag "e2"',
-		applyOf("b1.6", [tagPut("00010-a.html"), setPut("e2")]),
+		'an apply at "b1.6" of a put of the tag "a.html" and the ETag "e2"',
+		applyOf("b1.6", [tagPut("a.html"), setPut("e2")]),
 	);
 	await thenAnswersApplied(answer, []);
 	await thenTFullHolds(page, [], null);
@@ -851,14 +858,14 @@ for (const { held, applied, kept, etag, version } of [
 	{
 		held: "b1.5",
 		applied: ["t_full", "t_has_many_c"],
-		kept: ["00010-a.html", "00020-b.html"],
+		kept: ["a.html", "b.html"],
 		etag: "e2",
 		version: "b1.6",
 	},
 	{
 		held: "b1.7",
 		applied: ["t_has_many_c"],
-		kept: ["00010-a.html"],
+		kept: ["a.html"],
 		etag: "e1",
 		version: "b1.7",
 	},
@@ -868,13 +875,13 @@ for (const { held, applied, kept, etag, version } of [
 		context,
 	}) => {
 		await background(page, context);
-		await givenTFullHolds(page, ["00010-a.html"], "e1", held);
+		await givenTFullHolds(page, ["a.html"], "e1", held);
 		await givenHasManyHolds(page, [["go", "c1"]], "b1.5", "And");
 		const answer = await whenPosted(
 			page,
-			'an apply at "b1.6" of a put of the tag "00020-b.html", the ETag "e2" and a put of ["ruby", "c1"]',
+			'an apply at "b1.6" of a put of the tag "b.html", the ETag "e2" and a put of ["ruby", "c1"]',
 			applyOf("b1.6", [
-				tagPut("00020-b.html"),
+				tagPut("b.html"),
 				setPut("e2"),
 				hasC("put", ["ruby", "c1"]),
 			]),
@@ -998,21 +1005,21 @@ test("The calls of a tab run one at a time, in order", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	let result;
-	await test.step('When applyTagBatch is called with a put of the tag "00020-b.html" at "b1.6" and then getTags() without waiting', async () => {
+	await test.step('When applyTagBatch is called with a put of the tag "b.html" at "b1.6" and then getTags() without waiting', async () => {
 		result = await page.evaluate(
 			async (batch) => {
 				const t = await import("/js/api/lcty-t.js");
 				t.applyTagBatch(batch);
 				return t.getTags();
 			},
-			batchOf("b1.6", [tagPut("00020-b.html")]),
+			batchOf("b1.6", [tagPut("b.html")]),
 		);
 	});
-	await test.step('Then getTags resolves to the tags ["00010-a.html", "00020-b.html"] and the ETag "e1"', () => {
+	await test.step('Then getTags resolves to the tags ["a.html", "b.html"] and the ETag "e1"', () => {
 		expect(result).toEqual({
-			tags: [tag("00010-a.html"), tag("00020-b.html")],
+			tags: [tag("a.html"), tag("b.html")],
 			etag: "e1",
 		});
 	});
@@ -1073,15 +1080,15 @@ test("Getting the tags of a copy never filled reads the lists over the tab's con
 	await background(page, context);
 	await givenNoDatabase(page);
 	let rpc;
-	await test.step('And /v1/rpc answers "t.list" with the tags ["00010-a.html"] at "b1.5" with the ETag "e1", and "t.c.list" with the rows [["go", "c1"]] at "b1.5"', async () => {
+	await test.step('And /v1/rpc answers "t.list" with the tags ["a.html"] at "b1.5" with the ETag "e1", and "t.c.list" with the rows [["go", "c1"]] at "b1.5"', async () => {
 		rpc = await fakeRpc(context, {
-			"t.list": tList(["00010-a.html"], "b1.5", "e1"),
+			"t.list": tList(["a.html"], "b1.5", "e1"),
 			"t.c.list": tcList([["go", "c1"]], "b1.5"),
 		});
 	});
 	const result = await whenGetTags(page);
-	await test.step('Then it resolves to the tags ["00010-a.html"] and the ETag "e1"', () => {
-		expect(result).toEqual({ tags: [tag("00010-a.html")], etag: "e1" });
+	await test.step('Then it resolves to the tags ["a.html"] and the ETag "e1"', () => {
+		expect(result).toEqual({ tags: [tag("a.html")], etag: "e1" });
 	});
 	await thenMethodsCalled(
 		rpc,
@@ -1096,17 +1103,17 @@ test("Getting the tags of a filled copy opens no connection", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	let rpc;
-	await test.step('And /v1/rpc answers "t.list" with the tags ["00010-b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"', async () => {
+	await test.step('And /v1/rpc answers "t.list" with the tags ["b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"', async () => {
 		rpc = await fakeRpc(context, {
-			"t.list": tList(["00010-b.html"], "b1.6", "e2"),
+			"t.list": tList(["b.html"], "b1.6", "e2"),
 			"t.c.list": tcList([], "b1.6"),
 		});
 	});
 	const result = await whenGetTags(page);
-	await test.step('Then it resolves to the tags ["00010-a.html"] and the ETag "e1"', () => {
-		expect(result).toEqual({ tags: [tag("00010-a.html")], etag: "e1" });
+	await test.step('Then it resolves to the tags ["a.html"] and the ETag "e1"', () => {
+		expect(result).toEqual({ tags: [tag("a.html")], etag: "e1" });
 	});
 	await test.step("And no connection to /v1/rpc is opened", () => {
 		expect(rpc.connections).toBe(0);
@@ -1118,7 +1125,7 @@ test("putTags sends t.replace with the ETag and resolves to the new one", async 
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	let rpc;
 	await test.step('And /v1/rpc answers "t.replace" with the ETag "e2" at "b1.6"', async () => {
 		rpc = await fakeRpc(context, {
@@ -1126,10 +1133,10 @@ test("putTags sends t.replace with the ETag and resolves to the new one", async 
 		});
 	});
 	let result;
-	await test.step('When putTags([{"file": "00010-b.html"}], "e1") is called', async () => {
+	await test.step('When putTags([{"file": "b.html"}], "e1") is called', async () => {
 		result = await page.evaluate(async () => {
 			const t = await import("/js/api/lcty-t.js");
-			return t.putTags([{ file: "00010-b.html" }], "e1");
+			return t.putTags([{ file: "b.html" }], "e1");
 		});
 	});
 	await test.step('Then it resolves to "e2"', () => {
@@ -1143,8 +1150,8 @@ test("putTags sends t.replace with the ETag and resolves to the new one", async 
 	await thenCalledWith(
 		rpc,
 		"t.replace",
-		'{"tags": [{"file": "00010-b.html"}], "etag": "e1"}',
-		{ tags: [{ file: "00010-b.html" }], etag: "e1" },
+		'{"tags": [{"file": "b.html"}], "etag": "e1"}',
+		{ tags: [{ file: "b.html" }], etag: "e1" },
 	);
 });
 
@@ -1153,14 +1160,14 @@ test("A putTags that fails reads the lists again and rejects with the error", as
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	let rpc;
-	await test.step('And /v1/rpc answers "t.replace" with the error 8 "the tags have changed", "t.list" with the tags ["00010-b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"', async () => {
+	await test.step('And /v1/rpc answers "t.replace" with the error 8 "the tags have changed", "t.list" with the tags ["b.html"] at "b1.6" with the ETag "e2", and "t.c.list" with the rows [] at "b1.6"', async () => {
 		rpc = await fakeRpc(context, {
 			"t.replace": () => ({
 				error: { code: 8, message: "the tags have changed" },
 			}),
-			"t.list": tList(["00010-b.html"], "b1.6", "e2"),
+			"t.list": tList(["b.html"], "b1.6", "e2"),
 			"t.c.list": tcList([], "b1.6"),
 		});
 	});
@@ -1194,7 +1201,7 @@ test("A putTags that fails reads the lists again and rejects with the error", as
 		'And the methods called over /v1/rpc are "initialize", "t.replace", "t.list" and "t.c.list"',
 		["initialize", "t.replace", "t.list", "t.c.list"],
 	);
-	await thenTFullHolds(page, ["00010-b.html"], "e2");
+	await thenTFullHolds(page, ["b.html"], "e2");
 });
 
 test("addMemory sends t.memory.add and resolves to the item", async ({
@@ -1210,10 +1217,10 @@ test("addMemory sends t.memory.add and resolves to the item", async ({
 		});
 	});
 	let result;
-	await test.step('When addMemory("00010-a.html", {"text": "t", "source": {"cid": "c1"}}) is called', async () => {
+	await test.step('When addMemory("a.html", {"text": "t", "source": {"cid": "c1"}}) is called', async () => {
 		result = await page.evaluate(async () => {
 			const t = await import("/js/api/lcty-t.js");
-			return t.addMemory("00010-a.html", { text: "t", source: { cid: "c1" } });
+			return t.addMemory("a.html", { text: "t", source: { cid: "c1" } });
 		});
 	});
 	await test.step('Then it resolves to the item {"id": "m1", "text": "t", "at": "2026-11-15T00:00:00Z"}', () => {
@@ -1227,8 +1234,8 @@ test("addMemory sends t.memory.add and resolves to the item", async ({
 	await thenCalledWith(
 		rpc,
 		"t.memory.add",
-		'{"file": "00010-a.html", "text": "t", "source": {"cid": "c1"}}',
-		{ file: "00010-a.html", text: "t", source: { cid: "c1" } },
+		'{"file": "a.html", "text": "t", "source": {"cid": "c1"}}',
+		{ file: "a.html", text: "t", source: { cid: "c1" } },
 	);
 });
 
@@ -1331,14 +1338,14 @@ test("A read over rpc replaces the copies and calls the listeners", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	await givenHasManyHolds(page, [["go", "c1"]], "b1.5", "And");
 	await givenListener(page);
 	let calls;
-	await test.step('When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["00010-b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"', async () => {
+	await test.step('When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"', async () => {
 		calls = await readFrom(
 			page,
-			listsOf(["00010-b.html"], "b1.6", "e2", [["ruby", "c2"]]),
+			listsOf(["b.html"], "b1.6", "e2", [["ruby", "c2"]]),
 		);
 	});
 	await test.step('Then the rpc was called with "t.list" and then "t.c.list"', () => {
@@ -1347,7 +1354,7 @@ test("A read over rpc replaces the copies and calls the listeners", async ({
 	await test.step("And the listener was called once", async () => {
 		expect(await changes(page)).toBe(1);
 	});
-	await thenTFullHolds(page, ["00010-b.html"], "e2");
+	await thenTFullHolds(page, ["b.html"], "e2");
 	await thenSyncAt(page, "t_full", "b1.6");
 	await thenHasManyHolds(page, [["ruby", "c2"]]);
 	await thenSyncAt(page, "t_has_many_c", "b1.6");
@@ -1358,15 +1365,15 @@ test("A read over rpc of an older version calls no listener", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.7");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.7");
 	await givenHasManyHolds(page, [["go", "c1"]], "b1.7", "And");
 	await givenListener(page);
-	await test.step('When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["00010-b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"', () =>
-		readFrom(page, listsOf(["00010-b.html"], "b1.6", "e2", [["ruby", "c2"]])));
+	await test.step('When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["b.html"] at "b1.6" with the ETag "e2" and whose "t.c.list" answers the rows [["ruby", "c2"]] at "b1.6"', () =>
+		readFrom(page, listsOf(["b.html"], "b1.6", "e2", [["ruby", "c2"]])));
 	await test.step("Then the listener was not called", async () => {
 		expect(await changes(page)).toBe(0);
 	});
-	await thenTFullHolds(page, ["00010-a.html"], "e1");
+	await thenTFullHolds(page, ["a.html"], "e1");
 	await thenHasManyHolds(page, [["go", "c1"]]);
 });
 
@@ -1402,13 +1409,10 @@ test("A batch of the tags calls the listeners too", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	await givenListener(page);
-	await test.step('When applyTagBatch is called with a delete of "00010-a.html" and the ETag "e2" at "b1.6"', () =>
-		applyBatch(
-			page,
-			batchOf("b1.6", [tagDelete("00010-a.html"), setPut("e2")]),
-		));
+	await test.step('When applyTagBatch is called with a delete of "a.html" and the ETag "e2" at "b1.6"', () =>
+		applyBatch(page, batchOf("b1.6", [tagDelete("a.html"), setPut("e2")])));
 	await test.step("Then the listener is called once", async () => {
 		await expect.poll(() => changes(page)).toBe(1);
 	});
@@ -1421,13 +1425,13 @@ test("A batch that arrives during a read is written after it", async ({
 	context,
 }) => {
 	await background(page, context);
-	await givenTFullHolds(page, ["00010-a.html"], "e1", "b1.5");
+	await givenTFullHolds(page, ["a.html"], "e1", "b1.5");
 	await givenHasManyHolds(page, [["go", "c1"]], "b1.5", "And");
 	await givenListener(page);
-	await test.step('When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["00010-a.html"] at "b1.6" with the ETag "e1" and whose "t.c.list" answers the rows [["go", "c2"]] at "b1.6", after applyTagBatch was called with a put of ["ruby", "c2"] at "b1.7"', () =>
+	await test.step('When readTagsFrom(rpc) is called with an rpc whose "t.list" answers the tags ["a.html"] at "b1.6" with the ETag "e1" and whose "t.c.list" answers the rows [["go", "c2"]] at "b1.6", after applyTagBatch was called with a put of ["ruby", "c2"] at "b1.7"', () =>
 		readFrom(
 			page,
-			listsOf(["00010-a.html"], "b1.6", "e1", [["go", "c2"]]),
+			listsOf(["a.html"], "b1.6", "e1", [["go", "c2"]]),
 			batchOf("b1.7", [hasC("put", ["ruby", "c2"])]),
 		));
 	await thenHasManyHolds(

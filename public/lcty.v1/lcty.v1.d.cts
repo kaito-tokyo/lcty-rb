@@ -80,7 +80,7 @@ type LctyTextKey =
 	| "duplicateTagName"
 	| "invalidTagFile"
 	| "tagFileGone"
-	| "tagNumbersFull"
+	| "reservedTagName"
 	| "tagsChangedElsewhere"
 	| "tagsSaved"
 	| "saveFailedShort"
@@ -448,7 +448,7 @@ declare class LctyComposerElement extends HTMLElement {
 }
 
 /**
- * <lcty-t>: a tag file shown as a page (/t/NNNNN-<part>.html). It puts its sidebar before itself and the class "page"
+ * <lcty-t>: a tag file shown as a page (/t/<part>.html). It puts its sidebar before itself and the class "page"
  * on <body>, and its view first among its children; the children of the file are hidden (lcty.v1.css). Once they have
  * been parsed, the view shows the tag read-only with the tag editor's fields. /t/tag-file.js, imported once the page
  * has loaded, replaces the view with the editor.

@@ -806,7 +806,7 @@ class RpcTest < Lcty::Scenarios
 
   # A tag file of this test: a random part (the tests share the tag files)
   def tag_file(part = "t-#{SecureRandom.hex(5)}", extra = {})
-    { 'file' => "00500-#{part}.html", 'name' => part, 'ops' => [], 'prompt' => '', 'memory' => [] }.merge(extra)
+    { 'file' => "#{part}.html", 'name' => part, 'ops' => [], 'prompt' => '', 'memory' => [] }.merge(extra)
   end
 
   # [tags, etag] from t.list
@@ -815,11 +815,12 @@ class RpcTest < Lcty::Scenarios
     [r['items'], r['etag']]
   end
 
+  # Add the tag last and return it as t.list gives it (with its order)
   def add_tag(tag)
     tags, etag = tag_list
     r = rpc('t.replace', 'tags' => tags + [tag], 'etag' => etag)
     raise r.inspect if r['error']
-    tag
+    tag_list[0].find { |t| t['file'] == tag['file'] }
   end
 
   # A page receiving t.batch.updated
@@ -839,10 +840,10 @@ class RpcTest < Lcty::Scenarios
     r = nil
     step('Given a tag file') { add_tag(tag_file) }
     step('When t.list is called') { r = rpc('t.list')['result'] }
-    step('Then the result has the version, the etag and the items, each with file, name, ops, prompt and memory') do
+    step('Then the result has the version, the etag and the items, each with file, name, order, ops, prompt and memory') do
       assert_equal %w[etag items version], r.keys.sort
       refute_empty r['items']
-      r['items'].each { |t| assert_equal %w[file memory name ops prompt], t.keys.sort }
+      r['items'].each { |t| assert_equal %w[file name order ops prompt memory], t.keys }
     end
     step('And the etag is a quoted SHA-256 and the version is that of the last change') do
       assert_match(/\A"[0-9a-f]{64}"\z/, r['etag'])
@@ -869,9 +870,10 @@ class RpcTest < Lcty::Scenarios
       refute_equal etag, r['etag']
       assert_equal now, r['etag']
     end
-    step('And t.list has the new tag with its policy, its prompt and its memory item, and the tags that were there before') do
-      assert_equal tag, after.find { |t| t['file'] == tag['file'] }
-      assert_equal before, after.reject { |t| t['file'] == tag['file'] }
+    step('And t.list has the new tag last, with its policy, its prompt and its memory item, and the tags that were there before') do
+      tag = tag.merge('order' => (before.size + 1) * 10)
+      assert_equal tag, after.last
+      assert_equal before, after[0...-1]
     end
     note = nil
     step('And the page gets one t.batch.updated with the version and the actorId of the request') do
@@ -884,6 +886,32 @@ class RpcTest < Lcty::Scenarios
     step('And its records put the new tag, then put the new etag in t_set') do
       assert_equal [{ 'store' => 't_full', 'op' => 'put', 'row' => tag },
                     { 'store' => 't_set', 'op' => 'put', 'row' => { 'etag' => r['etag'] } }], note['records']
+    end
+  end
+
+  scenario 't.replace orders the tags as they were sent' do
+    before = pg = sent = nil
+    step('Given two tag files, and a page receiving t.batch.updated') do
+      add_tag(tag_file)
+      add_tag(tag_file)
+      before = tag_list[0]
+      pg = tag_page
+    end
+    step('When t.replace sends the tags in the reverse order, with the current etag') do
+      tags, etag = tag_list
+      sent = tags.reverse
+      assert_nil rpc('t.replace', 'tags' => sent, 'etag' => etag)['error']
+    end
+    after = nil
+    step('Then t.list lists them in that order, with the order 10, 20 and so on') do
+      after = tag_list[0]
+      assert_equal sent.map { |t| t['file'] }, after.map { |t| t['file'] }
+      assert_equal (1..sent.size).map { |i| i * 10 }, after.map { |t| t['order'] }
+    end
+    step("And the page's t.batch.updated puts the tags whose order changed, then the new etag in t_set") do
+      changed = after.reject { |t| before.include?(t) }.map { |t| ['t_full', 'put', t['file']] }
+      refute_empty changed
+      assert_equal [changed + [['t_set', 'put', tag_list[1]]]], tag_records(pg)
     end
   end
 
@@ -925,10 +953,12 @@ class RpcTest < Lcty::Scenarios
 
   [
     ['tags that are no array', '"body must be {\"tags\": [...]}"', ->(_) { 'x' }, 'body must be {"tags": [...]}'],
-    ['a file name without its number', '"invalid tag file name \"ruby.html\": must be NNNNN-<name>.html"',
-     ->(tags) { tags + [tag_file.merge('file' => 'ruby.html')] }, 'invalid tag file name "ruby.html": must be NNNNN-<name>.html'],
+    ['the file name index.html',
+     '"invalid tag file name \"index.html\": must be <name>.html, not index.html, and not start with . or lcty.v1"',
+     ->(tags) { tags + [tag_file.merge('file' => 'index.html')] },
+     'invalid tag file name "index.html": must be <name>.html, not index.html, and not start with . or lcty.v1'],
     ['two files with the same part', '"tag file names must be unique"',
-     ->(tags) { t = tag_file; tags + [t, t.merge('file' => t['file'].sub('00500', '00510'))] }, 'tag file names must be unique'],
+     ->(tags) { t = tag_file; tags + [t, t.merge('name' => 'other')] }, 'tag file names must be unique'],
     ['a memory item with a blank text', '"memory must be an array of {id, text}"',
      ->(tags) { tags + [tag_file("m-#{SecureRandom.hex(5)}", 'memory' => [{ 'id' => 'm1', 'text' => '  ' }])] },
      'memory must be an array of {id, text}']
@@ -979,9 +1009,11 @@ class RpcTest < Lcty::Scenarios
 
   [
     ['a text for an unknown file', 9, '"no such tag file"', 'no such tag file',
-     ->(_) { { 'file' => "00500-nope-#{SecureRandom.hex(5)}.html", 'text' => 'x' } }],
-    ['a text for a name without its number', 3, '"invalid tag file name: must be NNNNN-<name>.html"',
-     'invalid tag file name: must be NNNNN-<name>.html', ->(t) { { 'file' => t['name'], 'text' => 'x' } }],
+     ->(_) { { 'file' => "nope-#{SecureRandom.hex(5)}.html", 'text' => 'x' } }],
+    ['a text for the file name index.html', 3,
+     '"invalid tag file name: must be <name>.html, not index.html, and not start with . or lcty.v1"',
+     'invalid tag file name: must be <name>.html, not index.html, and not start with . or lcty.v1',
+     ->(_) { { 'file' => 'index.html', 'text' => 'x' } }],
     ['a blank text for its file', 3, '"text is required"', 'text is required', ->(t) { { 'file' => t['file'], 'text' => '   ' } }]
   ].each do |request, code, message_label, message, params|
     scenario "t.memory.add refuses what cannot be done (#{request})" do

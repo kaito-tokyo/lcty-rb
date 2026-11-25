@@ -211,11 +211,18 @@ export function renderTagsEditor(
 	const save = async () => {
 		const bad = work.find((t) => !t.invalid && tagNameError(t.name));
 		if (bad !== undefined) {
-			status.textContent = tr(
-				"badTagName",
-				'The tag name "{name}" cannot be used (1 to 40 characters, no spaces, control characters or : ; / " \' ` ~ \\ |)',
-				{ name: bad.name },
-			);
+			status.textContent =
+				tagNameError(bad.name) === "reserved"
+					? tr(
+							"reservedTagName",
+							'The tag name "{name}" is reserved (index, or starting with . or lcty.v1)',
+							{ name: bad.name },
+						)
+					: tr(
+							"badTagName",
+							'The tag name "{name}" cannot be used (1 to 40 characters, no spaces, control characters or : ; / " \' ` ~ \\ |)',
+							{ name: bad.name },
+						);
 			return;
 		}
 		// Names with the same part are one tag (one file); an invalid tag's part is its file's
@@ -225,22 +232,13 @@ export function renderTagsEditor(
 			return;
 		}
 		// Blank memory items are left out of what is sent; the editor keeps them until the save succeeds
-		let tags;
-		try {
-			tags = assignFileNames(
-				work.map((t) => ({
-					...t,
-					name: t.name.normalize("NFC"),
-					memory: (t.memory || []).filter((m) => m.text.trim()),
-				})),
-			);
-		} catch {
-			status.textContent = tr(
-				"tagNumbersFull",
-				"There is no number left for a new tag. Renumber the tags on the reorder page first.",
-			);
-			return;
-		}
+		const tags = assignFileNames(
+			work.map((t) => ({
+				...t,
+				name: t.name.normalize("NFC"),
+				memory: (t.memory || []).filter((m) => m.text.trim()),
+			})),
+		);
 		try {
 			version = await putTags(tags, version);
 		} catch (e) {

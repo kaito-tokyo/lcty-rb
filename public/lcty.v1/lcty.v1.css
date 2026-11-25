@@ -164,8 +164,8 @@ lcty-c::part(lcty-c__tag--unknown) {
 	line-height: 1;
 	color: var(--fg-dim);
 } /* in <lcty-c>: lcty-c__tag-remove */
-/* the new-conversation picker (#setup-tags): browser defaults, except that a checkbox and its tag never wrap apart */
-#setup-tags > label {
+/* the new-conversation picker (#setup-tags): browser defaults, except that a checkbox, its tag and its ⚙︎ never wrap apart */
+#setup-tags > .tag-pick {
 	display: inline-block;
 }
 /* a chosen tag: its chip in the accent color */
@@ -1157,7 +1157,7 @@ lcty-c::part(lcty-memory__proposal) {
 	gap: 6px;
 	align-items: flex-start;
 }
-/* a tag file shown as a page (/t/NNNNN-<part>.html): <lcty-t> is the card, and its view shows the file's own
+/* a tag file shown as a page (/t/<part>.html): <lcty-t> is the card, and its view shows the file's own
    children, which are hidden */
 lcty-t > :is(lcty-tagop, lcty-system, lcty-memory) {
 	display: none;

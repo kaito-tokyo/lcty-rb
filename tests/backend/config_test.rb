@@ -426,16 +426,16 @@ class ConfigTest < Lcty::Scenarios
     '"日本語" (not ASCII)' => '日本語',
     '"c~23" (an escaped symbol)' => 'c~23',
     '"a#b" (punctuation)' => 'a#b',
-    '244 bytes' => 'あ' * 81 + 'a'
+    '250 bytes' => 'あ' * 83 + 'a'
   }.each do |label, value|
-    scenario "tag_ref? accepts tag references of at most 244 bytes (#{label})" do
+    scenario "tag_ref? accepts tag references of at most 250 bytes (#{label})" do
       step("Then tag_ref? accepts #{label}") { assert Chatty.tag_ref?(value), value.inspect }
     end
   end
 
   {
     '"" (empty)' => '',
-    '245 bytes' => 'あ' * 81 + 'ab',
+    '251 bytes' => 'あ' * 83 + 'ab',
     '"tag:work" (a colon)' => 'tag:work',
     '"a/b" (a slash)' => 'a/b',
     'a backslash' => 'a\\b',
@@ -446,7 +446,7 @@ class ConfigTest < Lcty::Scenarios
     'bytes that are not UTF-8' => "a\xFFb".dup.force_encoding(Encoding::UTF_8),
     'a number' => 1
   }.each do |label, value|
-    scenario "tag_ref? rejects whitespace, controls, path separators, colons and more than 244 bytes (#{label})" do
+    scenario "tag_ref? rejects whitespace, controls, path separators, colons and more than 250 bytes (#{label})" do
       step("Then tag_ref? rejects #{label}") { refute Chatty.tag_ref?(value), value.inspect }
     end
   end

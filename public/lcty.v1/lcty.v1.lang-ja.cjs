@@ -64,8 +64,8 @@ LctyT.addLang("ja", {
 	invalidTagFile:
 		"タグファイル {file} は読めない（<lcty-t> がない）ため、ここでは編集できません。データディレクトリの t/ にあるファイルを直すか、削除してください。",
 	tagFileGone: "このタグはもうありません。名前が変わったか、削除されました。",
-	tagNumbersFull:
-		"新しいタグに付ける番号がありません。先に並べ替えのページで番号を振り直してください。",
+	reservedTagName:
+		"タグの名前「{name}」は予約されているため使えません（index、および . や lcty.v1 で始まる名前）",
 	tagsChangedElsewhere:
 		"ほかの場所でタグが変更されたので、読み込み直しました。もう一度編集してください。",
 	tagsSaved: "タグを保存しました",

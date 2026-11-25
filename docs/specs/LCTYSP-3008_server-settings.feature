@@ -237,7 +237,7 @@ Feature: LCTYSP-3008 Server settings
       | "abc\n" (a trailing newline) |
       | "日本語" (not ASCII)         |
 
-  Scenario Outline: tag_ref? accepts tag references of at most 244 bytes
+  Scenario Outline: tag_ref? accepts tag references of at most 250 bytes
     Then tag_ref? accepts <value>
 
     Examples:
@@ -247,15 +247,15 @@ Feature: LCTYSP-3008 Server settings
       | "日本語" (not ASCII)       |
       | "c~23" (an escaped symbol) |
       | "a#b" (punctuation)        |
-      | 244 bytes                  |
+      | 250 bytes                  |
 
-  Scenario Outline: tag_ref? rejects whitespace, controls, path separators, colons and more than 244 bytes
+  Scenario Outline: tag_ref? rejects whitespace, controls, path separators, colons and more than 250 bytes
     Then tag_ref? rejects <value>
 
     Examples:
       | value                    |
       | "" (empty)               |
-      | 245 bytes                |
+      | 251 bytes                |
       | "tag:work" (a colon)     |
       | "a/b" (a slash)          |
       | a backslash              |

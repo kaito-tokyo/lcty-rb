@@ -102,8 +102,8 @@ test("Every page takes the server's tags as soon as it is shown", async ({
 	const part = uniqueWord("force");
 	const before = part.toUpperCase();
 	const after = `${part[0].toUpperCase()}${part.slice(1)}`;
-	await test.step('Given the tag file "00010-<part>.html" named "<PART>", in upper case', () =>
-		putTags(request, [{ file: `00010-${part}.html`, name: before }]));
+	await test.step('Given the tag file "<part>.html" named "<PART>", in upper case', () =>
+		putTags(request, [{ file: `${part}.html`, name: before }]));
 	let conv;
 	await test.step('And a conversation tagged "<part>"', async () => {
 		conv = await createConversation(request, {
@@ -121,7 +121,7 @@ test("Every page takes the server's tags as soon as it is shown", async ({
 	// Changed on the server, not through this browser: the next page shown has the new name without any wait for idle
 	// time or a save
 	await test.step('When the tag is renamed "<Part>" on the server, not through the browser', () =>
-		putTags(request, [{ file: `00010-${part}.html`, name: after }]));
+		putTags(request, [{ file: `${part}.html`, name: after }]));
 	await test.step("And the new conversation page /c/ is opened again", () =>
 		openNewPage(page));
 	await test.step(`Then the conversation's tag chip reads "<Part>"`, async () => {
@@ -275,19 +275,19 @@ test("The tag button next to 新しい会話 opens the tag menu, which lists the
 	await test.step("Then the tag menu is shown", async () => {
 		await expect(tagMenu(page)).toBeVisible();
 	});
-	await test.step(`And it lists A and B, in that order, each with the link "編集" to its file's page, /t/00010-A.html and /t/00020-B.html`, async () => {
+	await test.step(`And it lists A and B, in that order, each with the link "編集" to its file's page, /t/A.html and /t/B.html`, async () => {
 		await expect(menuNames(page)).toHaveText([a, b]);
 		await expect(edits).toHaveText(["編集", "編集"]);
 		const paths = await edits.evaluateAll((links) =>
 			links.map((l) => new URL(l.href).pathname),
 		);
-		expect(paths).toEqual([`/t/00010-${a}.html`, `/t/00020-${b}.html`]);
+		expect(paths).toEqual([`/t/${a}.html`, `/t/${b}.html`]);
 	});
 	await test.step(`When "編集" of B is clicked`, async () => {
 		await edits.nth(1).click();
 	});
-	await test.step("Then the browser is on /t/00020-B.html", async () => {
-		await expect(page).toHaveURL(new RegExp(`/t/00020-${b}\\.html$`));
+	await test.step("Then the browser is on /t/B.html", async () => {
+		await expect(page).toHaveURL(new RegExp(`/t/${b}\\.html$`));
 	});
 });
 

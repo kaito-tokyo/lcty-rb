@@ -331,16 +331,22 @@ Feature: LCTYSP-3020 The RPC protocol
   Scenario: t.list returns every tag file with the ETag of the set and the version
     Given a tag file
     When t.list is called
-    Then the result has the version, the etag and the items, each with file, name, ops, prompt and memory
+    Then the result has the version, the etag and the items, each with file, name, order, ops, prompt and memory
     And the etag is a quoted SHA-256 and the version is that of the last change
 
   Scenario: t.replace replaces the tag files as a whole and announces them with the actor
     Given the tags and the etag from t.list, and a page receiving t.batch.updated
     When t.replace sends them and a new tag file with a policy, a prompt and a memory item, with the etag
     Then the result has the version and a new etag, the one t.list gives next
-    And t.list has the new tag with its policy, its prompt and its memory item, and the tags that were there before
+    And t.list has the new tag last, with its policy, its prompt and its memory item, and the tags that were there before
     And the page gets one t.batch.updated with the version and the actorId of the request
     And its records put the new tag, then put the new etag in t_set
+
+  Scenario: t.replace orders the tags as they were sent
+    Given two tag files, and a page receiving t.batch.updated
+    When t.replace sends the tags in the reverse order, with the current etag
+    Then t.list lists them in that order, with the order 10, 20 and so on
+    And the page's t.batch.updated puts the tags whose order changed, then the new etag in t_set
 
   Scenario: t.replace announces the tag files that went as deletes
     Given a tag file, and a page receiving t.batch.updated
@@ -364,11 +370,11 @@ Feature: LCTYSP-3020 The RPC protocol
     And the tags are unchanged
 
     Examples:
-      | tags                            | message                                                           |
-      | tags that are no array          | "body must be {\"tags\": [...]}"                                  |
-      | a file name without its number  | "invalid tag file name \"ruby.html\": must be NNNNN-<name>.html"  |
-      | two files with the same part    | "tag file names must be unique"                                   |
-      | a memory item with a blank text | "memory must be an array of {id, text}"                           |
+      | tags                            | message                                                                                                       |
+      | tags that are no array          | "body must be {\"tags\": [...]}"                                                                              |
+      | the file name index.html        | "invalid tag file name \"index.html\": must be <name>.html, not index.html, and not start with . or lcty.v1"   |
+      | two files with the same part    | "tag file names must be unique"                                                                               |
+      | a memory item with a blank text | "memory must be an array of {id, text}"                                                                       |
 
   Scenario: t.memory.add adds a memory item and announces the tag
     Given a tag file with a display name in Japanese, the etag from t.list, and a page receiving t.batch.updated
@@ -384,10 +390,10 @@ Feature: LCTYSP-3020 The RPC protocol
     And the tag file is unchanged
 
     Examples:
-      | request                                 | code | message                                             |
-      | a text for an unknown file              | 9    | "no such tag file"                                  |
-      | a text for a name without its number    | 3    | "invalid tag file name: must be NNNNN-<name>.html"  |
-      | a blank text for its file               | 3    | "text is required"                                  |
+      | request                                 | code | message                                                                                        |
+      | a text for an unknown file              | 9    | "no such tag file"                                                                             |
+      | a text for the file name index.html     | 3    | "invalid tag file name: must be <name>.html, not index.html, and not start with . or lcty.v1"  |
+      | a blank text for its file               | 3    | "text is required"                                                                             |
 
   Scenario: c.update.title fits the title into the slot and sends a c_meta record
     Given a conversation with a title slot of 32 bytes, and a page receiving c.batch.updated

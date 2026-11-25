@@ -104,7 +104,7 @@ Everything is in the data directory, `~/Library/Application Support/tokyo.kaito.
 (`LCTY_DATA_DIR`; see Settings for Linux):
 
 - `c/<id>.html`: one file per conversation. Opened through the server (`/c/<id>.html`) it shows as the conversation.
-- `t/NNNNN-<name>.html`: one file per tag (its name, prompt and memory); `NNNNN` is the order, changed on `/t/`.
+- `t/<name>.html`: one file per tag (its name, its place in the order, prompt and memory); the order is changed on `/t/`.
 - `lcty_t.sqlite`: the current tags of conversations, one row per tag and conversation (an older version's `tags.sqlite` is
   renamed to it when the server starts). Tag definitions and memory kept there by an older version are dropped when it
   starts (they are not converted; define the tags again).

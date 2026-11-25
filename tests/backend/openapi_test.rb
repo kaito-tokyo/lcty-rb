@@ -18,7 +18,7 @@ require File.expand_path('../../lcty.rb', __dir__)
 class OpenapiTest < Lcty::Scenarios
   REPO_ROOT = File.expand_path('../..', __dir__)
   CID = 'openapi-3021'
-  TAG_FILE = '03021-openapi.html'
+  TAG_FILE = 'openapi.html'
 
   def self.port
     @port ||= begin

@@ -71,7 +71,7 @@ test("Opening a conversation loads its frame, its features and the sidebar", asy
 	const pageErrors = [];
 	const failed = [];
 	await test.step("Given a tag whose display name is its file-name part in upper case", () =>
-		putTags(request, [{ file: `00010-${part}.html`, name: display }]));
+		putTags(request, [{ file: `${part}.html`, name: display }]));
 	await test.step("And a conversation with that tag, created through the API", async () => {
 		conv = await createConversation(request, {
 			title: uniqueWord("開く"),
@@ -209,7 +209,7 @@ test("Choosing a tag in the header and removing it saves the tags", async ({
 		(await (await request.get(`/v1/conversations/${id}`)).json()).tags;
 	const conv =
 		await test.step("Given a tag, and a conversation of two finished turns is open", async () => {
-			await putTags(request, [{ file: `00010-${part}.html`, name: part }]);
+			await putTags(request, [{ file: `${part}.html`, name: part }]);
 			return openTwoTurns(page, request);
 		});
 	await test.step("When the tag is chosen in the tag picker in the header", async () => {

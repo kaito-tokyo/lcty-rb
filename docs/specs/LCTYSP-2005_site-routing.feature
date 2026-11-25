@@ -49,9 +49,9 @@ Feature: LCTYSP-2005 The paths of the site
     Then the answer is 404
 
     Examples:
-      | path                      |
-      | /c/no-such-id.html        |
-      | /c/sub/no-such-id.html    |
-      | /c/notes.txt              |
-      | /t/00010-no-such-tag.html |
-      | /t/notes.html             |
+      | path                   |
+      | /c/no-such-id.html     |
+      | /c/sub/no-such-id.html |
+      | /c/notes.txt           |
+      | /t/no-such-tag.html    |
+      | /t/sub/notes.html      |

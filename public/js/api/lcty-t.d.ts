@@ -59,7 +59,7 @@ export function readTagDefs(): Promise<{
 export function putTags(tags: Tag[], etag: string | null): Promise<string>;
 
 /**
- * Add a memory item ({text, source}) to the tag in file, e.g. 00010-ruby.html (t.memory.add); rejects with an RpcError
+ * Add a memory item ({text, source}) to the tag in file, e.g. ruby.html (t.memory.add); rejects with an RpcError
  * when the file is gone (code 9) or the text is blank (code 3). Resolves to the item as written, {id, text, at,
  * source?}.
  */

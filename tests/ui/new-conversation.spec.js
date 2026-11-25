@@ -171,6 +171,31 @@ test("Choosing a tag fills the system prompt draft from its prompt and memory", 
 	});
 });
 
+test("Each tag in the list has a ⚙︎ link to its file's page", async ({
+	page,
+	request,
+}) => {
+	const [a, b] = [uniqueWord("a"), uniqueWord("b")];
+	const cogs = page.locator("#setup-tags > .tag-pick > a");
+	await test.step("Given the tags A and B, in that order", () =>
+		putTags(request, [{ name: a }, { name: b }]));
+	await test.step("And the new conversation page /c/ is open", () =>
+		openNewPage(page));
+	await test.step(`Then each tag is followed by the link "⚙︎" labelled "「A」を編集" and "「B」を編集", to /t/A.html and /t/B.html`, async () => {
+		await expect(cogs).toHaveText(["⚙︎", "⚙︎"]);
+		await expect(cogs.nth(0)).toHaveAccessibleName(`「${a}」を編集`);
+		await expect(cogs.nth(1)).toHaveAccessibleName(`「${b}」を編集`);
+		const paths = await cogs.evaluateAll((links) =>
+			links.map((l) => new URL(l.href).pathname),
+		);
+		expect(paths).toEqual([`/t/${a}.html`, `/t/${b}.html`]);
+	});
+	await test.step('When the "⚙︎" of B is clicked', () => cogs.nth(1).click());
+	await test.step("Then the browser is on /t/B.html", async () => {
+		await expect(page).toHaveURL(new RegExp(`/t/${b}\\.html$`));
+	});
+});
+
 test("A fork starts from the source's system prompt and puts the chosen message into the composer", async ({
 	page,
 	request,

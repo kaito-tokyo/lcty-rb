@@ -91,8 +91,8 @@ for (const path of [
 	"/c/no-such-id.html",
 	"/c/sub/no-such-id.html",
 	"/c/notes.txt",
-	"/t/00010-no-such-tag.html",
-	"/t/notes.html",
+	"/t/no-such-tag.html",
+	"/t/sub/notes.html",
 ]) {
 	test(`What is not a page or a file of the site is 404 (${path})`, async ({
 		request,

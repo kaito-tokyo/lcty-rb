@@ -7,9 +7,10 @@
 
 Feature: LCTYSP-1018 Tags, drafts and memory
 
-  The tags of LCTYSP-0009 in the browser. A tag is a tag file {file, name, ops, prompt, memory}: its file name
-  NNNNN-<part>.html gives the draft order, and conversations refer to the tag by the part (the reference, see
-  LCTYSP-1020), while the editor and the model see its display name. composeDraft builds the system prompt draft of a
+  The tags of LCTYSP-0009 in the browser. A tag is a tag file {file, name, ops, prompt, memory}: its file name is
+  <part>.html, the tags come in their order (kept in the files, which t.list answers sorted), which is the draft
+  order, and conversations refer to the tag by the part (the reference, see LCTYSP-1020), while the editor and the
+  model see its display name. composeDraft builds the system prompt draft of a
   new conversation from the chosen references. renderTagsEditor draws the editor of the definitions and their memory
   and saves them with t.replace over the tab's /v1/rpc connection (LCTYSP-0012, LCTYSP-0014), sending the ETag they
   were read with and giving each tag its file name; the order is changed on the reorder page /t/, not in the editor.
@@ -19,19 +20,19 @@ Feature: LCTYSP-1018 Tags, drafts and memory
   and adds the adopted ones with t.memory.add. /v1/rpc and llama-server are answered by the test: as the server does,
   a change is announced with t.batch.updated before its response, and the page follows it as the sidebar does.
 
-  In the steps the definitions "a", "b", … are the tag files "00010-a.html", "00020-b.html", … named "a", "b", … with
-  no ops, unless a step gives the file or the name.
+  In the steps the definitions "a", "b", … are the tag files "a.html", "b.html", … named "a", "b", …, in
+  that order, with no ops, unless a step gives the file or the name.
 
   Background:
     Given /v1/rpc and the llama-server at http://llm.test are answered by the test
 
   Scenario: The draft follows the tag files, not the order of the choice
-    Given the tag files "00010-ruby.html" named "Ruby" with a prompt and two memory items and "00020-go.html" named "Go" with a prompt and no memory
+    Given the tag files "ruby.html" named "Ruby" with a prompt and two memory items and "go.html" named "Go" with a prompt and no memory
     When composeDraft composes the draft of "go" and "ruby"
     Then it is the prompt of "Ruby", its memory under "# Memory (Ruby)" and the prompt of "Go", joined by blank lines
 
   Scenario: The draft chooses tags by their reference, not by their display name
-    Given the tag file "00010-c~23.html" named "C#" with the prompt "Sharp" and the memory item "x"
+    Given the tag file "c~23.html" named "C#" with the prompt "Sharp" and the memory item "x"
     When composeDraft composes the draft of "C#" and of "c~23"
     Then the draft of "C#" is ""
     And the draft of "c~23" is "Sharp\n\n# Memory (C#)\n- x"
@@ -68,7 +69,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And t.replace will store the definitions with timestamps and answer the ETag "e2"
     When the prompt of "ruby" is changed to "New prompt", a new tag "rust" is added and Save is clicked
     Then t.replace is sent with the etag "e1"
-    And it is sent "00010-ruby.html" with the new prompt and only the memory item "fact", "00020-go.html" and "00030-rust.html" without memory
+    And it is sent "ruby.html" with the new prompt and only the memory item "fact", "go.html" and "rust.html" without memory
     And onSaved is called with the definitions as t.replace stored them
     And the toast says "Tags saved", the status is empty and isDirty() is false
     When the prompt of "go" is changed and Save is clicked
@@ -78,13 +79,13 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
     When the name of "go" is changed to "Golang", the new tags "C#" and "Café" typed decomposed are added and Save is clicked
-    Then t.replace is sent "00010-ruby.html" named "ruby", "00020-golang.html" named "Golang", "00030-c~23.html" named "C#" and "00040-café.html" named "Café", composed
+    Then t.replace is sent "ruby.html" named "ruby", "golang.html" named "Golang", "c~23.html" named "C#" and "café.html" named "Café", composed
 
-  Scenario: A new tag is numbered after the largest number
+  Scenario: The tags are sent in the editor's order, not in the order of their files
     Given a page on the server's origin
-    Given the editor of the tag files "00010-ruby.html" named "ruby" and "00050-go.html" named "go"
+    Given the editor of the tag files "zig.html" named "zig" and "ada.html" named "ada"
     When a new tag "rust" is added and Save is clicked
-    Then t.replace is sent the files "00010-ruby.html", "00050-go.html" and "00060-rust.html"
+    Then t.replace is sent the files "zig.html", "ada.html" and "rust.html", in this order
 
   Scenario: A tag name that breaks the rules is not saved, and the status says the rules
     Given a page on the server's origin
@@ -117,6 +118,20 @@ Feature: LCTYSP-1018 Tags, drafts and memory
       | 41 code points        | 41 times "x"          |
       | 41 astral characters  | 41 times "𝒳"          |
 
+  Scenario Outline: A reserved tag name is not saved, and the status says why
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and "go"
+    When the name of "go" is changed to "<name>" and Save is clicked
+    Then the status says 'The tag name "<name>" is reserved (index, or starting with . or lcty.v1)'
+    And no t.replace is sent
+    And isDirty() is true
+
+    Examples:
+      | case               | name     |
+      | the reorder page   | Index    |
+      | a leading dot      | .net     |
+      | the frame's prefix | lcty.v1x |
+
   Scenario Outline: A tag name with the file-name part of another tag is not saved
     Given a page on the server's origin
     Given the editor of the definitions "ruby" and "go"
@@ -132,43 +147,43 @@ Feature: LCTYSP-1018 Tags, drafts and memory
 
   Scenario: An invalid tag is shown without fields and sent back as it is
     Given a page on the server's origin
-    Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"
-    Then the second section has the name "broken", the button "Delete" and the note that "00020-broken.html" cannot be read, and no field
+    Given the editor of the definitions "ruby" and the invalid tag "broken.html" named "broken"
+    Then the second section has the name "broken", the button "Delete" and the note that "broken.html" cannot be read, and no field
     When the prompt of "ruby" is changed to "New prompt" and Save is clicked
-    Then t.replace is sent "00010-ruby.html" with the new prompt and "00020-broken.html" as it was, with invalid true
+    Then t.replace is sent "ruby.html" with the new prompt and "broken.html" as it was, with invalid true
 
   Scenario: A new tag with the file-name part of an invalid tag is not saved
     Given a page on the server's origin
-    Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"
+    Given the editor of the definitions "ruby" and the invalid tag "broken.html" named "broken"
     When a new tag "Broken" is added and Save is clicked
     Then the status says "Tag names must be unique"
     And no t.replace is sent
 
-  # renderTagsEditor with file: the page of a tag file (/t/NNNNN-<part>.html) edits that tag alone
+  # renderTagsEditor with file: the page of a tag file (/t/<part>.html) edits that tag alone
 
   Scenario: With a file, the editor shows only that tag and no + New tag
     Given a page on the server's origin
-    Given the editor of the definitions "ruby" and "go" for the file "00020-go.html"
+    Given the editor of the definitions "ruby" and "go" for the file "go.html"
     Then it shows one section, "go", with its prompt
     And there is no button "+ New tag"
 
   Scenario: Saving with a file sends the whole set and gives onSaved the tag's new file
     Given a page on the server's origin
-    Given the editor of the definitions "ruby" and "go" for the file "00020-go.html"
+    Given the editor of the definitions "ruby" and "go" for the file "go.html"
     When the name is changed to "Golang" and Save is clicked
-    Then t.replace is sent "00010-ruby.html" as it was and "00020-golang.html" named "Golang"
-    And onSaved is given the file "00020-golang.html"
+    Then t.replace is sent "ruby.html" as it was and "golang.html" named "Golang"
+    And onSaved is given the file "golang.html"
 
   Scenario: Deleting the tag of the file saves at once and gives onSaved no file
     Given a page on the server's origin
-    Given the editor of the definitions "ruby" and "go" for the file "00020-go.html"
+    Given the editor of the definitions "ruby" and "go" for the file "go.html"
     When Delete is clicked and the question is accepted
-    Then t.replace is sent only "00010-ruby.html"
+    Then t.replace is sent only "ruby.html"
     And onSaved is given the file null
 
   Scenario: A file that is not in the set shows that the tag is gone
     Given a page on the server's origin
-    Given the editor of the definitions "ruby" for the file "00020-go.html"
+    Given the editor of the definitions "ruby" for the file "go.html"
     Then no section is shown and the list says "This tag is not in the tags any more: it was renamed or deleted."
 
   Scenario: A name is trimmed and may have 40 code points
@@ -202,7 +217,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Given the editor of the definitions "ruby" with the memory items "fact" and "  ", and "go"
     And t.replace fails with the RPC error "boom"
     When Save is clicked
-    Then t.replace was sent "00010-ruby.html" with only the memory item "fact"
+    Then t.replace was sent "ruby.html" with only the memory item "fact"
     And the status says "Could not save: boom"
     And isDirty() is false
     When "+ New tag" is clicked
@@ -278,7 +293,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Then the dialog is closed
 
   Scenario: A memory proposal continues the conversation with one temporary message
-    Given the tag files "00010-ruby.html" named "Ruby" with the memory item "existing", "00020-go.html" named "Go" without memory and "00030-python.html" named "Python"
+    Given the tag files "ruby.html" named "Ruby" with the memory item "existing", "go.html" named "Go" without memory and "python.html" named "Python"
     And a conversation with the tags "ruby", "unknown" and "go", the instructions "Be brief" and a user message, a reply and an empty reply
     And the model replies with proposals for "Ruby", "ruby", "Python", "Go" with blank text and "Go"
     When proposeMemory asks for proposals with the backend "m" at http://llm.test/ and the key "k"
@@ -297,7 +312,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And nothing is sent to the model
 
   Scenario: An invalid tag gets no proposal, like an undefined one
-    Given the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"
+    Given the definitions "ruby" and the invalid tag "broken.html" named "broken"
     And a conversation with the tags "broken"
     When proposeMemory asks for proposals
     Then it throws "The conversation has no defined tags"
@@ -308,7 +323,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     And a conversation with the tags "ruby"
     And the model replies with "{}"
     When proposeMemory asks for proposals
-    Then it returns no proposals and the tag "ruby" with the file "00010-ruby.html"
+    Then it returns no proposals and the tag "ruby" with the file "ruby.html"
 
   Scenario Outline: A failed proposal throws
     Given the definitions "ruby"
@@ -336,10 +351,10 @@ Feature: LCTYSP-1018 Tags, drafts and memory
   Scenario: The memory dialog shows every proposal, adopted
     Given a page on the server's origin
     Given a <dialog id="memory-dialog"> in the page
-    When openMemoryDialog shows the proposals "A" for "Ruby" and "B" for "Go" with the tags "Ruby" of "00010-ruby.html" and "Go" of "00020-go.html"
+    When openMemoryDialog shows the proposals "A" for "Ruby" and "B" for "Go" with the tags "Ruby" of "ruby.html" and "Go" of "go.html"
     Then "#memory-dialog" is open as a modal dialog
     And it shows two proposals, each with a checked "Adopt" box, a choice of "Ruby" and "Go" with its tag chosen, and its text
-    And the choices are the files "00010-ruby.html" and "00020-go.html"
+    And the choices are the files "ruby.html" and "go.html"
     And it has the buttons "Close" and "Add the adopted items"
 
   Scenario: The adopted proposals are added as edited
@@ -347,7 +362,7 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Given a <dialog id="memory-dialog"> in the page
     And openMemoryDialog shows the proposals "A" for "Ruby", "B" for "Go" and "C" for "Ruby" with the source of the conversation
     When the text of "A" is changed to "  A2  ", the tag of "B" to "Ruby", "C" is not adopted and Add the adopted items is clicked
-    Then t.memory.add is sent "A2" and then "B" for "00010-ruby.html", each with the source
+    Then t.memory.add is sent "A2" and then "B" for "ruby.html", each with the source
     And the dialog is closed, onDone is called and the toast says "Added 2 items to memory"
 
   Scenario: Adding nothing adopted sends nothing

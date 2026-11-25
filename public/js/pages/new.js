@@ -16,6 +16,7 @@ import {
 } from "../common.js";
 import { replyArticle, userArticle } from "../convert/article.js";
 import { localize, tr } from "../i18n.js";
+import { siteUrl } from "../site.js";
 import { sortTags, tagRef } from "../tag-names.js";
 import { composeDraft } from "../tags.js";
 import {
@@ -67,7 +68,7 @@ export function initNewPage() {
 
 	function renderTags() {
 		const picker = form.tags;
-		// One checkbox per tag definition, then ⚙︎; rebuilt only when the definitions change
+		// One checkbox and ⚙︎ link per tag definition, then ⚙︎; rebuilt only when the definitions change
 		const names = JSON.stringify(state.tagDefs.map((t) => [t.file, t.name]));
 		if (picker.dataset.names !== names) {
 			picker.dataset.names = names;
@@ -85,7 +86,16 @@ export function initNewPage() {
 						chip.className = "tag-chip";
 						chip.textContent = t.name;
 						label.append(box, chip);
-						return label;
+						// ⚙︎ after each tag: its file's page, /t/<part>.html
+						const edit = document.createElement("a");
+						edit.href = siteUrl(`t/${encodeURIComponent(t.file)}`).href;
+						edit.title = tr("editTagNamed", "Edit {name}", { name: t.name });
+						edit.setAttribute("aria-label", edit.title);
+						edit.textContent = "⚙︎";
+						const item = document.createElement("span");
+						item.className = "tag-pick";
+						item.append(label, " ", edit);
+						return item;
 					})
 				: [tr("noTagsYet", "(No tags yet)")];
 			picker.replaceChildren(

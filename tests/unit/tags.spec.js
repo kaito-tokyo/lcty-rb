@@ -10,9 +10,9 @@
 // open <dialog>s: they run in a real browser on the test server's origin, on the empty unit page. composeDraft and
 // proposeMemory run in Node.js, in tests/unit/tags.test.js. The page's /v1/rpc connection (api/tab-rpc.js, through
 // api/lcty-t.js) is answered by a fake of the server set with context.routeWebSocket (server.*): it keeps a set of tags
-// with its ETag and version, answers initialize, t.list, t.c.list, t.replace and t.memory.add, records the params of
-// each change, and announces a change with t.batch.updated before its response, as the server does. The page follows
-// it as the sidebar does (the notification applied, the lists read whenever the connection opens), so the browser's
+// with its ETag and version (each tag listed with its order, its place in the set), answers initialize, t.list,
+// t.c.list, t.replace and t.memory.add, records the params of each change, and announces a change with t.batch.updated
+// before its response, as the server does. The page follows it as the sidebar does (the notification applied, the lists read whenever the connection opens), so the browser's
 // copy of the tags is the real one in IndexedDB, and the server's data does not matter. The fake llama-server at
 // http://llm.test is answered by a route. What the module calls back (onSaved, toast, onDone) is pushed to window.seen.
 
@@ -51,6 +51,10 @@ function replyWith(text, timings = { prompt_n: 3, predicted_n: 9 }) {
 /** The code of a generic failure the test makes a call fail with (JSON-RPC's internal error). */
 const INTERNAL_ERROR = -32603;
 
+/** The rows of tags as the server lists them: copies, each with its order from its place, ignoring any order sent. */
+const ordered = (tags) =>
+	tags.map((t, i) => ({ ...structuredClone(t), order: (i + 1) * 10 }));
+
 /** The fake's answer to one call of the page: a result, or an RpcError thrown as {code, message}. */
 function answerCall(server, method, params) {
 	if (method === "t.replace") server.replaces.push(params);
@@ -70,7 +74,7 @@ function answerCall(server, method, params) {
 			return {
 				version: server.version(),
 				etag: server.etag,
-				items: structuredClone(server.tags),
+				items: ordered(server.tags),
 			};
 		case "t.c.list":
 			return { version: server.version(), items: [] };
@@ -91,7 +95,11 @@ function answerCall(server, method, params) {
 						op: "delete",
 						row: { file: t.file },
 					})),
-				...next.tags.map((row) => ({ store: "t_full", op: "put", row })),
+				...ordered(next.tags).map((row) => ({
+					store: "t_full",
+					op: "put",
+					row,
+				})),
 				{ store: "t_set", op: "put", row: { etag: next.etag } },
 			]);
 			server.tags = structuredClone(next.tags);
@@ -105,9 +113,12 @@ function answerCall(server, method, params) {
 				at: "2026-11-15T00:00:00+09:00",
 				source: params.source,
 			};
-			const tag = server.tags.find((t) => t.file === params.file);
+			const i = server.tags.findIndex((t) => t.file === params.file);
+			const tag = server.tags[i];
 			if (tag) tag.memory = [...(tag.memory ?? []), item];
-			const records = tag ? [{ store: "t_full", op: "put", row: tag }] : [];
+			const records = tag
+				? [{ store: "t_full", op: "put", row: ordered(server.tags)[i] }]
+				: [];
 			return { version: server.change(records), item };
 		}
 		default:
@@ -202,10 +213,10 @@ function answerNextQuestion(page, accept, questions) {
 
 // ---- Definitions ----
 
-/** The definitions "a", "b", … of the feature: the tag files 00010-a.html, 00020-b.html, … named a, b, … */
+/** The definitions "a", "b", … of the feature: the tag files a.html, b.html, … named a, b, …, in that order */
 const defsOf = (...tags) =>
-	tags.map((t, i) => ({
-		file: `${String((i + 1) * 10).padStart(5, "0")}-${t.name}.html`,
+	tags.map((t) => ({
+		file: `${t.name}.html`,
 		ops: [],
 		prompt: "",
 		memory: [],
@@ -440,21 +451,21 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 	const stored = {
 		tags: [
 			{
-				file: "00010-ruby.html",
+				file: "ruby.html",
 				name: "ruby",
 				ops: [],
 				prompt: "New prompt",
 				memory: [{ id: "1", text: "fact", at: "2026-11-01T00:00:00+09:00" }],
 			},
 			{
-				file: "00020-go.html",
+				file: "go.html",
 				name: "go",
 				ops: [],
 				prompt: "Go prompt",
 				memory: [],
 			},
 			{
-				file: "00030-rust.html",
+				file: "rust.html",
 				name: "rust",
 				ops: [],
 				prompt: "",
@@ -474,27 +485,27 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 	await test.step('Then t.replace is sent with the etag "e1"', () => {
 		expect(server.replaces.map((p) => p.etag)).toEqual(["e1"]);
 	});
-	await test.step('And it is sent "00010-ruby.html" with the new prompt and only the memory item "fact", "00020-go.html" and "00030-rust.html" without memory', () => {
+	await test.step('And it is sent "ruby.html" with the new prompt and only the memory item "fact", "go.html" and "rust.html" without memory', () => {
 		expect(server.replaces).toEqual([
 			{
 				etag: "e1",
 				tags: [
 					{
-						file: "00010-ruby.html",
+						file: "ruby.html",
 						name: "ruby",
 						ops: [],
 						prompt: "New prompt",
 						memory: [{ text: "fact" }],
 					},
 					{
-						file: "00020-go.html",
+						file: "go.html",
 						name: "go",
 						ops: [],
 						prompt: "Go prompt",
 						memory: [],
 					},
 					{
-						file: "00030-rust.html",
+						file: "rust.html",
 						name: "rust",
 						ops: [],
 						prompt: "",
@@ -506,7 +517,7 @@ test("Saving puts the definitions and takes the saved ones back", async ({
 	});
 	await test.step("And onSaved is called with the definitions as t.replace stored them", async () => {
 		expect((await seen(page)).filter(([k]) => k === "saved")).toEqual([
-			["saved", stored.tags],
+			["saved", ordered(stored.tags)],
 		]);
 	});
 	await test.step('And the toast says "Tags saved", the status is empty and isDirty() is false', async () => {
@@ -536,19 +547,19 @@ test("Saving gives each tag its file name", async ({ page, context }) => {
 		await nameInput(page, 3).fill("Café");
 		await clickSave(page, server);
 	});
-	await test.step('Then t.replace is sent "00010-ruby.html" named "ruby", "00020-golang.html" named "Golang", "00030-c~23.html" named "C#" and "00040-café.html" named "Café", composed', () => {
+	await test.step('Then t.replace is sent "ruby.html" named "ruby", "golang.html" named "Golang", "c~23.html" named "C#" and "café.html" named "Café", composed', () => {
 		expect(putFiles(server)).toEqual([
 			[
-				["00010-ruby.html", "ruby"],
-				["00020-golang.html", "Golang"],
-				["00030-c~23.html", "C#"],
-				["00040-café.html", "Café"],
+				["ruby.html", "ruby"],
+				["golang.html", "Golang"],
+				["c~23.html", "C#"],
+				["café.html", "Café"],
 			],
 		]);
 	});
 });
 
-test("A new tag is numbered after the largest number", async ({
+test("The tags are sent in the editor's order, not in the order of their files", async ({
 	page,
 	context,
 }) => {
@@ -556,23 +567,50 @@ test("A new tag is numbered after the largest number", async ({
 	await givenTheEditor(
 		server,
 		page,
-		[RUBY, { ...GO, file: "00050-go.html" }],
-		'Given the editor of the tag files "00010-ruby.html" named "ruby" and "00050-go.html" named "go"',
+		defsOf({ name: "zig" }, { name: "ada" }),
+		'Given the editor of the tag files "zig.html" named "zig" and "ada.html" named "ada"',
 	);
 	await test.step('When a new tag "rust" is added and Save is clicked', async () => {
 		await button(page, "+ New tag").click();
 		await nameInput(page, 2).fill("rust");
 		await clickSave(page, server);
 	});
-	await test.step('Then t.replace is sent the files "00010-ruby.html", "00050-go.html" and "00060-rust.html"', () => {
+	await test.step('Then t.replace is sent the files "zig.html", "ada.html" and "rust.html", in this order', () => {
 		expect(server.replaces.map((b) => b.tags.map((t) => t.file))).toEqual([
-			["00010-ruby.html", "00050-go.html", "00060-rust.html"],
+			["zig.html", "ada.html", "rust.html"],
 		]);
 	});
 });
 
 const BAD_NAME = (name) =>
 	`The tag name "${name}" cannot be used (1 to 40 characters, no spaces, control characters or : ; / " ' \` ~ \\ |)`;
+
+for (const { caseName, name } of [
+	{ caseName: "the reorder page", name: "Index" },
+	{ caseName: "a leading dot", name: ".net" },
+	{ caseName: "the frame's prefix", name: "lcty.v1x" },
+]) {
+	test(`A reserved tag name is not saved, and the status says why (${caseName})`, async ({
+		page,
+		context,
+	}) => {
+		const server = await background(page, context);
+		await givenTheEditor(server, page);
+		await test.step(`When the name of "go" is changed to "${name}" and Save is clicked`, async () => {
+			await nameInput(page, 1).fill(name);
+			await clickSave(page, server);
+		});
+		await test.step(`Then the status says 'The tag name "${name}" is reserved (index, or starting with . or lcty.v1)'`, async () => {
+			expect(await status(page)).toBe(
+				`The tag name "${name}" is reserved (index, or starting with . or lcty.v1)`,
+			);
+		});
+		await test.step("And no t.replace is sent", () => {
+			expect(server.replaces).toEqual([]);
+		});
+		await thenIsDirty(page, true);
+	});
+}
 
 test("A tag name that breaks the rules is not saved, and the status says the rules", async ({
 	page,
@@ -669,7 +707,7 @@ for (const { caseName, name } of [
 
 /** The invalid tag of the feature: a file without <lcty-t>, as t.list lists it. */
 const BROKEN = {
-	file: "00020-broken.html",
+	file: "broken.html",
 	name: "broken",
 	ops: [],
 	prompt: "",
@@ -686,9 +724,9 @@ test("An invalid tag is shown without fields and sent back as it is", async ({
 		server,
 		page,
 		[RUBY, BROKEN],
-		'Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
+		'Given the editor of the definitions "ruby" and the invalid tag "broken.html" named "broken"',
 	);
-	await test.step('Then the second section has the name "broken", the button "Delete" and the note that "00020-broken.html" cannot be read, and no field', async () => {
+	await test.step('Then the second section has the name "broken", the button "Delete" and the note that "broken.html" cannot be read, and no field', async () => {
 		const shown = await section(page, 1).evaluate((s) => ({
 			head: [...s.querySelector(".tag-edit-head").children].map(
 				(e) => e.textContent,
@@ -698,7 +736,7 @@ test("An invalid tag is shown without fields and sent back as it is", async ({
 		}));
 		expect(shown).toEqual({
 			head: ["broken", "Delete"],
-			note: "The tag file 00020-broken.html cannot be read (it has no <lcty-t>), so it cannot be edited here. Fix or delete the file in t/ of the data directory.",
+			note: "The tag file broken.html cannot be read (it has no <lcty-t>), so it cannot be edited here. Fix or delete the file in t/ of the data directory.",
 			fields: 0,
 		});
 	});
@@ -706,11 +744,11 @@ test("An invalid tag is shown without fields and sent back as it is", async ({
 		await promptInput(page, 0).fill("New prompt");
 		await clickSave(page, server);
 	});
-	await test.step('Then t.replace is sent "00010-ruby.html" with the new prompt and "00020-broken.html" as it was, with invalid true', () => {
+	await test.step('Then t.replace is sent "ruby.html" with the new prompt and "broken.html" as it was, with invalid true', () => {
 		expect(server.replaces).toHaveLength(1);
 		const [ruby, broken] = server.replaces[0].tags;
 		expect(ruby).toMatchObject({
-			file: "00010-ruby.html",
+			file: "ruby.html",
 			prompt: "New prompt",
 		});
 		expect(broken).toEqual(BROKEN);
@@ -726,7 +764,7 @@ test("A new tag with the file-name part of an invalid tag is not saved", async (
 		server,
 		page,
 		[RUBY, BROKEN],
-		'Given the editor of the definitions "ruby" and the invalid tag "00020-broken.html" named "broken"',
+		'Given the editor of the definitions "ruby" and the invalid tag "broken.html" named "broken"',
 	);
 	await test.step('When a new tag "Broken" is added and Save is clicked', async () => {
 		await button(page, "+ New tag").click();
@@ -744,10 +782,10 @@ test("A new tag with the file-name part of an invalid tag is not saved", async (
 // ---- renderTagsEditor with a file (the page of a tag file) ----
 
 async function givenTheEditorOfGo(server, page, defs = [RUBY, GO]) {
-	await test.step(`Given the editor of the definitions ${defs.map((d) => `"${d.name}"`).join(" and ")} for the file "00020-go.html"`, () => {
+	await test.step(`Given the editor of the definitions ${defs.map((d) => `"${d.name}"`).join(" and ")} for the file "go.html"`, () => {
 		server.tags = structuredClone(defs);
 		server.etag = "e0";
-		return renderEditor(page, defs, "e0", "00020-go.html");
+		return renderEditor(page, defs, "e0", "go.html");
 	});
 }
 
@@ -777,15 +815,15 @@ test("Saving with a file sends the whole set and gives onSaved the tag's new fil
 		await nameInput(page, 0).fill("Golang");
 		await clickSave(page, server);
 	});
-	await test.step('Then t.replace is sent "00010-ruby.html" as it was and "00020-golang.html" named "Golang"', () => {
+	await test.step('Then t.replace is sent "ruby.html" as it was and "golang.html" named "Golang"', () => {
 		expect(server.replaces).toHaveLength(1);
 		const [ruby, go] = server.replaces[0].tags;
 		expect(ruby).toEqual(RUBY);
-		expect([go.file, go.name]).toEqual(["00020-golang.html", "Golang"]);
+		expect([go.file, go.name]).toEqual(["golang.html", "Golang"]);
 	});
-	await test.step('And onSaved is given the file "00020-golang.html"', async () => {
+	await test.step('And onSaved is given the file "golang.html"', async () => {
 		const saved = (await seen(page)).filter(([k]) => k === "saved");
-		expect(saved.map(([, , s]) => s)).toEqual([{ file: "00020-golang.html" }]);
+		expect(saved.map(([, , s]) => s)).toEqual([{ file: "golang.html" }]);
 	});
 });
 
@@ -803,8 +841,8 @@ test("Deleting the tag of the file saves at once and gives onSaved no file", asy
 			.click();
 		await expect.poll(() => seen(page)).toContainEqual(["toast", "Tags saved"]);
 	});
-	await test.step('Then t.replace is sent only "00010-ruby.html"', () => {
-		expect(putFiles(server)).toEqual([[["00010-ruby.html", "ruby"]]]);
+	await test.step('Then t.replace is sent only "ruby.html"', () => {
+		expect(putFiles(server)).toEqual([[["ruby.html", "ruby"]]]);
 	});
 	await test.step("And onSaved is given the file null", async () => {
 		const saved = (await seen(page)).filter(([k]) => k === "saved");
@@ -922,10 +960,10 @@ test("A failed save keeps the blank memory items", async ({
 		server.fail["t.replace"] = { code: INTERNAL_ERROR, message: "boom" };
 	});
 	await test.step("When Save is clicked", () => clickSave(page, server));
-	await test.step('Then t.replace was sent "00010-ruby.html" with only the memory item "fact"', () => {
+	await test.step('Then t.replace was sent "ruby.html" with only the memory item "fact"', () => {
 		expect(server.replaces.map((b) => b.tags[0])).toEqual([
 			{
-				file: "00010-ruby.html",
+				file: "ruby.html",
 				name: "ruby",
 				ops: [],
 				prompt: "Ruby prompt",
@@ -1188,8 +1226,8 @@ test("Closing the tags dialog with unsaved edits asks first", async ({
 
 const SOURCE = { conv_id: "c1", msg_id: "m1" };
 const TAGS = [
-	{ name: "Ruby", file: "00010-ruby.html" },
-	{ name: "Go", file: "00020-go.html" },
+	{ name: "Ruby", file: "ruby.html" },
+	{ name: "Go", file: "go.html" },
 ];
 /** A proposal of the text for the tag of the display name, as proposeMemory returns it */
 const proposalFor = (tag, text) => ({
@@ -1270,7 +1308,7 @@ test("The memory dialog shows every proposal, adopted", async ({
 }) => {
 	await background(page, context);
 	await givenAMemoryDialog(page);
-	await test.step('When openMemoryDialog shows the proposals "A" for "Ruby" and "B" for "Go" with the tags "Ruby" of "00010-ruby.html" and "Go" of "00020-go.html"', () =>
+	await test.step('When openMemoryDialog shows the proposals "A" for "Ruby" and "B" for "Go" with the tags "Ruby" of "ruby.html" and "Go" of "go.html"', () =>
 		openMemory(page, [proposalFor("Ruby", "A"), proposalFor("Go", "B")]));
 	let state;
 	await test.step('Then "#memory-dialog" is open as a modal dialog', async () => {
@@ -1295,10 +1333,10 @@ test("The memory dialog shows every proposal, adopted", async ({
 			},
 		]);
 	});
-	await test.step('And the choices are the files "00010-ruby.html" and "00020-go.html"', () => {
+	await test.step('And the choices are the files "ruby.html" and "go.html"', () => {
 		expect(state.proposals.map((p) => p.values)).toEqual([
-			["00010-ruby.html", "00020-go.html"],
-			["00010-ruby.html", "00020-go.html"],
+			["ruby.html", "go.html"],
+			["ruby.html", "go.html"],
 		]);
 	});
 	await test.step('And it has the buttons "Close" and "Add the adopted items"', () => {
@@ -1321,10 +1359,10 @@ test("The adopted proposals are added as edited", async ({ page, context }) => {
 		await proposal(page, 2).getByRole("checkbox").uncheck();
 		await clickAdd(page);
 	});
-	await test.step('Then t.memory.add is sent "A2" and then "B" for "00010-ruby.html", each with the source', () => {
+	await test.step('Then t.memory.add is sent "A2" and then "B" for "ruby.html", each with the source', () => {
 		expect(server.memory).toEqual([
-			{ file: "00010-ruby.html", text: "A2", source: SOURCE },
-			{ file: "00010-ruby.html", text: "B", source: SOURCE },
+			{ file: "ruby.html", text: "A2", source: SOURCE },
+			{ file: "ruby.html", text: "B", source: SOURCE },
 		]);
 	});
 	await test.step('And the dialog is closed, onDone is called and the toast says "Added 2 items to memory"', async () => {
@@ -1372,7 +1410,7 @@ test("A failed addition keeps the dialog open", async ({ page, context }) => {
 		expect((await memoryDialogState(page)).hints).toContain(
 			"Could not add: no such tag file",
 		);
-		expect(server.memory.map((p) => p.file)).toEqual(["00010-ruby.html"]);
+		expect(server.memory.map((p) => p.file)).toEqual(["ruby.html"]);
 	});
 	await test.step("And the dialog is still open and onDone is not called", async () => {
 		expect((await memoryDialogState(page)).open).toBe(true);

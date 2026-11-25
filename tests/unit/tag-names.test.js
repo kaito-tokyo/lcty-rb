@@ -25,10 +25,10 @@ function text(shown) {
 	return s;
 }
 
-/** The definitions "a", "b", … of the feature: the tag files 00010-a.html, 00020-b.html, … named a, b, … */
+/** The definitions "a", "b", … of the feature: the tag files a.html, b.html, … named a, b, …, in that order */
 const defsOf = (...names) =>
-	names.map((name, i) => ({
-		file: N.tagFileName((i + 1) * 10, name),
+	names.map((name) => ({
+		file: N.tagFileName(name),
 		name,
 		ops: [],
 		prompt: "",
@@ -67,6 +67,8 @@ for (const [title, result, rows] of [
 			["an emoji", '"🦀"'],
 			["40 astral characters", '40 times "𝒳"'],
 			["40 decomposed letters", '40 times "e" U+0301'],
+			["index at the start", '"indexes"'],
+			["index after a dot", '"my.index"'],
 		],
 	],
 	[
@@ -103,6 +105,16 @@ for (const [title, result, rows] of [
 			["a tilde", '"a~b"'],
 			["a backslash", '"a\\b"'],
 			["a vertical bar", '"a|b"'],
+		],
+	],
+	[
+		"A reserved display name",
+		'"reserved"',
+		[
+			["the reorder page", '"index"'],
+			["index in upper case", '"Index"'],
+			["a leading dot", '".net"'],
+			["the frame's prefix", '"lcty.v1x"'],
 		],
 	],
 ]) {
@@ -174,33 +186,27 @@ scenario("The part of a part is the same part", async ({ step }) => {
 	});
 });
 
-// ---- tagFileName, tagNumber and tagRef ----
+// ---- tagFileName and tagRef ----
 
-scenario(
-	"A file name is the number in five digits and the part",
-	async ({ step }) => {
-		let made;
-		await step(
-			'When tagFileName makes the file names of 10 and "c~23" and of 99999 and "ruby"',
-			() => {
-				made = [N.tagFileName(10, "c~23"), N.tagFileName(99999, "ruby")];
-			},
-		);
-		await step('Then they are "00010-c~23.html" and "99999-ruby.html"', () => {
-			expect(made).toEqual(["00010-c~23.html", "99999-ruby.html"]);
-		});
-	},
-);
+scenario("A file name is the part and .html", async ({ step }) => {
+	let made;
+	await step(
+		'When tagFileName makes the file names of "c~23" and of "ruby"',
+		() => {
+			made = [N.tagFileName("c~23"), N.tagFileName("ruby")];
+		},
+	);
+	await step('Then they are "c~23.html" and "ruby.html"', () => {
+		expect(made).toEqual(["c~23.html", "ruby.html"]);
+	});
+});
 
-scenario("The number and the reference of a file name", async ({ step }) => {
+scenario("The reference of a file name", async ({ step }) => {
 	let def;
-	await step('Given the tag file "00120-c~23.html"', () => {
-		def = tag("00120-c~23.html", "C#");
+	await step('Given the tag file "c~23.html"', () => {
+		def = tag("c~23.html", "C#");
 	});
-	await step("Then tagNumber gives 120", () => {
-		expect(N.tagNumber(def.file)).toBe(120);
-	});
-	await step('And tagRef gives "c~23"', () => {
+	await step('Then tagRef gives "c~23"', () => {
 		expect(N.tagRef(def)).toBe("c~23");
 	});
 });
@@ -210,9 +216,9 @@ scenario(
 	async ({ step }) => {
 		let def;
 		await step(
-			'Given the tag file "00010-cafe" U+0301 ".html", listed decomposed',
+			'Given the tag file "cafe" U+0301 ".html", listed decomposed',
 			() => {
-				def = tag("00010-café.html", "Café");
+				def = tag("café.html", "Café");
 			},
 		);
 		let ref;
@@ -230,9 +236,9 @@ scenario(
 scenario("The display name of a reference", async ({ step }) => {
 	let defs;
 	await step(
-		'Given the tag files "00010-c~23.html" named "C#" and "00020-ruby.html" named "Ruby"',
+		'Given the tag files "c~23.html" named "C#" and "ruby.html" named "Ruby"',
 		() => {
-			defs = [tag("00010-c~23.html", "C#"), tag("00020-ruby.html", "Ruby")];
+			defs = [tag("c~23.html", "C#"), tag("ruby.html", "Ruby")];
 		},
 	);
 	await step(
@@ -272,9 +278,9 @@ scenario(
 	async ({ step }) => {
 		let defs;
 		await step(
-			'Given the tag files "00010-cafe" U+0301 ".html" and "00020-ruby.html"',
+			'Given the tag files "cafe" U+0301 ".html" and "ruby.html"',
 			() => {
-				defs = [tag("00010-café.html", "Café"), tag("00020-ruby.html", "ruby")];
+				defs = [tag("café.html", "Café"), tag("ruby.html", "ruby")];
 			},
 		);
 		let sorted;
@@ -289,131 +295,18 @@ scenario(
 
 // ---- assignFileNames ----
 
-scenario(
-	"A tag keeps its number and takes the part of its name",
-	async ({ step }) => {
-		let tags;
-		await step(
-			'Given the tags "00010-ruby.html" named "Ruby" with a prompt, "00020-go.html" named "Golang" and a new tag "C#"',
-			() => {
-				tags = [
-					tag("00010-ruby.html", "Ruby", {
-						prompt: "Ruby prompt",
-						memory: [{ text: "fact" }],
-					}),
-					tag("00020-go.html", "Golang"),
-					tag(null, "C#"),
-				];
-			},
-		);
-		let assigned;
-		await step("When assignFileNames gives them file names", () => {
-			assigned = N.assignFileNames(tags);
-		});
-		await step(
-			'Then the files are "00010-ruby.html", "00020-golang.html" and "00030-c~23.html"',
-			() => {
-				expect(files(assigned)).toEqual([
-					"00010-ruby.html",
-					"00020-golang.html",
-					"00030-c~23.html",
-				]);
-			},
-		);
-		await step(
-			"And the names, the prompt and the other fields are kept",
-			() => {
-				expect(assigned.map(({ file, ...rest }) => rest)).toEqual(
-					tags.map(({ file, ...rest }) => rest),
-				);
-			},
-		);
-	},
-);
-
-scenario(
-	"New tags are numbered after the largest number, in order",
-	async ({ step }) => {
-		let tags;
-		await step(
-			'Given a new tag "a", the tag "00050-b.html" named "b", a new tag "c" and the tag "00020-d.html" named "d"',
-			() => {
-				tags = [
-					tag(null, "a"),
-					tag("00050-b.html", "b"),
-					tag(null, "c"),
-					tag("00020-d.html", "d"),
-				];
-			},
-		);
-		let assigned;
-		await step("When assignFileNames gives them file names", () => {
-			assigned = N.assignFileNames(tags);
-		});
-		await step(
-			'Then the files are "00060-a.html", "00050-b.html", "00070-c.html" and "00020-d.html"',
-			() => {
-				expect(files(assigned)).toEqual([
-					"00060-a.html",
-					"00050-b.html",
-					"00070-c.html",
-					"00020-d.html",
-				]);
-			},
-		);
-	},
-);
-
-scenario("The first new tags are numbered from 00010", async ({ step }) => {
-	let tags;
-	await step('Given the new tags "a" and "b"', () => {
-		tags = [tag(null, "a"), tag(null, "b")];
-	});
-	let assigned;
-	await step("When assignFileNames gives them file names", () => {
-		assigned = N.assignFileNames(tags);
-	});
-	await step('Then the files are "00010-a.html" and "00020-b.html"', () => {
-		expect(files(assigned)).toEqual(["00010-a.html", "00020-b.html"]);
-	});
-});
-
-scenario("A new tag that would need six digits is full", async ({ step }) => {
-	let tags;
-	await step('Given the tag "99990-a.html" named "a" and a new tag "b"', () => {
-		tags = [tag("99990-a.html", "a"), tag(null, "b")];
-	});
-	let error;
-	await step("When assignFileNames gives them file names", () => {
-		try {
-			N.assignFileNames(tags);
-		} catch (e) {
-			error = e;
-		}
-	});
-	await step('Then it throws "full"', () => {
-		expect(error?.message).toBe("full");
-	});
-	await step(
-		'And the tag "99999-a.html" named "a" alone keeps its file',
-		() => {
-			expect(files(N.assignFileNames([tag("99999-a.html", "a")]))).toEqual([
-				"99999-a.html",
-			]);
-		},
-	);
-});
-
-scenario("An invalid tag keeps its file name as it is", async ({ step }) => {
+scenario("A tag takes the part of its name as its file", async ({ step }) => {
 	let tags;
 	await step(
-		'Given the invalid tag "00020-Broken~2A.html" named "Broken~2A", the tag "00030-a.html" named "a" and a new tag "b"',
+		'Given the tags "ruby.html" named "Ruby" with a prompt, "go.html" named "Go" and a new tag "C#"',
 		() => {
-			// A file put in t/ by hand: its part is not one tagPart would make (upper case, an escape in upper case)
 			tags = [
-				tag("00020-Broken~2A.html", "Broken~2A", { invalid: true }),
-				tag("00030-a.html", "a"),
-				tag(null, "b"),
+				tag("ruby.html", "Ruby", {
+					prompt: "Ruby prompt",
+					memory: [{ text: "fact" }],
+				}),
+				tag("go.html", "Go"),
+				tag(null, "C#"),
 			];
 		},
 	);
@@ -422,84 +315,76 @@ scenario("An invalid tag keeps its file name as it is", async ({ step }) => {
 		assigned = N.assignFileNames(tags);
 	});
 	await step(
-		'Then the files are "00020-Broken~2A.html", "00030-a.html" and "00040-b.html"',
+		'Then the files are "ruby.html", "go.html" and "c~23.html"',
 		() => {
-			expect(files(assigned)).toEqual([
-				"00020-Broken~2A.html",
-				"00030-a.html",
-				"00040-b.html",
-			]);
+			expect(files(assigned)).toEqual(["ruby.html", "go.html", "c~23.html"]);
 		},
 	);
-	await step("And the invalid tag is the same object", () => {
-		expect(assigned[0]).toBe(tags[0]);
+	await step("And the names, the prompt and the other fields are kept", () => {
+		expect(assigned.map(({ file, ...rest }) => rest)).toEqual(
+			tags.map(({ file, ...rest }) => rest),
+		);
 	});
 });
 
-// ---- renumber ----
-
 scenario(
-	"Renumbering numbers the tags in the given order and keeps their parts",
+	"A renamed tag takes its new part's file and an invalid tag keeps its own",
 	async ({ step }) => {
 		let tags;
 		await step(
-			'Given the tags "00050-go.html" named "Go", "00010-c~23.html" named "C#" and "00011-ruby.html" named "Ruby", in this order',
+			'Given the invalid tag "Broken~2A.html" named "Broken~2A", the tag "go.html" renamed "Golang" and a new tag "b"',
 			() => {
+				// A file put in t/ by hand: its part is not one tagPart would make (upper case, an escape in upper case)
 				tags = [
-					tag("00050-go.html", "Go"),
-					tag("00010-c~23.html", "C#"),
-					tag("00011-ruby.html", "Ruby"),
+					tag("Broken~2A.html", "Broken~2A", { invalid: true }),
+					tag("go.html", "Golang"),
+					tag(null, "b"),
 				];
 			},
 		);
-		let renumbered;
-		await step("When renumber renumbers them", () => {
-			renumbered = N.renumber(tags);
+		let assigned;
+		await step("When assignFileNames gives them file names", () => {
+			assigned = N.assignFileNames(tags);
 		});
 		await step(
-			'Then the files are "00010-go.html", "00020-c~23.html" and "00030-ruby.html"',
+			'Then the files are "Broken~2A.html", "golang.html" and "b.html", in the same order',
 			() => {
-				expect(files(renumbered)).toEqual([
-					"00010-go.html",
-					"00020-c~23.html",
-					"00030-ruby.html",
+				expect(files(assigned)).toEqual([
+					"Broken~2A.html",
+					"golang.html",
+					"b.html",
 				]);
 			},
 		);
-		await step("And the names are kept", () => {
-			expect(renumbered.map((t) => t.name)).toEqual(["Go", "C#", "Ruby"]);
+		await step("And the invalid tag is the same object", () => {
+			expect(assigned[0]).toBe(tags[0]);
 		});
 	},
 );
 
-scenario("Renumbering composes a decomposed file name", async ({ step }) => {
+scenario("A decomposed name takes a composed file name", async ({ step }) => {
 	let tags;
-	await step(
-		'Given the tag "00070-cafe" U+0301 ".html" named "Café", listed decomposed',
-		() => {
-			tags = [tag("00070-café.html", "Café")];
-		},
-	);
-	let renumbered;
-	await step("When renumber renumbers it", () => {
-		renumbered = N.renumber(tags);
+	await step('Given a new tag named "Cafe" U+0301', () => {
+		tags = [tag(null, "Café")];
 	});
-	await step('Then its file is "00010-caf" U+00E9 ".html"', () => {
-		expect(files(renumbered)).toEqual(["00010-café.html"]);
+	let assigned;
+	await step("When assignFileNames gives it a file name", () => {
+		assigned = N.assignFileNames(tags);
+	});
+	await step('Then its file is "caf" U+00E9 ".html"', () => {
+		expect(files(assigned)).toEqual(["café.html"]);
 	});
 });
 
+// ---- tagFileOfPath ----
+
 for (const [caseName, path, file] of [
-	["an ASCII name", '"/t/00010-ruby.html"', '"00010-ruby.html"'],
-	["an escape", '"/t/00020-c~23.html"', '"00020-c~23.html"'],
-	[
-		"percent-encoded",
-		'"/t/00030-%E6%96%99%E7%90%86.html"',
-		'"00030-料理.html"',
-	],
-	["decomposed", '"/t/00040-cafe%CC%81.html"', '"00040-caf" U+00E9 ".html"'],
-	["below another directory", '"/site/t/00010-ruby.html"', '"00010-ruby.html"'],
-	["a broken escape", '"/t/00010-%E6.html"', '"00010-%E6.html"'],
+	["an ASCII name", '"/t/ruby.html"', '"ruby.html"'],
+	["an escape", '"/t/c~23.html"', '"c~23.html"'],
+	["percent-encoded", '"/t/%E6%96%99%E7%90%86.html"', '"料理.html"'],
+	["decomposed", '"/t/cafe%CC%81.html"', '"caf" U+00E9 ".html"'],
+	["below another directory", '"/site/t/ruby.html"', '"ruby.html"'],
+	["a broken escape", '"/t/%E6.html"', '"%E6.html"'],
 ]) {
 	scenario(
 		`The file of a tag file's page is read from its path (${caseName})`,

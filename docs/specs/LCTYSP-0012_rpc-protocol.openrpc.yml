@@ -527,7 +527,7 @@ methods:
     summary: Every tag definition, with the ETag of the set
     description: >-
       What a page reads to fill t_full and t_set of lcty_t (LCTYSP-0014), and again after reconnecting and whenever it
-      is shown from the back/forward cache: every tag file of t/ in file-name order, parsed into JSON (LCTYSP-0009), and
+      is shown from the back/forward cache: every tag file of t/ in the order of the tags (data-order), parsed into JSON (LCTYSP-0009), and
       the ETag of the set, which changes also when a file is edited outside the server. The version is taken together
       with them, so the page follows the records of t.batch.updated from it.
     params: []
@@ -590,7 +590,7 @@ methods:
     params:
       - name: file
         required: true
-        description: The tag file, NNNNN-<file-name part>.html
+        description: The tag file, <file-name part>.html
         schema:
           type: string
       - name: text
@@ -991,11 +991,16 @@ components:
       required: [file, name, ops, prompt, memory]
       properties:
         file:
-          description: NNNNN-<file-name part>.html
+          description: <file-name part>.html
           type: string
         name:
           description: The display name
           type: string
+        order:
+          description: >-
+            data-order of <lcty-t>, the tag's place in the order; null without one. Given by t.list, ignored by
+            t.replace, which orders the tags as they are sent
+          type: [integer, "null"]
         ops:
           type: array
           items:

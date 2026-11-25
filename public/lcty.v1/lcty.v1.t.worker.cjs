@@ -136,12 +136,19 @@ function write(os, { store, op, row }) {
 	return { applied };
 }
 
-/** t_full and t_set: the tags in file-name order and the ETag; stale true when the copy has never been filled. */
+/** The order of the tags: by order, those without one last, ties by file name (the rows come in that order). */
+function byOrder(a, b) {
+	const x = a.order ?? Number.POSITIVE_INFINITY;
+	const y = b.order ?? Number.POSITIVE_INFINITY;
+	return x === y ? 0 : x < y ? -1 : 1;
+}
+
+/** t_full and t_set: the tags in their order and the ETag; stale true when the copy has never been filled. */
 /*export*/ function get() {
 	return withStores("readonly", [TAGS, SET, SYNC], (tags, set, sync) => {
 		const out = { tags: [], etag: null, stale: true };
 		tags.getAll().onsuccess = (e) => {
-			out.tags = e.target.result;
+			out.tags = e.target.result.sort(byOrder); // stable: ties stay in file-name order
 		};
 		set.get(SET_KEY).onsuccess = (e) => {
 			out.etag = e.target.result?.etag ?? null;

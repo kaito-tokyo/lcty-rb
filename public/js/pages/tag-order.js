@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// The tag reorder page, /t/: moves the tags and saves them renumbered (LCTYSP-0005, LCTYSP-0009).
+// The tag reorder page, /t/: moves the tags and saves them in the new order (LCTYSP-0005, LCTYSP-0009).
 
 import {
 	forceSyncTags,
@@ -13,7 +13,6 @@ import {
 import { tabRpc } from "../api/tab-rpc.js";
 import { showToast } from "../common.js";
 import { localize, tr } from "../i18n.js";
-import { renumber } from "../tag-names.js";
 import { initSidebar } from "../ui/sidebar.js";
 
 /** Starts /t/: called once by the page's entry (public/t/index.js). */
@@ -111,7 +110,7 @@ export function initTagOrderPage() {
 	}
 
 	saveButton.addEventListener("click", async () => {
-		const tags = [...renumber(state.work), ...state.invalid];
+		const tags = [...state.work, ...state.invalid]; // the server writes the order as sent
 		saveButton.disabled = true;
 		try {
 			state.etag = await putTags(tags, state.etag);

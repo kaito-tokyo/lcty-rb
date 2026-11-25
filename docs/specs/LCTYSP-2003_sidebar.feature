@@ -34,7 +34,7 @@ Feature: LCTYSP-2003 The sidebar
 
   # sync_full of LCTYSP-0009: the tags are synced when the page is shown, without waiting for idle time or a save
   Scenario: Every page takes the server's tags as soon as it is shown
-    Given the tag file "00010-<part>.html" named "<PART>", in upper case
+    Given the tag file "<part>.html" named "<PART>", in upper case
     And a conversation tagged "<part>"
     When the new conversation page /c/ is opened
     Then the conversation's tag chip reads "<PART>"
@@ -80,9 +80,9 @@ Feature: LCTYSP-2003 The sidebar
     Then the sidebar's nav holds the new conversation button and then the tag button, which reads "タグ"
     When the tag button is clicked
     Then the tag menu is shown
-    And it lists A and B, in that order, each with the link "編集" to its file's page, /t/00010-A.html and /t/00020-B.html
+    And it lists A and B, in that order, each with the link "編集" to its file's page, /t/A.html and /t/B.html
     When "編集" of B is clicked
-    Then the browser is on /t/00020-B.html
+    Then the browser is on /t/B.html
 
   Scenario: Choosing tags in the tag menu puts them in the search box and narrows the list
     Given the tags A and B, in that order

@@ -226,7 +226,7 @@ class ServletsTest < Lcty::Scenarios
     step('And the body is the bytes of the file') { assert_equal body, res.body.b }
   end
 
-  %w[00010-ruby.html 00020-c~23.html 00030-料理.html].each do |file|
+  %w[ruby.html c~23.html 料理.html].each do |file|
     scenario "A tag file is served as it is (#{file})" do
       background
       body = res = nil
@@ -239,6 +239,19 @@ class ServletsTest < Lcty::Scenarios
         assert_equal ['200', 'text/html; charset=utf-8'], [res.code, res['content-type']]
       end
       step('And the body is the bytes of the file') { assert_equal body, res.body.b }
+    end
+  end
+
+  %w[/base/t/.hidden.html /base/t/ruby.htm].each do |path|
+    scenario "A file in the tags' folder that is not a tag file is 404 (#{path})" do
+      background
+      res = nil
+      step(%(Given the files ".hidden.html" and "ruby.htm" in the tags' folder)) do
+        write(TAGS, '.hidden.html', '<lcty-t data-tag="hidden"></lcty-t>')
+        write(TAGS, 'ruby.htm', '<lcty-t data-tag="ruby"></lcty-t>')
+      end
+      step("When #{path} is requested") { res = get(path) }
+      step('Then the status is 404') { assert_equal '404', res.code }
     end
   end
 
@@ -262,7 +275,7 @@ class ServletsTest < Lcty::Scenarios
 
   %w[
     /base/c/no-such-id.html /base/c/notes.txt /base/c/sub/abc-1.html /base/c/..%2Fabc-1.html /base/c/%FF.html
-    /base/c/lcty.v1/sub.js /base/t/0010-short.html /base/t/00010-none.html
+    /base/c/lcty.v1/sub.js /base/t/none.html
   ].each do |path|
     scenario "What is not a page, a data file or an lcty.v1 name is 404 (#{path})" do
       background

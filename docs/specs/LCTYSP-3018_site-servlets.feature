@@ -11,7 +11,7 @@ Feature: LCTYSP-3018 The servlets of the site
   from the working directory, with its type from MIME_TYPES, Cache-Control (no-cache unless it is given another),
   Last-Modified and an ETag, and answers a matching If-None-Match with 304. C (/c/) and T (/t/) serve a directory of
   pages: the page at the directory itself and its index.html, the data files of their data directory (C the
-  conversation files <id>.html, T the tag files NNNNN-<part>.html), a redirect to the directory for the path without
+  conversation files <id>.html, T the tag files <part>.html), a redirect to the directory for the path without
   its slash, and, for every name that starts with lcty.v1, a redirect to the same name in ../lcty.v1/ that a browser
   keeps for a day. PublicDirectoryServlet serves the files below a directory, and never a path with an empty part, a
   part that starts with "." or a NUL, nor a licence file of REUSE (a name that ends with .license). In the steps the
@@ -114,10 +114,20 @@ Feature: LCTYSP-3018 The servlets of the site
     And the body is the bytes of the file
 
     Examples:
-      | file            |
-      | 00010-ruby.html |
-      | 00020-c~23.html |
-      | 00030-料理.html  |
+      | file      |
+      | ruby.html |
+      | c~23.html |
+      | 料理.html  |
+
+  Scenario Outline: A file in the tags' folder that is not a tag file is 404
+    Given the files ".hidden.html" and "ruby.htm" in the tags' folder
+    When <path> is requested
+    Then the status is 404
+
+    Examples:
+      | path                    |
+      | /base/t/.hidden.html    |
+      | /base/t/ruby.htm        |
 
   Scenario Outline: A name that starts with lcty.v1 redirects to the same name in ../lcty.v1/ for a day
     When <path> is requested
@@ -145,8 +155,7 @@ Feature: LCTYSP-3018 The servlets of the site
       | /base/c/..%2Fabc-1.html    |
       | /base/c/%FF.html           |
       | /base/c/lcty.v1/sub.js     |
-      | /base/t/0010-short.html    |
-      | /base/t/00010-none.html    |
+      | /base/t/none.html          |
 
   # ---- PublicDirectoryServlet ----
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Tag names, tag file names t/NNNNN-<part>.html and references, with no imports (LCTYSP-0009).
+// Tag names, tag file names t/<part>.html and references, with no imports (LCTYSP-0009).
 
 /** The longest display name, in code points (after NFC). */
 export const TAG_NAME_MAX = 40;
@@ -10,15 +10,16 @@ export const TAG_NAME_MAX = 40;
 const FORBIDDEN_RE = /[\p{Z}\p{C}:;/"'`~\\|]/u;
 /** Escaped in the file-name part as ~ and two lowercase hex digits. */
 const ESCAPED_RE = /[!#$%&()*<>?[\]^{}]/g;
-/** The largest order number: five digits. */
-const MAX_NUMBER = 99999;
+/** Parts whose file would be the reorder page, a hidden file or a name /t/ redirects to /lcty.v1/. */
+const RESERVED_RE = /^(?:index$|\.|lcty\.v1)/;
 
-/** Why the display name cannot be used ("length" or "character"), or null, checked as it will be saved. */
+/** Why the display name cannot be used ("length", "character" or "reserved"), or null, checked as it will be saved. */
 export function tagNameError(name) {
 	const n = String(name).normalize("NFC");
 	const length = [...n].length;
 	if (length < 1 || length > TAG_NAME_MAX) return "length";
 	if (FORBIDDEN_RE.test(n)) return "character";
+	if (RESERVED_RE.test(tagPart(n))) return "reserved";
 	return null;
 }
 
@@ -35,19 +36,14 @@ export function tagPart(name) {
 	);
 }
 
-/** NNNNN-<part>.html */
-export function tagFileName(number, part) {
-	return `${String(number).padStart(5, "0")}-${part}.html`;
+/** <part>.html */
+export function tagFileName(part) {
+	return `${part}.html`;
 }
 
-/** The order number of a tag file name */
-export function tagNumber(file) {
-	return Number.parseInt(file.slice(0, 5), 10);
-}
-
-/** The reference to the tag of a definition: the part of its file name (without the number and .html) */
+/** The reference to the tag of a definition: the part of its file name (without .html) */
 export function tagRef(def) {
-	return def.file.normalize("NFC").slice(6, -5);
+	return def.file.normalize("NFC").slice(0, -5);
 }
 
 /** The display name of a reference: the name of its tag file, or the reference itself for an undefined tag */
@@ -63,25 +59,14 @@ export function sortTags(defs, refs) {
 	);
 }
 
-/** The file names of tags edited in order: numbers kept, a new tag largest + 10; throws "full" past five digits. */
+/** The file names of tags edited in order: each tag's file is its name's part; an invalid tag keeps its own. */
 export function assignFileNames(tags) {
-	let last = Math.max(
-		0,
-		...tags.filter((t) => t.file).map((t) => tagNumber(t.file)),
+	return tags.map((t) =>
+		t.invalid ? t : { ...t, file: tagFileName(tagPart(t.name)) },
 	);
-	return tags.map((t) => {
-		if (t.invalid) return t;
-		let number = t.file ? tagNumber(t.file) : 0;
-		if (!t.file) {
-			last += 10;
-			number = last;
-		}
-		if (number > MAX_NUMBER) throw new Error("full");
-		return { ...t, file: tagFileName(number, tagPart(t.name)) };
-	});
 }
 
-/** The file name of a tag file's page from its URL path (/t/00010-ruby.html): the last segment, decoded, NFC. */
+/** The file name of a tag file's page from its URL path (/t/ruby.html): the last segment, decoded, NFC. */
 export function tagFileOfPath(path) {
 	const last = path.split("/").pop();
 	try {
@@ -89,12 +74,4 @@ export function tagFileOfPath(path) {
 	} catch {
 		return last;
 	}
-}
-
-/** The same tags renumbered in the given order, 00010, 00020, … (the reorder page) */
-export function renumber(tags) {
-	return tags.map((t, i) => ({
-		...t,
-		file: tagFileName((i + 1) * 10, tagRef(t)),
-	}));
 }
