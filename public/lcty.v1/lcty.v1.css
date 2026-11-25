@@ -1164,6 +1164,9 @@ lcty-c::part(lcty-memory__proposal) {
 	display: grid;
 	gap: 6px;
 }
+.mem-add {
+	margin-top: 6px;
+}
 .mem-list li {
 	display: flex;
 	gap: 6px;

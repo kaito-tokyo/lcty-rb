@@ -15,7 +15,7 @@ SPDX-License-Identifier: Apache-2.0
 
 Conversations can carry tags. A tag has an optional prompt and a list of memory items; before a conversation starts,
 the chosen tags compose a draft of the system prompt. After that, tags are only labels for search. Memory is proposed by
-the model and added only when the user approves it.
+the model and added only when the user approves it, or written, edited and deleted by the user in the tag editor.
 
 ## Tags
 
@@ -86,6 +86,10 @@ draft = for each chosen tag, in definition order, joined with "\n\n":
 - **What to remember is instructed by the tag's prompt.** The UI has no memory policy of its own (for example, a "ruby"
   tag's prompt can say "remember the design decisions made and the constraints discovered").
 - **Memory is proposed by the model and added only when the user approves.** It never grows by itself.
+- **The user can also add, edit and delete memory items freely** in the tag editor (the tags dialog and a tag's page):
+  "+ Add a memory item" (＋ メモリを追加) appends a blank item with a new UUIDv7 id, each item has its Delete, and
+  all of it takes effect on Save, through replace-all; blank items are left out, and the server gives a new item its
+  `at`. The memory section is open on a tag's page, and in the dialog when the tag has at most five items.
 - **Memory enters the system prompt draft when a conversation starts.** After the start it is fixed; new memory does not
   change that conversation's system prompt.
 
@@ -476,7 +480,7 @@ Tags are handled in the browser the way the conversation meta is (`c_meta`,
   replace-all over it without getting all again.
 - Not adopted: adding memory through replace-all. Every addition would rewrite every file and could undo another tab's
   edits to other tags.
-- Editing and deleting memory items stay in the tag editor and go through replace-all.
+- Adding by hand, editing and deleting memory items stay in the tag editor and go through replace-all.
 
 ### Renaming is not a rename
 

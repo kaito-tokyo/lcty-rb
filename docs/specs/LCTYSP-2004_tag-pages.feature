@@ -91,6 +91,15 @@ Feature: LCTYSP-2004 The tag pages: /t/ and the tag files
     And the tag file's module /t/tag-file.js has been loaded
     And no page error happened, and no request of the site was answered with a status of 400 or more
 
+  Scenario: On a tag's page, memory items are added and deleted freely, and Save stores them
+    Given the tag A with the memory items "old one" and "keep me"
+    When the page of A's file /t/A.html is opened
+    Then its memory shows "old one" and "keep me", open
+    When the button "削除" of "old one" is pressed, "＋ メモリを追加" is pressed and "new one" is typed into the new item
+    And the button "保存" is pressed
+    Then the toast says "タグを保存しました"
+    And the server has the tag A with the memory items "keep me" and "new one", the new one with an id and a time
+
   Scenario: The system prompt field of the tag editor shows at least 12 lines
     Given the tag A
     When the tags dialog is opened on the new conversation page /c/

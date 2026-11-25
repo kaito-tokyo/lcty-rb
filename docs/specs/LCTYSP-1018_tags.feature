@@ -54,8 +54,23 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     When renderTagsEditor draws them
     Then it shows a section per tag with its name and prompt, in order
     And "ruby" shows its two memory items under "Memory (2 items, about 9 characters)", open
-    And "go" shows "Memory (0 items, about 0 characters)" and "big" its six items, both closed
+    And "go" shows "Memory (0 items, about 0 characters)", open, and "big" its six items, closed
     And isDirty() is false
+
+  Scenario: Adding a memory item appends a blank item with the focus, and Save sends it with a new id
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and "go"
+    When "+ Add a memory item" of "go" is clicked
+    Then "go" shows one blank memory item under "Memory (1 items, about 0 characters)", open, and the item has the focus
+    And isDirty() is true
+    When "remember this" is typed into the item and Save is clicked
+    Then t.replace is sent "go.html" with the one memory item "remember this", whose id is a UUIDv7 and which has no time
+
+  Scenario: Adding a memory item to a long memory keeps it open
+    Given a page on the server's origin
+    Given the editor of the definition "big" with six memory items
+    When the memory of "big" is opened and "+ Add a memory item" is clicked
+    Then "big" shows seven memory items, the last one blank, open
 
   Scenario: The order is changed on the reorder page, not in the editor
     Given a page on the server's origin
@@ -166,6 +181,11 @@ Feature: LCTYSP-1018 Tags, drafts and memory
     Given the editor of the definitions "ruby" and "go" for the file "go.html"
     Then it shows one section, "go", with its prompt
     And there is no button "+ New tag"
+
+  Scenario: With a file, the memory is open even with more than five items
+    Given a page on the server's origin
+    Given the editor of the definitions "ruby" and "big" with six memory items for the file "big.html"
+    Then "big" shows its six memory items, open, and the button "+ Add a memory item"
 
   Scenario: Saving with a file sends the whole set and gives onSaved the tag's new file
     Given a page on the server's origin

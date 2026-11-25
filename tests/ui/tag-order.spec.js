@@ -375,6 +375,54 @@ test("A tag named in Japanese has a page that opens from the reorder page and ed
 	});
 });
 
+test("On a tag's page, memory items are added and deleted freely, and Save stores them", async ({
+	page,
+	request,
+}) => {
+	const a = uniqueWord("a");
+	const items = page.locator(".tag-edit .mem-list li");
+	const texts = () =>
+		items.locator("textarea").evaluateAll((areas) => areas.map((t) => t.value));
+	await test.step('Given the tag A with the memory items "old one" and "keep me"', () =>
+		putTags(request, [
+			{
+				name: a,
+				memory: [
+					{ id: "m1", text: "old one" },
+					{ id: "m2", text: "keep me" },
+				],
+			},
+		]));
+	await test.step(`When the page of A's file /t/A.html is opened`, async () => {
+		await page.goto(`/t/${a}.html`);
+		await expect(
+			page.getByRole("button", { name: "＋ メモリを追加" }),
+		).toBeVisible();
+	});
+	await test.step('Then its memory shows "old one" and "keep me", open', async () => {
+		await expect.poll(texts).toEqual(["old one", "keep me"]);
+		await expect(page.locator(".tag-edit details")).toHaveAttribute("open");
+	});
+	await test.step('When the button "削除" of "old one" is pressed, "＋ メモリを追加" is pressed and "new one" is typed into the new item', async () => {
+		await items.first().getByRole("button", { name: "削除" }).click();
+		await page.getByRole("button", { name: "＋ メモリを追加" }).click();
+		await page.keyboard.type("new one");
+		await expect.poll(texts).toEqual(["keep me", "new one"]);
+	});
+	await test.step('And the button "保存" is pressed', () =>
+		page.getByRole("button", { name: "保存", exact: true }).click());
+	await test.step('Then the toast says "タグを保存しました"', async () => {
+		await expect(page.locator("#toast")).toHaveText("タグを保存しました");
+	});
+	await test.step('And the server has the tag A with the memory items "keep me" and "new one", the new one with an id and a time', async () => {
+		const [tag] = await getTags(request);
+		expect(tag.memory.map((m) => m.text)).toEqual(["keep me", "new one"]);
+		expect(tag.memory[0].id).toBe("m2");
+		expect(tag.memory[1].id).toMatch(/^[0-9a-f-]{36}$/);
+		expect(tag.memory[1].at).toBeTruthy();
+	});
+});
+
 /** The height of a textarea in lines of its text (line-height "normal" taken as 1.2 times the font size). */
 const heightInLines = (textarea) =>
 	textarea.evaluate((t) => {
