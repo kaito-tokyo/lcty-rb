@@ -396,11 +396,11 @@ test("The editor shows every definition with its memory", async ({
 			open: true,
 		});
 	});
-	await test.step('And "go" shows "Memory (0 items, about 0 characters)" and "big" its six items, both closed', () => {
+	await test.step('And "go" shows "Memory (0 items, about 0 characters)", open, and "big" its six items, closed', () => {
 		expect(state[1]).toMatchObject({
 			memory: [],
 			summary: "Memory (0 items, about 0 characters)",
-			open: false,
+			open: true,
 		});
 		expect(state[2]).toMatchObject({
 			memory: ["m0", "m1", "m2", "m3", "m4", "m5"],
@@ -409,6 +409,73 @@ test("The editor shows every definition with its memory", async ({
 		});
 	});
 	await thenIsDirty(page, false);
+});
+
+/** The definition "big" with six memory items m0 … m5 */
+const [BIG] = defsOf({
+	name: "big",
+	memory: Array.from({ length: 6 }, (_, i) => ({ id: `m${i}`, text: `m${i}` })),
+});
+/** The button "+ Add a memory item" of tag section i */
+const addMemoryButton = (page, i) =>
+	section(page, i).getByRole("button", {
+		name: "+ Add a memory item",
+		exact: true,
+	});
+
+test("Adding a memory item appends a blank item with the focus, and Save sends it with a new id", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditor(server, page);
+	await test.step('When "+ Add a memory item" of "go" is clicked', () =>
+		addMemoryButton(page, 1).click());
+	await test.step('Then "go" shows one blank memory item under "Memory (1 items, about 0 characters)", open, and the item has the focus', async () => {
+		expect((await editorState(page))[1]).toMatchObject({
+			memory: [""],
+			summary: "Memory (1 items, about 0 characters)",
+			open: true,
+		});
+		await expect(section(page, 1).locator(".mem-list textarea")).toBeFocused();
+	});
+	await thenIsDirty(page, true);
+	await test.step('When "remember this" is typed into the item and Save is clicked', async () => {
+		await page.keyboard.type("remember this");
+		await clickSave(page, server);
+	});
+	await test.step('Then t.replace is sent "go.html" with the one memory item "remember this", whose id is a UUIDv7 and which has no time', () => {
+		const go = server.replaces.at(-1).tags.find((t) => t.file === "go.html");
+		expect(go.memory).toHaveLength(1);
+		expect(go.memory[0].text).toBe("remember this");
+		expect(go.memory[0].id).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+		);
+		expect(go.memory[0].at).toBeUndefined();
+	});
+});
+
+test("Adding a memory item to a long memory keeps it open", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await givenTheEditor(
+		server,
+		page,
+		[BIG],
+		'Given the editor of the definition "big" with six memory items',
+	);
+	await test.step('When the memory of "big" is opened and "+ Add a memory item" is clicked', async () => {
+		await section(page, 0).locator("summary").click();
+		await addMemoryButton(page, 0).click();
+	});
+	await test.step('Then "big" shows seven memory items, the last one blank, open', async () => {
+		expect((await editorState(page))[0]).toMatchObject({
+			memory: ["m0", "m1", "m2", "m3", "m4", "m5", ""],
+			open: true,
+		});
+	});
 });
 
 test("The order is changed on the reorder page, not in the editor", async ({
@@ -802,6 +869,24 @@ test("With a file, the editor shows only that tag and no + New tag", async ({
 	});
 	await test.step('And there is no button "+ New tag"', async () => {
 		await expect(button(page, "+ New tag")).toHaveCount(0);
+	});
+});
+
+test("With a file, the memory is open even with more than five items", async ({
+	page,
+	context,
+}) => {
+	const server = await background(page, context);
+	await test.step('Given the editor of the definitions "ruby" and "big" with six memory items for the file "big.html"', () => {
+		server.tags = structuredClone([RUBY, BIG]);
+		server.etag = "e0";
+		return renderEditor(page, [RUBY, BIG], "e0", "big.html");
+	});
+	await test.step('Then "big" shows its six memory items, open, and the button "+ Add a memory item"', async () => {
+		expect(await editorState(page)).toMatchObject([
+			{ name: "big", memory: ["m0", "m1", "m2", "m3", "m4", "m5"], open: true },
+		]);
+		await expect(addMemoryButton(page, 0)).toBeVisible();
 	});
 });
 

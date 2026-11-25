@@ -76,6 +76,7 @@ type LctyTextKey =
 	| "confirmDeleteTag"
 	| "tagPromptLabel"
 	| "memorySummary"
+	| "addMemoryItem"
 	| "badTagName"
 	| "duplicateTagName"
 	| "invalidTagFile"

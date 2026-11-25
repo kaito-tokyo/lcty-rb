@@ -10,6 +10,7 @@ import { stream } from "./llm/client.js";
 import { buildRequest } from "./llm/history.js";
 import { siteUrl } from "./site.js";
 import { assignFileNames, tagNameError, tagPart, tagRef } from "./tag-names.js";
+import { uuidv7 } from "./uuid.js";
 
 function el(tag, props = {}, ...children) {
 	const e = document.createElement(tag);
@@ -55,6 +56,7 @@ export function renderTagsEditor(
 	let currentFile = file;
 	let current = single ? work.find((t) => t.file === currentFile) : null;
 	const list = el("div", { class: "tags-edit" });
+	const memOpen = new WeakMap(); // tag → whether the user left its memory open
 	const status = el("p", { class: "hint" });
 	// Takes work anew (after a reload or a save): the tag shown on a tag file's page is found again by its file
 	const reset = (tags) => {
@@ -148,13 +150,32 @@ export function renderTagsEditor(
 							),
 						),
 					);
+					// A new, blank item at the end, focused; blank items are left out of what is saved
+					const addButton = el(
+						"button",
+						{
+							type: "button",
+							class: "mem-add",
+							onclick: () => {
+								t.memory = [...(t.memory || []), { id: uuidv7(), text: "" }];
+								memOpen.set(t, true);
+								render();
+								const areas = list.querySelectorAll(
+									`section[data-index="${i}"] .mem-list textarea`,
+								);
+								areas[areas.length - 1]?.focus();
+							},
+						},
+						tr("addMemoryItem", "+ Add a memory item"),
+					);
 					const memChars = (t.memory || []).reduce(
 						(s, m) => s + m.text.length,
 						0,
 					);
+					const count = (t.memory || []).length;
 					return el(
 						"section",
-						{ class: "tag-edit" },
+						{ class: "tag-edit", dataset: { index: String(i) } },
 						el(
 							"div",
 							{ class: "tag-edit-head" },
@@ -186,8 +207,9 @@ export function renderTagsEditor(
 						el(
 							"details",
 							{
-								open:
-									(t.memory || []).length > 0 && (t.memory || []).length <= 5,
+								// open on a tag's page, else up to five items, until the user opens or closes it
+								open: memOpen.get(t) ?? (single || count <= 5),
+								ontoggle: (e) => memOpen.set(t, e.target.open),
 							},
 							el(
 								"summary",
@@ -195,13 +217,11 @@ export function renderTagsEditor(
 								tr(
 									"memorySummary",
 									"Memory ({count} items, about {chars} characters)",
-									{
-										count: (t.memory || []).length,
-										chars: memChars.toLocaleString(),
-									},
+									{ count, chars: memChars.toLocaleString() },
 								),
 							),
 							memList,
+							addButton,
 						),
 					);
 				}),

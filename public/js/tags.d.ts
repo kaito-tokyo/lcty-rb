@@ -41,6 +41,11 @@ export function composeDraft(
  * rest of the set is sent back as it is. Deleting it saves at once. onSaved's file is the tag's file after the save
  * (a new name gives a new file), or null when it was deleted.
  *
+ * Each tag's memory items can be edited, deleted and added freely ("+ Add a memory item" appends a blank item with a
+ * new UUIDv7 id and focuses it); like every edit they take effect on Save, and blank items are left out of what is
+ * sent (the server gives a new item its time). The memory section is open on a tag file's page, and in the dialog
+ * when a tag has at most five items; once the user opens or closes it, it stays so while the editor shows.
+ *
  * Saving checks every name (tagNameError, with its own message for a reserved name) and that the names are unique as
  * parts; the tags are sent in the order shown, so a new tag goes last. A save refused as changed (TAGS_CHANGED: the tags were changed in
  * another tab meanwhile) takes the new state, and the user redoes the edit on it; when that state cannot be loaded, the

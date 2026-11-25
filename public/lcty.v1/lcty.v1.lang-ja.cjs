@@ -58,6 +58,7 @@ LctyT.addLang("ja", {
 		"タグ「{name}」を削除しますか？（会話に付いたタグの名前は残ります）",
 	tagPromptLabel: "システムプロンプト（何を覚えるかの方針もここに書く）",
 	memorySummary: "メモリ（{count} 件・約 {chars} 文字）",
+	addMemoryItem: "＋ メモリを追加",
 	badTagName:
 		"タグの名前「{name}」は使えません（1〜40文字。空白、制御文字、: ; / \" ' ` ~ \\ | は不可）",
 	duplicateTagName: "タグの名前が重複しています",
