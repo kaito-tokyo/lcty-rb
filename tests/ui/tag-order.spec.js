@@ -374,3 +374,38 @@ test("A tag named in Japanese has a page that opens from the reorder page and ed
 		).toEqual([]);
 	});
 });
+
+/** The height of a textarea in lines of its text (line-height "normal" taken as 1.2 times the font size). */
+const heightInLines = (textarea) =>
+	textarea.evaluate((t) => {
+		const s = getComputedStyle(t);
+		const line =
+			Number.parseFloat(s.lineHeight) || Number.parseFloat(s.fontSize) * 1.2;
+		return t.clientHeight / line;
+	});
+
+test("The system prompt field of the tag editor shows at least 12 lines", async ({
+	page,
+	request,
+}) => {
+	const a = uniqueWord("a");
+	const prompt = (scope) =>
+		scope.getByRole("textbox", {
+			name: "システムプロンプト（何を覚えるかの方針もここに書く）",
+		});
+	await test.step("Given the tag A", () => putTags(request, [{ name: a }]));
+	await test.step("When the tags dialog is opened on the new conversation page /c/", () =>
+		openTagsDialog(page));
+	await test.step("Then A's system prompt field in the dialog is at least 12 lines tall", async () => {
+		const field = prompt(page.locator("#tags-dialog"));
+		await expect(field).toBeVisible();
+		expect(await heightInLines(field)).toBeGreaterThanOrEqual(12);
+	});
+	await test.step(`When the page of A's file /t/A.html is opened`, () =>
+		page.goto(`/t/${a}.html`));
+	await test.step("Then the system prompt field of the page is at least 12 lines tall, and can be edited", async () => {
+		const field = prompt(page);
+		await expect(field).toBeEditable();
+		expect(await heightInLines(field)).toBeGreaterThanOrEqual(12);
+	});
+});

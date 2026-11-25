@@ -1150,6 +1150,13 @@ lcty-c::part(lcty-memory__proposal) {
 	flex: 1;
 	font-weight: 600;
 }
+/* the tag's system prompt: 12 lines at least, growing with its text up to most of the window where the browser can */
+.tag-edit > .field textarea {
+	min-height: calc(12lh + 14px);
+	max-height: 70vh;
+	field-sizing: content;
+	resize: vertical;
+}
 .mem-list {
 	list-style: none;
 	margin: 6px 0 0;

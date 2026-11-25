@@ -185,6 +185,8 @@ unasked.
   sidebar and shows the tag read-only from the file's own elements; the page's features (`/t/tag-file.js`) replace that
   with the editor, which reads the tag from the browser's copy by the file name of the page
   ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
+- **The prompt field is large,** in the dialog and on the page alike: at least 12 lines, growing with its text up to
+  70% of the window where the browser supports `field-sizing: content` (else it scrolls), and resizable by the user.
 - **Saving is the same replace-all** as the dialog's (`t.replace` with the etag), with the other tags sent back
   as they are. A rename gives the tag a new file, so the page moves to the new file's URL; deleting it saves at once
   and moves to the reorder page.
