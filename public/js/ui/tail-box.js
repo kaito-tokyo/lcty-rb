@@ -7,8 +7,8 @@
 // the part of the box in view that starts following, and the ratios the view is read at
 const FOLLOW = 0.8;
 const THRESHOLDS = Array.from({ length: 21 }, (_, i) => i / 20);
-// the room between the content's end and the composer while following, in px
-const MARGIN = 16;
+// the room between the content's end and the composer while following, in lines, as below the messages (lcty.v1.css)
+const MARGIN_LINES = 3;
 const SCROLL_KEYS = new Set([
 	"ArrowUp",
 	"ArrowDown",
@@ -21,6 +21,12 @@ const SCROLL_KEYS = new Set([
 
 /** The height reserved at first, and added at each step: a third of the view. */
 const part = () => Math.round(innerHeight / 3);
+
+/** The height of a line of el's text in px, 1.2 times its font size for line-height: normal. */
+function lineHeight(el) {
+	const s = getComputedStyle(el);
+	return Number.parseFloat(s.lineHeight) || 1.2 * Number.parseFloat(s.fontSize);
+}
 
 // the boxes on the page, which a scroll by the reader stops following
 const boxes = new Set();
@@ -142,11 +148,13 @@ export class TailBox {
 		}
 	}
 
-	/** Put the content's end right above the composer. */
+	/** Put the content's end three lines above the composer. */
 	toEnd() {
-		const dock = this.article.closest("lcty-c")?.dock;
+		const frame = this.article.closest("lcty-c");
+		const dock = frame?.dock;
+		this.margin ??= MARGIN_LINES * lineHeight(frame ?? this.article);
 		const limit =
-			(dock ? dock.getBoundingClientRect().top : innerHeight) - MARGIN;
+			(dock ? dock.getBoundingClientRect().top : innerHeight) - this.margin;
 		const end = this.content.getBoundingClientRect().bottom;
 		// above the composer too, so that the room left in the box stays below the view
 		if (Math.abs(end - limit) >= 1) {

@@ -116,8 +116,10 @@ instead of every frame.
 The box also gives the page a simple measure of whether the reader is at the reply's end:
 
 - **Following the reply.** The page follows the reply from when at least 80% of the box comes into view (80% of the
-  view's height, when the box is taller than the view): it keeps the end of the tail's content 16px above the composer
-  as the content grows. It puts the end there from above as well as from below, so after "To the bottom", which goes
+  view's height, when the box is taller than the view): it keeps the end of the tail's content three lines above the
+  composer as the content grows. Three lines is the room the page always leaves below the messages
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md#layout-of-the-conversation-page)), where "To the bottom" and the running command
+  float, so they never cover the text being written, and the reply does not move when it ends. It puts the end there from above as well as from below, so after "To the bottom", which goes
   to the page's end, the room left in the box moves below the view instead of showing under the content. It stops
   following when the box leaves the view entirely, or when the reader scrolls: a scroll the page did not make itself,
   by a wheel, a touch, a key or the scroll bar, stops it at once, even with the box still in view, so the page never

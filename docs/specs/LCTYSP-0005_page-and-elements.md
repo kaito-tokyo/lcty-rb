@@ -458,6 +458,10 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   appended elements), so `<lcty-c>` does everything there. Other pages place components individually.
 - The header is `position: sticky` at the top, the composer is `sticky` at the bottom, and the sidebar is
   `position: fixed`. A growing spacer after the `<slot>` keeps the composer at the bottom even with few messages.
+  The spacer is at least three lines high (`min-height: 3lh`), so at the end of the page the last message always
+  ends three lines above the composer, and "To the bottom" and the running command, which float above the composer,
+  never cover it. A reply streaming in is followed to the same place
+  ([LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box)).
 - **The new conversation page (`/c/`)** puts the creation card (`main.new-card`, plain HTML) in the middle of the screen, framed like a dialog (border,
   rounded corners, shadow; at most 760px wide) so it reads as creating something. The sidebar is the same as on every
   page.

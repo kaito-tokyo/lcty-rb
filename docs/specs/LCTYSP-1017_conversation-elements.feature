@@ -104,12 +104,13 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     When the page is scrolled to its top and back to its end, and 20 more lines are added
     Then the end of the tail's content is in view again
 
-  Scenario: Following keeps the end of the tail's content right above the bottom of the view
-    Given a page twice the view high
+  Scenario: Following keeps the end of the tail's content three lines above the bottom of the view
+    Given the page's line height is 20px
+    And a page twice the view high
     And a streaming reply below it
     And the page is scrolled to its end, so the box is in view
     When appendText adds 20 lines of code and the frames are drawn
-    Then the end of the tail's content is 16px above the bottom of the view, and the room left in the box below it
+    Then the end of the tail's content is 60px (three lines) above the bottom of the view, and the room left in the box below it
 
   Scenario: A scroll up that no input made stops following
     Given a page twice the view high

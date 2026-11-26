@@ -21,8 +21,11 @@
  * - A commit does not move what is below: when the <article> grows, the box gives up as much, as far as the content
  *   still fits, so the reply's height stays.
  * - Following: from when at least 80% of the box is in view (of the view's height, when the box is taller than the
- *   view), the end of the content is kept 16px above the composer of the <lcty-c> it is in (or the view's bottom),
- *   from above as from below, so that the room left in the box stays below the view. It stops when no part of the box
+ *   view), the end of the content is kept three lines above the composer of the <lcty-c> it is in (or the view's
+ *   bottom), from above as from below, so that the room left in the box stays below the view. A line is the line
+ *   height of the <lcty-c> (of the <article> outside one), read once, the first time the box follows; it is the room
+ *   lcty.v1.css leaves below the messages, so the reply stays where it is when it ends, and the floating "To the
+ *   bottom" and running command never cover its end. It stops when no part of the box
  *   is in view, or when the reader scrolls: a wheel, a touch move, a key that scrolls the page (arrows, Page Up and
  *   Down, Home, End, Space) pressed outside a field, a press on the page's scroll bar, or a scroll up that the box did
  *   not make. It starts again only when the box comes into view by 80% again, after it was less.

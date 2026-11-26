@@ -616,8 +616,8 @@ test("The page follows a reply whose box is in view until the reader scrolls", a
 });
 
 /** A page twice the view high above a streaming reply of an open code block, scrolled to its end, so it is followed. */
-async function givenAFollowedReply(page) {
-	await test.step("Given a page twice the view high", async () => {
+async function givenAFollowedReply(page, prefix = "Given") {
+	await test.step(`${prefix} a page twice the view high`, async () => {
 		await page.evaluate(() => {
 			const above = document.createElement("div");
 			above.style.height = `${2 * innerHeight}px`;
@@ -635,12 +635,16 @@ async function givenAFollowedReply(page) {
 	});
 }
 
-test("Following keeps the end of the tail's content right above the bottom of the view", async ({
+test("Following keeps the end of the tail's content three lines above the bottom of the view", async ({
 	page,
 	context,
 }) => {
 	await background(page, context);
-	await givenAFollowedReply(page);
+	await test.step("Given the page's line height is 20px", () =>
+		page.evaluate(() => {
+			document.body.style.lineHeight = "20px";
+		}));
+	await givenAFollowedReply(page, "And");
 	await test.step("When appendText adds 20 lines of code and the frames are drawn", async () => {
 		await page.evaluate(
 			(text) => window.E.appendText(window.r, text),
@@ -648,9 +652,9 @@ test("Following keeps the end of the tail's content right above the bottom of th
 		);
 		await settle(page);
 	});
-	await test.step("Then the end of the tail's content is 16px above the bottom of the view, and the room left in the box below it", async () => {
+	await test.step("Then the end of the tail's content is 60px (three lines) above the bottom of the view, and the room left in the box below it", async () => {
 		const box = await tailBox(page);
-		expect(Math.abs(box.contentBottom - (box.view - 16))).toBeLessThanOrEqual(
+		expect(Math.abs(box.contentBottom - (box.view - 60))).toBeLessThanOrEqual(
 			2,
 		);
 		expect(box.bottom).toBeGreaterThan(box.view);

@@ -546,9 +546,11 @@ lcty-setup::part(lcty-setup__text) {
 	margin: 6px 0 0;
 	font-family: var(--font-mono);
 }
-/* below the messages: the composer stays at the bottom, even with few messages */
+/* below the messages: the composer stays at the bottom, even with few messages, and three lines are always left
+   above it, where "to the bottom" and the running command float (tail-box.js follows a reply to the same room) */
 lcty-c::part(lcty-c__spacer) {
 	flex: 1;
+	min-height: 3lh;
 }
 lcty-c::part(lcty-c__end) {
 	height: 0;
