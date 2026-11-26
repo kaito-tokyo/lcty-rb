@@ -1312,8 +1312,17 @@ test("The frame holds the sidebar, the header, the messages, the dock, the memor
 					e === c.composer ? "composer" : sel(e),
 				),
 				float: [...float.children].map((e) =>
-					e === c.toEndButton ? "toEndButton" : `${sel(e)}${e.name}`,
+					e === c.toEndButton
+						? "toEndButton"
+						: e === c.followLabel
+							? `followLabel(${[...e.children].map((x) => (x === c.followCheck ? "followCheck" : sel(x))).join()})`
+							: `${sel(e)}${e.name}`,
 				),
+				follow: [
+					c.followLabel.hidden,
+					c.followCheck.type,
+					c.followLabel.textContent,
+				],
 				fields: [
 					c.sidebar === c.shadowRoot.getElementById("sidebar"),
 					c.dock === c.shadowRoot.getElementById("dock"),
@@ -1351,9 +1360,16 @@ test("The frame holds the sidebar, the header, the messages, the dock, the memor
 			"New chat",
 		]);
 	});
-	await test.step('And the dock holds div#float (holding its field toEndButton and <slot name="float">) and its field composer', () => {
+	await test.step('And the dock holds div#float (holding its field toEndButton, <slot name="float"> and its field followLabel, which holds its field followCheck) and its field composer', () => {
 		expect(f.dock).toEqual(["div#float", "composer"]);
-		expect(f.float).toEqual(["toEndButton", "slot[]float"]);
+		expect(f.float).toEqual([
+			"toEndButton",
+			"slot[]float",
+			"followLabel(followCheck)",
+		]);
+	});
+	await test.step('And followLabel "Auto-scroll" is hidden and followCheck is a checkbox', () => {
+		expect(f.follow).toEqual([true, "checkbox", "Auto-scroll"]);
 	});
 	await test.step("And its fields sidebar, dock and memoryDialog are those elements", () => {
 		expect(f.fields).toEqual([true, true, true]);
@@ -1607,6 +1623,51 @@ test("The frame imports the page's features once, after the page has loaded", as
 	});
 	await test.step("Then /lcty.v1/lcty.v1.async.mjs has been requested once", () => {
 		expect(server.moduleRequests).toBe(1);
+	});
+});
+
+test('"Auto-scroll" shows unchecked while an element is in the float slot', async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenBody(page, '<lcty-c id="c-conv"></lcty-c>');
+	const state = () =>
+		page.evaluate(() => {
+			const c = document.querySelector("lcty-c");
+			return {
+				hidden: c.followLabel.hidden,
+				shown: c.followLabel.getBoundingClientRect().height > 0,
+				checked: c.followCheck.checked,
+			};
+		});
+	await test.step("Then followLabel is hidden", async () => {
+		expect(await state()).toMatchObject({ hidden: true, shown: false });
+	});
+	await test.step('When followCheck is checked and a <div slot="float"> is added to <lcty-c>', () =>
+		page.evaluate(() => {
+			const c = document.querySelector("lcty-c");
+			c.followCheck.checked = true;
+			const d = document.createElement("div");
+			d.slot = "float";
+			d.textContent = "running";
+			c.append(d);
+		}));
+	await test.step("Then followLabel is shown and followCheck is unchecked", async () => {
+		await expect
+			.poll(state)
+			.toEqual({ hidden: false, shown: true, checked: false });
+	});
+	await test.step("When followCheck is checked and the <div> is removed", () =>
+		page.evaluate(() => {
+			const c = document.querySelector("lcty-c");
+			c.followCheck.checked = true;
+			c.querySelector('[slot="float"]').remove();
+		}));
+	await test.step("Then followLabel is hidden and followCheck is unchecked", async () => {
+		await expect
+			.poll(state)
+			.toEqual({ hidden: true, shown: false, checked: false });
 	});
 });
 

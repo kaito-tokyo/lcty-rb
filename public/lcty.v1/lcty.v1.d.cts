@@ -122,6 +122,7 @@ type LctyTextKey =
 	| "stopped"
 	| "selectAll"
 	| "toEnd"
+	| "follow"
 	| "generating"
 	| "retry"
 	| "remove"
@@ -252,11 +253,22 @@ declare class LctyCElement extends HTMLElement {
 	composer: LctyComposerElement;
 	/** The memory proposal dialog (#memory-dialog) */
 	memoryDialog: HTMLDialogElement;
-	/** "To the bottom" (#to-end), floating above the composer; shown while the end (lcty-c__end) is more than 48 px below the view */
+	/** "To the bottom" (#to-end), in the bar above the composer; shown while the end (lcty-c__end) is more than 48 px below the view */
 	toEndButton: HTMLButtonElement;
 	/**
-	 * The bottom dock (#dock, sticky): #float (floating above it: #to-end and <slot name="float"> for a running
-	 * lcty-cmd) and the composer
+	 * "Auto-scroll" (#follow, part lcty-c__follow), in the bar above the composer after the running command: shown
+	 * while an element is in <slot name="float">, that is while a command runs, and unchecked each time it is shown or
+	 * hidden. It holds followCheck.
+	 */
+	followLabel: HTMLLabelElement;
+	/**
+	 * The checkbox of followLabel (part lcty-c__follow-check): whether a reply streaming in is followed. js/ui/tail-box.js
+	 * keeps it equal to its box's following and follows or stops when the reader changes it (LCTYSP-0018).
+	 */
+	followCheck: HTMLInputElement;
+	/**
+	 * The bottom dock (#dock, sticky, opaque): #float, the bar above the composer that takes its own room so that it
+	 * never covers a message (#to-end, <slot name="float"> for a running lcty-cmd, and #follow), and the composer
 	 */
 	dock: HTMLDivElement;
 }

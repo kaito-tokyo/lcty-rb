@@ -250,7 +250,8 @@ Feature: LCTYSP-1016 The elements of a conversation file
     And the body holds <lcty-c id="c-conv"></lcty-c>
     Then its Shadow DOM is lcty-sidebar#sidebar, header#conv-header, <slot>, div#log-spacer, div#dock, dialog#memory-dialog and the end (part lcty-c__end)
     And the header holds its fields titleInput, tags (holding tagList and tagPicker), proposeMemoryButton and deleteButton
-    And the dock holds div#float (holding its field toEndButton and <slot name="float">) and its field composer
+    And the dock holds div#float (holding its field toEndButton, <slot name="float"> and its field followLabel, which holds its field followCheck) and its field composer
+    And followLabel "Auto-scroll" is hidden and followCheck is a checkbox
     And its fields sidebar, dock and memoryDialog are those elements
     And the title field reads "My chat"
     And the sidebar exports the parts of the sidebar and its list, and the composer the parts of the composer
@@ -303,6 +304,14 @@ Feature: LCTYSP-1016 The elements of a conversation file
     Given the body holds two <lcty-c> elements
     When the page has loaded
     Then /lcty.v1/lcty.v1.async.mjs has been requested once
+
+  Scenario: "Auto-scroll" shows unchecked while an element is in the float slot
+    Given the body holds <lcty-c id="c-conv"></lcty-c>
+    Then followLabel is hidden
+    When followCheck is checked and a <div slot="float"> is added to <lcty-c>
+    Then followLabel is shown and followCheck is unchecked
+    When followCheck is checked and the <div> is removed
+    Then followLabel is hidden and followCheck is unchecked
 
   Scenario: "Scroll to bottom" shows while the end of the page is out of view
     Given the body holds <lcty-c id="c-conv"> with a message 3000px tall

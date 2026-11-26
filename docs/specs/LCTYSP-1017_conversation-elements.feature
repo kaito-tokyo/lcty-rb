@@ -119,6 +119,32 @@ Feature: LCTYSP-1017 Messages and the composer of a conversation
     When a script scrolls the page up by 200px and 20 lines of code are added
     Then the end of the tail's content is not in view
 
+  Scenario: "Auto-scroll" is checked while the reply is followed, and unchecking it stops following
+    Given the container is an <lcty-c> with the page's styles, whose features are not loaded, and a page twice the view high in it
+    And a streaming reply in it
+    And the page is scrolled to its end, so the box is in view
+    Then "Auto-scroll" is shown and checked
+    When the reader unchecks "Auto-scroll" and 20 lines of code are added
+    Then "Auto-scroll" is unchecked and the end of the tail's content is below the dock
+    When the reader turns the wheel down until the box fills the view
+    Then "Auto-scroll" is still unchecked
+    When the reader checks "Auto-scroll"
+    Then it is checked and the end of the tail's content is three lines above the dock again
+
+  Scenario: A scroll by the reader unchecks "Auto-scroll"
+    Given the container is an <lcty-c> with the page's styles, whose features are not loaded, and a page twice the view high in it
+    And a streaming reply in it
+    And the page is scrolled to its end, so "Auto-scroll" is checked
+    When the reader turns the wheel up
+    Then "Auto-scroll" is unchecked
+
+  Scenario: "Auto-scroll" checked before the reply begins follows it from its start
+    Given the container is an <lcty-c> with the page's styles, whose features are not loaded, and a page twice the view high in it
+    And the page is at its top, and the reader checks "Auto-scroll"
+    When a streaming reply begins in it with 20 lines of code
+    And the frames are drawn
+    Then "Auto-scroll" is still checked and the end of the tail's content is three lines above the dock
+
   Scenario: Thinking is counted while it streams and shown when it is open
     Given a streaming reply
     When appendThinking adds "abc" and "de" and a frame is drawn

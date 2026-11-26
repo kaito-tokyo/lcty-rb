@@ -148,6 +148,24 @@
 		this.toEndButton.addEventListener("click", () =>
 			window.scrollTo(0, document.scrollingElement.scrollHeight),
 		);
+		// Whether a reply streaming in is followed: shown while a command runs, kept by js/ui/tail-box.js
+		this.followCheck = $(document.createElement("input"), {
+			type: "checkbox",
+			part: "lcty-c__follow-check",
+		});
+		this.followLabel = $(
+			document.createElement("label"),
+			{ id: "follow", part: "lcty-c__follow", hidden: "" },
+			this.followCheck,
+			_("follow", "Auto-scroll"),
+		);
+		const floatSlot = $(document.createElement("slot"), { name: "float" });
+		floatSlot.addEventListener("slotchange", () => {
+			const running = floatSlot.assignedElements().length > 0;
+			if (running === !this.followLabel.hidden) return;
+			this.followLabel.hidden = !running;
+			this.followCheck.checked = false;
+		});
 		this.dock = $(
 			document.createElement("div"),
 			{ id: "dock", part: "lcty-c__dock" },
@@ -155,7 +173,8 @@
 				document.createElement("div"),
 				{ id: "float", part: "lcty-c__float" },
 				this.toEndButton,
-				$(document.createElement("slot"), { name: "float" }),
+				floatSlot,
+				this.followLabel,
 			),
 			this.composer,
 		);
@@ -166,10 +185,10 @@
 		// the end of the page, watched for "to the bottom"
 		this.end = $(document.createElement("div"), { part: "lcty-c__end" });
 
-		// Tuning (LCTYSP-0005): the × of a tag chip is a bare button; the floating area lets clicks through between its buttons
+		// Tuning (LCTYSP-0005): the × of a tag chip is a bare button; a hidden control of the bar above the composer stays hidden
 		const sheet = new CSSStyleSheet();
 		sheet.replaceSync(
-			'[part~="lcty-c__tag-remove"] { background: transparent; border: 0; padding: 0 0 0 2px; cursor: pointer; } [part~="lcty-c__float"] { pointer-events: none; } [part~="lcty-c__float"] > * { pointer-events: auto; }',
+			'[part~="lcty-c__tag-remove"] { background: transparent; border: 0; padding: 0 0 0 2px; cursor: pointer; } [part~="lcty-c__float"] > [hidden] { display: none !important; }',
 		);
 		this.attachShadow({ mode: "open" }).adoptedStyleSheets = [sheet];
 		this.shadowRoot.append(

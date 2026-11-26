@@ -71,6 +71,8 @@ function listen() {
 
 /** The tail's box after article: its content is where the tail is drawn. */
 export class TailBox {
+	#following = false;
+
 	constructor(article) {
 		this.article = article;
 		this.box = document.createElement("div");
@@ -89,11 +91,14 @@ export class TailBox {
 		// the heights last seen, the <article>'s null before the first
 		this.articleHeight = null;
 		this.contentHeight = 0;
-		this.following = false;
+		// the frame's "Auto-scroll" if the reader checked it before the reply began, as when it thinks first
+		this.#following = this.frame?.followCheck.checked ?? false;
 		// where the page was scrolled to last, by the page or by the reader
 		this.scrolled = scrollY;
 		// whether coming into view by FOLLOW starts following: not again until the box has been out of it
-		this.armed = true;
+		this.armed = !this.#following;
+		// whether the reader unchecked "Auto-scroll": following then starts again only when they check it
+		this.held = false;
 		this.resize = new ResizeObserver((entries) => this.resized(entries));
 		this.resize.observe(this.content);
 		this.resize.observe(article);
@@ -103,6 +108,36 @@ export class TailBox {
 		this.view.observe(this.box);
 		boxes.add(this);
 		listen();
+		// "Auto-scroll" changed by the reader (a change event does not leave the frame's Shadow DOM)
+		this.check = this.frame?.followCheck ?? null;
+		this.checked = () => this.follow(this.check.checked);
+		this.check?.addEventListener("change", this.checked);
+		// followed from the start: its end is put in view before the view is first read, which would find it out of view
+		if (this.#following) this.toEnd();
+	}
+
+	/** The <lcty-c> the reply is in, whose "Auto-scroll" shows following; null outside one. */
+	get frame() {
+		return this.article.closest("lcty-c");
+	}
+
+	/** Whether the page follows the reply now: "Auto-scroll" is checked while it does. */
+	get following() {
+		return this.#following;
+	}
+
+	set following(on) {
+		this.#following = on;
+		const check = this.frame?.followCheck;
+		if (check) check.checked = on;
+	}
+
+	/** Follow the reply from its end, or stop, as the reader checked or unchecked "Auto-scroll". */
+	follow(on) {
+		this.following = on;
+		this.armed = false;
+		this.held = !on;
+		if (on) this.toEnd();
 	}
 
 	/** The content's and the <article>'s new heights, read after the browser has laid them out. */
@@ -141,7 +176,7 @@ export class TailBox {
 			e.rootBounds?.height ?? innerHeight,
 		);
 		if (shown < FOLLOW * whole) this.armed = true;
-		else if (this.armed) {
+		else if (this.armed && !this.held) {
 			this.armed = false;
 			this.following = true;
 			this.toEnd();
@@ -150,7 +185,7 @@ export class TailBox {
 
 	/** Put the content's end three lines above the composer. */
 	toEnd() {
-		const frame = this.article.closest("lcty-c");
+		const frame = this.frame;
 		const dock = frame?.dock;
 		this.margin ??= MARGIN_LINES * lineHeight(frame ?? this.article);
 		const limit =
@@ -172,6 +207,7 @@ export class TailBox {
 	remove() {
 		this.resize.disconnect();
 		this.view.disconnect();
+		this.check?.removeEventListener("change", this.checked);
 		boxes.delete(this);
 		this.box.remove();
 		this.article.style.removeProperty("display");

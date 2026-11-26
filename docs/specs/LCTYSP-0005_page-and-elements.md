@@ -240,8 +240,8 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
   (`adoptedStyleSheets`): a `CSSStyleSheet` built with `replaceSync` in the element's constructor, right where its
   Shadow DOM is made, so the tuning sits next to the elements it tunes. It must stay
   small, since it is part of `lcty.v1.cjs`, and it never sets what the page would want to change (colors, sizes of
-  text, spacing between elements, layout). Today: in `<lcty-c>` (the tag chip's × as a bare button, and the floating area letting clicks through
-  between its buttons); in `<lcty-composer>` (the textarea as a bare field: no border, background,
+  text, spacing between elements, layout). Today: in `<lcty-c>` (the tag chip's × as a bare button, and a hidden control of the bar above the
+  composer staying hidden, as the page's `display` for it would otherwise show it); in `<lcty-composer>` (the textarea as a bare field: no border, background,
   outline or resize handle, its inner padding and maximum height). Page rules through `::part()` still win over
   them (the outer tree's normal declarations come first in the cascade).
 - **No Shadow DOM loads a stylesheet.** The page links `lcty.v1.css` once (line 2 of a conversation file, the
@@ -283,7 +283,7 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
 - **Parts today.**
   - `lcty-c`: `__sidebar`, `__header`, `__title`, `__tags`, `__tag-list`, `__tag` (`--unknown`), `__tag-name`,
     `__tag-remove`, `__tag-picker`, `__propose-memory`, `__delete`, `__spacer`, `__dock`,
-    `__float`, `__to-end`, `__end`, `__composer`,
+    `__float`, `__to-end`, `__follow`, `__follow-check`, `__end`, `__composer`,
     `__memory`.
   - `lcty-setup`: `__details`, `__summary`, `__text`.
   - `lcty-memory`: `__form`, `__title`, `__hint`, `__proposals`, `__proposal`, `__adopt`, `__tag`, `__text`,
@@ -459,9 +459,13 @@ sidebar, the composer, messages, commands), or where a conversation file has to 
 - The header is `position: sticky` at the top, the composer is `sticky` at the bottom, and the sidebar is
   `position: fixed`. A growing spacer after the `<slot>` keeps the composer at the bottom even with few messages.
   The spacer is at least three lines high (`min-height: 3lh`), so at the end of the page the last message always
-  ends three lines above the composer, and "To the bottom" and the running command, which float above the composer,
-  never cover it. A reply streaming in is followed to the same place
+  ends three lines above the dock. A reply streaming in is followed to the same place
   ([LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box)).
+- **Nothing is drawn over a message.** The dock (`#dock`) is opaque, and its controls, "To the bottom", the running
+  command and "Auto-scroll", are in a bar of their own above the composer (`#float`, part `lcty-c__float`), which
+  takes its room in the dock instead of floating over the messages. The bar is always the same height (44px), empty
+  or not, so the dock never changes its height as the controls show and hide. A message scrolled under the dock is
+  hidden whole, never showing through between the controls.
 - **The new conversation page (`/c/`)** puts the creation card (`main.new-card`, plain HTML) in the middle of the screen, framed like a dialog (border,
   rounded corners, shadow; at most 760px wide) so it reads as creating something. The sidebar is the same as on every
   page.
@@ -498,16 +502,22 @@ Rendering must stay cheaper than generation:
 - **Scrolling is the user's.** The page never moves to the end by itself: where it opens is the browser's (the top, the
   `#c-msg-…` element, or on reload the previous position); the page does not touch `history.scrollRestoration`. Moving to the end
   on open fought the browser's restoration and the estimated heights of off-screen messages, and sometimes ended at
-  the top. The one exception is a reply streaming in that the reader is at the end of: the page follows it while the
-  reader stays there, as [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box) says, and stops when the reader
-  leaves.
-- **"To the bottom" floats above the composer** (`#to-end` in `<lcty-c>`), shown while the end is out of view (more
-  than 48px below): an `IntersectionObserver` watches an empty element at the end of the frame (`lcty-c__end`). It moves to the end once.
-- **A running command floats next to it.** While an `lcty-cmd` runs (every generation does: sending, regenerating, a
-  new conversation), it sets `slot="float"` on itself and floats next to "To the bottom" with its spinner and a stop
-  button; when it ends it removes the attribute and is hidden again. Nothing else scrolls the page but the button and
-  the following of a reply ([LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box)): not sending, and not a
-  reply streaming in below a reader who is not at its end.
+  the top. The one exception is a reply streaming in that is followed: the page follows it while the reader is at its
+  end or has checked "Auto-scroll", as [LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box) says, and stops
+  when the reader leaves or unchecks it.
+- **"To the bottom" is in the bar above the composer** (`#to-end` in `<lcty-c>`), shown while the end is out of view
+  (more than 48px below): an `IntersectionObserver` watches an empty element at the end of the frame (`lcty-c__end`).
+  It moves to the end once.
+- **A running command is next to it.** While an `lcty-cmd` runs (every generation does: sending, regenerating, a
+  new conversation), it sets `slot="float"` on itself and shows in the bar next to "To the bottom" with its spinner and
+  a stop button; when it ends it removes the attribute and is hidden again.
+- **"Auto-scroll" is next to the running command** (`#follow` in `<lcty-c>`, a checkbox in a label), shown exactly
+  while an element is in `<slot name="float">`, that is while a command runs, so it is always there while a reply is
+  generated. It is unchecked when it shows and when it hides. It is checked while the reply streaming in is followed,
+  and the reader turns following on and off with it
+  ([LCTYSP-0018](LCTYSP-0018_markdown-streaming.md#the-tails-box)). Nothing else scrolls the page but "To the bottom",
+  "Auto-scroll" and the following of a reply: not sending, and not a reply streaming in below a reader who is not at
+  its end and has not checked "Auto-scroll".
 - Not adopted: streaming insertion APIs such as `streamAppendHTML` (behind a flag as of 2026-11, not in Safari). The hard
   part, incremental Markdown parsing, has to be written anyway, and rendering is not a bottleneck.
 

@@ -547,7 +547,7 @@ lcty-setup::part(lcty-setup__text) {
 	font-family: var(--font-mono);
 }
 /* below the messages: the composer stays at the bottom, even with few messages, and three lines are always left
-   above it, where "to the bottom" and the running command float (tail-box.js follows a reply to the same room) */
+   above the dock (tail-box.js follows a reply to the same room) */
 lcty-c::part(lcty-c__spacer) {
 	flex: 1;
 	min-height: 3lh;
@@ -555,23 +555,41 @@ lcty-c::part(lcty-c__spacer) {
 lcty-c::part(lcty-c__end) {
 	height: 0;
 } /* the end of the page, watched for "to the bottom" */
+/* opaque, so that a message scrolled under it is hidden whole instead of showing through between its controls */
 lcty-c::part(lcty-c__dock) {
 	position: sticky;
 	bottom: 0;
+	background: var(--bg);
 }
 lcty-c::part(lcty-c__composer) {
 	background: var(--bg);
 }
-/* floating above the composer: "to the bottom" and the running command (<lcty-cmd slot="float">) */
+/* the bar above the composer: "to the bottom", the running command (<lcty-cmd slot="float">) and "Auto-scroll".
+   It takes its own room, always the same, so it never covers a message and the dock never changes its height */
 lcty-c::part(lcty-c__float) {
-	position: absolute;
-	bottom: calc(100% + 8px);
-	left: 0;
-	right: 0;
+	box-sizing: border-box;
+	min-height: 44px;
+	padding: 8px 16px 0;
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
 	justify-content: center;
-	align-items: center; /* clicks pass between its buttons: lcty.v1.cjs */
+	align-items: center;
+}
+lcty-c::part(lcty-c__follow) {
+	display: inline-flex;
+	gap: 6px;
+	align-items: center;
+	padding: 4px 14px;
+	color: var(--fg-dim);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-pill);
+	cursor: pointer;
+	user-select: none;
+}
+lcty-c::part(lcty-c__follow-check) {
+	margin: 0;
+	cursor: pointer;
 }
 lcty-c::part(lcty-c__to-end) {
 	border-radius: var(--radius-pill);
@@ -995,7 +1013,7 @@ lcty-msg:is([data-role="system"], [data-role="memory"]) > article {
 	font-family: var(--font-mono);
 }
 
-/* ---- <lcty-cmd> (js/ui/lcty-cmd.js): shown only while running, a spinner and a stop button; floats above the
+/* ---- <lcty-cmd> (js/ui/lcty-cmd.js): shown only while running, a spinner and a stop button; in the bar above the
    composer (slot="float") ---- */
 lcty-cmd {
 	display: none;

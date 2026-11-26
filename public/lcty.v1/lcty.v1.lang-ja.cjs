@@ -115,6 +115,7 @@ LctyT.addLang("ja", {
 	stopped: "停止しました",
 	selectAll: "すべて選択",
 	toEnd: "一番下へ",
+	follow: "自動スクロール",
 	generating: "生成中…",
 	retry: "やり直す",
 	remove: "削除",

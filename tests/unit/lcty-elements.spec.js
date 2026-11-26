@@ -7,7 +7,8 @@
 //
 // js/ui/lcty-elements.js runs in a real browser on the test server's origin, on the empty unit page, which loads
 // /c/lcty.v1.js for the custom elements. The container is a plain <div> with a <lcty-composer> as its composer (a real
-// <lcty-c> would import the conversation page's features). The module and the elements are kept on window (E, c,
+// <lcty-c> would import the conversation page's features), except for the scenarios of "Auto-scroll", which need the
+// frame and give it empty features. The module and the elements are kept on window (E, c,
 // composer) so each step can reach them.
 
 import { expect, test } from "@playwright/test";
@@ -679,6 +680,173 @@ test("A scroll up that no input made stops following", async ({
 	await test.step("Then the end of the tail's content is not in view", async () => {
 		const box = await tailBox(page);
 		expect(box.contentBottom).toBeGreaterThan(box.view);
+	});
+});
+
+/**
+ * The container becomes a real <lcty-c id="c-frame"> with lcty.v1.css, its sticky dock and its "Auto-scroll", a page
+ * twice the view high above the reply; the features it imports are left empty, so that nothing but this module runs.
+ */
+async function givenAFrame(page, context) {
+	await test.step("Given the container is an <lcty-c> with the page's styles, whose features are not loaded, and a page twice the view high in it", async () => {
+		await context.route("**/lcty.v1/lcty.v1.async.mjs", (route) =>
+			route.fulfill({ contentType: "text/javascript", body: "" }),
+		);
+		await page.evaluate(
+			() =>
+				new Promise((resolve, reject) => {
+					const link = document.createElement("link");
+					link.rel = "stylesheet";
+					link.href = "/lcty.v1/lcty.v1.css";
+					link.onload = resolve;
+					link.onerror = reject;
+					document.head.append(link);
+				}),
+		);
+		await page.evaluate(() => {
+			const frame = document.createElement("lcty-c");
+			frame.id = "c-frame";
+			const above = document.createElement("div");
+			above.style.height = `${2 * innerHeight}px`;
+			frame.append(above);
+			window.c.replaceWith(frame);
+			window.composer.remove();
+			window.c = frame;
+			// a running command, as while a reply is generated: "Auto-scroll" shows
+			const cmd = document.createElement("div");
+			cmd.slot = "float";
+			cmd.textContent = "running";
+			frame.append(cmd);
+		});
+	});
+}
+
+/** "Auto-scroll" of the frame: whether it is shown and checked, and where the tail's content ends against the dock. */
+const followState = (page) =>
+	page.evaluate(() => {
+		const content = window.r.querySelector(".md-tail-content");
+		return {
+			shown: window.c.followLabel.getBoundingClientRect().height > 0,
+			checked: window.c.followCheck.checked,
+			// how far the end of the tail's content is above the dock, in lines of the frame
+			linesAbove:
+				(window.c.dock.getBoundingClientRect().top -
+					content.getBoundingClientRect().bottom) /
+				Number.parseFloat(getComputedStyle(window.c).lineHeight),
+		};
+	});
+
+/** Click "Auto-scroll" of the frame, as the reader does. */
+const clickFollow = (page) =>
+	page.locator('#c-frame [part~="lcty-c__follow-check"]').click();
+
+test('"Auto-scroll" is checked while the reply is followed, and unchecking it stops following', async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAFrame(page, context);
+	await givenAStreamingReply(page, "And a streaming reply in it");
+	await test.step("And the page is scrolled to its end, so the box is in view", async () => {
+		await page.evaluate(() => window.E.appendText(window.r, "```\n"));
+		await settle(page);
+		await page.evaluate(() =>
+			scrollTo(0, document.scrollingElement.scrollHeight),
+		);
+		await settle(page);
+	});
+	await test.step('Then "Auto-scroll" is shown and checked', async () => {
+		expect(await followState(page)).toMatchObject({
+			shown: true,
+			checked: true,
+		});
+	});
+	await test.step('When the reader unchecks "Auto-scroll" and 20 lines of code are added', async () => {
+		await clickFollow(page);
+		await page.evaluate(
+			(text) => window.E.appendText(window.r, text),
+			codeLines(20),
+		);
+		await settle(page);
+	});
+	await test.step('Then "Auto-scroll" is unchecked and the end of the tail\'s content is below the dock', async () => {
+		const s = await followState(page);
+		expect(s.checked).toBe(false);
+		expect(s.linesAbove).toBeLessThan(0);
+	});
+	await test.step("When the reader turns the wheel down until the box fills the view", async () => {
+		const top = await page.evaluate(
+			() => window.r.querySelector(".md-tail").getBoundingClientRect().top,
+		);
+		await page.mouse.move(100, 100);
+		await page.mouse.wheel(0, top + 10);
+		await settle(page);
+	});
+	await test.step('Then "Auto-scroll" is still unchecked', async () => {
+		const box = await page.evaluate(() =>
+			window.r.querySelector(".md-tail").getBoundingClientRect().toJSON(),
+		);
+		expect(box.top).toBeLessThanOrEqual(0);
+		expect((await followState(page)).checked).toBe(false);
+	});
+	await test.step('When the reader checks "Auto-scroll"', async () => {
+		await clickFollow(page);
+		await settle(page);
+	});
+	await test.step("Then it is checked and the end of the tail's content is three lines above the dock again", async () => {
+		const s = await followState(page);
+		expect(s.checked).toBe(true);
+		expect(Math.abs(s.linesAbove - 3)).toBeLessThanOrEqual(0.1);
+	});
+});
+
+test('A scroll by the reader unchecks "Auto-scroll"', async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAFrame(page, context);
+	await givenAStreamingReply(page, "And a streaming reply in it");
+	await test.step('And the page is scrolled to its end, so "Auto-scroll" is checked', async () => {
+		await page.evaluate(() => window.E.appendText(window.r, "```\n"));
+		await settle(page);
+		await page.evaluate(() =>
+			scrollTo(0, document.scrollingElement.scrollHeight),
+		);
+		await settle(page);
+		expect((await followState(page)).checked).toBe(true);
+	});
+	await test.step("When the reader turns the wheel up", async () => {
+		await page.mouse.move(100, 100);
+		await page.mouse.wheel(0, -40);
+		await settle(page);
+	});
+	await test.step('Then "Auto-scroll" is unchecked', async () => {
+		expect((await followState(page)).checked).toBe(false);
+	});
+});
+
+test('"Auto-scroll" checked before the reply begins follows it from its start', async ({
+	page,
+	context,
+}) => {
+	await background(page, context);
+	await givenAFrame(page, context);
+	await test.step('And the page is at its top, and the reader checks "Auto-scroll"', async () => {
+		await page.evaluate(() => scrollTo(0, 0));
+		await settle(page);
+		await clickFollow(page);
+	});
+	await givenAStreamingReply(
+		page,
+		"When a streaming reply begins in it with 20 lines of code",
+		`\`\`\`\n${codeLines(20)}`,
+	);
+	await test.step("And the frames are drawn", () => settle(page));
+	await test.step('Then "Auto-scroll" is still checked and the end of the tail\'s content is three lines above the dock', async () => {
+		const s = await followState(page);
+		expect(s.checked).toBe(true);
+		expect(Math.abs(s.linesAbove - 3)).toBeLessThanOrEqual(0.1);
 	});
 });
 
