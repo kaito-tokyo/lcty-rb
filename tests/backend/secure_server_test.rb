@@ -103,6 +103,22 @@ class SecureServerTest < Lcty::Scenarios
     end
   end
 
+  [
+    ['GET /c/', 'text/html; charset=utf-8', Chatty::PAGE_CSP],
+    ['GET /lcty.v1/lcty.v1.cjs', 'text/javascript; charset=utf-8', Chatty::SCRIPT_CSP]
+  ].each do |line, type, csp|
+    scenario "A 304 of a page or a script keeps the policy of its type (#{line})" do
+      method, path = line.split(' ', 2)
+      etag = res = nil
+      step("Given the ETag of #{line}") { etag = request(method, path)['etag'] }
+      step("When #{line} is requested with If-None-Match of that ETag") do
+        res = request(method, path, 'If-None-Match' => etag)
+      end
+      step(%(Then the status is 304 with the type "#{type}")) { assert_equal ['304', type], [res.code, res['content-type']] }
+      step(%(And Content-Security-Policy is the policy of "#{type}")) { assert_equal csp, res['content-security-policy'] }
+    end
+  end
+
   ['GET /v1/defaults.json', 'GET /lcty.v1/lcty.v1.css', 'GET /nope'].each do |line|
     scenario "A response that is neither a page nor a script gets the short policy (#{line})" do
       res = nil

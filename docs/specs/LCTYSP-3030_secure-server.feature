@@ -41,6 +41,17 @@ Feature: LCTYSP-3030 The protective headers of every response
       | GET /fuzzy_search.worker.js |
       | GET /lcty.v1/lcty.v1.cjs    |
 
+  Scenario Outline: A 304 of a page or a script keeps the policy of its type
+    Given the ETag of <path>
+    When <path> is requested with If-None-Match of that ETag
+    Then the status is 304 with the type <type>
+    And Content-Security-Policy is the policy of <type>
+
+    Examples:
+      | path                     | type                             |
+      | GET /c/                  | "text/html; charset=utf-8"       |
+      | GET /lcty.v1/lcty.v1.cjs | "text/javascript; charset=utf-8" |
+
   Scenario Outline: A response that is neither a page nor a script gets the short policy
     When <path> is requested
     Then Content-Security-Policy is "default-src 'none'; frame-ancestors 'none'"
