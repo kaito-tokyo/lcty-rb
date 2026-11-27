@@ -12,11 +12,11 @@ on:
     branches: [main]
   workflow_call:
 
-# One job per browser, each with a server of its own, so the browsers run side by side. test-ui, the check the main
-# ruleset requires, passes when all of them have.
+# One job per browser and Ruby (the server in the compose.yml of each dev container), each with a server of its own, so
+# they run side by side. test-ui, the check the main ruleset requires, passes when all of them have.
 jobs:
   test-ui-browser:
-    name: test-ui (${{ matrix.browser }})
+    name: test-ui (${{ matrix.browser }}, ${{ matrix.ruby }})
     runs-on: ubuntu-26.04
     timeout-minutes: 20
 
@@ -27,10 +27,11 @@ jobs:
       fail-fast: false
       matrix:
         browser: [chromium, webkit, firefox]
+        ruby: [ruby-4.0.10, ruby-2.6.10]
 
     env:
       BROWSER: ${{ matrix.browser }}
-      COMPOSE_FILE: .devcontainer/ruby-2.6.10/compose.yml
+      COMPOSE_FILE: .devcontainer/${{ matrix.ruby }}/compose.yml
 
     steps:
       - name: Checkout
@@ -70,7 +71,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7.0.0
         with:
-          name: playwright-test-results-${{ matrix.browser }}
+          name: playwright-test-results-${{ matrix.browser }}-${{ matrix.ruby }}
           path: test-results/
 
       - name: Stop the server

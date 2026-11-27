@@ -21,9 +21,10 @@ server over a SQLite FTS5 index, with semantic search, which runs in the browser
 - **The index is derived data** in `data/_index.sqlite` and can always be rebuilt from the conversation files
   ([LCTYSP-0010](LCTYSP-0010_data-and-settings.md)); it is discarded and made anew at every start
   ([LCTYSP-0015](LCTYSP-0015_schema-versions.md)).
-- It uses the sqlite3 gem bundled with `/usr/bin/ruby` (1.3.13, SQLite 3.54). FTS5 and the trigram tokenizer are
-  available. Extension loading is disabled (`OMIT_LOAD_EXTENSION`), so vector extensions such as sqlite-vec cannot be
-  used. Only APIs that exist in that gem version are used (`Database#execute`, `#transaction`, `SQLite3::Blob`).
+- It uses the sqlite3 gem of `Gemfile.lock` (2.10) on Ruby 4.0, and the one bundled with `/usr/bin/ruby` (1.3.13,
+  SQLite 3.54) on macOS's Ruby. FTS5 and the trigram tokenizer are available in both. Extension loading is disabled in
+  macOS's (`OMIT_LOAD_EXTENSION`), so vector extensions such as sqlite-vec are not used. Only APIs that exist in both
+  gem versions are used (`Database#execute` with the bind values in an array, `#transaction`, `SQLite3::Blob`).
 - WEBrick uses a thread per request, so there is one connection guarded by a Mutex.
 
 ### Rounds (chunks)

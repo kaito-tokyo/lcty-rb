@@ -11,9 +11,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Summary
 
-lcty-rb is a personal chat web UI for local LLMs served by llama-server. It runs on the Ruby that ships with macOS
-(`/usr/bin/ruby`, Ruby.framework, 2.6) using only its standard library and bundled gems, and it stores every
-conversation as a plain HTML file instead of in a database server.
+lcty-rb is a personal chat web UI for local LLMs served by llama-server. It targets Ruby 4.0 with the three libraries
+of its `Gemfile`, keeps to what the Ruby that ships with macOS (`/usr/bin/ruby`, Ruby.framework, 2.6) can run, and
+stores every conversation as a plain HTML file instead of in a database server.
 
 The top priority is performance, above all the time from sending a message to the first token on screen.
 
@@ -74,12 +74,17 @@ Two principles drive the design:
 - Plain ES modules, no external libraries and no CDN.
 - Pages are a multi-page application: every page has its own URL ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md)).
 
-### Runs on macOS's Ruby.framework
+### Targets Ruby 4.0, and still runs on macOS's Ruby.framework
 
-- Targets `/usr/bin/ruby` 2.6 with its standard library and the gems bundled with macOS (`webrick`, `sqlite3`,
-  `nokogiri`). Nothing has to be installed.
-- The code uses only syntax and APIs available in 2.6, so it also runs on ordinary Ruby once those three gems are
-  installed.
+- Targets Ruby 4.0 with its standard library and the gems of the `Gemfile` (`webrick`, `sqlite3`, `nokogiri`, and
+  `base64`, a bundled gem since Ruby 3.4), at the versions of `Gemfile.lock`, run with Bundler
+  (`bundle exec ruby lcty.rb`).
+- The code uses only syntax and APIs available in both 2.6 and 4.0, so `/usr/bin/ruby` 2.6 still runs it without
+  Bundler, on the gems bundled with macOS (nokogiri 1.13.8, sqlite3 1.3.13). CI runs every test on both
+  (`.devcontainer/ruby-4.0.10`, `.devcontainer/ruby-2.6.10`), but 4.0 is the Ruby lcty-rb is set up and used with.
+- Before 2026-11-27 lcty-rb targeted `/usr/bin/ruby` 2.6 only, and its `Gemfile` pinned the versions macOS has. Those
+  versions have known vulnerabilities that GitHub reported against `Gemfile.lock` and that cannot be fixed on 2.6, so
+  the `Gemfile` moved to Ruby 4.0. macOS's own copies of those gems are unchanged.
 
 ## Security
 

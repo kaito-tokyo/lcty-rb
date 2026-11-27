@@ -108,7 +108,8 @@ class LctyTest < Lcty::Scenarios
     end
     step('Then it exits with the status 1 and prints "lcty-rb: " and the message of the settings file, without a backtrace') do
       assert_equal 1, status.exitstatus
-      assert_equal "lcty-rb: #{path}: invalid option: --prot=8080\n", err
+      # Ruby 4.0's OptionParser adds a "Did you mean?" line; 2.6's does not
+      assert_match(/\Alcty-rb: #{Regexp.escape(path)}: invalid option: --prot=8080\n(Did you mean\?.*\n)?\z/, err)
     end
   ensure
     FileUtils.rm_rf(dir)
@@ -121,7 +122,7 @@ class LctyTest < Lcty::Scenarios
     step('When lcty.rb is run with "--prot"') { _, err, status = run_lcty(dir, '--prot') }
     step('Then it exits with the status 1 and prints "lcty-rb: the command line: invalid option: --prot" and the usage') do
       assert_equal 1, status.exitstatus
-      assert_equal "lcty-rb: the command line: invalid option: --prot\n#{usage}", err
+      assert_match(/\Alcty-rb: the command line: invalid option: --prot\n(Did you mean\?.*\n)?#{Regexp.escape(usage)}\z/, err)
     end
   ensure
     FileUtils.rm_rf(dir)

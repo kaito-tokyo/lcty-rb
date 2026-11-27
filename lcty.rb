@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 # frozen_string_literal: true
 
 # SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
@@ -6,14 +6,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # lcty-rb: static file server + JSON document store.
-# Runs on macOS /usr/bin/ruby (2.6) with the standard library only. Never talks to the chat model (LCTYSP-0001); it
-# starts a llama-server of its own for the embedding model of semantic search (LCTYSP-0019).
+# Targets Ruby 4.0 with the libraries of the Gemfile, and keeps to Ruby 2.6 so macOS's /usr/bin/ruby still runs it.
+# Never talks to the chat model (LCTYSP-0001); it starts a llama-server of its own for the embedding model of semantic
+# search (LCTYSP-0019).
 #
-#   /usr/bin/ruby lcty.rb                            # => http://127.0.0.1:45280, or the next free port up to 45379
-#   LCTY_PORT=8080 /usr/bin/ruby lcty.rb             # => http://127.0.0.1:8080 (that port only; PORT if unset)
-#   /usr/bin/ruby lcty.rb --bind-ip=127.0.0.1 --bind-ip=192.168.1.10   # => both addresses, at one port
-#   /usr/bin/ruby lcty.rb --base-url=/lcty/          # => the site under /lcty/
-#   /usr/bin/ruby lcty.rb --help                     # => every option
+#   bundle exec ruby lcty.rb                         # => http://127.0.0.1:45280, or the next free port up to 45379
+#   LCTY_PORT=8080 bundle exec ruby lcty.rb          # => http://127.0.0.1:8080 (that port only; PORT if unset)
+#   bundle exec ruby lcty.rb --bind-ip=127.0.0.1 --bind-ip=192.168.1.10   # => both addresses, at one port
+#   bundle exec ruby lcty.rb --base-url=/lcty/       # => the site under /lcty/
+#   bundle exec ruby lcty.rb --help                  # => every option
 #
 # The port is an environment variable only (LCTY_PORT, else PORT), and LCTY_DATA_DIR says where the data directory is.
 # The options can also be written one per line in server_settings.txt of the data directory; LCTY_BIND_IP, LCTY_BASE_URL

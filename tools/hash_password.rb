@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 # frozen_string_literal: true
 
 # SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
@@ -9,7 +9,7 @@
 # (lib/password.rb, LCTYSP-0010). The password is asked twice without echo on a terminal; from anything else it is the
 # first line of input, so a script can pipe it.
 #
-#   /usr/bin/ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
+#   bundle exec ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
 #
 # Exits with 1, printing nothing, when the password cannot be used.
 

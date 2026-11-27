@@ -209,7 +209,7 @@ browser.
   twice without echo on a terminal, and else reads the first line of its input.
 
   ```bash
-  /usr/bin/ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
+  bundle exec ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
   ```
 
   A user or password changed applies after a restart, as every setting does.

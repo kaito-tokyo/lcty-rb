@@ -1,4 +1,4 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 # frozen_string_literal: true
 
 # SPDX-FileCopyrightText: 2026 Kaito Udagawa <umireon@kaito.tokyo>
@@ -9,7 +9,7 @@
 # stopped (lib/convert_c.rb, LCTYSP-3023). Each file is copied to c-former/ before it is replaced; a file converted
 # already is left as it is. Back up the data directory first.
 #
-#   /usr/bin/ruby tools/convert.rb
+#   bundle exec ruby tools/convert.rb
 #
 # LCTY_DATA_DIR says where the data directory is, as for lcty.rb. Exits with 1 when a file could not be converted.
 

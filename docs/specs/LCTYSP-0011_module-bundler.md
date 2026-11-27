@@ -26,7 +26,7 @@ because the modules follow strict conventions, and the bundler refuses to start 
 
 - **One file per page.** The new conversation page loads one module file, `/c/index.js`, and the modules themselves
   (`public/js/`) stay in the repository.
-- **No external tools.** The server runs on macOS's `/usr/bin/ruby` with no Node.js or npm, so the bundler is part of
+- **No external tools.** The server runs on Ruby with no Node.js or npm, so the bundler is part of
   the server and has to be small enough to read in one sitting.
 - **No runtime.** The output has no loader, no module registry and no wrapper functions: it is the modules' own code
   in blocks.

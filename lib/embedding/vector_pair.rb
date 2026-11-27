@@ -77,7 +77,7 @@ module Chatty
         @idx_path = idx_path
         @lock = Mutex.new
         @rows_of = {} # id => [record numbers of its valid rows]
-        @invalid = SortedSet.new # record numbers of NaN rows (record 0, the header, is not one)
+        @invalid = Set.new # record numbers of NaN rows (record 0, the header, is not one); ranges sorts them
         start(current, now)
       end
 
@@ -179,7 +179,7 @@ module Chatty
       end
 
       def ranges
-        @invalid.each_with_object([]) do |r, out|
+        @invalid.sort.each_with_object([]) do |r, out|
           if out.last && out.last[1] == r - 1
             out.last[1] = r
           else
