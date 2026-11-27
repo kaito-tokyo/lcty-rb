@@ -44,9 +44,11 @@ module Lcty::Servlets
       res['Cache-Control'] = @cache_control
       res['Last-Modified'] = file_stat.mtime.httpdate
       res['ETag'] = get_etag(file_stat)
+      # The type goes on a 304 too: the protective headers follow it (lib/secure_server.rb), and a browser puts the
+      # headers of a 304 on the copy it keeps, so a 304 without it would give a page the policy that blocks everything
+      res.content_type = @content_type
       raise WEBrick::HTTPStatus::NotModified if req['If-None-Match'].to_s.split(/\s*,\s*/).include?(res['ETag'])
 
-      res.content_type = @content_type
       res.body = File.binread(@path_from_pwd)
     end
   end
