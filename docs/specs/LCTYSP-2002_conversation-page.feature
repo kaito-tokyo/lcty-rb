@@ -29,6 +29,11 @@ Feature: LCTYSP-2002 The conversation page
     And the tag chip in the header shows the tag's display name
     And no page error happened and no request of the site was answered with a status of 400 or more
 
+  Scenario: Three lines are left between the last message and the composer
+    Given a conversation whose reply of 4000 characters is taller than the view is open
+    When the page is scrolled to its end
+    Then the last message ends at least three lines of the page's text above the composer
+
   # ---- Sending ----
 
   Scenario: A message sent on the conversation page gets a reply and both are saved

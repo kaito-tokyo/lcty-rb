@@ -7,8 +7,8 @@
 // the part of the box in view that starts following, and the ratios the view is read at
 const FOLLOW = 0.8;
 const THRESHOLDS = Array.from({ length: 21 }, (_, i) => i / 20);
-// the room between the content's end and the composer while following, in px
-const MARGIN = 16;
+// the room between the content's end and the composer while following, in lines, as below the messages (lcty.v1.css)
+const MARGIN_LINES = 3;
 const SCROLL_KEYS = new Set([
 	"ArrowUp",
 	"ArrowDown",
@@ -21,6 +21,12 @@ const SCROLL_KEYS = new Set([
 
 /** The height reserved at first, and added at each step: a third of the view. */
 const part = () => Math.round(innerHeight / 3);
+
+/** The height of a line of el's text in px, 1.2 times its font size for line-height: normal. */
+function lineHeight(el) {
+	const s = getComputedStyle(el);
+	return Number.parseFloat(s.lineHeight) || 1.2 * Number.parseFloat(s.fontSize);
+}
 
 // the boxes on the page, which a scroll by the reader stops following
 const boxes = new Set();
@@ -65,6 +71,8 @@ function listen() {
 
 /** The tail's box after article: its content is where the tail is drawn. */
 export class TailBox {
+	#following = false;
+
 	constructor(article) {
 		this.article = article;
 		this.box = document.createElement("div");
@@ -83,11 +91,14 @@ export class TailBox {
 		// the heights last seen, the <article>'s null before the first
 		this.articleHeight = null;
 		this.contentHeight = 0;
-		this.following = false;
+		// the frame's "Auto-scroll" if the reader checked it before the reply began, as when it thinks first
+		this.#following = this.frame?.followCheck.checked ?? false;
 		// where the page was scrolled to last, by the page or by the reader
 		this.scrolled = scrollY;
 		// whether coming into view by FOLLOW starts following: not again until the box has been out of it
-		this.armed = true;
+		this.armed = !this.#following;
+		// whether the reader unchecked "Auto-scroll": following then starts again only when they check it
+		this.held = false;
 		this.resize = new ResizeObserver((entries) => this.resized(entries));
 		this.resize.observe(this.content);
 		this.resize.observe(article);
@@ -97,6 +108,36 @@ export class TailBox {
 		this.view.observe(this.box);
 		boxes.add(this);
 		listen();
+		// "Auto-scroll" changed by the reader (a change event does not leave the frame's Shadow DOM)
+		this.check = this.frame?.followCheck ?? null;
+		this.checked = () => this.follow(this.check.checked);
+		this.check?.addEventListener("change", this.checked);
+		// followed from the start: its end is put in view before the view is first read, which would find it out of view
+		if (this.#following) this.toEnd();
+	}
+
+	/** The <lcty-c> the reply is in, whose "Auto-scroll" shows following; null outside one. */
+	get frame() {
+		return this.article.closest("lcty-c");
+	}
+
+	/** Whether the page follows the reply now: "Auto-scroll" is checked while it does. */
+	get following() {
+		return this.#following;
+	}
+
+	set following(on) {
+		this.#following = on;
+		const check = this.frame?.followCheck;
+		if (check) check.checked = on;
+	}
+
+	/** Follow the reply from its end, or stop, as the reader checked or unchecked "Auto-scroll". */
+	follow(on) {
+		this.following = on;
+		this.armed = false;
+		this.held = !on;
+		if (on) this.toEnd();
 	}
 
 	/** The content's and the <article>'s new heights, read after the browser has laid them out. */
@@ -135,18 +176,20 @@ export class TailBox {
 			e.rootBounds?.height ?? innerHeight,
 		);
 		if (shown < FOLLOW * whole) this.armed = true;
-		else if (this.armed) {
+		else if (this.armed && !this.held) {
 			this.armed = false;
 			this.following = true;
 			this.toEnd();
 		}
 	}
 
-	/** Put the content's end right above the composer. */
+	/** Put the content's end three lines above the composer. */
 	toEnd() {
-		const dock = this.article.closest("lcty-c")?.dock;
+		const frame = this.frame;
+		const dock = frame?.dock;
+		this.margin ??= MARGIN_LINES * lineHeight(frame ?? this.article);
 		const limit =
-			(dock ? dock.getBoundingClientRect().top : innerHeight) - MARGIN;
+			(dock ? dock.getBoundingClientRect().top : innerHeight) - this.margin;
 		const end = this.content.getBoundingClientRect().bottom;
 		// above the composer too, so that the room left in the box stays below the view
 		if (Math.abs(end - limit) >= 1) {
@@ -164,6 +207,7 @@ export class TailBox {
 	remove() {
 		this.resize.disconnect();
 		this.view.disconnect();
+		this.check?.removeEventListener("change", this.checked);
 		boxes.delete(this);
 		this.box.remove();
 		this.article.style.removeProperty("display");

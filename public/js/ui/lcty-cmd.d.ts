@@ -8,7 +8,8 @@
 //   <lcty-cmd data-op="send" data-at="…"></lcty-cmd>
 //
 // When a command becomes the last element of <lcty-c>, it runs its operation (data-op) and is responsible for it: while
-// running it floats above the composer (slot="float" of <lcty-c>) with a spinner and a stop button, and can be aborted.
+// running it shows in the bar above the composer (slot="float" of <lcty-c>, next to "Auto-scroll") with a spinner and
+// a stop button, and can be aborted.
 // It never scrolls the page. A command is added either
 //   - to the file as well (when a conversation is created): opening the conversation again runs it while it is still
 //     the last element, so an interrupted creation resumes; or

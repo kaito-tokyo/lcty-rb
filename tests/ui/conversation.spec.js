@@ -115,6 +115,48 @@ test("Opening a conversation loads its frame, its features and the sidebar", asy
 	});
 });
 
+test("Three lines are left between the last message and the composer", async ({
+	page,
+	request,
+}) => {
+	await test.step("Given a conversation whose reply of 4000 characters is taller than the view is open", async () => {
+		const conv = await createConversation(request, {
+			title: "長い答え",
+			messages: [
+				["user", "長い質問"],
+				["assistant", "長".repeat(4000)],
+			],
+		});
+		await openConversation(page, conv.id);
+		await expect(messages(page)).toHaveCount(2);
+		expect(
+			await messages(page)
+				.last()
+				.evaluate((m) => m.getBoundingClientRect().height > innerHeight),
+		).toBe(true);
+	});
+	await test.step("When the page is scrolled to its end", () =>
+		page.evaluate(() => scrollTo(0, document.scrollingElement.scrollHeight)));
+	await test.step("Then the last message ends at least three lines of the page's text above the composer", async () => {
+		const room = await messages(page)
+			.last()
+			.evaluate((last) => {
+				const c = last.closest("lcty-c");
+				return {
+					gap:
+						c.dock.getBoundingClientRect().top -
+						last.getBoundingClientRect().bottom,
+					lines: 3 * Number.parseFloat(getComputedStyle(c).lineHeight),
+					atEnd:
+						scrollY + innerHeight >= document.scrollingElement.scrollHeight - 1,
+				};
+			});
+		expect(room.atEnd).toBe(true);
+		expect(room.lines).toBeGreaterThan(0);
+		expect(room.gap).toBeGreaterThanOrEqual(room.lines - 1);
+	});
+});
+
 // ---- Sending ----
 
 test("A message sent on the conversation page gets a reply and both are saved", async ({

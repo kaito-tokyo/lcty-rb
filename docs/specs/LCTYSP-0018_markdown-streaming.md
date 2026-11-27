@@ -116,20 +116,33 @@ instead of every frame.
 The box also gives the page a simple measure of whether the reader is at the reply's end:
 
 - **Following the reply.** The page follows the reply from when at least 80% of the box comes into view (80% of the
-  view's height, when the box is taller than the view): it keeps the end of the tail's content 16px above the composer
-  as the content grows. It puts the end there from above as well as from below, so after "To the bottom", which goes
+  view's height, when the box is taller than the view): it keeps the end of the tail's content three lines above the
+  dock (the composer and the bar of controls above it) as the content grows. Three lines is the room the page always
+  leaves below the messages ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md#layout-of-the-conversation-page)), so the
+  reply does not move when it ends, and as the dock is opaque and draws nothing over the messages, no line being
+  written is ever hidden. It puts the end there from above as well as from below, so after "To the bottom", which goes
   to the page's end, the room left in the box moves below the view instead of showing under the content. It stops
   following when the box leaves the view entirely, or when the reader scrolls: a scroll the page did not make itself,
   by a wheel, a touch, a key or the scroll bar, stops it at once, even with the box still in view, so the page never
-  pulls the reader back. Following starts again only when the box comes into view again by 80%, as it does when the
-  reader goes back to the end, or presses "To the bottom". Whether the box is in view is read from an
+  pulls the reader back. Following starts again by itself only when the box comes into view again by 80%, as it does
+  when the reader goes back to the end, or presses "To the bottom". Whether the box is in view is read from an
   `IntersectionObserver` on it, at every 5%, with no read of layout. The reader's scrolls are told apart mostly by
   their input, as a scroll event cannot say who made it. A scroll bar drawn over the page, as macOS's is, leaves no
   input to see, so while following, a scroll up from where the page last put the view stops it too; a scroll down is
   let be, as the page's own growth may make one.
+- **"Auto-scroll".** While a reply is generated, the checkbox "Auto-scroll" shows in the bar above the composer
+  ([LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams)), checked exactly while the page follows the
+  reply, so the reader always sees whether it does. The reader turns following on and off with it:
+  - Checking it follows at once: the page goes to the reply's end, wherever the reader was, and keeps it there.
+  - Unchecking it stops following, and following does not start again by itself for the rest of the reply, even when
+    the box comes into view by 80% again; only checking it again does. A choice the reader made is not undone by the
+    page.
+  - Checked while the reply has no text yet (while the model thinks), it follows the text from its first line.
+  - It is unchecked each time a generation starts: as before, following starts by itself only when the reader is at
+    the reply's end.
 - **The one way the page scrolls by itself.** Following is the exception
   [LCTYSP-0005](LCTYSP-0005_page-and-elements.md#rendering-streams) makes to scrolling being the user's: only while the
-  reader is at the reply's end, and never on opening a page or sending.
+  reader is at the reply's end or has checked "Auto-scroll", and never on opening a page or sending.
 
 ### How others write a stream
 
