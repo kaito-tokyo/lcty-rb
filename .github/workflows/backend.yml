@@ -5,8 +5,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# The backend unit tests (tests/backend, LCTYSP-3xxx) in the dev container .devcontainer/ruby-2.6.10: macOS's Ruby
-# (2.6.10) with the libraries of the Gemfile, started from its devcontainer.json with the Dev Container CLI.
+# The backend unit tests (tests/backend, LCTYSP-3xxx) in each dev container, started from its devcontainer.json with the
+# Dev Container CLI: .devcontainer/ruby-4.0.10 (the Ruby lcty-rb targets, with Gemfile.lock) and
+# .devcontainer/ruby-2.6.10 (macOS's /usr/bin/ruby, with the libraries it has).
 
 name: Backend CI
 
@@ -17,15 +18,23 @@ on:
 
 env:
   DEVCONTAINER_CLI: "@devcontainers/cli@0.89.0"
-  DEVCONTAINER_CONFIG: .devcontainer/ruby-2.6.10/devcontainer.json
 
 jobs:
-  test-backend:
+  test-backend-ruby:
+    name: test-backend (${{ matrix.ruby }})
     runs-on: ubuntu-26.04
     timeout-minutes: 15
 
     permissions:
       contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: [ruby-4.0.10, ruby-2.6.10]
+
+    env:
+      DEVCONTAINER_CONFIG: .devcontainer/${{ matrix.ruby }}/devcontainer.json
 
     steps:
       - name: Checkout
@@ -38,3 +47,20 @@ jobs:
 
       - name: Run backend unit tests
         run: npx --yes "$DEVCONTAINER_CLI" exec --workspace-folder . --config "$DEVCONTAINER_CONFIG" ruby tests/backend/run.rb
+
+  # test-backend, the check the main ruleset requires, passes when every Ruby has
+  test-backend:
+    needs: test-backend-ruby
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    permissions: {}
+
+    steps:
+      - name: Check that every Ruby passed
+        env:
+          RESULT: ${{ needs.test-backend-ruby.result }}
+        run: |
+          echo "test-backend-ruby: $RESULT"
+          [[ "$RESULT" == success ]]

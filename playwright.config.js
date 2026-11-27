@@ -12,11 +12,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-// The servers: by default the tests start one per browser on macOS's /usr/bin/ruby, on LCTY_TEST_PORT (Chromium; the
+// The servers: by default the tests start one per browser on the Ruby of the Gemfile, on LCTY_TEST_PORT (Chromium; the
 // unit tests use it too) and the two ports after it (WebKit, Firefox), each with a data directory of its own that
 // starts as a copy of tests/ui/seed (the files no API writes: a conversation of LCTYSP-0003). LCTY_TEST_SERVER_URL
 // points every test at one server that is already running instead, with a data directory of its own that starts the
-// same way (in CI, the container of .devcontainer/ruby-2.6.10/compose.yml).
+// same way (in CI, the container of the compose.yml of .devcontainer/ruby-4.0.10 or ruby-2.6.10).
 const external = process.env.LCTY_TEST_SERVER_URL;
 const PORT = Number(process.env.LCTY_TEST_PORT || 45290);
 const BROWSERS = [
@@ -74,7 +74,7 @@ export default defineConfig({
 				});
 				return {
 					// No embedding server (LCTYSP-0019): the tests never start a model
-					command: "/usr/bin/ruby lcty.rb --no-embedding",
+					command: "bundle exec ruby lcty.rb --no-embedding",
 					url: `${urlOf(i)}/`,
 					reuseExistingServer: false,
 					env: {

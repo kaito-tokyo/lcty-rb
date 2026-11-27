@@ -2,11 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# Starts the server on its own in the image of this dev container (Dockerfile: macOS's Ruby with the libraries of the
-# Gemfile), without opening the dev container; devcontainer.json does not use this file. The UI tests use it outside
-# macOS (CI runs on Linux). Not for running lcty-rb for real: the repository (two folders up) is mounted read-only and
-# the data directory is a tmpfs, so every start begins with only the data of tests/ui/seed. --build rebuilds the image
-# when the Gemfile has changed.
+# Starts the server on its own in the image of this dev container (Dockerfile: macOS's Ruby with the libraries it has),
+# without opening the dev container; devcontainer.json does not use this file. The UI tests use it outside macOS (CI
+# runs on Linux). Not for running lcty-rb for real: the repository (two folders up) is mounted read-only and the data
+# directory is a tmpfs, so every start begins with only the data of tests/ui/seed. --build rebuilds the image when the
+# Dockerfile has changed.
 #
 #   docker compose -f .devcontainer/ruby-2.6.10/compose.yml up --build --detach --wait
 #   LCTY_TEST_SERVER_URL=http://127.0.0.1:45290 npm run test:ui

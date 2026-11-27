@@ -15,8 +15,10 @@ Ruby server on your own machine. Conversations are plain HTML files you can open
 
 ## Requirements
 
-- macOS's own Ruby, `/usr/bin/ruby` (2.6). It already has everything the server uses (WEBrick, SQLite3, Nokogiri):
-  there is nothing to install.
+- Ruby 4.0 first on `PATH` (on macOS, Homebrew's `ruby@4.0`: `/opt/homebrew/opt/ruby@4.0/bin`) with Bundler, and the
+  libraries of the `Gemfile` (WEBrick, SQLite3, Nokogiri) installed by `bundle install`. The code keeps to Ruby 2.6,
+  so macOS's own `/usr/bin/ruby`, which has those libraries already, still runs it without Bundler (`/usr/bin/ruby
+  lcty.rb`); it is tested in CI, but is no longer the Ruby lcty-rb is set up for.
 - `llama-server` from llama.cpp on `PATH`, for the chat model and the embedding model.
 - A current browser (Chrome or Safari).
 
@@ -28,20 +30,27 @@ Start the chat model (router mode: the models of `llm-backend/llama-cpp.ini`, on
 llm-backend/run-llama-cpp.sh
 ```
 
+Install the libraries once (again after the `Gemfile` changes):
+
+```bash
+bundle install
+```
+
 Start the server and open http://127.0.0.1:45280/:
 
 ```bash
-/usr/bin/ruby lcty.rb
+bundle exec ruby lcty.rb
 ```
 
 The browser talks to the chat model's `llama-server` directly; the Ruby server serves the pages and keeps the
 conversations, the tags and the search index. For semantic search it starts a `llama-server` of its own with the
 embedding model (downloaded at the first start) and embeds every message in the background.
 
-Outside macOS, the dev container `.devcontainer/ruby-2.6.10` gives the same Ruby and libraries (`ruby:2.6.10` with the
-`Gemfile`, installed into its image; rebuild it after changing the `Gemfile`). Run `ruby lcty.rb` in it; port 45280 is
-forwarded. Its data
-directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-data`, so it outlives a rebuild.
+The dev container `.devcontainer/ruby-4.0.10` gives the same Ruby and libraries (`ruby:4.0.10` with `Gemfile.lock`,
+installed into its image; rebuild it after changing the `Gemfile`), and `.devcontainer/ruby-2.6.10` the Ruby and
+libraries of macOS's `/usr/bin/ruby` (`ruby:2.6.10` with nokogiri 1.13.8, sqlite3 1.3.13 and webrick 1.9.1, installed
+by its `Dockerfile`). Run `ruby lcty.rb` in either; port 45280 is forwarded. Their data directory
+(`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-data`, so it outlives a rebuild.
 
 ## Settings
 
@@ -51,7 +60,7 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
     that is `~/.local/share/…` by default, on Linux).
   - The port is the environment variable `LCTY_PORT`, else `PORT`. Without either the server takes the first free
     port from 45280 to 45379 and prints it.
-  - The other settings are options of `lcty.rb` (`/usr/bin/ruby lcty.rb --help` lists them), written one per line in
+  - The other settings are options of `lcty.rb` (`bundle exec ruby lcty.rb --help` lists them), written one per line in
     `server_settings.txt` of the data directory, read when the server starts:
 
     ```
@@ -78,7 +87,7 @@ directory (`~/.local/share/tokyo.kaito.lcty-rb/Data`) is the volume `lcty-rb-dat
     `server_settings.txt`:
 
     ```bash
-    /usr/bin/ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
+    bundle exec ruby tools/hash_password.rb alice >> "$HOME/Library/Application Support/tokyo.kaito.lcty-rb/Data/server_settings.txt"
     ```
 
     Basic sends the password itself; from outside the machine, put HTTPS in front of the server (a reverse proxy). A
@@ -131,7 +140,7 @@ the new format and show the others read-only, so run it once after updating. Bac
 (above), then:
 
 ```bash
-/usr/bin/ruby tools/convert.rb
+bundle exec ruby tools/convert.rb
 ```
 
 The tools are scripts of `tools/`, run on their own; `lcty.rb` only starts the server. Each file is copied to
@@ -144,8 +153,8 @@ Markdown.
 
 The frontend unit tests that need no browser run in Node.js (26 or later, for its Web Workers) with its test runner,
 `node:test`; the other frontend tests run in Chromium, WebKit and Firefox with [Playwright](https://playwright.dev/).
-Node.js is needed for them only; the server itself still needs nothing installed. The backend tests run on the server's
-Ruby with Minitest, which Ruby 2.6 bundles.
+Node.js is needed for them only; the server itself needs only the libraries of the `Gemfile`. The backend tests run on
+the server's Ruby with Minitest (in the `Gemfile`; Ruby 2.6 bundles it).
 
 - **Frontend unit tests** (`tests/unit/`): one module of `public/` on its own, such as a worker or a function. Their
   behaviour is written as Gherkin features, `docs/specs/LCTYSP-1xxx_*.feature`, and each feature is tested by one test
@@ -163,7 +172,7 @@ The backend unit tests need neither Node.js nor a running server (the HTTP tests
 they use a new, empty data directory in the temporary folder, removed afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it):
 
 ```bash
-ruby tests/backend/run.rb
+bundle exec ruby tests/backend/run.rb
 ```
 
 `npm run test:backend` does the same. Each test file runs in a process of its own, as many at a time as there are
@@ -199,16 +208,15 @@ Firefox.
 runs an unrelated npm package named `biome`.
 
 CI runs on Linux. The unit tests in Node.js run on their own, without the server or the browsers
-(`.github/workflows/node.yml`). The backend unit tests run inside the dev container `.devcontainer/ruby-2.6.10`, started
-from its `devcontainer.json` with the Dev Container CLI (`.github/workflows/backend.yml`; the commands are in LCTYSP-3000). For
-the frontend tests, `.devcontainer/ruby-2.6.10/compose.yml` runs the server on its own in the image of that dev container
-(`ruby:2.6.10` with the libraries of the `Gemfile`, the versions macOS's `/usr/bin/ruby` has; on a Mac the server needs
-neither the `Gemfile` nor Bundler), and the tests are pointed at it with `LCTY_TEST_SERVER_URL`; each browser has a job
-of its own there, with a server of its own. To do the same by
-hand (`--build` rebuilds the image when the `Gemfile` has changed):
+(`.github/workflows/node.yml`). The backend unit tests run inside each of the dev containers `.devcontainer/ruby-4.0.10`
+and `.devcontainer/ruby-2.6.10`, started from its `devcontainer.json` with the Dev Container CLI
+(`.github/workflows/backend.yml`; the commands are in LCTYSP-3000). For the frontend tests, the `compose.yml` of each dev
+container runs the server on its own in the image of that dev container, and the tests are pointed at it with
+`LCTY_TEST_SERVER_URL`; each browser and Ruby has a job of its own there, with a server of its own. To do the same by
+hand (`--build` rebuilds the image when the `Gemfile` or the `Dockerfile` has changed; `ruby-2.6.10` for the other):
 
 ```bash
-docker compose -f .devcontainer/ruby-2.6.10/compose.yml up --build --detach --wait
+docker compose -f .devcontainer/ruby-4.0.10/compose.yml up --build --detach --wait
 ```
 
 ```bash
@@ -216,10 +224,10 @@ LCTY_TEST_SERVER_URL=http://127.0.0.1:45290 npm test
 ```
 
 ```bash
-docker compose -f .devcontainer/ruby-2.6.10/compose.yml down
+docker compose -f .devcontainer/ruby-4.0.10/compose.yml down
 ```
 
-Its data directory is emptied whenever the container restarts (`docker compose -f .devcontainer/ruby-2.6.10/compose.yml restart`).
+Its data directory is emptied whenever the container restarts (`docker compose -f .devcontainer/ruby-4.0.10/compose.yml restart`).
 
 ## Documentation
 

@@ -194,4 +194,5 @@ character references. They are handled by the kind of value:
   byte for byte.
 - When reading, `Nokogiri::XML::DocumentFragment.parse` (recovery mode) is used. If it reports errors (a write that was
   interrupted), the last element is dropped with a warning.
-- Ruby 2.6 ships nokogiri 1.13.8 with libxml2 2.9.13.
+- Ruby 2.6 ships nokogiri 1.13.8 with libxml2 2.9.13; on Ruby 4.0 it is the nokogiri of `Gemfile.lock` (1.19), with a
+  newer libxml2. The parse above behaves the same on both.

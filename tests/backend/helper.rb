@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # -*- encoding: utf-8 -*-
-# The backend unit tests (LCTYSP-3xxx): the server's parts on their own, with Minitest, which Ruby 2.6 bundles, so
-# nothing has to be installed (macOS's /usr/bin/ruby, or the dev container .devcontainer/ruby-2.6.10).
+# The backend unit tests (LCTYSP-3xxx): the server's parts on their own, with Minitest (the Gemfile's, or the one Ruby
+# 2.6 bundles: macOS's /usr/bin/ruby, or the dev container .devcontainer/ruby-2.6.10).
 #
 # Like the frontend unit tests, each test is a Scenario of a Gherkin feature in docs/specs: `scenario` names the test
 # after the Scenario's title, and `step` wraps each of its lines, so a failure says which line failed.

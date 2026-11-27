@@ -8,7 +8,7 @@
 		"test:unit": "npm run test:node && playwright test tests/unit",
 		"test:ui": "playwright test tests/ui",
 		"test:ui:install": "playwright install chromium webkit firefox",
-		"test:backend": "ruby tests/backend/run.rb",
+		"test:backend": "bundle exec ruby tests/backend/run.rb",
 		"check:scenarios": "node tests/unit/check-scenarios.js",
 		"check:biome": "biome check"
 	},

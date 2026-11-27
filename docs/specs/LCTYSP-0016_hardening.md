@@ -240,8 +240,8 @@ With step 1 the HTTP API is closed to other sites; this step leaves one way to w
    method is 405). Writing the conversations of LCTYSP-0003 (`POST /v1/conversations`, its lines and `pop`), which no
    page used any more, went with them, and with them the code of `Chatty::Store` that wrote that format and the
    functions of `js/api/storage.js` that called it. The UI tests that need such a file find one in the data directory
-   they start with (`tests/ui/seed`, copied in by `playwright.config.js` and, in CI, by the container of
-   `.devcontainer/ruby-2.6.10/compose.yml`).
+   they start with (`tests/ui/seed`, copied in by `playwright.config.js` and, in CI, by the containers of the
+   `compose.yml` of `.devcontainer/ruby-4.0.10` and `.devcontainer/ruby-2.6.10`).
 
 ### 4. Keep it checked
 

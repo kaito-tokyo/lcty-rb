@@ -97,8 +97,10 @@ end
 
 ## The test environment
 
-- **Ruby.** Ruby 2.6, as macOS's `/usr/bin/ruby`, with Minitest, which it bundles. The tests use the same libraries as
-  the server (the standard library, nokogiri, sqlite3, webrick) and nothing else.
+- **Ruby.** Ruby 4.0 with the `Gemfile` (Minitest is in its `test` group), and Ruby 2.6, as macOS's `/usr/bin/ruby`,
+  with the Minitest it bundles; every test passes on both. The tests use the same libraries as the server (the standard
+  library, nokogiri, sqlite3, webrick, base64) and nothing else. Where the two Rubies differ in a message that is not
+  lcty-rb's own (OptionParser's "Did you mean?" line, 4.0 only), the test accepts both.
 - **Data.** `helper.rb` points `LCTY_DATA_DIR` at a new, empty folder in the temporary folder before `lib/config.rb` is
   loaded, whatever it was, and removes it afterwards (`LCTY_TEST_KEEP_DATA=1` keeps it). Every test of a process shares it:
   `Lcty.open_data` opens it as the server does, once, and each test makes conversations, tags and words with ids of its
@@ -115,25 +117,27 @@ end
 ## Running the tests
 
 ```bash
-ruby tests/backend/run.rb
+bundle exec ruby tests/backend/run.rb
 ```
 
-`npm run test:backend` does the same. Minitest's options follow, for example `-n "/same millisecond/"` to run the tests
+`npm run test:backend` does the same; `/usr/bin/ruby tests/backend/run.rb` runs them on macOS's Ruby. Minitest's options follow, for example `-n "/same millisecond/"` to run the tests
 whose names match, or `--seed 1234` to repeat an order; they go to every file. `run.rb` prints one line per file, and
 the whole output of a file that fails; with options, the whole output of every file that ran a test. One file runs
 on its own with `ruby tests/backend/<file>`.
 
 ## CI
 
-`.github/workflows/backend.yml` runs the tests on Linux in the dev container `.devcontainer/ruby-2.6.10`
-(`ruby:2.6.10` with the libraries of the `Gemfile`, the versions macOS's `/usr/bin/ruby` has), started from its
-`devcontainer.json` with the Dev Container CLI. It runs for every pull request to `main` and, through
-`push-main.yml`, for every push to `main`. To do the same by hand:
+`.github/workflows/backend.yml` runs the tests on Linux in each of the dev containers `.devcontainer/ruby-4.0.10`
+(`ruby:4.0.10` with `Gemfile.lock`) and `.devcontainer/ruby-2.6.10` (`ruby:2.6.10` with the versions of the libraries
+macOS's `/usr/bin/ruby` has, installed by its `Dockerfile`), started from its `devcontainer.json` with the Dev
+Container CLI, one job each (`test-backend (ruby-4.0.10)`, `test-backend (ruby-2.6.10)`); the job `test-backend`
+passes when both have. It runs for every pull request to `main` and, through `push-main.yml`, for every push to
+`main`. To do the same by hand (`ruby-2.6.10` for the other):
 
 ```bash
-npx --yes @devcontainers/cli@0.89.0 up --workspace-folder . --config .devcontainer/ruby-2.6.10/devcontainer.json
+npx --yes @devcontainers/cli@0.89.0 up --workspace-folder . --config .devcontainer/ruby-4.0.10/devcontainer.json
 ```
 
 ```bash
-npx --yes @devcontainers/cli@0.89.0 exec --workspace-folder . --config .devcontainer/ruby-2.6.10/devcontainer.json ruby tests/backend/run.rb
+npx --yes @devcontainers/cli@0.89.0 exec --workspace-folder . --config .devcontainer/ruby-4.0.10/devcontainer.json ruby tests/backend/run.rb
 ```
